@@ -23,7 +23,7 @@ def set_pagerduty_integration_secret(integration_key):
     kubeconfig = os.getenv("KUBECONFIG")
     cmd = (
         f"oc create secret generic {constants.PAGERDUTY_SECRET} "
-        f"--from--literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
+        f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
         f"--kubeconfig {kubeconfig} --dry-run -o yaml"
     )
     secret_data = exec_cmd(cmd, secrets=[integration_key]).stdout
@@ -39,7 +39,7 @@ def set_pagerduty_integration_secret(integration_key):
 def check_incident_list(summary, urgency, incidents):
     """
     Check list of incidents that there are incidents with requested label
-        in summary and specific urgency. If some alert is missing then this check
+        in summary and specific urgency. If some incident is missing then this check
     fails.
 
     Args:
@@ -48,7 +48,7 @@ def check_incident_list(summary, urgency, incidents):
         incidents (list): List of incidents to check
 
         Returns:
-                list: List of alerts that match search requirements
+                list: List of incidents that match search requirements
 
     """
     logger.info(f"Looking for incidents with summary {summary} and urgency {urgency}")
@@ -84,7 +84,6 @@ class PagerDutyAPI(object):
         Constructor for PagerDutyAPI class.
         """
         self._token = token or config.AUTH["pagerduty"]["api_key"]
-        self.set_pagerduty_secret
 
     def get(self, resource, payload=None):
         """
@@ -98,7 +97,7 @@ class PagerDutyAPI(object):
                 {"service_ids[]": <id>, "since": "2021-07-15T00:00:00Z", "time_zone": "UTC"}
 
         Returns:
-            dict: Response from Prometheus alerts api
+            dict: Response from PagerDuty api
 
         """
         pattern = f"/{resource}"
@@ -129,7 +128,7 @@ class PagerDutyAPI(object):
             payload (dict): Provide parameters to POST API call.
 
         Returns:
-            dict: Response from Prometheus alerts api
+            dict: Response from PagerDuty api
 
         """
         pattern = f"/{resource}"
@@ -141,13 +140,41 @@ class PagerDutyAPI(object):
 
         logger.debug(f"POST {self._endpoint + pattern}")
         logger.debug(f"headers={headers}")
-        logger.debug(f"params={payload}")
+        logger.debug(f"json={payload}")
 
         response = requests.post(
             self._endpoint + pattern,
             headers=headers,
             verify=False,
-            params=payload,
+            json=payload,
+        )
+        return response
+
+    def delete(self, resource):
+        """
+        Delete resource from PagerDuty API.
+
+        Args:
+            resource (str): Represents part of uri that specifies given
+                resource
+
+        Returns:
+            dict: Response from PagerDuty api
+
+        """
+        pattern = f"/{resource}"
+        headers = {
+            "Authorization": f"Token {self._token}",
+            "Accept": "application/vnd.pagerduty+json;version=2",
+        }
+
+        logger.debug(f"GET {self._endpoint + pattern}")
+        logger.debug(f"headers={headers}")
+
+        response = requests.delete(
+            self._endpoint + pattern,
+            headers=headers,
+            verify=False,
         )
         return response
 
@@ -180,10 +207,19 @@ class PagerDutyAPI(object):
 
         """
         vendor_id = None
-        vendors = self.get("vendors").json()
-        for vendor in vendors["vendors"]:
-            if vendor["name"] == name:
-                vendor_id = vendor["id"]
+        offset = 0
+        more = True
+        while more:
+            payload = {"limit": 100, "offset": offset}
+            vendors = self.get("vendors", payload=payload).json()
+            for vendor in vendors["vendors"]:
+                if vendor["name"] == name:
+                    vendor_id = vendor["id"]
+                    break
+            if vendors["more"]:
+                offset = int(vendors["offset"]) + 100
+            else:
+                more = False
         if not vendor_id:
             logger.warning(f"PagerDuty vendor {name} was not found")
         return vendor_id
@@ -198,7 +234,7 @@ class PagerDutyAPI(object):
 
         """
         cluster_name = config.ENV_DATA["cluster_name"]
-        default_policy = self.get_default_escelation_policy_id()
+        default_policy = self.get_default_escalation_policy_id()
         return {
             "service": {
                 "type": "service",
@@ -241,41 +277,41 @@ class PagerDutyAPI(object):
 
         Args:
             summary (str): Incident summary
-            sleep (int): Number of seconds to sleep in between alert search
+            sleep (int): Number of seconds to sleep in between incidents search
 
         Returns:
             list: List of incident records
 
         """
         while timeout > 0:
-            incident_response = self.get(
+            incidents_response = self.get(
                 "incidents",
             )
             msg = f"Request {incidents_response.request.url} failed"
             assert incidents_response.ok, msg
             incidents = [
                 incident
-                for incident in incidents_response.json()
+                for incident in incidents_response.json().get("incidents")
                 if summary in incident.get("summary")
             ]
             logger.info(
                 f"Checking for {summary} incidents. There should be no incidents ... "
                 f"{len(incidents)} found"
             )
-            if len(alerts) == 0:
+            if len(incidents) == 0:
                 break
             time.sleep(sleep)
             timeout -= sleep
-        return alerts
+        return incidents
 
-    def check_alert_cleared(self, summary, measure_end_time, time_min=120):
+    def check_incident_cleared(self, summary, measure_end_time, time_min=120):
         """
         Check that all incidents with provided summary are cleared.
 
         Args:
             summary (str): Incident summary
             measure_end_time (int): Timestamp of measurement end
-            time_min (int): Number of seconds to wait for alert to be cleared
+            time_min (int): Number of seconds to wait for incidents to be cleared
                 since measurement end
 
         """

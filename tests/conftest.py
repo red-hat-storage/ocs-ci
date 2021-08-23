@@ -324,9 +324,10 @@ def log_ocs_version(cluster):
 
 
 @pytest.fixture(scope="session")
-def pagerduty_service():
+def pagerduty_service(request):
     """
     Create a Service in PagerDuty service. The service represents a cluster instance.
+    The service is deleted at the end of the test run.
 
     Returns:
         str: PagerDuty service json
@@ -338,7 +339,20 @@ def pagerduty_service():
         service_response = pagerduty_api.create("services", payload=payload)
         msg = f"Request {service_response.request.url} failed"
         assert service_response.ok, msg
-        return service_response.json()
+        service = service_response.json().get("service")
+
+        def teardown():
+            """
+            Delete the service at the end of test run
+            """
+            service_id = service["id"]
+            log.info(f"Deleting service with id {service_id}")
+            delete_response = pagerduty_api.delete(f"services/{service_id}")
+            msg = f"Deletion of service {service_id} failed"
+            assert delete_response.ok, msg
+
+        request.addfinalizer(teardown)
+        return service
     else:
         log.info(
             "PagerDuty service is not created because "
@@ -382,7 +396,8 @@ def pagerduty_integration(pagerduty_service):
             )
             msg = f"Request {integration_response.request.url} failed"
             assert integration_response.ok, msg
-            integration_key = integration_response.json()["integration_key"]
+            integration = integration_response.json().get("integration")
+            integration_key = integration["integration_key"]
         pagerduty.set_pagerduty_integration_secret(integration_key)
 
 
