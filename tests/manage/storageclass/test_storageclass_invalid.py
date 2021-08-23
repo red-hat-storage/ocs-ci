@@ -8,7 +8,7 @@ from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.framework.testlib import tier3, ManageTest
+from ocs_ci.framework.testlib import tier3, ManageTest, ignore_data_rebalance
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 
@@ -52,6 +52,7 @@ OCS_341_RBD_PARAMS = {
 }
 
 
+@ignore_data_rebalance
 @pytest.fixture(
     params=[
         pytest.param(OCS_311_CEPHFS_PARAMS, marks=pytest.mark.polarion_id("OCS-331")),
@@ -91,6 +92,7 @@ def invalid_storageclass(request):
     storageclass.delete()
 
 
+@ignore_data_rebalance
 @tier3
 class TestStorageClassInvalid(ManageTest):
     def test_storageclass_invalid(self, invalid_storageclass):

@@ -2,13 +2,14 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier3
+from ocs_ci.framework.testlib import ManageTest, tier3, ignore_data_rebalance
 from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
 
 @tier3
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames="interface",
     argvalues=[

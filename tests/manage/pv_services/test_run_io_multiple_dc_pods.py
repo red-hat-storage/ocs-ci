@@ -1,7 +1,7 @@
 import pytest
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, ignore_data_rebalance
 
 
 @tier2
@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import ManageTest, tier2
         ),
     ],
 )
+@ignore_data_rebalance
 class TestRunIOMultipleDcPods(ManageTest):
     """
     Run IO on multiple dc pods in parallel

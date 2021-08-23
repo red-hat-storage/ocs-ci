@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_ocp_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.helpers import helpers
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @acceptance
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[

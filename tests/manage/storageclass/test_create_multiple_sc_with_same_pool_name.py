@@ -5,7 +5,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.exceptions import ResourceLeftoversException
-from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    skipif_external_mode,
+    ignore_data_rebalance,
+)
 from tests.fixtures import (
     create_ceph_block_pool,
     create_rbd_secret,
@@ -53,6 +58,7 @@ def resources(request):
 
 @skipif_external_mode
 @tier2
+@ignore_data_rebalance
 @pytest.mark.usefixtures(
     create_project.__name__,
     create_rbd_secret.__name__,

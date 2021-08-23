@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_ocp_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2368")
+@ignore_data_rebalance
 class TestCloneWithDifferentAccessMode(ManageTest):
     """
     Tests to verify PVC clone with access mode different than parent PVC

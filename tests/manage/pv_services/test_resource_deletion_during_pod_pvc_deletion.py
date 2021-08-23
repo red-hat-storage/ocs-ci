@@ -3,7 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4,
+    tier4c,
+    ignore_leftover_label,
+    ignore_data_rebalance,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -321,6 +327,7 @@ class DisruptionBase(ManageTest):
         ),
     ],
 )
+@ignore_data_rebalance
 class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
     """
     Delete ceph/rook pod while deletion of PVCs/pods is progressing

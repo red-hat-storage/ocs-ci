@@ -16,12 +16,14 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     polarion_id,
     bugzilla,
+    ignore_data_rebalance,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier2
+@ignore_data_rebalance
 @skipif_ocp_version("<4.6")
 @pytest.mark.parametrize(
     argnames=["pvc_create_sc_type", "restore_sc_type"],

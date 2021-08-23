@@ -8,13 +8,14 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 
-from ocs_ci.framework.testlib import ManageTest, tier1, tier2
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2, ignore_data_rebalance
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 class TestObjectIntegrity(ManageTest):
     """
     Test data integrity of RGW buckets

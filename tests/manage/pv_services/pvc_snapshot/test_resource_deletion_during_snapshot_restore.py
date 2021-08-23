@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftover_label,
     skipif_ocp_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers import disruption_helpers
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @skipif_ocp_version("<4.6")
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.polarion_id("OCS-2369")
+@ignore_data_rebalance
 class TestResourceDeletionDuringSnapshotRestore(ManageTest):
     """
     Tests to verify PVC snapshot and restore will succeeded if rook-ceph,

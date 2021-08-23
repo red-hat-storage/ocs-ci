@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocp_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_snapshot_content_obj
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @pytest.mark.polarion_id("OCS-2318")
+@ignore_data_rebalance
 class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
     """
     Tests to take snapshot when PVC usage is at different levels

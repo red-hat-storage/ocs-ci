@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, ignore_data_rebalance
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface", "reclaim_policy"],
     argvalues=[

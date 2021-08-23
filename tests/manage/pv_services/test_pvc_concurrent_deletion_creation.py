@@ -8,7 +8,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from ocs_ci.framework.testlib import tier2, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier2, ManageTest, bugzilla, ignore_data_rebalance
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     verify_volume_deleted_in_backend,
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 @bugzilla("1734259")
 @tier2
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames="interface",
     argvalues=[

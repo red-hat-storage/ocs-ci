@@ -3,7 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4,
+    tier4c,
+    ignore_leftover_label,
+    ignore_data_rebalance,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -23,6 +29,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@ignore_data_rebalance
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],

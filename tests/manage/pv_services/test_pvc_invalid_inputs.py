@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier3, ManageTest
+from ocs_ci.framework.testlib import tier3, ManageTest, ignore_data_rebalance
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.helpers import helpers
@@ -57,6 +57,7 @@ def teardown():
 
 
 @tier3
+@ignore_data_rebalance
 @pytest.mark.usefixtures(test_fixture.__name__)
 @pytest.mark.polarion_id("OCS-284")
 class TestPvcCreationInvalidInputs(ManageTest):

@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_openshift_dedicated,
+    ignore_data_rebalance,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -28,6 +29,7 @@ ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 class TestBucketDeletion(MCGTest):
     """
     Test bucket Creation Deletion of buckets

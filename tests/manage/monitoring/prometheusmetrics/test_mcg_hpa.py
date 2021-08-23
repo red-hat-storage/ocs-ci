@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.pytest_customization import marks
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, ignore_data_rebalance
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @marks.polarion_id("OCS-2376")
 @marks.bugzilla("1873162")
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 def test_hpa_noobaa_endpoint_metric():
     """
     Test to verify HPA noobaa-endpoint cpu metrics is available

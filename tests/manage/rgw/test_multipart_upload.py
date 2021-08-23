@@ -3,7 +3,7 @@ import logging
 import pytest
 import uuid
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, ignore_data_rebalance
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     abort_all_multipart_upload,
@@ -48,6 +48,7 @@ def setup(pod_obj, rgw_bucket_factory, test_directory_setup):
     return bucket, object_key, origin_dir, res_dir, full_object_path, parts
 
 
+@ignore_data_rebalance
 class TestS3MultipartUpload(ManageTest):
     """
     Test Multipart upload on RGW buckets

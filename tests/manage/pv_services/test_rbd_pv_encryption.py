@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocs_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
         pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
+@ignore_data_rebalance
 @skipif_ocs_version("<4.7")
 class TestRbdPvEncryption(ManageTest):
     """

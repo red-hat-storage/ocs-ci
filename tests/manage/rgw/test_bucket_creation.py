@@ -2,7 +2,12 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    acceptance,
+    tier1,
+    tier3,
+    ignore_data_rebalance,
+)
 from ocs_ci.ocs.resources.objectbucket import OBC, BUCKET_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 import botocore
@@ -11,6 +16,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 class TestRGWBucketCreation:
     """
     Test creation of a bucket

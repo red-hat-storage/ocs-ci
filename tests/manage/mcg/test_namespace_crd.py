@@ -18,6 +18,7 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
     skipif_ocs_version,
+    ignore_data_rebalance,
     tier1,
     tier2,
     tier4,
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
+@ignore_data_rebalance
 @skipif_ocs_version("<4.7")
 class TestNamespace(MCGTest):
     """

@@ -3,13 +3,14 @@ import logging
 
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, ignore_data_rebalance
 
 
 logger = logging.getLogger(__name__)
 
 
 @tier2
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[

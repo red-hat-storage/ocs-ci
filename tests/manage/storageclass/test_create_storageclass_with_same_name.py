@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, ignore_data_rebalance
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
@@ -75,6 +75,7 @@ def create_storageclass(sc_name, expect_fail=False):
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
+@ignore_data_rebalance
 @pytest.mark.polarion_id("OCS-322")
 class TestCreateSCSameName(ManageTest):
     def test_create_storageclass_with_same_name(self):

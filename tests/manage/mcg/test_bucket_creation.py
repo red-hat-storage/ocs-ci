@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 class TestBucketCreation(MCGTest):
     """
     Test creation of a bucket

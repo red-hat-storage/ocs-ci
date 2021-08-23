@@ -15,6 +15,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_ocs_version,
+    ignore_data_rebalance,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be paralleli
 
 @flaky
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 class TestObjectIntegrity(MCGTest):
     """
     Test data integrity of various objects

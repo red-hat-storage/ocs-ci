@@ -2,7 +2,11 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, tier1
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    tier1,
+    ignore_data_rebalance,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
@@ -28,6 +32,7 @@ def test_alerting_works():
 @pytest.mark.polarion_id("OCS-2503")
 @bugzilla("1897674")
 @tier1
+@ignore_data_rebalance
 def test_prometheus_rule_failures():
     """
     There should be no PrometheusRuleFailures alert when OCS is configured.

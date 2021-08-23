@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     polarion_id,
     skipif_ocp_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2353")
+@ignore_data_rebalance
 class TestCloneWhenFull(ManageTest):
     """
     Tests to verify PVC clone when PVC is full

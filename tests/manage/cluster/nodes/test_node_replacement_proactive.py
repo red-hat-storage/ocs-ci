@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
+from ocs_ci.ocs.cluster import is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
@@ -262,11 +262,6 @@ class TestNodeReplacement(ManageTest):
         # Verify OSD encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
-
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=1800
-        ), "Data re-balance failed to complete"
 
 
 @tier4b

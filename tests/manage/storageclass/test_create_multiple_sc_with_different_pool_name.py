@@ -3,7 +3,12 @@ import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    skipif_external_mode,
+    ignore_data_rebalance,
+)
 from tests.fixtures import create_rbd_secret, create_project
 
 log = logging.getLogger(__name__)
@@ -11,6 +16,7 @@ log = logging.getLogger(__name__)
 
 @skipif_external_mode
 @tier2
+@ignore_data_rebalance
 @pytest.mark.usefixtures(
     create_project.__name__,
     create_rbd_secret.__name__,

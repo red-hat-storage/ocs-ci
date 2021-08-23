@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4a
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, ignore_data_rebalance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import disruption_helpers
@@ -14,6 +14,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
     argvalues=[

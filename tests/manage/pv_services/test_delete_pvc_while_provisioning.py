@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_ocs_version,
     bugzilla,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["resource_to_delete"],
     argvalues=[

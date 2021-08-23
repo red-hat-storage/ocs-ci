@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     config,
     bugzilla,
     skipif_ocs_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.framework.pytest_customization.marks import (
@@ -62,6 +63,7 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
 @bugzilla("1880747")
 @bugzilla("1880748")
 @tier1
+@ignore_data_rebalance
 def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
     Test to verify object bucket(backed by RGW) available size

@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_upgraded_from,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
+@ignore_data_rebalance
 class TestPvcExpand(ManageTest):
     """
     Tests to verify PVC expansion

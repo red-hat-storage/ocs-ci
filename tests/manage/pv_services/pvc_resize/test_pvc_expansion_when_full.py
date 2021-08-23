@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     polarion_id,
     skipif_upgraded_from,
+    ignore_data_rebalance,
 )
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 @polarion_id("OCS-301")
+@ignore_data_rebalance
 class TestPvcExpansionWhenFull(ManageTest):
     """
     Tests to verify PVC expansion when the PVC is 100% utilized.

@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
     skipif_ocs_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -28,6 +29,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
+@ignore_data_rebalance
 @skipif_ocs_version("<=4.9")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """

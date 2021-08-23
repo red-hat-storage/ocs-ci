@@ -1799,10 +1799,6 @@ def check_ceph_health_after_add_capacity(
     ceph_health_check(
         namespace=config.ENV_DATA["cluster_namespace"], tries=ceph_health_tries
     )
-    ceph_cluster_obj = CephCluster()
-    assert ceph_cluster_obj.wait_for_rebalance(
-        timeout=ceph_rebalance_timeout
-    ), "Data re-balance failed to complete"
 
 
 def validate_existence_of_blocking_pdb():

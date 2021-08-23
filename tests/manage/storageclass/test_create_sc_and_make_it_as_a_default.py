@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, ignore_data_rebalance
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from tests.fixtures import create_project
 
@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.usefixtures(
     create_project.__name__,
 )
+@ignore_data_rebalance
 class TestCreateStorageClassandMakeItAsDefault(ManageTest):
     """
     Verifies that a storageclass can be made as default

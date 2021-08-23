@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftover_label,
     skipif_upgraded_from,
+    ignore_data_rebalance,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers import disruption_helpers
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 @ignore_leftover_label(constants.drain_canary_pod_label)
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[

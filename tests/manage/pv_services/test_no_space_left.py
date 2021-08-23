@@ -5,13 +5,14 @@ import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
 
-from ocs_ci.framework.testlib import tier2, ManageTest
+from ocs_ci.framework.testlib import tier2, ManageTest, ignore_data_rebalance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 
 log = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[

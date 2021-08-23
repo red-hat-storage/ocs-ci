@@ -7,7 +7,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import tier3
+from ocs_ci.framework.testlib import tier3, ignore_data_rebalance
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
+@ignore_data_rebalance
 def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     """
     Make sure simple problems with MON daemons are reported via OCP Prometheus.

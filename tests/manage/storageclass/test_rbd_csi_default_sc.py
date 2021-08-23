@@ -5,7 +5,12 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier1, ManageTest, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    tier1,
+    ManageTest,
+    skipif_external_mode,
+    ignore_data_rebalance,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceLeftoversException
@@ -57,6 +62,7 @@ def resources(request):
     create_ceph_block_pool.__name__,
     create_rbd_secret.__name__,
 )
+@ignore_data_rebalance
 @pytest.mark.polarion_id("OCS-347")
 class TestBasicPVCOperations(ManageTest):
     """

@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     acceptance,
     performance,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -45,6 +46,7 @@ def pod_io(pods):
             p.submit(pod.run_io, "fs", "1G")
 
 
+@ignore_data_rebalance
 @skipif_openshift_dedicated
 class TestBucketIO(MCGTest):
     """

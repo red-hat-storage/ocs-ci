@@ -4,12 +4,16 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    ignore_data_rebalance,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 class TestMultiCloud(MCGTest):
     """
     Test the multi cloud functionality

@@ -4,7 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4, tier4a
+from ocs_ci.framework.testlib import tier4, tier4a, ignore_data_rebalance
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-2323")
 @pytest.mark.bugzilla("1953615")
+@ignore_data_rebalance
 def test_rgw_unavailable(measure_stop_rgw):
     """
     Test that there is appropriate alert when RGW is unavailable and that

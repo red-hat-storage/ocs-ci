@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_data_rebalance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames=["interface", "resource_name"],
     argvalues=[

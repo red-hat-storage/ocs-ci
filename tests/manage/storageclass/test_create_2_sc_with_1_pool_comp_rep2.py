@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, ignore_data_rebalance
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2391")
+@ignore_data_rebalance
 class TestMultipleScOnePoolRep2Comp(ManageTest):
     """
     Create new rbd pool with replica 2 and compression.

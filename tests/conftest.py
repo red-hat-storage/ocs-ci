@@ -22,6 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier_marks,
     ignore_leftover_label,
 )
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
@@ -223,6 +224,42 @@ def pytest_collection_modifyitems(session, items):
                     f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item):
+    """
+    Move the next test case to be last in the execution ordering, in case PG re-balance is not
+    completed, in case PG re-balance completion is needed for it
+    """
+    yield
+    idx = item.session.items.index(item)
+    remaining_items = item.session.items[idx + 1 :]
+    if remaining_items:
+        nextitem = remaining_items[0]
+        if not nextitem.get_closest_marker("ignore_data_rebalance"):
+            cluster = CephCluster()
+            rebalance_status = cluster.get_rebalance_status()
+            if not rebalance_status:
+                if config.RUN["first_pushed_to_last_item"] is not nextitem:
+                    for i in remaining_items:
+                        if config.RUN["first_pushed_to_last_item"] == i:
+                            break
+                        elif i.get_closest_marker("ignore_data_rebalance"):
+                            break
+                        else:
+                            remaining_items.remove(i)
+                            remaining_items.append(i)
+                            if not config.RUN["first_pushed_to_last_item"]:
+                                config.RUN["first_pushed_to_last_item"] = i
+                    item.session.items[idx + 1 :] = remaining_items
+                else:
+                    cluster.wait_for_rebalance(timeout=3600)
+                    config.RUN["first_pushed_to_last_item"] = None
+        if nextitem.get_closest_marker("last"):
+            remaining_items.remove(nextitem)
+            remaining_items.append(nextitem)
+            item.session.items[idx + 1 :] = remaining_items
 
 
 @pytest.fixture()

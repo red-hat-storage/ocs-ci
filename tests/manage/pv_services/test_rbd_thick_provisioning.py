@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     acceptance,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import TimeoutSampler
@@ -16,6 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 @skipif_ocs_version("<=4.9")
 class TestRbdThickProvisioning(ManageTest):
     """

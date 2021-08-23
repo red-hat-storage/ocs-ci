@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
     skipif_openshift_dedicated,
+    ignore_data_rebalance,
     tier1,
     tier2,
     tier3,
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")
+@ignore_data_rebalance
 class TestNamespace(MCGTest):
     """
     Test creation of a namespace resources and buckets via RPC calls.

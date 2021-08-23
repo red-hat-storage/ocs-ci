@@ -2,7 +2,7 @@ import logging
 import pytest
 from itertools import cycle
 
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier2, ignore_data_rebalance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCS
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 
 @tier2
+@ignore_data_rebalance
 @pytest.mark.parametrize(
     argnames="interface",
     argvalues=[

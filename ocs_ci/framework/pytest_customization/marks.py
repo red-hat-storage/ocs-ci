@@ -111,6 +111,9 @@ ignore_leftovers = pytest.mark.ignore_leftovers
 # the app labels specified
 ignore_leftover_label = pytest.mark.ignore_leftover_label
 
+# Mark test cases, that do not require data rebalance to be completed before they start, with this label
+ignore_data_rebalance = pytest.mark.ignore_data_rebalance
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this

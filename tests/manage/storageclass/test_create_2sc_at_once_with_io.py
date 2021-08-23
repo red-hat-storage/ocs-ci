@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@ignore_data_rebalance
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2394")

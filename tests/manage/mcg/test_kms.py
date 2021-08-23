@@ -2,7 +2,11 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_no_kms,
+    ignore_data_rebalance,
+)
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources import pod
@@ -11,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_no_kms
+@ignore_data_rebalance
 class TestNoobaaKMS(MCGTest):
     """
     Test KMS integration with NooBaa

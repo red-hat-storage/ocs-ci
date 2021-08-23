@@ -2,11 +2,18 @@ import logging
 import pytest
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.framework.testlib import ui, skipif_ocs_version, tier2, skipif_ibm_cloud
+from ocs_ci.framework.testlib import (
+    ui,
+    skipif_ocs_version,
+    tier2,
+    skipif_ibm_cloud,
+    ignore_data_rebalance,
+)
 
 logger = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 class TestPvcUserInterface(object):
     """
     Test Quickstarts in the User Interface

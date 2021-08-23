@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_openshift_dedicated,
     tier4,
     tier4a,
+    ignore_data_rebalance,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
 @skipif_openshift_dedicated
+@ignore_data_rebalance
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.

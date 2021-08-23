@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    acceptance,
+    ignore_data_rebalance,
+)
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
@@ -11,6 +16,7 @@ from ocs_ci.helpers import helpers
 logger = logging.getLogger(__name__)
 
 
+@ignore_data_rebalance
 class TestDynamicPvc(ManageTest):
     """
     Automates the following test cases:

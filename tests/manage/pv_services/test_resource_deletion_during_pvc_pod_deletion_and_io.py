@@ -5,7 +5,13 @@ from itertools import cycle
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4,
+    tier4c,
+    ignore_leftover_label,
+    ignore_data_rebalance,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -38,6 +44,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@ignore_data_rebalance
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],

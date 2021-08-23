@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
-from ocs_ci.ocs.cluster import CephCluster
+
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_flexy_deployment,
@@ -26,7 +26,3 @@ class TestAddNode(ManageTest):
 
         """
         add_nodes(ocs_nodes=True)
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=3600
-        ), "Data re-balance failed to complete"

@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_aws_creds_are_missing,
     skipif_openshift_dedicated,
+    ignore_data_rebalance,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_openshift_dedicated
 @skipif_aws_creds_are_missing
+@ignore_data_rebalance
 class TestMultiRegion(MCGTest):
     """
     Test the multi region functionality

@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
     bugzilla,
+    ignore_data_rebalance,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -31,6 +32,7 @@ POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPAC
 
 
 @tier4a
+@ignore_data_rebalance
 @ignore_leftovers
 @skipif_external_mode
 @skipif_ocs_version("<4.6")

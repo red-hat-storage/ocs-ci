@@ -6,7 +6,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ui, ignore_leftovers, skipif_lso
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import ceph_health_check
@@ -73,10 +72,6 @@ class TestAddCapacityUI(object):
         infra_ui_obj.verify_pod_status(pod_names=osd_pod_names)
 
         logger.info("Wait data re-balance to complete")
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=5400
-        ), "Data re-balance failed to complete"
 
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
