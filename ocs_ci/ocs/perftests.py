@@ -5,19 +5,19 @@ import re
 
 from elasticsearch import Elasticsearch
 
-from ocs_ci.framework.testlib import BaseTest
-
-from ocs_ci.ocs import defaults, constants, node
-from ocs_ci.ocs import benchmark_operator
 from ocs_ci.framework import config
-from ocs_ci.ocs.version import get_environment_info
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
-from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.resources import pod
+from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.helpers.performance_lib import run_oc_command
+
+from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
+from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.version import get_environment_info
+
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 
 log = logging.getLogger(__name__)
 
@@ -263,13 +263,16 @@ class PASTest(BaseTest):
 
         Raise:
             exception for too much restarts of the test.
+            ResourceWrongStatusException : test Failed / Error
+            TimeoutExpiredError : test did not completed on time.
 
         """
         log.info(f"Waiting for {self.client_pod_name} to complete")
 
         Finished = 0
         restarts = 0
-        while not Finished:
+        total_time = timeout
+        while not Finished and total_time > 0:
             results = run_oc_command(
                 "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
                 namespace=benchmark_operator.BMO_NAME,
@@ -285,36 +288,54 @@ class PASTest(BaseTest):
                 )
                 self.client_pod = fname
                 restarts += 1
+                # in case of restarting the benchmark, reset the timeout as well
+                total_time = timeout
             if restarts > 3:
                 err_msg = f"Too much restarts of the benchmark ({restarts})"
                 log.error(err_msg)
                 raise Exception(err_msg)
             if status == "Succeeded":
+                # Getting the end time of the benchmark - for reporting.
                 self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
                 self.test_logs = self.pod_obj.exec_oc_cmd(
                     f"logs {self.client_pod}", out_yaml_format=False
                 )
                 log.info(f"{self.client_pod} completed successfully")
                 Finished = 1
+            elif (
+                status != constants.STATUS_RUNNING
+                and status != constants.STATUS_PENDING
+            ):
+                # if the benchmark pod is not in Running state (and not Completed/Pending),
+                # no need to wait for timeout.
+                # Note: the pod can be in pending state in case of restart.
+                err_msg = f"{self.client_pod} Failed to run - ({status})"
+                log.error(err_msg)
+                raise exceptions.ResourceWrongStatusException(
+                    self.client_pod,
+                    describe_out=err_msg,
+                    column="Status",
+                    expected="Succeeded",
+                    got=status,
+                )
             else:
                 log.info(
                     f"{self.client_pod} is in {status} State, and wait to Succeeded State."
                     f" wait another {sleep} sec. for benchmark to complete"
                 )
                 time.sleep(sleep)
+                total_time -= sleep
 
-        self.pod_obj.wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
-            resource_name=self.client_pod,
-            timeout=timeout,
-            sleep=sleep,
-        )
+        if not Finished:
+            err_msg = (
+                f"{self.client_pod} did not completed on time, "
+                f"maybe timeout ({timeout}) need to be increase"
+            )
+            log.error(err_msg)
+            raise exceptions.TimeoutExpiredError(
+                self.client_pod, custom_message=err_msg
+            )
 
-        # Getting the end time of the benchmark - for reporting.
-        self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-        self.test_logs = self.pod_obj.exec_oc_cmd(
-            f"logs {self.client_pod}", out_yaml_format=False
-        )
         # Saving the benchmark internal log into a file at the logs directory
         log_file_name = f"{self.full_log_path}/test-pod.log"
         try:
