@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_aws_creds_are_missing,
     bugzilla,
-    skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -102,15 +101,14 @@ def test_pod_io(
 
 @post_upgrade
 @bugzilla("1974343")
-@skipif_ocs_version("<4.4")
 @pytest.mark.polarion_id("OCS-2629")
 def test_pod_log_after_upgrade():
     """
     Check OSD/MON/MGR pod logs after upgrade and verify the expected log exist
 
     """
-    osd_pod_objs = get_osd_pods() + get_mon_pods() + get_mgr_pods()
-    pod_names = [osd_pod_obj.name for osd_pod_obj in osd_pod_objs]
+    pod_objs = get_osd_pods() + get_mon_pods() + get_mgr_pods()
+    pod_names = [osd_pod_obj.name for osd_pod_obj in pod_objs]
     expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
     logging.info(
         f"The log '{expected_log_after_upgrade}' appears after the osd/mon/mg pod is initialized"
