@@ -1206,7 +1206,7 @@ def node_replacement_verification_steps_user_side(
 
 
 def node_replacement_verification_steps_ceph_side(
-    old_node_name, new_node_name, new_osd_node_name
+    old_node_name, new_node_name, new_osd_node_name=None
 ):
     """
     Check the verification steps from the Ceph side, after the process
@@ -1233,17 +1233,27 @@ def node_replacement_verification_steps_ceph_side(
 
     ct_pod = pod.get_ceph_tools_pod()
     ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    if new_osd_node_name not in ceph_osd_status:
-        log.warning("new osd node name not found in 'ceph osd status' output")
-        return False
+    log.info(f"Ceph osd status: {ceph_osd_status}")
+    osd_node_names = get_osd_running_nodes()
+    log.info(f"osd node names: {osd_node_names}")
+
+    if new_osd_node_name:
+        log.info(f"New osd node name is: {new_osd_node_name}")
+        if new_osd_node_name not in ceph_osd_status:
+            log.warning("new osd node name not found in 'ceph osd status' output")
+            return False
+        if new_osd_node_name not in osd_node_names:
+            log.warning("the new osd hostname not found in osd node names")
+            return False
+    else:
+        log.info(
+            "New osd node name is not provided. Continue with the other verification steps..."
+        )
+
     if old_node_name in ceph_osd_status:
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    osd_node_names = get_osd_running_nodes()
-    if new_osd_node_name not in osd_node_names:
-        log.warning("the new osd hostname not found in osd node names")
-        return False
     if old_node_name in osd_node_names:
         log.warning("the old hostname found in osd node names")
         return False
