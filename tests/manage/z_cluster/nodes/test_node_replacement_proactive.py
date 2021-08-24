@@ -58,8 +58,40 @@ def check_node_replacement_verification_steps(
         AssertionError: If the node replacement verification steps failed.
 
     """
-    new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout=1500)
-    assert new_osd_node_name, "New osd node not found"
+    min_osd_nodes = 3
+    num_of_old_osd_nodes = len(old_osd_node_names)
+    ocs_nodes = node.get_ocs_nodes()
+    num_of_old_ocs_nodes = len(ocs_nodes)
+
+    if num_of_old_osd_nodes <= min_osd_nodes:
+        log.info(
+            f"We have {num_of_old_osd_nodes} osd nodes in the cluster - which is the minimum number "
+            f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
+        )
+        timeout = 1500
+        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        assert new_osd_node_name, (
+            f"New osd node not found after the node replacement process "
+            f"while waiting for {timeout} seconds"
+        )
+    elif num_of_old_osd_nodes < num_of_old_ocs_nodes:
+        num_of_extra_old_ocs_nodes = num_of_old_ocs_nodes - num_of_old_osd_nodes
+        log.info(
+            f"We have {num_of_extra_old_ocs_nodes} existing extra OCS worker nodes in the cluster"
+            f"Wait for one of the existing OCS nodes to appear in the osd nodes"
+        )
+        timeout = 600
+        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        assert new_osd_node_name, (
+            f"New osd node not found after the node replacement process "
+            f"while waiting for {timeout} seconds"
+        )
+    else:
+        log.info(
+            f"We have more than {min_osd_nodes} osd nodes in the cluster, and also we don't have "
+            f"an existing extra OCS worker nodes in the cluster. Don't wait for the new osd node"
+        )
+        new_osd_node_name = None
 
     assert node.node_replacement_verification_steps_ceph_side(
         old_node_name, new_node_name, new_osd_node_name
