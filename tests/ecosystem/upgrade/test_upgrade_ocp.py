@@ -67,6 +67,8 @@ class TestUpgradeOCP(ManageTest):
 
         """
 
+        cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
+        logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
@@ -151,6 +153,9 @@ class TestUpgradeOCP(ManageTest):
                 if sampler:
                     logger.info("Upgrade Completed Successfully!")
                     break
+
+        cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
+        logger.debug(f"Cluster versions post upgrade:\n{cluster_ver}")
 
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
