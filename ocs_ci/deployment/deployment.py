@@ -60,6 +60,7 @@ from ocs_ci.utility import (
     kms as KMS,
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.utils import (
     ceph_health_check,
     enable_huge_pages,
@@ -342,7 +343,7 @@ class Deployment(object):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and not live_deployment
         ):
-            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
+            link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         package_manifest = PackageManifest(
@@ -484,9 +485,7 @@ class Deployment(object):
             csv.wait_for_phase("Installing", timeout=720)
             logger.info("Sleeping for 30 seconds before applying SA")
             time.sleep(30)
-            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
-            logger.info("Deleting all pods in openshift-storage namespace")
-            exec_cmd(f"oc delete pod --all -n {self.namespace}")
+            link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
@@ -1003,37 +1002,6 @@ def create_ocs_secret(namespace):
     )
     templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
     exec_cmd(f"oc apply -f {secret_manifest.name} -n {namespace}", timeout=2400)
-
-
-def link_sa_and_secret(sa_name, secret_name, namespace):
-    """
-    Link service account and secret for pulling of images.
-
-    Args:
-        sa_name (str): service account name
-        secret_name (str): secret name
-        namespace (str): namespace name
-
-    """
-    exec_cmd(f"oc secrets link {sa_name} {secret_name} --for=pull -n {namespace}")
-
-
-def link_all_sa_and_secret(secret_name, namespace):
-    """
-    Link all service accounts in specified namespace with the secret for pulling
-    of images.
-
-    Args:
-        secret_name (str): secret name
-        namespace (str): namespace name
-
-    """
-    service_account = ocp.OCP(kind="serviceAccount", namespace=namespace)
-    service_accounts = service_account.get()
-    for sa in service_accounts.get("items", []):
-        sa_name = sa["metadata"]["name"]
-        logger.info(f"Linking secret: {secret_name} with SA: {sa_name}")
-        link_sa_and_secret(sa_name, secret_name, namespace)
 
 
 def create_catalog_source(image=None, ignore_upgrade=False):
