@@ -7,21 +7,22 @@ import pytest
 import statistics
 
 # Local modules
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.version import get_environment_info
+from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
-    E2ETest,
     performance,
 )
 from ocs_ci.utility.utils import ceph_health_check
@@ -29,23 +30,10 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
-def ripsaw(request, storageclass_factory):
-    def teardown():
-        ripsaw.cleanup()
-        time.sleep(10)
-
-    request.addfinalizer(teardown)
-
-    ripsaw = RipSaw()
-
-    return ripsaw
-
-
 @performance
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
-class TestPvcSnapshotPerformance(E2ETest):
+class TestPvcSnapshotPerformance(PASTest):
     """
     Tests to verify PVC snapshot creation and deletion performance
     """
@@ -81,7 +69,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
         )
 
-        self.pod_obj = pod_factory(
+        self.pod_object = pod_factory(
             interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
@@ -186,29 +174,29 @@ class TestPvcSnapshotPerformance(E2ETest):
             }
             log.info(f"Starting test phase number {test_num}")
             # Step 1. Run I/O on a pod file.
-            file_name = f"{self.pod_obj.name}-{test_num}"
-            log.info(f"Starting IO on the POD {self.pod_obj.name}")
+            file_name = f"{self.pod_object.name}-{test_num}"
+            log.info(f"Starting IO on the POD {self.pod_object.name}")
             # Going to run only write IO to fill the PVC for the snapshot
-            self.pod_obj.fillup_fs(size=file_size, fio_filename=file_name)
+            self.pod_object.fillup_fs(size=file_size, fio_filename=file_name)
 
             # Wait for fio to finish
-            fio_result = self.pod_obj.get_fio_results()
+            fio_result = self.pod_object.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
             assert (
                 err_count == 0
-            ), f"IO error on pod {self.pod_obj.name}. FIO result: {fio_result}"
+            ), f"IO error on pod {self.pod_object.name}. FIO result: {fio_result}"
             log.info("IO on the PVC Finished")
 
             # Verify presence of the file
-            file_path = pod.get_file_path(self.pod_obj, file_name)
+            file_path = pod.get_file_path(self.pod_object, file_name)
             log.info(f"Actual file path on the pod {file_path}")
             assert pod.check_file_existence(
-                self.pod_obj, file_path
+                self.pod_object, file_path
             ), f"File {file_name} doesn't exist"
-            log.info(f"File {file_name} exists in {self.pod_obj.name}")
+            log.info(f"File {file_name} exists in {self.pod_object.name}")
 
             # Step 2. Calculate md5sum of the file.
-            orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
+            orig_md5_sum = pod.cal_md5sum(self.pod_object, file_name)
 
             # Step 3. Take a snapshot of the PVC and measure the time of creation.
             snap_name = self.pvc_obj.name.replace(
@@ -276,7 +264,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             log.info(f'restore sped is : {test_results["restore"]["speed"]} MB/sec')
 
             # Step 5. Attach a new pod to the restored PVC
-            restore_pod_obj = helpers.create_pod(
+            restore_pod_object = helpers.create_pod(
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
                 namespace=self.snap_obj.namespace,
@@ -285,29 +273,29 @@ class TestPvcSnapshotPerformance(E2ETest):
 
             # Confirm that the pod is running
             helpers.wait_for_resource_state(
-                resource=restore_pod_obj, state=constants.STATUS_RUNNING
+                resource=restore_pod_object, state=constants.STATUS_RUNNING
             )
-            teardown_factory(restore_pod_obj)
-            restore_pod_obj.reload()
+            teardown_factory(restore_pod_object)
+            restore_pod_object.reload()
 
             # Step 6. Verify that the file is present on the new pod also.
             log.info(
                 f"Checking the existence of {file_name} "
-                f"on restore pod {restore_pod_obj.name}"
+                f"on restore pod {restore_pod_object.name}"
             )
             assert pod.check_file_existence(
-                restore_pod_obj, file_path
+                restore_pod_object, file_path
             ), f"File {file_name} doesn't exist"
-            log.info(f"File {file_name} exists in {restore_pod_obj.name}")
+            log.info(f"File {file_name} exists in {restore_pod_object.name}")
 
             # Step 7. Verify that the md5sum matches
             log.info(
                 f"Verifying that md5sum of {file_name} "
-                f"on pod {self.pod_obj.name} matches with md5sum "
-                f"of the same file on restore pod {restore_pod_obj.name}"
+                f"on pod {self.pod_object.name} matches with md5sum "
+                f"of the same file on restore pod {restore_pod_object.name}"
             )
             assert pod.verify_data_integrity(
-                restore_pod_obj, file_name, orig_md5_sum
+                restore_pod_object, file_name, orig_md5_sum
             ), "Data integrity check failed"
             log.info("Data integrity check passed, md5sum are same")
 
@@ -349,39 +337,22 @@ class TestPvcSnapshotPerformance(E2ETest):
                 marks=[pytest.mark.polarion_id("OCS-2624")],
             ),
             pytest.param(
-                *[16, 250000, 8, constants.CEPHBLOCKPOOL],
-                marks=[pytest.mark.polarion_id("OCS-2624")],
-            ),
-            pytest.param(
-                *[8, 500000, 8, constants.CEPHBLOCKPOOL],
-                marks=[pytest.mark.polarion_id("OCS-2624")],
-            ),
-            pytest.param(
                 *[32, 125000, 8, constants.CEPHFILESYSTEM],
-                marks=[pytest.mark.polarion_id("OCS-2625")],
-            ),
-            pytest.param(
-                *[16, 250000, 8, constants.CEPHFILESYSTEM],
-                marks=[pytest.mark.polarion_id("OCS-2625")],
-            ),
-            pytest.param(
-                *[8, 500000, 8, constants.CEPHFILESYSTEM],
                 marks=[pytest.mark.polarion_id("OCS-2625")],
             ),
         ],
     )
     def test_pvc_snapshot_performance_multiple_files(
-        self, ripsaw, file_size, files, threads, interface
+        self, file_size, files, threads, interface
     ):
         """
         Run SmallFile Workload and the take snapshot.
-        test will run with 1M, 2M and 4M of file on the volume - total data set
+        test will run with 1M of file on the volume - total data set
         is the same for all tests, ~30GiB, and then take snapshot and measure
         the time it takes.
         the test will run 3 time to check consistency.
 
         Args:
-            ripsaw : benchmark operator fixture which will run the workload
             file_size (int): the size of the file to be create - in KiB
             files (int): number of files each thread will create
             threads (int): number of threads will be used in the workload
@@ -393,6 +364,12 @@ class TestPvcSnapshotPerformance(E2ETest):
                            more then 2 Hours
 
         """
+
+        # Deploying elastic-search server in the cluster for use by the
+        # SmallFiles workload, since it is mandatory for the workload.
+        # This is deployed once for all test iterations and will be deleted
+        # in the end of the test.
+        self.es = ElasticSearch()
 
         # Loading the main template yaml file for the benchmark and update some
         # fields with new values
@@ -411,7 +388,9 @@ class TestPvcSnapshotPerformance(E2ETest):
         sf_data["spec"]["workload"]["args"]["files"] = files
         sf_data["spec"]["workload"]["args"]["threads"] = threads
         sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-        del sf_data["spec"]["elasticsearch"]
+        sf_data["spec"]["elasticsearch"] = {
+            "url": f"http://{self.es.get_ip()}:{self.es.get_port()}"
+        }
 
         """
         Calculating the size of the volume that need to be test, it should
@@ -437,9 +416,11 @@ class TestPvcSnapshotPerformance(E2ETest):
         sf_data["spec"]["clustername"] = environment["clustername"]
         log.debug(f"The smallfile yaml file is {sf_data}")
 
-        # Deploy the ripsaw operator
-        log.info("Apply Operator CRD")
-        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
+        # Deploy the benchmark-operator, so we can use the SmallFiles workload
+        # to fill up the volume with files, and switch to the benchmark-operator namespace.
+        log.info("Deploy the benchmark-operator")
+        self.deploy_benchmark_operator()
+        switch_to_project(BMO_NAME)
 
         all_results = []
 
@@ -456,7 +437,7 @@ class TestPvcSnapshotPerformance(E2ETest):
                 10,
                 get_pod_name_by_pattern,
                 "smallfile-client",
-                constants.RIPSAW_NAMESPACE,
+                BMO_NAME,
             ):
                 try:
                     if bench_pod[0] is not None:
@@ -465,7 +446,7 @@ class TestPvcSnapshotPerformance(E2ETest):
                 except IndexError:
                     log.info("Bench pod not ready yet")
 
-            bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
+            bench_pod = OCP(kind="pod", namespace=BMO_NAME)
             log.info("Waiting for SmallFile benchmark to Run")
             assert bench_pod.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
@@ -473,12 +454,16 @@ class TestPvcSnapshotPerformance(E2ETest):
                 sleep=30,
                 timeout=600,
             )
-            for item in bench_pod.get()["items"][1]["spec"]["volumes"]:
-                if "persistentVolumeClaim" in item:
-                    pvc_name = item["persistentVolumeClaim"]["claimName"]
-                    break
+            # Initialize the pvc_name variable so it will not be in loop scope only.
+            pvc_name = ""
+            for item in bench_pod.get()["items"]:
+                if item.get("metadata").get("name") == small_file_client_pod:
+                    for volume in item.get("spec").get("volumes"):
+                        if "persistentVolumeClaim" in volume:
+                            pvc_name = volume["persistentVolumeClaim"]["claimName"]
+                            break
             log.info(f"Benchmark PVC name is : {pvc_name}")
-            # Creation of 4M files on CephFS can take a lot of time
+            # Creation of 1M files on CephFS can take a lot of time
             timeout = 7200
             while timeout >= 0:
                 logs = bench_pod.get_logs(name=small_file_client_pod)
@@ -489,6 +474,8 @@ class TestPvcSnapshotPerformance(E2ETest):
                     raise TimeoutError("Timed out waiting for benchmark to complete")
                 time.sleep(30)
             log.info(f"Smallfile test ({test_num + 1}) finished.")
+
+            # Taking snapshot of the PVC (which contain files)
             snap_name = pvc_name.replace("claim", "snapshot-")
             log.info(f"Taking snapshot of the PVC {pvc_name}")
             log.info(f"Snapshot name : {snap_name}")
@@ -498,7 +485,7 @@ class TestPvcSnapshotPerformance(E2ETest):
             log.info(f"Snapshot creation time is {creation_time} seconds")
             all_results.append(creation_time)
 
-            # Delete the smallfile workload
+            # Delete the smallfile workload - which will delete also the PVC
             log.info("Deleting the smallfile workload")
             if sf_obj.delete(wait=True):
                 log.info("The smallfile workload was deleted successfully")
@@ -509,6 +496,13 @@ class TestPvcSnapshotPerformance(E2ETest):
                 log.info("The snapshot deleted successfully")
             log.info("Verify (and wait if needed) that ceph health is OK")
             ceph_health_check(tries=45, delay=60)
+
+            # Sleep for 1 Min. between test samples
+            time.sleep(60)
+
+        # Cleanup the elasticsearch instance.
+        log.info("Deleting the elastic-search instance")
+        self.es.cleanup()
 
         log.info(f"Full test report for {interface}:")
         log.info(
