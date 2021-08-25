@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     load_config_file,
     TimeoutSampler,
 )
+from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import (
     TimeoutException,
@@ -475,13 +476,12 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     ceph_cluster = CephCluster()
     original_ocs_version = config.ENV_DATA.get("ocs_version")
+    upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
     upgrade_ocs = OCSUpgrade(
         namespace=config.ENV_DATA["cluster_namespace"],
         version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-        upgrade_in_current_source=config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        ),
+        upgrade_in_current_source=upgrade_in_current_source,
     )
     upgrade_version = upgrade_ocs.get_upgrade_version()
     assert (
@@ -522,6 +522,21 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         upgrade_ocs.update_subscription(channel)
+        if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+            upgrade_in_current_source
+        ):
+            for attempt in range(2):
+                # We need to do it twice, because some of the SA are updated
+                # after the first load of OCS pod after upgrade. So we need to
+                # link updated SA again.
+                log.info(
+                    f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                    "of linking secret/SAs"
+                )
+                time.sleep(60)
+                link_all_sa_and_secret_and_delete_pods(
+                    constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                )
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)
