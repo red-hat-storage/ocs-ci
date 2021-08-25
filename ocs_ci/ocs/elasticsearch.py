@@ -3,9 +3,10 @@ Deploying an Elasticsearch server for collecting logs from ripsaw benchmarks.
 Interface for the Performance ElasticSearch server
 
 """
-import logging
 import base64
 import json
+import logging
+import os
 
 from elasticsearch import Elasticsearch, helpers, exceptions as esexp
 
@@ -103,9 +104,10 @@ class ElasticSearch(object):
         """
         log.info("Initializing the Elastic-Search environment object")
         self.namespace = "elastic-system"
-        self.eck_file = "ocs_ci/templates/app-pods/eck.1.6.0-all-in-one.yaml"
-        self.dumper_file = "ocs_ci/templates/app-pods/esclient.yaml"
-        self.crd = "ocs_ci/templates/app-pods/esq.yaml"
+        self.eck_path = os.path.join(constants.TEMPLATE_APP_POD_DIR, "eck1.7")
+        self.eck_file = os.path.join(self.eck_path, "crds.yaml")
+        self.dumper_file = os.path.join(constants.TEMPLATE_APP_POD_DIR, "esclient.yaml")
+        self.crd = os.path.join(self.eck_path, "esq.yaml")
 
         # Creating some different types of OCP objects
         self.ocp = OCP(
@@ -156,13 +158,19 @@ class ElasticSearch(object):
         """
 
         log.info("Deploying the ECK environment for the ES cluster")
+        log.info("Deploy the ECK CRD's")
         self.ocp.apply(self.eck_file)
+        log.info("deploy the ECK operator")
+        self.ocp.apply(f"{self.eck_path}/operator.yaml")
 
         sample = TimeoutSampler(
             timeout=300, sleep=10, func=self._pod_is_found, pattern="elastic-operator"
         )
         if not sample.wait_for_func_status(True):
-            raise Exception("ECK deployment Failed")
+            err_msg = "ECK deployment Failed"
+            log.error(err_msg)
+            self.cleanup()
+            raise Exception(err_msg)
 
         log.info("The ECK pod is ready !")
 
@@ -180,6 +188,7 @@ class ElasticSearch(object):
             timeout=300, sleep=10, func=self._pod_is_found, pattern="es-dumper"
         )
         if not sample.wait_for_func_status(True):
+            self.cleanup()
             raise Exception("Dumper pod deployment Failed")
         self.dump_pod = get_pod_name_by_pattern("es-dumper", self.namespace)[0]
         log.info(f"The dumper client pod {self.dump_pod} is ready !")
@@ -233,6 +242,7 @@ class ElasticSearch(object):
             pattern="quickstart-es-default",
         )
         if not sample.wait_for_func_status(True):
+            self.cleanup()
             raise Exception("The ElasticSearch pod deployment Failed")
         self.espod = get_pod_name_by_pattern("quickstart-es-default", self.namespace)[0]
         log.info(f"The ElasticSearch pod {self.espod} Started")
@@ -281,6 +291,7 @@ class ElasticSearch(object):
         self.ocp.delete(yaml_file=self.crd)
         log.info("Deleting the es project")
         # self.ns_obj.delete_project(project_name=self.namespace)
+        self.ocp.delete(f"{self.eck_path}/operator.yaml")
         self.ocp.delete(yaml_file=self.eck_file)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
 
