@@ -63,7 +63,9 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @pytest.skip("This test case is highly destructive, hence skipped until stabilized")
+    @pytest.mark.skip(
+        "This test case is highly destructive, hence skipped until stabilized"
+    )
     def test_worker_node_restart_during_pvc_expansion(self, nodes):
         """
         Verify PVC expansion will succeed if a worker node is restarted
