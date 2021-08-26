@@ -57,6 +57,9 @@ class AWSBase(CloudDeploymentBase):
         """
         super(AWSBase, self).__init__()
         self.aws = AWSUtil(self.region)
+        # dict of cluster prefixes with special handling rules (for existence
+        # check or during a cluster cleanup)
+        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def host_network_update(self):
         """
@@ -171,9 +174,6 @@ class AWSIPI(AWSBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
-        # dict of cluster prefixes with special handling rules (for existence
-        # check or during a cluster cleanup)
-        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
