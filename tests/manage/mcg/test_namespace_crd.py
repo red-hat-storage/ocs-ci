@@ -788,7 +788,7 @@ class TestNamespace(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 1000,
+                        "ttl": 600000,
                         "namespacestore_dict": {
                             "aws": [(1, "eu-central-1")],
                         },
@@ -835,9 +835,8 @@ class TestNamespace(MCGTest):
 
         # Delete the object from mcg interface
         s3_delete_object(mcg_obj, bucket_obj.name, writen_objs_names[0])
-        sleep(1)
-        if not check_cached_objects_by_name(mcg_obj, bucket_obj.name):
-            raise UnexpectedBehaviour("Object was not deleted from cache properly")
+        # Wait for object to be deleted from cache
+        wait_for_cache(mcg_obj, bucket_obj.name)
 
         # Check deletion in the cloud provider
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name

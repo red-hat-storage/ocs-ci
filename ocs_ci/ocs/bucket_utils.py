@@ -1082,6 +1082,11 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
         expected_objects_names (list): Expected objects to be cached
 
     """
+    if expected_objects_names:
+        error_msg = "Objects were not able to cache properly"
+    else:
+        error_msg = "Objects were not deleted from cache properly"
+
     sample = TimeoutSampler(
         timeout=60,
         sleep=10,
@@ -1091,7 +1096,7 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
         expected_objects_names=expected_objects_names,
     )
     if not sample.wait_for_func_status(result=True):
-        logger.error("Objects were not able to cache properly")
+        logger.error(error_msg)
         raise UnexpectedBehaviour
 
 
