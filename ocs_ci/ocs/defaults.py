@@ -84,5 +84,6 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
+        "VAULT_BACKEND": "kv-v2",
     }
 }

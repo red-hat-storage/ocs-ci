@@ -79,6 +79,13 @@ class TestRbdPvEncryption(ManageTest):
             vdict[self.new_kmsid] = vdict.pop(old_key)
             vdict[self.new_kmsid]["VAULT_BACKEND_PATH"] = self.vault_resource_name
             vdict[self.new_kmsid]["VAULT_NAMESPACE"] = self.vault_resource_name
+
+            # Workaround for BZ-1997624
+            if kv_version == "v1":
+                vdict[self.new_kmsid]["VAULT_BACKEND"] = "kv"
+            else:
+                vdict[self.new_kmsid]["VAULT_BACKEND"] = "kv-v2"
+
             kms.update_csi_kms_vault_connection_details(vdict)
 
         except CommandFailed as cfe:
@@ -86,7 +93,9 @@ class TestRbdPvEncryption(ManageTest):
                 raise
             else:
                 self.new_kmsid = "1-vault"
-                self.vault.create_vault_csi_kms_connection_details()
+                self.vault.create_vault_csi_kms_connection_details(
+                    kv_version=kv_version
+                )
 
         def finalizer():
             # Remove the vault config from csi-kms-connection-details configMap
