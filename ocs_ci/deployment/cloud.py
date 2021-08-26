@@ -13,8 +13,8 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.deployment import get_cluster_prefix
 from ocs_ci.utility.utils import get_cluster_name, run_cmd
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +59,9 @@ class CloudDeploymentBase(Deployment):
 
         """
         if not config.DEPLOYMENT.get("force_deploy_multiple_clusters"):
-            cluster_name_parts = self.cluster_name.split("-")
-            prefix = cluster_name_parts[0]
-            if prefix.lower() in self.cluster_prefixes_special_rules:
-                # if the prefix is a cleanup special rule, use the next part of
-                # the cluster name as the prefix
-                prefix = cluster_name_parts[1]
+            prefix = get_cluster_prefix(
+                self.cluster_name, self.cluster_prefixes_special_rules
+            )
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
