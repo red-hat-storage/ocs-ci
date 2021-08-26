@@ -256,6 +256,7 @@ class AWSUPI(AWSBase):
             # setup necessary env variables
             upi_env_vars = {
                 "INSTANCE_NAME_PREFIX": config.ENV_DATA["cluster_name"],
+                "CLUSTER_NAME": config.ENV_DATA["cluster_name"],
                 "AWS_REGION": config.ENV_DATA["region"],
                 "rhcos_ami": config.ENV_DATA.get("rhcos_ami"),
                 "route53_domain_name": config.ENV_DATA["base_domain"],
@@ -274,6 +275,8 @@ class AWSUPI(AWSBase):
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
                 upi_env_vars["remove_bootstrap"] = "No"
+
+            logger.info(f"UPI ENV VARS = {upi_env_vars}")
 
             for key, value in upi_env_vars.items():
                 if value:
