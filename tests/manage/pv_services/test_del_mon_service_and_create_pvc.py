@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     bugzilla,
 )
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import is_lso_cluster
@@ -20,36 +21,37 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     run_io_in_bg,
     wait_for_storage_pods,
+    delete_pods,
 )
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
 POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
-@bugzilla("1858195")
 @tier4a
 @ignore_leftovers
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
-@pytest.mark.parametrize(
-    argnames=["interface"],
-    argvalues=[
-        pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
-        ),
-        pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
-        ),
-    ],
-)
 class TestPvcCreationAfterDelMonService(E2ETest):
     """
     Tests to verify PVC creation after deleting
     mon services manually
     """
 
+    @bugzilla("1858195")
+    @pytest.mark.parametrize(
+        argnames=["interface"],
+        argvalues=[
+            pytest.param(
+                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
+            ),
+            pytest.param(
+                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
+            ),
+        ],
+    )
     def test_pvc_creation_after_del_mon_services(self, interface, pod_factory):
         """
         1. Delete one mon service
@@ -235,3 +237,160 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         log.info(f"Create {interface} PVC")
         pod_obj = pod_factory(interface=interface)
         pod_obj.run_io(storage_type="fs", size="500M")
+
+    @pytest.fixture()
+    def validate_all_mon_svc_are_up_at_teardown(self, request):
+        """
+        Verifies all mon services are running
+
+        """
+
+        # Get all mon services
+        mon_svc_list = get_services_by_label(
+            label=constants.MON_APP_LABEL,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+
+        # Get all mon pods
+        mon_pods_list = get_mon_pods()
+
+        def finalizer():
+
+            # Validate all mon services are running
+            if len(mon_svc_list) != len(
+                get_services_by_label(
+                    label=constants.MON_APP_LABEL,
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                )
+            ):
+
+                # Restart the rook-operator pod
+                operator_pod_obj = get_operator_pods()
+                delete_pods(pod_objs=operator_pod_obj)
+                POD_OBJ.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.OPERATOR_LABEL,
+                )
+
+                # Wait till all mon services are up
+                for svc_list in TimeoutSampler(
+                    1200,
+                    len(mon_svc_list),
+                    get_services_by_label,
+                    constants.MON_APP_LABEL,
+                    constants.OPENSHIFT_STORAGE_NAMESPACE,
+                ):
+                    try:
+                        if len(svc_list) == len(mon_svc_list):
+                            log.info("All expected mon services are up")
+                            break
+                    except IndexError:
+                        log.error(
+                            f"All expected mon services are not up only found :{svc_list}. "
+                            f"Expected: {mon_svc_list}"
+                        )
+
+                # Wait till all mon pods running
+                POD_OBJ.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.MON_APP_LABEL,
+                    resource_count=len(mon_pods_list),
+                    timeout=600,
+                    sleep=3,
+                )
+
+                # Check the ceph health OK
+                ceph_health_check(tries=90, delay=15)
+
+        request.addfinalizer(finalizer)
+
+    @bugzilla("1969733")
+    @pytest.mark.polarion_id("OCS-2611")
+    def test_del_mon_svc(
+        self, multi_pvc_factory, validate_all_mon_svc_are_up_at_teardown
+    ):
+        """
+        Test to verify same mon comes up and running
+        after deleting mon services manually and joins the quorum
+
+        1. Delete the mon services
+        2. Restart the rook operator
+        3. Make sure all mon pods are running,
+        and same service or endpoints are running
+        4. Make sure ceph health Ok and storage pods are running
+        5. Create PVC, should succeeded.
+
+        """
+
+        self.sanity_helpers = Sanity()
+
+        # Get all mon services
+        mon_svc_before = get_services_by_label(
+            label=constants.MON_APP_LABEL,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+
+        # Get all mon pods
+        mon_pods = get_mon_pods()
+
+        # Delete the mon services one by one
+        svc_obj = OCP(
+            kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        mon_svc_ip_before = []
+        for svc in mon_svc_before:
+            svc_name = svc["metadata"]["name"]
+            mon_svc_ip_before.append(svc["spec"]["clusterIP"])
+            log.info(f"Delete mon service {svc_name}")
+            svc_obj.delete(resource_name=svc_name)
+            # Verify mon services deleted
+            svc_obj.wait_for_delete(resource_name=svc_name)
+
+        # Restart the rook-operator pod
+        operator_pod_obj = get_operator_pods()
+        delete_pods(pod_objs=operator_pod_obj)
+        POD_OBJ.wait_for_resource(
+            condition=constants.STATUS_RUNNING, selector=constants.OPERATOR_LABEL
+        )
+
+        # Verify same mon services are created again
+        for svc in mon_svc_before:
+            svc_name = svc["metadata"]["name"]
+            svc_obj.check_resource_existence(
+                should_exist=True, timeout=300, resource_name=svc_name
+            )
+        log.info("Same old mon services are recreated")
+
+        # Validate all mons are running
+        log.info("Validate all mons are up and running")
+        POD_OBJ.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MON_APP_LABEL,
+            resource_count=len(mon_pods),
+            timeout=600,
+            sleep=3,
+        )
+
+        # Validate same mon services are running
+        log.info("Validate same mon services are running")
+        mon_svc_after = get_services_by_label(
+            label=constants.MON_APP_LABEL,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        mon_svc_ip_after = [svc["spec"]["clusterIP"] for svc in mon_svc_after]
+        assert len(set(mon_svc_ip_after) ^ set(mon_svc_ip_before)) == 0, (
+            "Different mon services are running. "
+            f"Before mon services list: {mon_svc_ip_before}, "
+            f"After mon services list: {mon_svc_ip_after}"
+        )
+        log.info("Same old mon services are running and all mons are in running state")
+
+        # Verify everything running fine
+        log.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=120)
+
+        # Validate all storage pods are running
+        wait_for_storage_pods()
+
+        # Create and delete resources
+        self.sanity_helpers.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
