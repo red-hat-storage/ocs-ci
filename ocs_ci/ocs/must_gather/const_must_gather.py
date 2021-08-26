@@ -721,6 +721,12 @@ GATHER_COMMANDS_OTHERS_EXTERNAL_4_6 = GATHER_COMMANDS_OTHERS_4_6 + [
     "ocs-external-storagecluster-rbdplugin-snapclass.yaml",
 ]
 
+GATHER_COMMANDS_OTHERS_EXTERNAL_4_8 = GATHER_COMMANDS_OTHERS_4_7 + [
+    "noobaa-ceph-objectstore-user.yaml",
+    "ocs-external-storagecluster-cephcluster.yaml",
+    "ocs-external-storagecluster-cephobjectstore.yaml",
+]
+
 GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE = [
     "ocs-storagecluster-cephblockpool.yaml",
     "ocs-storagecluster-cephcluster.yaml",
@@ -775,7 +781,7 @@ GATHER_COMMANDS_VERSION = {
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
         "OTHERS_EXTERNAL": list(
-            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_4_7)
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
@@ -784,7 +790,7 @@ GATHER_COMMANDS_VERSION = {
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
         "OTHERS_EXTERNAL": list(
-            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_4_7)
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
