@@ -6,7 +6,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
-    tier2,
+    tier3,
     skipif_openshift_dedicated,
     skipif_ocs_version,
     skipif_external_mode,
@@ -26,7 +26,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 log = logging.getLogger(__name__)
 
 
-@tier2
+@tier3
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2605")
 @pytest.mark.bugzilla("1924047")
