@@ -3,6 +3,7 @@ import datetime
 import logging
 import os
 import time
+import zipfile
 
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -15,14 +16,19 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from semantic_version.base import Version
+from urllib.parse import urlparse
 from webdriver_manager.chrome import ChromeDriverManager
 
 from ocs_ci.framework import config
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.helpers.helpers import get_current_test_name
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    NotSupportedProxyConfiguration,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -592,13 +598,51 @@ def login_ui():
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
-        # use proxy, if required
+        # use proxy server, if required
         if (
             config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
         ) and config.ENV_DATA.get("client_http_proxy"):
-            chrome_options.add_argument(
-                f"--proxy-server={config.ENV_DATA.get('client_http_proxy')}"
-            )
+            client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
+            # there is a big difference between configuring not authenticated
+            # and authenticated proxy server for Chrome:
+            # * not authenticated proxy can be configured via --proxy-server
+            #   command line parameter
+            # * authenticated proxy have to be provided throught customly
+            #   created Extension and it doesn't work in headless mode!
+            if not client_proxy.username:
+                # not authenticated proxy
+                logger.info(
+                    f"Configuring not authenticated proxy ('{client_proxy.geturl()}') for browser"
+                )
+                chrome_options.add_argument(f"--proxy-server={client_proxy.geturl()}")
+            elif not headless:
+                # authenticated proxy, not headless mode
+                # create Chrome extension with proxy settings
+                logger.info(
+                    f"Configuring authenticated proxy ('{client_proxy.geturl()}') for browser"
+                )
+                _templating = Templating()
+                manifest_json = _templating.render_template(
+                    constants.CHROME_PROXY_EXTENSION_MANIFEST_JSON_TEMPLATE, {}
+                )
+                background_js = _templating.render_template(
+                    constants.CHROME_PROXY_EXTENSION_BACKGROUND_JS_TEMPLATE,
+                    {"proxy": client_proxy},
+                )
+                pluginfile = "/tmp/proxy_auth_plugin.zip"
+                with zipfile.ZipFile(pluginfile, "w") as zp:
+                    zp.writestr("manifest.json", manifest_json)
+                    zp.writestr("background.js", background_js)
+                chrome_options.add_extension(pluginfile)
+            else:
+                # authenticated proxy, headless mode
+                logger.error(
+                    "It is not possible to configure authenticated proxy "
+                    f"('{client_proxy.geturl()}') for browser in headless mode"
+                )
+                raise NotSupportedProxyConfiguration(
+                    "Unable to configure authenticated proxy in headless browser mode!"
+                )
 
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
