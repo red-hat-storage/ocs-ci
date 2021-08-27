@@ -236,6 +236,7 @@ class PVC(OCS):
             pvc_name=self.name,
             snap_yaml=snap_yaml,
             snap_name=snapshot_name,
+            namespace=self.namespace,
             sc_name=snapshotclass,
             wait=wait,
         )
@@ -364,7 +365,9 @@ def get_deviceset_pvs():
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
 
 
-def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name=None, wait=False):
+def create_pvc_snapshot(
+    pvc_name, snap_yaml, snap_name, namespace, sc_name=None, wait=False
+):
     """
     Create snapshot of a PVC
 
@@ -372,6 +375,7 @@ def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name=None, wait=False
         pvc_name (str): Name of the PVC
         snap_yaml (str): The path of snapshot yaml
         snap_name (str): The name of the snapshot to be created
+        namespace (str): The namespace for the snapshot creation
         sc_name (str): The name of the snapshot class
         wait (bool): True to wait for snapshot to be ready, False otherwise
 
@@ -380,6 +384,7 @@ def create_pvc_snapshot(pvc_name, snap_yaml, snap_name, sc_name=None, wait=False
     """
     snapshot_data = templating.load_yaml(snap_yaml)
     snapshot_data["metadata"]["name"] = snap_name
+    snapshot_data["metadata"]["namespace"] = namespace
     if sc_name:
         snapshot_data["spec"]["volumeSnapshotClassName"] = sc_name
     snapshot_data["spec"]["source"]["persistentVolumeClaimName"] = pvc_name
@@ -487,3 +492,24 @@ def create_pvc_clone(
     assert created_pvc, f"Failed to create resource {pvc_name}"
     ocs_obj.reload()
     return ocs_obj
+
+
+def get_pvc_objs(
+    pvc_names,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Get the PVC objects of the specified names
+
+    Args:
+        pvc_names (list): The list of the pvc names to get their objects
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: The PVC objects of the specified names
+
+    """
+
+    pvc_names_set = set(pvc_names)
+    pvcs = get_all_pvc_objs(namespace=namespace)
+    return [pvc for pvc in pvcs if pvc.name in pvc_names_set]
