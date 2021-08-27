@@ -3370,3 +3370,21 @@ def get_failure_domain():
 
     storage_cluster_obj = get_storage_cluster()
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
+
+
+def modify_statefulset_replica_count(statefulset_name, replica_count):
+    """
+    Function to modify statefulset replica count,
+    i.e to scale up or down statefulset
+
+    Args:
+        statefulset_namee (str): Name of statefulset
+        replica_count (int): replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return ocp_obj.patch(resource_name=statefulset_name, params=params)
