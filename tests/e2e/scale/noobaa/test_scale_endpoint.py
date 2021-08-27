@@ -1,9 +1,11 @@
 import pytest
 import logging
+import time
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
 from ocs_ci.ocs import constants, defaults, ocp, scale_pgsql
 from ocs_ci.utility import utils
 from ocs_ci.helpers import disruption_helpers
+from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +38,15 @@ options = {
         ("numjobs", "4"),
     ],
 }
+
+
+@pytest.fixture(scope="function")
+def worker_node(request):
+    def teardown():
+        scale_pgsql.delete_worker_node()
+
+    request.addfinalizer(teardown)
+    return worker_node
 
 
 @scale
@@ -71,7 +82,10 @@ class TestScaleEndpointAutoScale(MCGTest):
         )
 
     def test_scale_endpoint_and_respin_ceph_pods(
-        self, mcg_job_factory, resource_to_delete
+        self,
+        mcg_job_factory,
+        resource_to_delete,
+        worker_node,
     ):
         """
         Generate S3 workload to trigger autoscale to increase from 1 to 2 endpoint
@@ -81,14 +95,26 @@ class TestScaleEndpointAutoScale(MCGTest):
         scale_pgsql.add_worker_node()
 
         # Check autoscale endpoint count before start s3 load
-        self._assert_endpoint_count(desired_count=1)
+        self._assert_endpoint_count(desired_count=self.MIN_ENDPOINT_COUNT)
 
-        # Create s3 workload using mcg_job_factory
-        for i in range(10):
-            exec(f"job{i} = mcg_job_factory(custom_options=options)")
+        endpoint_cnt = get_endpoint_pod_count(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        get_hpa_utilization(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        job_cnt = 0
+        wait_time = 30
+        job_list = list()
+
+        while endpoint_cnt < self.MAX_ENDPOINT_COUNT:
+            exec(f"job{job_cnt} = mcg_job_factory(custom_options=options)")
+            job_list.append(f"job{job_cnt}")
+            time.sleep(wait_time)
+            endpoint_cnt = get_endpoint_pod_count(constants.OPENSHIFT_STORAGE_NAMESPACE)
+            get_hpa_utilization(constants.OPENSHIFT_STORAGE_NAMESPACE)
+            if endpoint_cnt == self.MAX_ENDPOINT_COUNT:
+                break
+            job_cnt += 1
 
         # Validate autoscale endpoint count
-        self._assert_endpoint_count(desired_count=2)
+        self._assert_endpoint_count(desired_count=self.MAX_ENDPOINT_COUNT)
 
         # Respin ceph pods
         disruption = disruption_helpers.Disruptions()
@@ -98,15 +124,12 @@ class TestScaleEndpointAutoScale(MCGTest):
             disruption.delete_resource(resource_id=i)
 
         # Delete mcg_job_factory
-        for i in range(10):
-            exec(f"job{i}.delete()")
-            exec(f"job{i}.ocp.wait_for_delete(resource_name=job{i}.name, timeout=60)")
+        for job in job_list:
+            exec(f"{job}.delete()")
+            exec(f"{job}.ocp.wait_for_delete(resource_name={job}.name, timeout=60)")
 
         # Validate autoscale endpoint count
-        self._assert_endpoint_count(desired_count=1)
-
-        # Delete workers node in the cluster
-        scale_pgsql.delete_worker_node()
+        self._assert_endpoint_count(desired_count=self.MIN_ENDPOINT_COUNT)
 
         # Check ceph health status
         utils.ceph_health_check()
