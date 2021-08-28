@@ -321,10 +321,11 @@ pvc_4_8 = {
     ),
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
     "test-storage-class": (
-    "a[id='test-storage-class-link'] span[class='co-resource-item__resource-name']", By.CSS_SELECTOR),
-    "{}": ("//*[text()='{}']", By.XPATH),
-    "test-pvc-for-sc-1": ("a[title='test-pvc-for-sc-1']", By.CSS_SELECTOR),
-    "test-pvc-for-sc-2": ("a[title='test-pvc-for-sc-2']", By.CSS_SELECTOR),
+        "a[id='test-storage-class-link'] span[class='co-resource-item__resource-name']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_storage_class": ("//*[text()='{}']", By.XPATH),
+    "test-pvc-for-sc": ("a[title='test-pvc-for-sc']", By.CSS_SELECTOR),
 }
 
 pvc_4_9 = {
@@ -335,7 +336,7 @@ pvc_4_9 = {
 
 storage_class = {
     "create-sc": (
-        '#yaml-create',
+        "#yaml-create",
         By.CSS_SELECTOR,
     ),
     "sc-name": (
@@ -346,33 +347,54 @@ storage_class = {
     "reclaim-policy": ("#storage-class-reclaim-policy", By.CSS_SELECTOR),
     "reclaim-policy-delete": ("//button[@id='Delete-link']", By.XPATH),
     "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
-    "rbd-provisioner": ("//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']", By.XPATH),
+    "rbd-provisioner": (
+        "//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']",
+        By.XPATH,
+    ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
     "ceph-block-pool": ("//div[@class='pf-c-dropdown__menu-item-main']", By.XPATH),
     "encryption": ("#storage-class-encryption", By.CSS_SELECTOR),
-    "connections-details": (".pf-c-button.pf-m-link[data-test='edit-kms-link']", By.CSS_SELECTOR),
+    "connections-details": (
+        ".pf-c-button.pf-m-link[data-test='edit-kms-link']",
+        By.CSS_SELECTOR,
+    ),
     "service-name": ("#kms-service-name", By.CSS_SELECTOR),
     "kms-address": ("#kms-address", By.CSS_SELECTOR),
     "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
-    "save-btn": (".pf-c-button.pf-m-secondary[data-test='save-action']", By.CSS_SELECTOR),
-    "advanced-settings": (".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body", By.CSS_SELECTOR
-                          ),
+    "save-btn": (
+        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        By.CSS_SELECTOR,
+    ),
+    "advanced-settings": (
+        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
+        By.CSS_SELECTOR,
+    ),
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
     "tls-server-name": ("#kms-service-tls", By.CSS_SELECTOR),
     "vault-enterprise-namespace": ("#kms-service-namespace", By.CSS_SELECTOR),
     "browse-ca-certificate": ("#kms-service-ca-cert-browse-button", By.CSS_SELECTOR),
-    "browse-client-certificate":("#kms-service-cert-browse-button", By.CSS_SELECTOR),
-    "browse-client-private-key":("#kms-service-key-browse-button", By.CSS_SELECTOR),
-    "pvc-expansion-check": ("input[class='create-storage-class-form__checkbox']", By.CSS_SELECTOR),
+    "browse-client-certificate": ("#kms-service-cert-browse-button", By.CSS_SELECTOR),
+    "browse-client-private-key": ("#kms-service-key-browse-button", By.CSS_SELECTOR),
+    "pvc-expansion-check": (
+        "input[class='create-storage-class-form__checkbox']",
+        By.CSS_SELECTOR,
+    ),
     "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
-    "save-service-details": (".pf-c-button.pf-m-secondary[data-test='save-action']", By.CSS_SELECTOR),
+    "save-service-details": (
+        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        By.CSS_SELECTOR,
+    ),
     "create": ("#save-changes", By.CSS_SELECTOR),
     "sc-dropdown": ("button[data-test-id='dropdown-button']", By.CSS_SELECTOR),
     "name-from-dropdown": ("//button[@id='NAME-link']", By.XPATH),
     "sc-search": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
     "select-sc": ("//a[normalize-space()='{}']", By.XPATH),
     "sc-actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
-    "delete-storage-class": ("//button[normalize-space()='Delete StorageClass']", By.XPATH),
+    "delete-storage-class": (
+        "button[data-test-action='Delete StorageClass']",
+        By.CSS_SELECTOR,
+    ),
+    "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
 }
 
 
@@ -662,6 +684,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "validation": {**validation, **validation_4_8},
+        "storage_class": storage_class,
         "storage_class": storage_class
         "add_capacity": add_capacity,
         "block_pool": block_pool,

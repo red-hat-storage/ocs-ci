@@ -11,7 +11,8 @@ from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.proxy import get_cluster_proxies
-from ocs_ci.ocs.ui.base_ui import BaseUI, PageNavigator
+from ocs_ci.ocs.ui.base_ui import PageNavigator
+from selenium.webdriver.common.by import By
 
 
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
@@ -104,8 +105,9 @@ def format_locator(locator, string_to_insert):
     return locator[0].format(string_to_insert), locator[1]
 
 
-def create_storage_class_ui(setup_ui, encryption=False, backend_path=None,
-                            namespace=None):
+def create_storage_class_ui(
+    setup_ui, encryption=False, backend_path=None, namespace=None
+):
     """
     Test for creation of storage class with or without encryption via UI
 
@@ -119,7 +121,9 @@ def create_storage_class_ui(setup_ui, encryption=False, backend_path=None,
     logger.info("Create Storage Class")
     base_ui_obj.do_click(pvc_loc["create-sc"])
     logger.info("Storage Class Name")
-    sc_type = create_unique_resource_name(resource_description="test", resource_type="storageclass")
+    sc_type = create_unique_resource_name(
+        resource_description="test", resource_type="storageclass"
+    )
     base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_type}")
     logger.info("Storage Class Description")
     base_ui_obj.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
@@ -136,7 +140,9 @@ def create_storage_class_ui(setup_ui, encryption=False, backend_path=None,
         logger.info("Storage Class with Encryption")
         base_ui_obj.do_click(pvc_loc["encryption"])
         logger.info("Checking if 'Change connection details' option is available")
-        conn_details = base_ui_obj.check_element_text(expected_text="Change connection details")
+        conn_details = base_ui_obj.check_element_text(
+            expected_text="Change connection details"
+        )
         if conn_details:
             logger.info("Click on Change Connection Details")
             base_ui_obj.do_click(pvc_loc["connections-details"])
@@ -165,30 +171,31 @@ def create_storage_class_ui(setup_ui, encryption=False, backend_path=None,
         time.sleep(1)
         write(os.path.abspath(constants.VAULT_CA_CERT_PEM))
         time.sleep(1)
-        press('enter')
+        press("enter")
         time.sleep(1)
         logger.info("Selecting Client Certificate")
         base_ui_obj.do_click(pvc_loc["browse-client-certificate"])
         time.sleep(1)
         write(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
         time.sleep(1)
-        press('enter')
+        press("enter")
         time.sleep(1)
         logger.info("Selecting Client Private Key")
         base_ui_obj.do_click(pvc_loc["browse-client-private-key"])
         time.sleep(1)
         write(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
         time.sleep(1)
-        press('enter')
+        press("enter")
         time.sleep(1)
         logger.info("Saving Key Management Service Advanced Settings")
-        base_ui_obj.do_click(pvc_loc["save-advanced-settings"])
+        base_ui_obj.do_click(pvc_loc["save-advanced-settings"], enable_screenshot=True)
         time.sleep(1)
         logger.info("Save Key Management Service details")
-        base_ui_obj.do_click(pvc_loc["save-service-details"])
+        base_ui_obj.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
         time.sleep(1)
     logger.info("Creating Storage Class with Encryption")
     base_ui_obj.do_click(pvc_loc["create"])
+    time.sleep(1)
 
     return sc_type
 
@@ -304,7 +311,7 @@ def get_element_type(element_name):
 
 def verify_storage_class_ui(setup_ui, sc_type):
     """
-       Test for verifying storage class details via UI
+    Test for verifying storage class details via UI
 
     """
     base_ui_obj = PageNavigator(setup_ui)
@@ -322,23 +329,19 @@ def verify_storage_class_ui(setup_ui, sc_type):
     logger.info("Click and Select Storage Class")
     base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_type))
     # Verifying Storage Class Details via UI
+    logger.info("Verifying Storage Class Details via UI")
     sc_name = base_ui_obj.check_element_text(expected_text=sc_type)
     if sc_name:
         logger.info(f"Storage Class '{sc_type}' Found")
+        return True
     else:
         logger.error(f"Storage Class '{sc_type}' Not Found, Verification Failed")
-
-    # provisioner_list = ["openshift-storage.rbd.csi.ceph.com"]
-    # provisioner = base_ui_obj.check_element_text(expected_text=provisioner_list[0])
-    # if provisioner:
-    #     logger.info(f"Provisioner '{provisioner[0]}' Found")
-    # else:
-    #     logger.error(f"Provisioner '{provisioner[0]}' Not Found, Verification Failed")
+        return False
 
 
-def delete_storage_class_with_encryption_ui(setup_ui, sc_type):
+def delete_storage_class_ui(setup_ui, sc_type):
     """
-       Test for deletion of storage class via UI
+    Test for deletion of storage class via UI
 
     """
     base_ui_obj = PageNavigator(setup_ui)
@@ -358,3 +361,21 @@ def delete_storage_class_with_encryption_ui(setup_ui, sc_type):
     base_ui_obj.do_click(pvc_loc["sc-actions"])
     logger.info("Deleting Storage Class")
     base_ui_obj.do_click(pvc_loc["delete-storage-class"])
+    logger.info("Approving Storage Class Deletion")
+    # base_ui_obj.do_click(pvc_loc["approve-storage-class-deletion"])
+    time.sleep(2)
+    # Verifying if Storage Class is Details or not via UI
+    logger.info("Verifying if Storage Class is Deleted or not via UI")
+    # base_ui_obj.refresh_page()
+    logger.info("Search Storage Class with Name on Storage Class Page")
+    sc_name = base_ui_obj.check_element_text(expected_text=sc_type)
+    if sc_name:
+        logger.error(f"Storage Class '{sc_type}' Found, Deletion via UI failed")
+        return False
+    else:
+        logger.info(f"Storage Class '{sc_type}' Not Found, Deletion successful")
+        return True
+
+
+def get_element_type(element_name):
+    return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
