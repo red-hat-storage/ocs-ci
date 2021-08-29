@@ -2,6 +2,9 @@ from selenium.webdriver.common.by import By
 
 osd_sizes = ("512", "2048", "4096")
 
+OCS_OPERATOR = "OpenShift Container Storage"
+ODF_OPERATOR = "OpenShift Data Foundation"
+
 login = {
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
@@ -103,6 +106,23 @@ deployment_4_7 = {
     ),
     "enable_encryption": ('input[data-test="encryption-checkbox"]', By.CSS_SELECTOR),
     "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+}
+
+deployment_4_9 = {
+    "click_odf_operator": (
+        'a[data-test="odf-operator-odf-catalogsource-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_console_plugin": ('input[data-test="Enable-radio-input"]', By.CSS_SELECTOR),
+    "odf_operator_installed": (
+        'a[data-test-operator-row="OpenShift Data Foundation"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_system_tab": (
+        'a[data-test-id="horizontal-link-Storage System"]',
+        By.CSS_SELECTOR,
+    ),
+    "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -447,6 +467,12 @@ validation_4_8 = {
 }
 
 locators = {
+    "4.9": {
+        "login": login,
+        "page": page_nav,
+        "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
+        "generic": generic_locators,
+    },
     "4.8": {
         "login": login,
         "page": page_nav,

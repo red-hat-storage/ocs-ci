@@ -1,8 +1,9 @@
+from semantic_version import Version
 import logging
 import tempfile
 import time
 
-from ocs_ci.ocs.ui.views import locators, osd_sizes
+from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
 from ocs_ci.utility import templating
@@ -26,6 +27,11 @@ class DeploymentUI(PageNavigator):
         super().__init__(driver)
         self.ocp_version = get_ocp_version()
         self.dep_loc = locators[self.ocp_version]["deployment"]
+        self.operator = (
+            OCS_OPERATOR
+            if Version.coerce(self.ocp_version) < Version.coerce("4.9")
+            else ODF_OPERATOR
+        )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -78,23 +84,22 @@ class DeploymentUI(PageNavigator):
 
     def install_ocs_operator(self):
         """
-        Install OCS Opeartor
+        Install OCS/ODF Opeartor
 
         """
         self.navigate_operatorhub_page()
-
-        logger.info("Search OCS Operator")
-        self.do_send_keys(
-            self.dep_loc["search_operators"], text="OpenShift Container Storage"
-        )
-
+        self.do_send_keys(self.dep_loc["search_operators"], text=self.operator)
         logger.info("Choose OCS Version")
-        self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
-
+        if self.operator is OCS_OPERATOR:
+            self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
+        elif self.operator is ODF_OPERATOR:
+            self.do_click(self.dep_loc["click_odf_operator"], enable_screenshot=True)
         logger.info("Click Install OCS")
         self.do_click(self.dep_loc["click_install_ocs"], enable_screenshot=True)
+        if self.operator is ODF_OPERATOR:
+            self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
-        self.verify_operator_succeeded(operator="OpenShift Container Storage")
+        self.verify_operator_succeeded(operator=self.operator)
 
     def install_local_storage_operator(self):
         """
@@ -123,17 +128,22 @@ class DeploymentUI(PageNavigator):
         Install Storage Cluster
 
         """
-        self.search_operator_installed_operators_page()
-
+        self.search_operator_installed_operators_page(operator=self.operator)
         logger.info("Click on ocs operator on Installed Operators")
-        self.do_click(
-            locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
-        )
-
-        logger.info("Click on Storage Cluster")
-        self.do_click(
-            locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
-        )
+        if self.operator == ODF_OPERATOR:
+            self.do_click(
+                locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
+            )
+        elif self.operator == OCS_OPERATOR:
+            self.do_click(
+                locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
+            )
 
         logger.info("Click on Create Storage Cluster")
         self.refresh_page()
@@ -212,11 +222,10 @@ class DeploymentUI(PageNavigator):
         )
         self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
 
-        device_size = str(config.ENV_DATA.get("device_size"))
-        osd_size = device_size if device_size in osd_sizes else "512"
-        logger.info(f"Configure OSD Capacity {osd_size}")
-        self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
-        self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
+        if self.operator == ODF_OPERATOR:
+            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
+        self.configure_osd_size()
 
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
@@ -226,7 +235,7 @@ class DeploymentUI(PageNavigator):
                 locator=self.dep_loc["enable_encryption"], enable_screenshot=True
             )
 
-        if self.ocp_version in ("4.7", "4.8"):
+        if self.ocp_version in ("4.7", "4.8", "4.9"):
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
             self.configure_encryption()
@@ -260,8 +269,18 @@ class DeploymentUI(PageNavigator):
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
+    def configure_osd_size(self):
+        """
+        Configure OSD Size
+        """
+        device_size = str(config.ENV_DATA.get("device_size"))
+        osd_size = device_size if device_size in osd_sizes else "512"
+        logger.info(f"Configure OSD Capacity {osd_size}")
+        self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
+        self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
+
     def verify_operator_succeeded(
-        self, operator="OpenShift Container Storage", timeout_install=300, sleep=20
+        self, operator=OCS_OPERATOR, timeout_install=300, sleep=20
     ):
         """
         Verify Operator Installation
@@ -285,9 +304,7 @@ class DeploymentUI(PageNavigator):
             )
             raise TimeoutExpiredError
 
-    def search_operator_installed_operators_page(
-        self, operator="OpenShift Container Storage"
-    ):
+    def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """
         Search Operator on Installed Operators Page
 
@@ -299,7 +316,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
 
-        if self.ocp_version in ("4.7", "4.8"):
+        if self.ocp_version in ("4.7", "4.8", "4.9"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
