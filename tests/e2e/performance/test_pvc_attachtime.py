@@ -123,10 +123,6 @@ class TestPodStartTime(PASTest):
 
         pvc_size = 5
         self.msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
-        # for i in range(samples_num):
-        #    pvc_obj = pvc_factory(interface=interface, size=pvc_size)
-        #    pod_obj = pod_factory(pvc=pvc_obj)
-        #    pod_result_list.append(pod_obj)
 
         if self.interface == constants.CEPHBLOCKPOOL_THICK:
             self.sc_obj = storageclass_factory(
@@ -211,6 +207,7 @@ class TestPodStartTime(PASTest):
                     f"{self.msg_prefix} Pod number {index} start time is {start_time},"
                     f"which is greater than 30 seconds"
                 )
+        self.full_results.add_key("attach_time", time_measures)
 
         average = statistics.mean(time_measures)
         logging.info(
