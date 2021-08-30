@@ -32,3 +32,7 @@ def test_osd_flapping_alert(measure_ceph_osd_flapping):
     api.check_alert_cleared(
         label=target_label, measure_end_time=measure_ceph_osd_flapping.get("stop")
     )
+
+
+if __name__ == "__main__":
+    test_osd_flapping_alert()

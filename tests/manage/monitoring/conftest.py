@@ -832,18 +832,13 @@ def measure_ceph_osd_flapping(measurement_dir):
         # sleep time between OSD deletion
         run_time = 45
         for i in range(6):
-            target_osd = get_osd_pods_having_ids([0])[0]
+            target_osd = get_osd_pods_having_ids(["0"])
+            print(target_osd)
             logger.info(f"Deleting OSD {target_osd}")
-            delete_pods(target_osd[0])
+            delete_pods(target_osd)
             logger.info(f"{target_osd} was deleted")
             logger.info(f"Waiting for {run_time} seconds")
             time.sleep(run_time)
-
-        """try:
-            target_osd = get_osd_pods_having_ids([0])[0]
-        except :
-            logger.error("new OSD did not came up after deletion. please report a bug")
-            return False"""
 
     test_file = os.path.join(measurement_dir, "measure_ceph_osd_flapping.json")
     measured_op = measure_operation(stop_osd, test_file)
