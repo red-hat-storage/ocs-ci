@@ -30,12 +30,13 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.VSPHERE_PLATFORM:
-            from .vmware import VSPHEREUPI, VSPHEREIPI
+            from .vmware import VSPHEREUPI, VSPHEREIPI, VSPHEREUPIFlexy
 
             self.cls_map.update(
                 {
                     "vsphere_upi": VSPHEREUPI,
                     "vsphere_ipi": VSPHEREIPI,
+                    "vsphere_upi_flexy": VSPHEREUPIFlexy,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:

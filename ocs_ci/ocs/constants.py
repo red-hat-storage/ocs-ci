@@ -1080,6 +1080,7 @@ FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
 FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
+FLEXY_VSPHERE_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml")
 FLEXY_DEFAULT_PRIVATE_CONF_REPO = (

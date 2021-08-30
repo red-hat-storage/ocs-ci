@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
@@ -449,6 +450,17 @@ class OCP(object):
         """
         command = ["oc", "login", "-u", user, "-p", password]
         status = exec_cmd(command, secrets=[password])
+        # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
+        # defined, update kubeconfig file with proxy-url parameter to redirect
+        # client access through proxy server
+        if config.DEPLOYMENT.get("proxy") and config.ENV_DATA.get("client_http_proxy"):
+            kubeconfig = os.getenv("KUBECONFIG")
+            if not kubeconfig or not os.path.exists(kubeconfig):
+                kubeconfig = os.path.join(
+                    config.ENV_DATA["cluster_path"],
+                    config.RUN.get("kubeconfig_location"),
+                )
+            update_kubeconfig_with_proxy_url_for_client(kubeconfig)
         return status
 
     def login_as_sa(self):

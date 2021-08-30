@@ -61,6 +61,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
 from .deployment import Deployment
+from .flexy import FlexyVSPHEREUPI
 
 logger = logging.getLogger(__name__)
 
@@ -925,6 +926,64 @@ class VSPHEREIPI(VSPHEREBASE):
             for i in range(constants.NUM_OF_VIPS)
         ]
         ipam.release_ips(hosts)
+
+
+class VSPHEREUPIFlexy(VSPHEREBASE):
+    """
+    A class to handle vSphere UPI Flexy deployment
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            self.flexy_deployment = True
+            super().__init__()
+            self.flexy_instance = FlexyVSPHEREUPI()
+
+            # create terraform_data directory (used for compatibility with rest
+            # of the ocs-ci)
+            self.terraform_data_dir = os.path.join(
+                self.cluster_path, constants.TERRAFORM_DATA_DIR
+            )
+            create_directory_path(self.terraform_data_dir)
+
+        def deploy_prereq(self):
+            """
+            Instantiate proper flexy class here
+
+            """
+            super().deploy_prereq()
+            self.flexy_instance.deploy_prereq()
+
+        def deploy(self, log_level=""):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+
+            """
+            self.flexy_instance.deploy(log_level)
+            self.test_cluster()
+
+        def destroy(self, log_level=""):
+            """
+            Destroy cluster using Flexy
+            """
+            self.flexy_instance.destroy()
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to vSphere UPI Flexy
+
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+
+        """
+        super().destroy_cluster(log_level)
 
 
 def change_vm_root_disk_size(machine_file):
