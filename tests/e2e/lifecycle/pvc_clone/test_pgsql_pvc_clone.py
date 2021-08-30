@@ -47,9 +47,11 @@ class TestPvcCloneOfWorkloads(E2ETest):
         4. Create pgbench benchmark to new pgsql pod
         """
 
+        self.sset_list = []
+
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
-        pgsql = pgsql_factory_fixture(replicas=3, clients=3, transactions=600)
+        pgsql = pgsql_factory_fixture(replicas=3)
 
         # Get postgres pvcs obj list
         postgres_pvcs_obj = pgsql.get_postgres_pvc()

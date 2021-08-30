@@ -86,9 +86,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
 
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
-        pgsql = pgsql_factory_fixture(
-            replicas=3, clients=3, transactions=600, sc_name=sc_obj.name
-        )
+        pgsql = pgsql_factory_fixture(replicas=3, sc_name=sc_obj.name)
 
         # Get postgres pvc list obj
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
