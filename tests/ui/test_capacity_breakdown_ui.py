@@ -7,11 +7,9 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     bugzilla,
-    ignore_leftovers,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -31,19 +29,6 @@ class TestCapacityBreakdownUI(ManageTest):
 
     """
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        def finalizer():
-            self.pod_obj.delete()
-            self.pvc_obj.delete()
-            ocp_obj = OCP(namespace=self.project_obj.namespace)
-            ocp_obj.delete_project(self.project_obj.namespace)
-            ocp_obj.wait_for_delete(
-                resource_name=self.project_obj.namespace, timeout=90
-            )
-
-        request.addfinalizer(finalizer)
-
     @pytest.mark.parametrize(
         argnames=["project_name", "pod_name", "sc_type"],
         argvalues=[
@@ -58,42 +43,46 @@ class TestCapacityBreakdownUI(ManageTest):
         ],
     )
     @tier2
-    @ignore_leftovers
     @bugzilla("1832297")
     @skipif_ui_not_support("validation")
-    def test_capacity_breakdown_ui(self, setup_ui, project_name, pod_name, sc_type):
+    def test_capacity_breakdown_ui(
+        self, setup_ui, project_name, pod_name, sc_type, teardown_project_factory
+    ):
         """
         Test Capacity Breakdown UI
 
         """
-        self.project_obj = helpers.create_project(project_name=project_name)
+        project_obj = helpers.create_project(project_name=project_name)
+        teardown_project_factory(project_obj)
         logger.info(
             f"Created new pvc sc_name={sc_type} namespace={project_name}, "
             f"size=3Gi, access_mode={constants.ACCESS_MODE_RWO}"
         )
-        self.pvc_obj = helpers.create_pvc(
+        pvc_obj = helpers.create_pvc(
             sc_name=sc_type,
             namespace=project_name,
             size="3Gi",
             do_reload=False,
             access_mode=constants.ACCESS_MODE_RWO,
         )
+        # teardown_factory(pvc_obj)
         logger.info(
             f"Create new pod. Pod name={pod_name},"
             f"interface_type={constants.CEPHBLOCKPOOL}"
         )
-        self.pod_obj = helpers.create_pod(
-            pvc_name=self.pvc_obj.name,
-            namespace=self.project_obj.namespace,
+        pod_obj = helpers.create_pod(
+            pvc_name=pvc_obj.name,
+            namespace=project_obj.namespace,
             interface_type=constants.CEPHBLOCKPOOL,
             pod_name=pod_name,
         )
+        # teardown_factory(pod_obj)
         logger.info(f"Wait for pod {pod_name} move to Running state")
         helpers.wait_for_resource_state(
-            self.pod_obj, state=constants.STATUS_RUNNING, timeout=300
+            pod_obj, state=constants.STATUS_RUNNING, timeout=300
         )
         logger.info("Run fio workload")
-        self.pod_obj.run_io(
+        pod_obj.run_io(
             storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
             size="1GB",
             io_direction="rw",
@@ -101,7 +90,7 @@ class TestCapacityBreakdownUI(ManageTest):
             runtime=60,
             depth=4,
         )
-        fio_result = self.pod_obj.get_fio_results()
+        fio_result = pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
         reads = fio_result.get("jobs")[0].get("read").get("iops")
         writes = fio_result.get("jobs")[0].get("write").get("iops")
