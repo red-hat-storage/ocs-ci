@@ -108,7 +108,12 @@ class TestScaleEndpointAutoScale(MCGTest):
             job_list.append(f"job{job_cnt}")
             time.sleep(wait_time)
             endpoint_cnt = get_endpoint_pod_count(constants.OPENSHIFT_STORAGE_NAMESPACE)
-            get_hpa_utilization(constants.OPENSHIFT_STORAGE_NAMESPACE)
+            hpa_cpu_utilization = get_hpa_utilization(
+                constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            log.info(
+                f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%"
+            )
             if endpoint_cnt == self.MAX_ENDPOINT_COUNT:
                 break
             job_cnt += 1

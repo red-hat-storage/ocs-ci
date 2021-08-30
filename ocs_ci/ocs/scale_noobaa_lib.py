@@ -153,5 +153,4 @@ def get_hpa_utilization(namespace):
         value = re.findall(r"(\d{1,3})%/(\d{1,3})%", value.strip())
         value_list = [item for elem in value for item in elem]
         hpa_cpu_utilization = int(value_list[0])
-        log.info(f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%")
     return hpa_cpu_utilization
