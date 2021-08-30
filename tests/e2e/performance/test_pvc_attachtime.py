@@ -45,16 +45,16 @@ class ResultsAnalyse(PerfResult):
 
 @performance
 @pytest.mark.parametrize(
-    argnames=["interface", "samples_num"],
+    argnames=["interface", "samples_num", "pvc_size"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 5], marks=pytest.mark.polarion_id("OCS-2044")
+            *[constants.CEPHBLOCKPOOL, 5, 5], marks=pytest.mark.polarion_id("OCS-2044")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 5], marks=pytest.mark.polarion_id("OCS-2043")
+            *[constants.CEPHFILESYSTEM, 5, 5], marks=pytest.mark.polarion_id("OCS-2043")
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL_THICK, 5],
+            *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
             marks=pytest.mark.polarion_id("OCS-2630"),
         ),
     ],
@@ -109,7 +109,13 @@ class TestPodStartTime(PASTest):
 
     @pytest.fixture()
     def pod_obj_list(
-        self, interface, storageclass_factory, pod_factory, pvc_factory, samples_num
+        self,
+        interface,
+        storageclass_factory,
+        pod_factory,
+        pvc_factory,
+        samples_num,
+        pvc_size,
     ):
         """
         Prepare sample pods for the test
@@ -121,7 +127,6 @@ class TestPodStartTime(PASTest):
         self.interface = interface
         pod_result_list = []
 
-        pvc_size = 5
         self.msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
 
         if self.interface == constants.CEPHBLOCKPOOL_THICK:
@@ -198,7 +203,6 @@ class TestPodStartTime(PASTest):
 
         time_measures = [t["web-server"] for t in start_time_dict_list]
         for index, start_time in enumerate(time_measures):
-            # start_time = start_time_dict["web-server"]
             logging.info(
                 f"{self.msg_prefix} pod number {index} start time: {start_time} seconds"
             )
