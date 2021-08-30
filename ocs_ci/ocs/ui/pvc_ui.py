@@ -1,10 +1,12 @@
 import logging
+import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ui.helpers_ui import get_element_type
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,8 @@ class PvcUI(PageNavigator):
 
         logger.info("Select Storage Class")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
-        self.do_click(self.pvc_loc[sc_type])
+        # self.do_click(self.pvc_loc[sc_type])
+        self.do_click(format_locator(self.pvc_loc["pvc_storage_class"], sc_type))
 
         logger.info("Select PVC name")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
@@ -60,14 +63,7 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
-        if (
-            sc_type
-            in (
-                constants.DEFAULT_STORAGECLASS_RBD_THICK,
-                constants.DEFAULT_STORAGECLASS_RBD,
-            )
-            and access_mode == "ReadWriteOnce"
-        ):
+        if sc_type != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
             logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
 
             logger.info(f"Selecting Volume Mode of type {vol_mode}")
@@ -75,6 +71,7 @@ class PvcUI(PageNavigator):
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
+        time.sleep(1)
 
     def verify_pvc_ui(
         self, pvc_size, access_mode, vol_mode, sc_type, pvc_name, project_name
@@ -103,7 +100,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc[pvc_name])
+        self.do_click(get_element_type(pvc_name))
 
         logger.info("Checking status of Pvc")
         self.wait_until_expected_text_is_found(
@@ -118,14 +115,7 @@ class PvcUI(PageNavigator):
         self.check_element_text(expected_text=pvc_access_mode_new)
         logger.info(f"Verifying access mode : {pvc_access_mode_new}")
 
-        if (
-            sc_type
-            in (
-                constants.DEFAULT_STORAGECLASS_RBD_THICK,
-                constants.DEFAULT_STORAGECLASS_RBD,
-            )
-            and (access_mode == "ReadWriteOnce")
-        ):
+        if sc_type != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
             pvc_vol_mode_new = f"{vol_mode}"
             self.check_element_text(expected_text=pvc_vol_mode_new)
             logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
@@ -151,7 +141,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc[pvc_name])
+        self.do_click(get_element_type(pvc_name))
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
@@ -189,7 +179,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc[pvc_name])
+        self.do_click(get_element_type(pvc_name))
 
         is_expected_capacity = self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
@@ -234,7 +224,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(self.pvc_loc[pvc_name])
+        self.do_click(get_element_type(pvc_name))
 
         logger.info("Click on Actions")
         self.do_click(self.pvc_loc["pvc_actions"])
@@ -244,3 +234,4 @@ class PvcUI(PageNavigator):
 
         logger.info("Confirm PVC Deletion")
         self.do_click(self.pvc_loc["confirm_pvc_deletion"])
+        time.sleep(1)
