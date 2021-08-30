@@ -87,6 +87,7 @@ anywhere else.
 * `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
+* `proxy` - Set if the cluster is deployed in a proxy environment
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
@@ -197,6 +198,8 @@ higher priority).
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
 * `huge_pages` - True if you would like to enable HUGE PAGES.
+* `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
+* `client_http_proxy` - proxy configuration used by client to access OCP cluster
 
 #### UPGRADE
 
