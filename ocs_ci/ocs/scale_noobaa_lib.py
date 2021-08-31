@@ -1,11 +1,13 @@
 import logging
 import time
+import re
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -112,3 +114,43 @@ def cleanup(namespace):
     if obc_name_list:
         for i in obc_name_list:
             run_cmd(f"oc delete obc {i} -n {namespace}")
+
+
+def get_endpoint_pod_count(namespace):
+    """
+    Function to query number of endpoint running in the cluster.
+
+    Args:
+        namespace (str): Namespace where endpoint is running
+
+    Returns:
+        endpoint_count (int): Number of endpoint pods
+
+    """
+    endpoint_count = pod.get_pod_count(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace
+    )
+    log.info(f"Number of noobaa-endpoint pod(s) are running: {endpoint_count}")
+    return endpoint_count
+
+
+def get_hpa_utilization(namespace):
+    """
+    Function to get hpa utilization in the cluster.
+
+    Args:
+        namespace (str): Namespace where endpoint is running
+
+    Returns:
+         hpa_cpu_utilization (int): Percentage of CPU utilization on HPA.
+
+    """
+    obj = ocp.OCP()
+    hpa_resources = obj.exec_oc_cmd(
+        command=f"get hpa -n {namespace}", out_yaml_format=False
+    ).split(",")
+    for value in hpa_resources:
+        value = re.findall(r"(\d{1,3})%/(\d{1,3})%", value.strip())
+        value_list = [item for elem in value for item in elem]
+        hpa_cpu_utilization = int(value_list[0])
+    return hpa_cpu_utilization
