@@ -1073,6 +1073,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
+@retry(CommandFailed, tries=8, delay=3)
 def setup_persistent_monitoring():
     """
     Change monitoring backend to OCS
