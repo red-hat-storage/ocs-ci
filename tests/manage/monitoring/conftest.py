@@ -12,7 +12,10 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
-from ocs_ci.ocs.resources.pod import delete_pods, get_osd_pods_having_ids
+from ocs_ci.ocs.resources.pod import (
+    delete_pods,
+    get_osd_pods_having_ids,
+)
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
@@ -813,24 +816,20 @@ def measure_noobaa_ns_target_bucket_deleted(
 @pytest.fixture
 def measure_ceph_osd_flapping(measurement_dir):
     """
-    Delete Ceph osd, measures the time when it was
-    deleted and alerts that were triggered during this event.
+    Delete Ceph osd-0 for 6 times, measures the time when it was
+    deleted (must be under 5 minute) and alerts that were triggered during this event.
 
     Returns:
-        dict: Contains information about `start` and `stop` time for stopping
-            Ceph osd pod
+        dict: Contains information about `start` and `stop` and all alerts triggerd during this time
     """
 
     def stop_osd():
         """
-        Delete osd with id 0 for 6 times with 50 seconds sleep between the deletions
-        after 5 minutes prometeuse ale
+        Delete osd with id 0 for 6 times with 10 seconds sleep between the deletions
 
-        Returns:
-            str: Names of downscaled deployments
         """
-        # sleep time between OSD deletion
-        run_time = 45
+
+        run_time = 10  # sleep time between OSD deletion
         for i in range(6):
             target_osd = get_osd_pods_having_ids(["0"])
             print(target_osd)

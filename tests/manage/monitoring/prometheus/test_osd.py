@@ -25,14 +25,10 @@ def test_osd_flapping_alert(measure_ceph_osd_flapping):
         label=target_label,
         msg=expected_alert_msg,
         alerts=alerts,
-        states=["pending", "firing"],
+        states=["firing"],
         severity="critical",
     )
 
     api.check_alert_cleared(
         label=target_label, measure_end_time=measure_ceph_osd_flapping.get("stop")
     )
-
-
-if __name__ == "__main__":
-    test_osd_flapping_alert()
