@@ -296,3 +296,6 @@ skipif_upgraded_from = pytest.mark.skipif_upgraded_from
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
+
+# Marker for skipping tests if the cluster is not using Managed Service
+skipif_not_managed_service = pytest.mark.skipif_not_managed_service
