@@ -751,7 +751,7 @@ class Vault(KMS):
         self.create_resource(csi_kms_token, prefix="csikmstoken")
 
     def create_vault_csi_kms_connection_details(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        self, kv_version, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     ):
         """
         Create vault specific csi kms connection details
@@ -772,6 +772,11 @@ class Vault(KMS):
         buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
             config.ENV_DATA, "VAULT_TOKEN_NAME", constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
         )
+        if kv_version == "v1":
+            buf["VAULT_BACKEND"] = "kv"
+        else:
+            buf["VAULT_BACKEND"] = "kv-v2"
+
         csi_kms_conn_details["data"]["1-vault"] = json.dumps(buf)
         csi_kms_conn_details["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
