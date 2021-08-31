@@ -149,7 +149,9 @@ def pytest_collection_modifyitems(session, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
-            skipif_not_managed_service_marker = item.get_closest_marker("skipif_not_managed_service")
+            skipif_not_managed_service_marker = item.get_closest_marker(
+                "skipif_not_managed_service"
+            )
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
@@ -192,7 +194,10 @@ def pytest_collection_modifyitems(session, items):
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
             if skipif_not_managed_service_marker:
-                if config.ENV_DATA["platform"].lower() != constants.OPENSHIFT_DEDICATED_PLATFORM:
+                if (
+                    config.ENV_DATA["platform"].lower()
+                    != constants.OPENSHIFT_DEDICATED_PLATFORM
+                ):
                     log.info(
                         f"Test: {item} will be skipped because the installed OCS cluster is"
                         f" not Managed Service"
