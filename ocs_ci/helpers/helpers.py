@@ -3388,3 +3388,99 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
     ocp_obj = OCP(kind=constants.STATEFULSET, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
+
+
+def get_event_line_datetime(event_line):
+    """
+    Get the event line datetime
+
+    Args:
+        event_line (str): The event line to get it's datetime
+
+    Returns:
+         datetime object: The event line datetime
+
+    """
+    if re.search(r"\d{4}-\d{2}-\d{2}", event_line):
+        return datetime.datetime.strptime(event_line[:26], "%Y-%m-%d %H:%M:%S.%f")
+    else:
+        return None
+
+
+def get_rook_ceph_pod_events(pod_name):
+    """
+    Get the rook ceph pod events from the rook ceph pod operator logs
+
+    Args:
+        pod_name (str): The rook ceph pod name to get the events
+
+    Returns:
+        list: List of all the event lines with the specific pod
+
+    """
+    rook_ceph_operator_event_lines = get_logs_rook_ceph_operator().splitlines()
+    return [line for line in rook_ceph_operator_event_lines if pod_name in line]
+
+
+def get_rook_ceph_pod_events_by_keyword(pod_name, keyword):
+    """
+    Get the rook ceph pod events with the keyword 'keyword' from the rook ceph pod operator logs
+
+    Args:
+        pod_name (str): The rook ceph pod name to get the events
+        keyword (str): The keyword to search in the events
+
+    Returns:
+        list: List of all the event lines with the specific pod that has the keyword 'keyword'
+
+    """
+    pod_event_lines = get_rook_ceph_pod_events(pod_name)
+    return [
+        event_line
+        for event_line in pod_event_lines
+        if keyword.lower() in event_line.lower()
+    ]
+
+
+def wait_for_rook_ceph_pod_status(pod_obj, desired_status, timeout=420):
+    """
+    Wait for the rook ceph pod to reach the desired status. If the pod didn't reach the
+    desired status, check if the reason is that the pod is not found. If this is the case,
+    check in the rook ceph pod operator logs to see if the pod reached the desired status.
+
+    Args:
+        pod_obj (ocs_ci.ocs.resources.pod.Pod): The rook ceph pod object
+        desired_status (str): The desired status of the pod to wait for
+        timeout (int): time to wait for the pod to reach the desired status
+
+    Returns:
+        bool: True if the rook ceph pod to reach the desired status. False, otherwise
+
+    """
+    start_log_datetime = get_last_log_time_date()
+    try:
+        wait_for_resource_state(pod_obj, desired_status, timeout=timeout)
+    except (ResourceWrongStatusException, CommandFailed) as e:
+        if "not found" in str(e):
+            logger.info(
+                f"Failed to find the pod {pod_obj.name}. Trying to search for the event "
+                f"in rook ceph operator logs..."
+            )
+            pod_event_lines_with_desired_status = get_rook_ceph_pod_events_by_keyword(
+                pod_obj.name, keyword=desired_status
+            )
+            last_pod_event_line = pod_event_lines_with_desired_status[-1]
+            last_pod_event_datetime = get_event_line_datetime(last_pod_event_line)
+            if last_pod_event_datetime > start_log_datetime:
+                logger.info(
+                    f"Found the event of pod {pod_obj.name} with status {desired_status} in "
+                    f"rook ceph operator logs. The event line is: {last_pod_event_line}"
+                )
+                return True
+            else:
+                return False
+        else:
+            logger.info(f"An error has occurred when trying to get the pod object: {e}")
+            return False
+
+    return True
