@@ -31,6 +31,7 @@ deployment = {
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
@@ -283,6 +284,7 @@ pvc_4_8 = {
     ),
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -328,6 +330,7 @@ add_capacity = {
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
