@@ -191,8 +191,7 @@ def measure_operation(
                         "time_zone": "UTC",
                     },
                 )
-                msg = f"Request {incidents_response.request.url} failed"
-                assert incidents_response.ok, msg
+                incidents_response.raise_for_status()
                 pagerduty_incidents = incidents_response.json().get("incidents")
                 results["pagerduty_incidents"] = pagerduty_incidents
             logger.info(f"Results of measurement: {results}")

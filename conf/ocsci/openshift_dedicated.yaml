@@ -11,7 +11,7 @@ ENV_DATA:
 
 # AUTH:
 #   pagerduty:
-#     api_key: PAGERDUTY API KEY PLACEHOLDER
+#     api_key: PAGERDUTY API KEY PLACEHOLDER FOR MANAGED SERVICE
 #   openshiftdedicated:
 #     token: OCM TOKEN KEY PLACEHOLDER
 

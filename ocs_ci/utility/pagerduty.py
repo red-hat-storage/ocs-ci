@@ -14,6 +14,7 @@ logger = logging.getLogger(name=__file__)
 def set_pagerduty_integration_secret(integration_key):
     """
     Update ocs-converged-pagerduty secret. This is valid only on ODF Managed Service.
+    ocs-converged-pagerduty secret is expected to be present prior to the update.
 
     Args:
         integration_key (str): Integration key taken from PagerDuty Prometheus integration
@@ -107,7 +108,6 @@ class PagerDutyAPI(object):
         }
 
         logger.debug(f"GET {self._endpoint + pattern}")
-        logger.debug(f"headers={headers}")
         logger.debug(f"params={payload}")
 
         response = requests.get(
@@ -139,7 +139,6 @@ class PagerDutyAPI(object):
         }
 
         logger.debug(f"POST {self._endpoint + pattern}")
-        logger.debug(f"headers={headers}")
         logger.debug(f"json={payload}")
 
         response = requests.post(
@@ -169,7 +168,6 @@ class PagerDutyAPI(object):
         }
 
         logger.debug(f"GET {self._endpoint + pattern}")
-        logger.debug(f"headers={headers}")
 
         response = requests.delete(
             self._endpoint + pattern,
