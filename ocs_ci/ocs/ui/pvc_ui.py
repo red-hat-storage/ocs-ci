@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class PvcUI(PageNavigator):
     """
     User Interface Selenium
+
     """
 
     def __init__(self, driver):
@@ -26,6 +27,7 @@ class PvcUI(PageNavigator):
     ):
         """
         Create PVC via UI.
+
         Args:
             project_name (str): name of test project
             sc_name (str): storage class name
@@ -33,6 +35,7 @@ class PvcUI(PageNavigator):
             access_mode (str): access mode
             pvc_size (str): the size of pvc (GB)
             vol_mode (str): volume mode type
+
         """
         self.navigate_persistentvolumeclaims_page()
 
@@ -48,6 +51,8 @@ class PvcUI(PageNavigator):
 
         logger.info("Select Storage Class")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
+        # self.do_click(self.pvc_loc[sc_type])
+        self.do_click(format_locator(self.pvc_loc["pvc_storage_class"], sc_type))
         self.do_click(self.pvc_loc[sc_type])
         self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
         # self.do_click(self.pvc_loc[sc_type])
@@ -62,6 +67,7 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
+        if sc_type != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
         if (
             sc_type
             in (
@@ -85,6 +91,7 @@ class PvcUI(PageNavigator):
     ):
         """
         Verifying PVC details via UI
+
         Args:
             pvc_size (str): the size of pvc (GB)
             access_mode (str): access mode
@@ -92,6 +99,8 @@ class PvcUI(PageNavigator):
             sc_name (str): storage class name
             pvc_name (str): the name of pvc
             project_name (str): name of test project
+
+
 
         """
         self.navigate_persistentvolumeclaims_page()
@@ -120,6 +129,10 @@ class PvcUI(PageNavigator):
         self.check_element_text(expected_text=pvc_access_mode_new)
         logger.info(f"Verifying access mode : {pvc_access_mode_new}")
 
+        if sc_type != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
+            pvc_vol_mode_new = f"{vol_mode}"
+            self.check_element_text(expected_text=pvc_vol_mode_new)
+            logger.info(f"Verifying volume mode : {pvc_vol_mode_new}")
         if (
             sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
             and access_mode == "ReadWriteOnce"
@@ -137,10 +150,12 @@ class PvcUI(PageNavigator):
     def pvc_resize_ui(self, project_name, pvc_name, new_size):
         """
         Resizing pvc via UI
+
         Args:
             project_name (str): name of test project
             pvc_name (str): the name of pvc
             new_size (int): the new size of pvc (GB)
+
         """
         self.navigate_persistentvolumeclaims_page()
 
@@ -173,10 +188,12 @@ class PvcUI(PageNavigator):
     def verify_pvc_resize_ui(self, project_name, pvc_name, expected_capacity):
         """
         Verifying PVC resize via UI
+
         Args:
             project_name (str): name of test project
             pvc_name (str): the name of pvc
             expected_capacity (str): the new size of pvc (GiB)
+
         """
         self.navigate_persistentvolumeclaims_page()
 
@@ -217,9 +234,11 @@ class PvcUI(PageNavigator):
     def delete_pvc_ui(self, pvc_name, project_name):
         """
         Delete pvc via UI
+
         Args:
             pvc_name (str): Name of the pvc
             project_name (str): name of test project
+
         """
         self.navigate_persistentvolumeclaims_page()
 

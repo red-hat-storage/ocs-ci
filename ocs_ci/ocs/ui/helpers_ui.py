@@ -362,7 +362,7 @@ def delete_storage_class_ui(setup_ui, sc_type):
     logger.info("Deleting Storage Class")
     base_ui_obj.do_click(pvc_loc["delete-storage-class"])
     logger.info("Approving Storage Class Deletion")
-    # base_ui_obj.do_click(pvc_loc["approve-storage-class-deletion"])
+    base_ui_obj.do_click(pvc_loc["approve-storage-class-deletion"])
     time.sleep(2)
     # Verifying if Storage Class is Details or not via UI
     logger.info("Verifying if Storage Class is Deleted or not via UI")
@@ -377,5 +377,4 @@ def delete_storage_class_ui(setup_ui, sc_type):
         return True
 
 
-def get_element_type(element_name):
-    return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
