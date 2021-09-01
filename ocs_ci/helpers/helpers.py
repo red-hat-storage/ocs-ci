@@ -3235,12 +3235,9 @@ def check_osd_log_exist_on_rook_ceph_operator_pod(
     new_logs = list()
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
-        if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            log_date_time_obj = datetime.datetime.strptime(
-                line[:26], "%Y-%m-%d %H:%M:%S.%f"
-            )
-            if log_date_time_obj > last_log_date_time_obj:
-                new_logs.append(line)
+        log_date_time_obj = get_event_line_datetime(line)
+        if log_date_time_obj and log_date_time_obj > last_log_date_time_obj:
+            new_logs.append(line)
     res_expected = False
     res_unexpected = True
     for new_log in new_logs:
@@ -3273,10 +3270,9 @@ def get_last_log_time_date():
     logger.info("Get last log time")
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
-        if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            last_log_date_time_obj = datetime.datetime.strptime(
-                line[:26], "%Y-%m-%d %H:%M:%S.%f"
-            )
+        log_date_time_obj = get_event_line_datetime(line)
+        if log_date_time_obj:
+            last_log_date_time_obj = log_date_time_obj
     return last_log_date_time_obj
 
 
