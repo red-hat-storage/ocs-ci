@@ -111,7 +111,8 @@ def test_pod_log_after_upgrade():
     pod_names = [osd_pod_obj.name for osd_pod_obj in pod_objs]
     expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
     logging.info(
-        f"The log '{expected_log_after_upgrade}' appears after the osd/mon/mg pod is initialized"
+        f"Check that the log '{expected_log_after_upgrade}' "
+        f"appears after the osd/mon/mg pod is initialized"
     )
     for pod_name in pod_names:
         pod_logs = get_pod_logs(pod_name=pod_name, all_containers=True)
