@@ -592,6 +592,14 @@ def login_ui():
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
+        # use proxy, if required
+        if (
+            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+        ) and config.ENV_DATA.get("client_http_proxy"):
+            chrome_options.add_argument(
+                f"--proxy-server={config.ENV_DATA.get('client_http_proxy')}"
+            )
+
         chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
         driver = webdriver.Chrome(
             ChromeDriverManager(chrome_type=chrome_browser_type).install(),
