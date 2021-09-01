@@ -11,12 +11,9 @@ from ocs_ci.framework.testlib import (
     post_ocp_upgrade,
     bugzilla,
 )
-from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
-from ocs_ci.ocs.resources.pod import get_all_pods
 
 log = logging.getLogger(__name__)
 
@@ -74,8 +71,3 @@ class TestToCheckPDBPostUpgrade(ManageTest):
         assert (
             not validate_existence_of_blocking_pdb()
         ), "Blocking PDBs present in the cluster"
-
-        # Check for rook-ceph-canary pods
-        assert get_all_pods(
-            selector=constants.ROOK_CEPH_DRAIN_CANARY
-        ), f"Canary pods not found on {get_ocs_version()}"
