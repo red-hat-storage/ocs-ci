@@ -120,7 +120,6 @@ class ElasticSearch(object):
         # Clone the ECK repo locally
         self._clone()
 
-        # self.eck_path = os.path.join(constants.TEMPLATE_APP_POD_DIR, "eck1.7")
         self.eck_path = os.path.join(self.dir, "ocs-workloads/eck")
         self.eck_file = os.path.join(self.eck_path, "crds.yaml")
         self.dumper_file = os.path.join(constants.TEMPLATE_APP_POD_DIR, "esclient.yaml")
