@@ -2,6 +2,7 @@
 Test osd node balancing by adding nodes and osds and checking their distribution
 """
 import logging
+import pytest
 import re
 from uuid import uuid4
 from ocs_ci.framework.pytest_customization.marks import (
@@ -142,6 +143,7 @@ class ElasticData(PerfResult):
 @skipif_external_mode
 @ipi_deployment_required
 @ignore_leftovers
+@pytest.mark.polarion_id("OCS-2604")
 class Test_Osd_Balance(PASTest):
     """
     There is no cleanup code in this test because the final
