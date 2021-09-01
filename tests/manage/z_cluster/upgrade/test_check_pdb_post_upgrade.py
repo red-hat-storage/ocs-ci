@@ -65,7 +65,6 @@ class TestToCheckPDBPostUpgrade(ManageTest):
         """
         Test to verify OSD PDBs
         1. Post OCP and OCS successful upgrades check for OSD PDBs
-        2. Rook-ceph-drain-canary pods disappeared after upgrade of OCS version to ocs-operator.v4.6.2-233.ci
 
         """
         assert (
