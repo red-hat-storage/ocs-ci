@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.defaults import VAULT_CSI_CONNECTION_CONF
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -14,16 +13,13 @@ from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_pods,
-    create_unique_resource_name,
     get_snapshot_content_obj,
 )
 from ocs_ci.ocs.exceptions import (
-    CommandFailed,
     KMSResourceCleaneupError,
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
-from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -45,68 +41,14 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, kv_version, request):
-        """
+    def setup(self, kv_version, pv_encryption_kms_setup_factory):
+        """ "
         Setup csi-kms-connection-details configmap
-
         """
-        # Initialize Vault
-        self.vault = kms.Vault()
-        self.vault.gather_init_vault_conf()
-        self.vault.update_vault_env_vars()
 
-        # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        try:
-            ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
-        except CommandFailed as cfe:
-            if "not found" not in str(cfe):
-                raise
-            else:
-                self.vault.create_ocs_vault_cert_resources()
-
-        # Create vault namespace, backend path and policy in vault
-        self.vault_resource_name = create_unique_resource_name("test", "vault")
-        self.vault.vault_create_namespace(namespace=self.vault_resource_name)
-        self.vault.vault_create_backend_path(
-            backend_path=self.vault_resource_name, kv_version=kv_version
-        )
-        self.vault.vault_create_policy(policy_name=self.vault_resource_name)
-
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-
-        # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        try:
-            ocp_obj.get_resource(
-                resource_name="csi-kms-connection-details", column="NAME"
-            )
-            self.new_kmsid = self.vault_resource_name
-            vdict = VAULT_CSI_CONNECTION_CONF
-            for key in vdict.keys():
-                old_key = key
-            vdict[self.new_kmsid] = vdict.pop(old_key)
-            vdict[self.new_kmsid]["VAULT_BACKEND_PATH"] = self.vault_resource_name
-            vdict[self.new_kmsid]["VAULT_NAMESPACE"] = self.vault_resource_name
-            kms.update_csi_kms_vault_connection_details(vdict)
-
-        except CommandFailed as cfe:
-            if "not found" not in str(cfe):
-                raise
-            else:
-                self.new_kmsid = "1-vault"
-                self.vault.create_vault_csi_kms_connection_details()
-
-        def finalizer():
-            # Remove the vault config from csi-kms-connection-details configMap
-            if len(kms.get_encryption_kmsid()) > 1:
-                kms.remove_kmsid(self.new_kmsid)
-
-            # Delete the resources in vault
-            self.vault.remove_vault_backend_path()
-            self.vault.remove_vault_policy()
-            self.vault.remove_vault_namespace()
-
-        request.addfinalizer(finalizer)
+        log.info("Setting up csi-kms-connection-details configmap")
+        self.vault = pv_encryption_kms_setup_factory(kv_version)
+        log.info("csi-kms-connection-details setup successful")
 
     def test_encrypted_rbd_block_pvc_snapshot(
         self,
@@ -129,7 +71,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryption_kms_id=self.new_kmsid,
+            encryption_kms_id=self.vault.vault_backend_path,
         )
 
         # Create ceph-csi-kms-token in the tenant namespace
