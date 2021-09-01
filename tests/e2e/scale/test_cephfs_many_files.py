@@ -128,18 +128,10 @@ def million_file_cephfs(request):
 @pytest.mark.parametrize(
     argnames=["resource_to_delete"],
     argvalues=[
-        pytest.param(
-            *["mgr"],
-        ),
-        pytest.param(
-            *["mon"],
-        ),
-        pytest.param(
-            *["osd"],
-        ),
-        pytest.param(
-            *["mds"],
-        ),
+        pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2606")),
+        pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2607")),
+        pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2608")),
+        pytest.param(*["mds"], marks=pytest.mark.polarion_id("OCS-2609")),
     ],
 )
 class TestMillionCephfsFiles(E2ETest):
