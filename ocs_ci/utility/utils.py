@@ -2438,7 +2438,10 @@ def skipif_ui_not_support(ui_test):
     from ocs_ci.ocs.ui.views import locators
 
     ocp_version = get_running_ocp_version()
-    if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+    ):
         return True
     try:
         locators[ocp_version][ui_test]
