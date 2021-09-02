@@ -15,7 +15,7 @@ from uuid import uuid4
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perfresult import PerfResult
@@ -104,6 +104,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
         else:
             self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
+
+    @pytest.fixture()
+    def namespace(self, project_factory):
+        """
+        Create a new project
+        """
+        proj_obj = project_factory()
+        self.namespace = proj_obj.namespace
 
     def init_full_results(self, full_results):
         """
@@ -389,6 +397,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
+    @pytest.mark.usefixtures(namespace.__name__)
     @pytest.mark.polarion_id("OCS-2618")
     def test_multiple_pvc_deletion_measurement_performance(self, teardown_factory):
         """
@@ -408,7 +417,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=self.namespace,
             number_of_pvc=number_of_pvcs,
             size=pvc_size,
             burst=True,

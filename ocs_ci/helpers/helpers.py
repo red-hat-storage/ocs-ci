@@ -700,7 +700,7 @@ def create_multiple_pvcs(
         ocs_objs.append(pvc.PVC(**pvc_data))
 
     logger.info("Creating all PVCs as bulk")
-    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    oc = OCP(kind="pod", namespace=namespace)
     cmd = f"create -f {tmpdir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
