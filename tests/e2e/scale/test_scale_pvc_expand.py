@@ -6,6 +6,8 @@ from ocs_ci.framework.testlib import (
     scale,
     ignore_leftovers,
     skipif_ocs_version,
+    skipif_external_mode,
+    ipi_deployment_required,
 )
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.utility import utils
@@ -18,7 +20,6 @@ def resize_pvc(request):
     # Setup scale environment in the cluster
     resize_pvc = FioPodScale(
         kind=constants.POD,
-        pod_dict_path=constants.NGINX_POD_YAML,
         node_selector=constants.SCALE_NODE_SELECTOR,
     )
 
@@ -32,10 +33,8 @@ def resize_pvc(request):
 @scale
 @skipif_ocs_version("<4.5")
 @ignore_leftovers
-@pytest.mark.skip(
-    reason="Skipped due to scale_lib pod creations are "
-    "enhanced to use kube_job, TC needs update"
-)
+@skipif_external_mode
+@ipi_deployment_required
 @pytest.mark.parametrize(
     argnames=[
         "start_io",

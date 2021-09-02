@@ -83,7 +83,15 @@ class FioPodScale(object):
         else:
             self.sa_name = None
 
-    def create_multi_pvc_pod(self, pvc_count=760, pvcs_per_pod=20, obj_name="obj1"):
+    def create_multi_pvc_pod(
+        self,
+        pvc_count=760,
+        pvcs_per_pod=20,
+        obj_name="obj1",
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+    ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
 
@@ -92,7 +100,9 @@ class FioPodScale(object):
             pvcs_per_pod (int): No of PVCs to be attached to single pod
             Example, If 20 then a POD will be created with 20PVCs attached
             obj_name (string): Object name prefix string
-            tmp_path (pathlib.Path): Directory where a temporary yaml file will
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -118,6 +128,7 @@ class FioPodScale(object):
                 no_of_pvc=int(pvc_count / 2),
                 access_mode=constants.ACCESS_MODE_RWO,
                 sc_name=rbd_sc_obj,
+                pvc_size=pvc_size,
             )
         )
         cephfs_pvc_dict_list.extend(
@@ -125,6 +136,7 @@ class FioPodScale(object):
                 no_of_pvc=int(pvc_count / 2),
                 access_mode=constants.ACCESS_MODE_RWX,
                 sc_name=cephfs_sc_obj,
+                pvc_size=pvc_size,
             )
         )
 
@@ -171,6 +183,8 @@ class FioPodScale(object):
                 pvcs_per_pod=pvcs_per_pod,
                 deployment_config=True,
                 node_selector=self.node_selector,
+                start_io=start_io,
+                io_runtime=io_runtime,
             )
         )
         pod_data_list.extend(
@@ -180,6 +194,8 @@ class FioPodScale(object):
                 pvcs_per_pod=pvcs_per_pod,
                 deployment_config=True,
                 node_selector=self.node_selector,
+                start_io=start_io,
+                io_runtime=io_runtime,
             )
         )
 
@@ -208,7 +224,14 @@ class FioPodScale(object):
 
         return rbd_pvc_name, fs_pvc_name, pod_running_list
 
-    def create_scale_pods(self, scale_count=1500, pvc_per_pod_count=20):
+    def create_scale_pods(
+        self,
+        scale_count=1500,
+        pvc_per_pod_count=20,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+    ):
         """
         Main Function with scale pod creation flow and checks to add nodes
         for the supported platforms, validates pg-balancer after scaling
@@ -219,6 +242,9 @@ class FioPodScale(object):
             scale_count (int): No of PVCs to be Scaled
             pvc_per_pod_count (int): Number of PVCs to be attached to single POD
             Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
 
         """
 
@@ -279,6 +305,9 @@ class FioPodScale(object):
                     pvc_count=max_pvc_count + 10,
                     pvcs_per_pod=pvc_per_pod_count,
                     obj_name=f"obj{actual_itr_counter}",
+                    start_io=start_io,
+                    io_runtime=io_runtime,
+                    pvc_size=pvc_size,
                 )
                 logging.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
@@ -1205,7 +1234,10 @@ def attach_multiple_pvc_to_pod_dict(
     raw_block_pv=False,
     pvcs_per_pod=10,
     deployment_config=False,
+    start_io=True,
     node_selector=None,
+    io_runtime=None,
+    io_size=None,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1217,8 +1249,11 @@ def attach_multiple_pvc_to_pod_dict(
         raw_block_pv (bool): Either PVC is raw block PV or not
         pvcs_per_pod (int): No of PVCs to be attached to single pod
         deployment_config (bool): If True then DC enabled else not
+        start_io (bool): Binary value to start IO default it's True
         node_selector (dict): Pods will be created in this node_selector
             Example, {'nodetype': 'app-pod'}
+        io_runtime (seconds): Runtime in Seconds to continue IO
+        io_size (str value with M|K|G): io_size with respective unit
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1269,6 +1304,19 @@ def attach_multiple_pvc_to_pod_dict(
                     mount_list.append({"name": volume_name, "mountPath": mount_path})
 
                 liveness_check_path = device_path if raw_block_pv else mount_path
+                runtime = io_runtime if io_runtime else 3600000
+                size = io_size if io_size else "512M"
+                if start_io:
+                    io_cmd = (
+                        f"fio --name=fio-rand-readwrite "
+                        f"--filename={liveness_check_path}/abc "
+                        f"--readwrite=randrw --bs=4K --direct=1 "
+                        f"--numjobs=1 --time_based=1 --runtime={runtime} "
+                        f"--size={size} --iodepth=4 --fsync_on_close=1 "
+                        f"--rwmixread=25 --ioengine=libaio --rate=2k"
+                    )
+                else:
+                    io_cmd = "while true; do echo hello; sleep 10;done"
 
                 if flag and deployment_config:
                     # Update pod yaml with DeploymentConfig liveness probe and IO
@@ -1284,10 +1332,7 @@ def attach_multiple_pvc_to_pod_dict(
                     pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = [
                         "/bin/sh",
                         "-c",
-                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
-                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
-                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
-                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
+                        io_cmd,
                     ]
                     liveness = {
                         "exec": {"command": ["sh", "-ec", "df /mnt"]},
@@ -1309,10 +1354,7 @@ def attach_multiple_pvc_to_pod_dict(
                     pod_data["spec"]["containers"][0]["args"] = [
                         "/bin/sh",
                         "-c",
-                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
-                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
-                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
-                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
+                        io_cmd,
                     ]
                     liveness = {
                         "exec": {"command": ["sh", "-ec", "df /mnt"]},
