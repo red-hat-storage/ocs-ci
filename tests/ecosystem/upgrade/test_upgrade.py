@@ -2,7 +2,10 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import ocs_upgrade, polarion_id
+from ocs_ci.framework.testlib import (
+    ocs_upgrade,
+    polarion_id,
+)
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.utility.reporting import get_polarion_id
