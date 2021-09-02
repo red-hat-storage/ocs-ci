@@ -4,22 +4,29 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import post_ocs_upgrade, ManageTest, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    post_ocs_upgrade,
+    ManageTest,
+    skipif_external_mode,
+    post_ocp_upgrade,
+    bugzilla,
+)
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
+from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 
 log = logging.getLogger(__name__)
 
 
-@post_ocs_upgrade
-@skipif_external_mode
-@pytest.mark.polarion_id("OCS-2449")
-class TestToCheckMonPDBPostUpgrade(ManageTest):
+class TestToCheckPDBPostUpgrade(ManageTest):
     """
     Validate post ocs upgrade mon pdb count
 
     """
 
+    @post_ocs_upgrade
+    @skipif_external_mode
+    @pytest.mark.polarion_id("OCS-2449")
     def test_check_mon_pdb_post_upgrade(self):
         """
         Testcase to check disruptions_allowed and minimum
@@ -49,3 +56,17 @@ class TestToCheckMonPDBPostUpgrade(ManageTest):
             assert (
                 max_unavailable_mon == 1
             ), "Maximum unavailable mon count is not matching"
+
+    @post_ocp_upgrade
+    @post_ocs_upgrade
+    @bugzilla("1861104")
+    @pytest.mark.polarion_id("OCS-2626")
+    def test_check_osd_pdb_post_upgrade(self):
+        """
+        Test to verify OSD PDBs
+        1. Post OCP and OCS successful upgrades check for OSD PDBs
+
+        """
+        assert (
+            not validate_existence_of_blocking_pdb()
+        ), "Blocking PDBs present in the cluster"

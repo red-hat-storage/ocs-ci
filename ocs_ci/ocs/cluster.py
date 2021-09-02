@@ -19,6 +19,7 @@ import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -1710,6 +1711,42 @@ def check_ceph_health_after_add_capacity(
     assert ceph_cluster_obj.wait_for_rebalance(
         timeout=ceph_rebalance_timeout
     ), "Data re-balance failed to complete"
+
+
+def validate_existence_of_blocking_pdb():
+    """
+    Validate creation of PDBs for OSDs.
+    1. Versions lesser than ocs-operator.v4.6.2 have PDBs for each osds
+    2. Versions greater than or equal to ocs-operator.v4.6.2-233.ci have
+    PDBs collectively for osds like rook-ceph-osd
+
+    Returns:
+        bool: True if blocking PDBs are present, false otherwise
+
+    """
+    pdb_obj = ocp.OCP(
+        kind=constants.POD_DISRUPTION_BUDGET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    pdb_obj_get = pdb_obj.get()
+    osd_pdb = []
+    for pdb in pdb_obj_get.get("items"):
+        if not any(
+            osd in pdb["metadata"]["name"]
+            for osd in [constants.MDS_PDB, constants.MON_PDB]
+        ):
+            osd_pdb.append(pdb)
+    blocking_pdb_exist = False
+    for osd in range(len(osd_pdb)):
+        allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
+        maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
+        if allowed_disruptions & maximum_unavailable != 1:
+            logger.info("Blocking PDBs are created")
+            blocking_pdb_exist = True
+        else:
+            logger.info(
+                f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
+            )
+    return blocking_pdb_exist
 
 
 class CephClusterExternal(CephCluster):
