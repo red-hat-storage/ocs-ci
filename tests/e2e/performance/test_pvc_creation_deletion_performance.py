@@ -11,7 +11,6 @@ import threading
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
-from timeit import default_timer
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
@@ -111,7 +110,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
         """
         Create a new project
         """
-        self.start_time = default_timer()
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
 
