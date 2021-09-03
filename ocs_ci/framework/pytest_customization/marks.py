@@ -262,6 +262,11 @@ skipif_tainted_nodes = pytest.mark.skipif(
     reason="Test will not run if nodes are tainted",
 )
 
+skipif_flexy_deployment = pytest.mark.skipif(
+    config.ENV_DATA.get("flexy_deployment"),
+    reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     float(config.ENV_DATA["ocs_version"]) < 4.6
     and config.DEPLOYMENT.get("external_mode") is True,
