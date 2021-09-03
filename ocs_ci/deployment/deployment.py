@@ -487,7 +487,7 @@ class Deployment(object):
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        is_ibm_sa_lined = False
+        is_ibm_sa_linked = False
         for ocs_operator_name in ocs_operator_names:
             package_manifest = PackageManifest(
                 resource_name=ocs_operator_name,
@@ -501,16 +501,13 @@ class Deployment(object):
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and not live_deployment
             ):
-                csv.wait_for_phase("Installing", timeout=720)
-                if not is_ibm_sa_lined:
-                    logger.info("Sleeping for 30 seconds before applying SA")
-                    time.sleep(30)
+                if not is_ibm_sa_linked:
+                    logger.info("Sleeping for 60 seconds before applying SA")
+                    time.sleep(60)
                     link_all_sa_and_secret_and_delete_pods(
                         constants.OCS_SECRET, self.namespace
                     )
-                    is_ibm_sa_lined = True
-                    logger.info("Deleting all pods in openshift-storage namespace")
-                    exec_cmd(f"oc delete pod --all -n {self.namespace}")
+                    is_ibm_sa_linked = True
             csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
