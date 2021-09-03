@@ -517,7 +517,13 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
+SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
+
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
+
+STORAGE_SYSTEM_ODF_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
+)
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
