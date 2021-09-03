@@ -25,7 +25,7 @@ class TestDeleteRookCephMonPod(ManageTest):
     num_of_deletions = 0
 
     def test_delete_rook_ceph_mon_pod(self):
-        for i in range(20):
+        for i in range(30):
             self.rook_detect_pod_name = None
             rook_operator_pod = pod.get_ocs_operator_pod(
                 ocs_label=constants.OPERATOR_LABEL,
@@ -95,7 +95,7 @@ class TestDeleteRookCephMonPod(ManageTest):
                     )
         except TimeoutExpiredError:
             assert True, "rook-ceph-detect-version pod still exists"
-        log.info(f"Num of deletions: {self.num_of_deletions}/10")
+        log.info(f"Num of deletions: {self.num_of_deletions}/30")
         assert (
             self.num_of_deletions > 0
         ), "All (20) attempts to delete rook-ceph-detect-version pod failed."
