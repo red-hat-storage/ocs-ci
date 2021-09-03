@@ -56,11 +56,12 @@ class TestPVCExpand(E2ETest):
         Test case to scale pvc size expansion
         with and without IO running on the pods
         """
+
         # Create pvcs and scale pods
         logging.info("Create pvcs and scale pods")
         resize_pvc.create_scale_pods(
             scale_count=1500,
-            pods_per_iter=10,
+            pvc_per_pod_count=20,
             io_runtime=3600,
             start_io=start_io,
             pvc_size=pvc_size,

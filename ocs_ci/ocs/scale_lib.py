@@ -14,7 +14,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import machine as machine_utils
-from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.ocs.resources.pvc import get_all_pvcs, get_all_pvc_objs
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.utility.utils import ocsci_log_path, ceph_health_check
 from ocs_ci.ocs import constants, cluster, machine, node
@@ -181,7 +181,7 @@ class FioPodScale(object):
                 pvc_list=rbd_pvc_name,
                 namespace=self.namespace,
                 pvcs_per_pod=pvcs_per_pod,
-                deployment_config=True,
+                deployment_config=self.dc_deployment,
                 node_selector=self.node_selector,
                 start_io=start_io,
                 io_runtime=io_runtime,
@@ -192,7 +192,7 @@ class FioPodScale(object):
                 pvc_list=fs_pvc_name,
                 namespace=self.namespace,
                 pvcs_per_pod=pvcs_per_pod,
-                deployment_config=True,
+                deployment_config=self.dc_deployment,
                 node_selector=self.node_selector,
                 start_io=start_io,
                 io_runtime=io_runtime,
@@ -292,7 +292,8 @@ class FioPodScale(object):
         while True:
             if actual_itr_counter == expected_itr_counter:
                 logging.info(
-                    f"Scaled {scale_count} PVCs and created {scale_count/20} PODs"
+                    f"Scaled {scale_count} PVCs and created "
+                    f"{scale_count/pvc_per_pod_count} PODs"
                 )
                 # TODO: Removing PG balancer validation, due to PG auto_scale enabled
                 # TODO: sometime PG's can't be equally distributed across OSDs
@@ -316,7 +317,8 @@ class FioPodScale(object):
 
         logging.info(
             f"Scaled {actual_itr_counter * (max_pvc_count+10)} PVC's and "
-            f"Created {int((actual_itr_counter * (max_pvc_count+10))/20)} PODs"
+            f"Created {int((actual_itr_counter * (max_pvc_count+10))/pvc_per_pod_count)} "
+            f"PODs"
         )
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
@@ -324,11 +326,27 @@ class FioPodScale(object):
     def pvc_expansion(self, pvc_new_size):
         """
         Function to expand PVC size and verify the new size is reflected.
+
+        Args:
+            pvc_new_size (int): Updated/extended PVC size
+
         """
-        logging.info(f"PVC size is expanding to {pvc_new_size}")
-        for pvc_object in self.pvc_obj:
-            pvc_object.resize_pvc(new_size=pvc_new_size, verify=True)
-        logging.info(f"Verified: Size of all PVCs are expanded to {pvc_new_size}G")
+
+        logging.info(f"PVC size is expanding to {pvc_new_size}Gi")
+        # Get the PVC dict to update the values.
+        pvc_objs = get_all_pvc_objs(namespace=self.namespace)
+        for pvc_object in pvc_objs:
+            pvc_object.resize_pvc(new_size=pvc_new_size, verify=False)
+
+        # Validate PVC size is extended or not
+        kube_job_objs = self.kube_job_pvc_list
+        for objs in kube_job_objs:
+            validate_all_expanded_pvc_size_in_kube_job(
+                kube_job_obj=objs,
+                namespace=self.namespace,
+                no_of_pvc=int(len(pvc_objs) / 2),
+                resize_value=pvc_new_size,
+            )
 
     def cleanup(self):
         """
@@ -735,7 +753,7 @@ def check_and_add_enough_worker(worker_count):
             f"Setup has expected worker count {worker_count} "
             "to continue scale of pods"
         )
-        return True
+        return False
     else:
         logging.info(
             "There is no enough worker in the setup, will add enough worker "
@@ -1368,7 +1386,12 @@ def attach_multiple_pvc_to_pod_dict(
                     flag = 0
 
                 if node_selector:
-                    pod_data["spec"]["template"]["metadata"]["labels"] = node_selector
+                    if deployment_config:
+                        pod_data["spec"]["template"]["metadata"][
+                            "labels"
+                        ] = node_selector
+                    else:
+                        pod_data["spec"]["nodeSelector"] = node_selector
 
             temp_list.clear()
             pods_list.append(pod_data)
@@ -1613,3 +1636,63 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
     except Exception as e:
         logging.warning(f"Exception in validate_node_and_oc_services {e}")
         return False
+
+
+def validate_all_expanded_pvc_size_in_kube_job(
+    kube_job_obj, namespace, no_of_pvc, resize_value, timeout=30
+):
+    """
+    Function to check either bulk created PVCs has extended size using kube_job
+
+    Args:
+        kube_job_obj (obj): Kube Job Object
+        namespace (str): Namespace of PVC's created
+        no_of_pvc (int): Bulk PVC count
+        resize_value (int): Updated/extended PVC size
+        timeout: a timeout for all the pvc in kube job to reach bound status
+
+    Returns:
+        pvc_extended_list (list): List of all PVCs which is in Bound state.
+
+    Asserts:
+        If not all PVC has the extended size.
+
+    """
+    # Check all the PVC reached Bound state
+    pvc_extended_list, pvc_not_extended_list = ([] for i in range(2))
+    while_iteration_count = 0
+    while True:
+        # Get kube_job obj and fetch either all PVC size are extended
+        # If not bound adding those PVCs to pvc_not_bound_list
+        job_get_output = kube_job_obj.get(namespace=namespace)
+        for i in range(no_of_pvc):
+            pvc_size = job_get_output["items"][i]["status"]["capacity"]["storage"]
+            logging.info(
+                f"pvc {job_get_output['items'][i]['metadata']['name']} size {pvc_size}"
+            )
+            if pvc_size != f"{resize_value}Gi":
+                pvc_not_extended_list.append(
+                    job_get_output["items"][i]["metadata"]["name"]
+                )
+
+        # Check the length of pvc_not_bound_list to decide either all PVCs size extended
+        # If not then wait for timeout secs and re-iterate while loop
+        if len(pvc_not_extended_list):
+            time.sleep(timeout)
+            while_iteration_count += 1
+            # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
+            # And if PVCs still not in bound state then there will be assert.
+            if while_iteration_count >= 10:
+                assert logging.error(
+                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_extended_list}"
+                )
+                break
+            pvc_not_extended_list.clear()
+            continue
+        elif not len(pvc_not_extended_list):
+            for i in range(no_of_pvc):
+                pvc_extended_list.append(job_get_output["items"][i]["metadata"]["name"])
+            logging.info("All PVCs Size are Extended")
+            logging.info(f"Verified: Size of all PVCs are expanded to {resize_value}G")
+            break
+    return pvc_extended_list
