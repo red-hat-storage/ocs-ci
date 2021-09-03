@@ -1649,10 +1649,10 @@ def validate_all_expanded_pvc_size_in_kube_job(
         namespace (str): Namespace of PVC's created
         no_of_pvc (int): Bulk PVC count
         resize_value (int): Updated/extended PVC size
-        timeout: a timeout for all the pvc in kube job to reach bound status
+        timeout: a timeout for all the pvc in kube job to get extended size
 
     Returns:
-        pvc_extended_list (list): List of all PVCs which is in Bound state.
+        pvc_extended_list (list): List of all PVCs which have extended size.
 
     Asserts:
         If not all PVC has the extended size.
@@ -1663,7 +1663,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
     while_iteration_count = 0
     while True:
         # Get kube_job obj and fetch either all PVC size are extended
-        # If not bound adding those PVCs to pvc_not_bound_list
+        # If not extended adding those PVCs to pvc_not_extended_list
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_pvc):
             pvc_size = job_get_output["items"][i]["status"]["capacity"]["storage"]
@@ -1675,8 +1675,8 @@ def validate_all_expanded_pvc_size_in_kube_job(
                     job_get_output["items"][i]["metadata"]["name"]
                 )
 
-        # Check the length of pvc_not_bound_list to decide either all PVCs size extended
-        # If not then wait for timeout secs and re-iterate while loop
+        # Check the length of pvc_not_extended_list to decide either all PVCs
+        # size extended If not then wait for timeout secs and re-iterate while loop
         if len(pvc_not_extended_list):
             time.sleep(timeout)
             while_iteration_count += 1
