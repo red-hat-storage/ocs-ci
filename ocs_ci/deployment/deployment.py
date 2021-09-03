@@ -346,14 +346,23 @@ class Deployment(object):
             link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
+        # For OCS version >= 4.9, we have odf-operator
+        ocs_version = config.ENV_DATA["ocs_version"]
+        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            ocs_operator_name = defaults.ODF_OPERATOR_NAME
+            subscription_file = constants.SUBSCRIPTION_ODF_YAML
+        else:
+            ocs_operator_name = defaults.OCS_OPERATOR_NAME
+            subscription_file = constants.SUBSCRIPTION_YAML
+
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
+            resource_name=ocs_operator_name,
             selector=operator_selector,
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
         default_channel = package_manifest.get_default_channel()
-        subscription_yaml_data = templating.load_yaml(constants.SUBSCRIPTION_YAML)
+        subscription_yaml_data = templating.load_yaml(subscription_file)
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         if subscription_plan_approval:
             subscription_yaml_data["spec"][
@@ -469,24 +478,37 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
+        ocs_version = config.ENV_DATA["ocs_version"]
+        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            ocs_operator_names = [
+                defaults.ODF_OPERATOR_NAME,
+                defaults.OCS_OPERATOR_NAME,
+            ]
+        else:
+            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        if (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and not live_deployment
-        ):
-            csv.wait_for_phase("Installing", timeout=720)
-            logger.info("Sleeping for 30 seconds before applying SA")
-            time.sleep(30)
-            link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
-        csv.wait_for_phase("Succeeded", timeout=720)
+        is_ibm_sa_linked = False
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and not live_deployment
+            ):
+                if not is_ibm_sa_linked:
+                    logger.info("Sleeping for 60 seconds before applying SA")
+                    time.sleep(60)
+                    link_all_sa_and_secret_and_delete_pods(
+                        constants.OCS_SECRET, self.namespace
+                    )
+                    is_ibm_sa_linked = True
+            csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = float(get_ocp_version())
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
@@ -536,6 +558,10 @@ class Deployment(object):
             # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
             self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
+
+        # create storage system
+        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         # creating StorageCluster
         if config.DEPLOYMENT.get("kms_deployment"):
