@@ -58,9 +58,11 @@ def load_cluster_info():
         if cluster_info.get("INSTALLER", {}).get("CLIENT_PROXY"):
             client_proxy = cluster_info.get("INSTALLER", {}).get("CLIENT_PROXY")
             logging.info(f"Configuring client proxy: {client_proxy}")
-            config.ENV_DATA["client_http_proxy"] = client_proxy
-            os.environ["http_proxy"] = client_proxy
-            os.environ["https_proxy"] = client_proxy
+            config.ENV_DATA["client_http_proxy"] = config.ENV_DATA.get(
+                "client_http_proxy", client_proxy
+            )
+            os.environ["http_proxy"] = config.ENV_DATA["client_http_proxy"]
+            os.environ["https_proxy"] = config.ENV_DATA["client_http_proxy"]
 
 
 def configure_allowed_domains_in_proxy():
