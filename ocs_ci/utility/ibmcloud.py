@@ -210,7 +210,7 @@ def destroy_cluster(cluster):
         cluster (str): Cluster name or ID.
 
     """
-    cmd = f"ibmcloud ks cluster rm -c {cluster} -f"
+    cmd = f"ibmcloud ks cluster rm -c {cluster} -f --force-delete-storage"
     out = run_ibmcloud_cmd(cmd)
     logger.info(f"Destroy command output: {out}")
 
