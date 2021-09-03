@@ -607,7 +607,7 @@ def login_ui():
             # and authenticated proxy server for Chrome:
             # * not authenticated proxy can be configured via --proxy-server
             #   command line parameter
-            # * authenticated proxy have to be provided throught customly
+            # * authenticated proxy have to be provided through customly
             #   created Extension and it doesn't work in headless mode!
             if not client_proxy.username:
                 # not authenticated proxy
@@ -623,10 +623,10 @@ def login_ui():
                 )
                 _templating = Templating()
                 manifest_json = _templating.render_template(
-                    constants.CHROME_PROXY_EXTENSION_MANIFEST_JSON_TEMPLATE, {}
+                    constants.CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE, {}
                 )
                 background_js = _templating.render_template(
-                    constants.CHROME_PROXY_EXTENSION_BACKGROUND_JS_TEMPLATE,
+                    constants.CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE,
                     {"proxy": client_proxy},
                 )
                 pluginfile = "/tmp/proxy_auth_plugin.zip"
