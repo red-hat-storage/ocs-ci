@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.helpers.helpers import verify_pdb_mon
+from ocs_ci.helpers.helpers import verify_pdb_mon, check_number_of_mon_pods
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_operator_pods,
@@ -77,7 +77,7 @@ class TestDrainNodeMon(ManageTest):
         sample = TimeoutSampler(
             timeout=timeout, sleep=10, func=self.check_mon_pods_eq_3
         )
-        if sample.wait_for_func_status(result=True):
+        if sample.wait_for_func_status(result=False):
             assert "There are more than 3 mon pods."
 
         log.info("Respin pod rook-ceph operator pod")
@@ -101,19 +101,4 @@ class TestDrainNodeMon(ManageTest):
 
         ceph_health_check()
 
-    def check_mon_pods_eq_3(self):
-        """
-        Get number of monitoring pods
-
-        Returns:
-            bool: False if number of mon pods is 3, True otherwise
-
-        """
-        mon_pod_list = get_mon_pods()
-        if len(mon_pod_list) == 3:
-            return False
-        else:
-            log.info(f"There are {len(mon_pod_list)} mon pods")
-            for mon_pod in mon_pod_list:
-                log.info(f"{mon_pod.name}")
-            return True
+        assert check_number_of_mon_pods(), "The number of mon pods not equal to 3"
