@@ -522,7 +522,9 @@ def get_all_pods(
 
     """
     ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=namespace, field_selector=field_selector,
+        kind=constants.POD,
+        namespace=namespace,
+        field_selector=field_selector,
     )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
@@ -1432,7 +1434,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
 
     namespace = config.ENV_DATA["cluster_namespace"]
-    pod = OCP(kind=constants.POD, namespace=namespace,)
+    pod = OCP(kind=constants.POD, namespace=namespace)
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
         f"and upgraded."
@@ -1719,7 +1721,10 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
 
     try:
         for osd_removal_pod_names in TimeoutSampler(
-            timeout=timeout, sleep=5, func=get_pod_name_by_pattern, pattern=pattern,
+            timeout=timeout,
+            sleep=5,
+            func=get_pod_name_by_pattern,
+            pattern=pattern,
         ):
             if osd_removal_pod_names:
                 osd_removal_pod_name = osd_removal_pod_names[0]
