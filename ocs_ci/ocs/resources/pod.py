@@ -1406,7 +1406,7 @@ def wait_for_storage_pods(timeout=200):
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:] not in pod.get_labels().value
+        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:] not in pod.get_labels().values()
     ]
 
     for pod_obj in all_pod_obj:
