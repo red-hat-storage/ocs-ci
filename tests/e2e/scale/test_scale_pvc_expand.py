@@ -15,7 +15,7 @@ from ocs_ci.utility import utils
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def resize_pvc(request):
     # Setup scale environment in the cluster
     resize_pvc = FioPodScale(
