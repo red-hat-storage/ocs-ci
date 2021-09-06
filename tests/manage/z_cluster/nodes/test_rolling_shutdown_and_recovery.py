@@ -69,7 +69,7 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
             nodes.start_nodes(nodes=[node_obj])
             log.info("Checking storage pods status")
             wait_for_storage_pods()
-            self.sanity_helpers.health_check(tries=60)
+            self.sanity_helpers.health_check(cluster_check=False, tries=60)
 
         # Check basic cluster functionality by creating some resources
         self.sanity_helpers.create_resources(
