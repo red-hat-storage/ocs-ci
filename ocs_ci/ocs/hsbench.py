@@ -76,7 +76,9 @@ class HsBench(object):
         # Install hsbench
         log.info(f"Installing hsbench S3 benchmark on testing pod {self.pod_obj.name}")
         hsbench_path = "github.com/markhpc/hsbench"
-        self.pod_obj.exec_cmd_on_pod(f"go get -v {hsbench_path}", timeout=timeout)
+        self.pod_obj.exec_cmd_on_pod(
+            f"go get -v -insecure {hsbench_path}", timeout=timeout
+        )
         log.info("Successfully installing hsbench benchmark")
 
     def create_test_user(self):
