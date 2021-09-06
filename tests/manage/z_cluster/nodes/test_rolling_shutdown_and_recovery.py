@@ -64,12 +64,13 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
         log.info("ShutDown OCS worker")
         for node_obj in ocs_node_objs:
             nodes.stop_nodes(nodes=[node_obj])
-            log.info("Keeping node in stopped state for 5 mins")
-            time.sleep(300)
+            log.info("Keeping node in stopped state for 3 mins")
+            time.sleep(180)
             nodes.start_nodes(nodes=[node_obj])
-            log.info("Checking storage pods status")
-            wait_for_storage_pods()
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+            log.info("Checking storage pods status")
+            # Validate storage pods are running
+            wait_for_storage_pods()
 
         # Check basic cluster functionality by creating some resources
         self.sanity_helpers.create_resources(
