@@ -344,7 +344,7 @@ class FioPodScale(object):
             validate_all_expanded_pvc_size_in_kube_job(
                 kube_job_obj=objs,
                 namespace=self.namespace,
-                no_of_pvc=int(len(pvc_objs) / 2),
+                no_of_pvc=int(len(pvc_objs) / len(kube_job_objs)),
                 resize_value=pvc_new_size,
             )
 
@@ -1658,14 +1658,14 @@ def validate_all_expanded_pvc_size_in_kube_job(
         If not all PVC has the extended size.
 
     """
-    # Check all the PVC reached Bound state
+    # Check all the PVC extended size
     pvc_extended_list, pvc_not_extended_list = ([] for i in range(2))
     while_iteration_count = 0
     while True:
         # Get kube_job obj and fetch either all PVC size are extended
         # If not extended adding those PVCs to pvc_not_extended_list
         job_get_output = kube_job_obj.get(namespace=namespace)
-        for i in range(no_of_pvc):
+        for i in range(0, no_of_pvc):
             pvc_size = job_get_output["items"][i]["status"]["capacity"]["storage"]
             logging.info(
                 f"pvc {job_get_output['items'][i]['metadata']['name']} size {pvc_size}"
