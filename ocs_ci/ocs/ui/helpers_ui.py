@@ -1,5 +1,6 @@
 import logging
 
+from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
@@ -174,3 +175,14 @@ def ui_add_capacity(osd_size_capacity_requested):
     add_ui_obj.add_capacity_ui()
     close_browser(setup_ui)
     return new_storage_devices_sets_count
+
+
+def get_element_type(element_name):
+    """
+    This function accepts an element name as a argument and returns the element type by creating XPATH for it.
+    This is helpful when we are creating dynamic names for PVC's, Pod's, Namespaces's etc. and want to interact
+    with the same on UI.
+
+    """
+
+    return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
