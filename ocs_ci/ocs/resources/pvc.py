@@ -448,6 +448,7 @@ def create_pvc_clone(
     sc_name,
     parent_pvc,
     clone_yaml,
+    namespace,
     pvc_name=None,
     do_reload=True,
     storage_size=None,
@@ -460,6 +461,7 @@ def create_pvc_clone(
     Args:
         sc_name (str): The name of storage class.
         parent_pvc (str): Name of the parent pvc, whose clone is to be created.
+        namespace (str): Namespace of the parent pvc
         pvc_name (str): The name of the PVC being created
         do_reload (bool): True for wait for reloading PVC after its creation,
             False otherwise
@@ -479,6 +481,7 @@ def create_pvc_clone(
         if pvc_name
         else helpers.create_unique_resource_name(parent_pvc, "clone")
     )
+    pvc_data["metadata"]["namespace"] = namespace
     pvc_data["spec"]["storageClassName"] = sc_name
     pvc_data["spec"]["dataSource"]["name"] = parent_pvc
     if storage_size:

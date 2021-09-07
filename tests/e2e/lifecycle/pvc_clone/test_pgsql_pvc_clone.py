@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     tier2,
 )
 from ocs_ci.ocs.constants import (
-    RIPSAW_NAMESPACE,
+    BMO_NAME,
     STATUS_COMPLETED,
     VOLUME_MODE_FILESYSTEM,
 )
@@ -83,11 +83,10 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
             # Validate cloned pvcs file space matches with parent
             cloned_pods_list = get_pod_name_by_pattern(
-                pattern=f"postgres-cloned-{i}", namespace=RIPSAW_NAMESPACE
+                pattern=f"postgres-cloned-{i}", namespace=BMO_NAME
             )
             cloned_pods_obj = [
-                get_pod_obj(name=pods, namespace=RIPSAW_NAMESPACE)
-                for pods in cloned_pods_list
+                get_pod_obj(name=pods, namespace=BMO_NAME) for pods in cloned_pods_list
             ]
             cloned_obj = pgsql.get_postgres_used_file_space(cloned_pods_obj)
             for pod_obj in parent_pods_obj:
@@ -105,7 +104,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
                                 ].filespace.strip("M")
                             )
                         )
-                        < 2
+                        < 3
                     ):
                         raise Exception(
                             f"Parent pvc {pod_obj.name} used file space is {pod_obj.filespace}. "

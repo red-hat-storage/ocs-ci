@@ -84,9 +84,12 @@ class TestClone(ManageTest):
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+        namespace = self.pvc_obj.namespace
         if interface_type == constants.CEPHFILESYSTEM:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
-        cloned_pvc_obj = pvc.create_pvc_clone(sc_name, parent_pvc, clone_yaml)
+        cloned_pvc_obj = pvc.create_pvc_clone(
+            sc_name, parent_pvc, clone_yaml, namespace
+        )
         teardown_factory(cloned_pvc_obj)
         helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
         cloned_pvc_obj.reload()
