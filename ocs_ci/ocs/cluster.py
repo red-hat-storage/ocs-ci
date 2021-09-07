@@ -16,7 +16,7 @@ import time
 from semantic_version import Version
 
 import ocs_ci.ocs.resources.pod as pod
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs import defaults
@@ -833,6 +833,37 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
             ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=1)
+def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
+    """
+    Validate if OCS pods have mathching PVC and Claim name
+
+    Args:
+        pvc_names (list): names of all PVCs you would like to validate with.
+        validated_pods(set): set to store already validated pods - if you pass
+            empty set outside of this function, this will speed up the next
+            validation when re-tries as it will skip those already validated
+            pods stored in this set.
+    Raises:
+        AssertionError: when the claim name does not match one of PVC name.
+
+    """
+    if validated_pods is None:
+        validated_pods = set()
+    ns = config.ENV_DATA["cluster_namespace"]
+    mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
+    osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
+    for ceph_pod in set(mon_pods + osd_pods) - validated_pods:
+        out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
+        out_yaml = yaml.safe_load(out)
+        for vol in out_yaml["spec"]["volumes"]:
+            if vol.get("persistentVolumeClaim"):
+                claimName = vol.get("persistentVolumeClaim").get("claimName")
+                logger.info(f"{ceph_pod} backed by pvc {claimName}")
+                assert claimName in pvc_names, "Ceph Internal Volume not backed by PVC"
+        validated_pods.add(ceph_pod)
+
+
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -884,15 +915,8 @@ def validate_cluster_on_pvc():
         pvc_names,
         constants.CEPH_ROOK_IO_PVC_LABEL,
     )
-    osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
-    for ceph_pod in mon_pods + osd_pods:
-        out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
-        out_yaml = yaml.safe_load(out)
-        for vol in out_yaml["spec"]["volumes"]:
-            if vol.get("persistentVolumeClaim"):
-                claimName = vol.get("persistentVolumeClaim").get("claimName")
-                logger.info(f"{ceph_pod} backed by pvc {claimName}")
-                assert claimName in pvc_names, "Ceph Internal Volume not backed by PVC"
+    validated_pods = set()
+    validate_claim_name_match_pvc(pvc_names, validated_pods)
 
 
 def count_cluster_osd():
