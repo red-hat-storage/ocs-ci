@@ -4,6 +4,7 @@ import random
 import time
 import datetime
 import re
+import os
 import pathlib
 
 from ocs_ci.helpers import helpers
@@ -14,7 +15,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import machine as machine_utils
-from ocs_ci.ocs.resources.pvc import get_all_pvcs, get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.utility.utils import ocsci_log_path, ceph_health_check
 from ocs_ci.ocs import constants, cluster, machine, node
@@ -333,18 +334,30 @@ class FioPodScale(object):
         """
 
         logging.info(f"PVC size is expanding to {pvc_new_size}Gi")
-        # Get the PVC dict to update the values.
-        pvc_objs = get_all_pvc_objs(namespace=self.namespace)
-        for pvc_object in pvc_objs:
-            pvc_object.resize_pvc(new_size=pvc_new_size, verify=False)
-
-        # Validate PVC size is extended or not
         kube_job_objs = self.kube_job_pvc_list
-        for objs in kube_job_objs:
+
+        for kube_job in kube_job_objs:
+            # Convert PosixPath to string
+            yaml_file = os.path.abspath(str(kube_job.yaml_file))
+            yaml_data = list(templating.load_yaml(yaml_file, multi_document=True))
+
+            # Update the yaml dict with extended value
+            for i in range(0, len(yaml_data)):
+                yaml_data[i]["spec"]["resources"]["requests"][
+                    "storage"
+                ] = f"{pvc_new_size}Gi"
+            templating.dump_data_to_temp_yaml(
+                yaml_data, os.path.abspath(str(kube_job.yaml_file))
+            )
+
+            # Apply PVC changes to extend PVC
+            kube_job.apply(namespace=self.namespace)
+
+            # Validate PVC size is extended or not
             validate_all_expanded_pvc_size_in_kube_job(
-                kube_job_obj=objs,
+                kube_job_obj=kube_job,
                 namespace=self.namespace,
-                no_of_pvc=int(len(pvc_objs) / len(kube_job_objs)),
+                no_of_pvc=len(yaml_data),
                 resize_value=pvc_new_size,
             )
 
