@@ -101,7 +101,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
                 condition="true",
                 resource_name=snap_obj.name,
                 column=STATUS_READYTOUSE,
-                timeout=600,
+                timeout=1200,
             )
         log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
