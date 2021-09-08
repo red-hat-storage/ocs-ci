@@ -786,6 +786,7 @@ def delete_bulk_pvcs(pvc_yaml_dir):
     cmd = f"delete -f {pvc_yaml_dir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
+
 def verify_block_pool_exists(pool_name):
     """
     Verify if a Ceph block pool exist
