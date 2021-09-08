@@ -4,7 +4,6 @@ Test to verify PVC creation performance
 import logging
 import pytest
 import math
-import time
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
