@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 @performance
 class TestPVCCreationPerformance(E2ETest):
     """
-    Test to verify PVC creation performance
+    Test to verify PVC creation and deletion performance
     """
 
     pvc_size = "1Gi"
@@ -63,7 +63,7 @@ class TestPVCCreationPerformance(E2ETest):
     ):
 
         """
-        Measuring PVC creation time of 120 PVCs in 180 seconds
+        Measuring PVC creation and deletion time of bulk_size (120/720) PVCs
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -72,7 +72,7 @@ class TestPVCCreationPerformance(E2ETest):
         Returns:
 
         """
-        multi_creation_time_limit = bulk_size / 2
+        bulk_creation_time_limit = bulk_size / 2
         log.info(f"Start creating new {bulk_size} PVCs")
 
         pvc_objs, yaml_creation_dir = helpers.create_bulk_pvcs(
@@ -101,10 +101,10 @@ class TestPVCCreationPerformance(E2ETest):
         total_time = (end_time - start_time).total_seconds()
         logging.info(f"{bulk_size} Bulk PVCs creation time is {total_time} seconds.")
 
-        if total_time > multi_creation_time_limit:
+        if total_time > bulk_creation_time_limit:
             raise ex.PerformanceException(
                 f"{bulk_size} Bulk PVCs creation time is {total_time} and "
-                f"greater than {multi_creation_time_limit} seconds"
+                f"greater than {bulk_creation_time_limit} seconds"
             )
 
         logging.info(f"Starting to delete bulk of {bulk_size} PVCs")

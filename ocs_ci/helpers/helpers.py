@@ -730,9 +730,8 @@ def create_bulk_pvcs(
         namespace (str): The namespace for the PVCs creation
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
-        do_reload (bool): True for wait for reloading PVC after its creation,
-            False otherwise
         access_mode (str): The kind of access mode for PVC
+
     Returns:
          list: List of PVC objects and tmp dir where the yamls are created
     """
