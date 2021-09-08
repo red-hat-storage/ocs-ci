@@ -30,7 +30,7 @@ class PvcUI(PageNavigator):
 
         Args:
             project_name (str): name of test project
-            sc_name (str): storage class type
+            sc_name (str): storage class name
             pvc_name (str): the name of pvc
             access_mode (str): access mode
             pvc_size (str): the size of pvc (GB)
@@ -85,10 +85,9 @@ class PvcUI(PageNavigator):
             pvc_size (str): the size of pvc (GB)
             access_mode (str): access mode
             vol_mode (str): volume mode type
-            sc_name (str): storage class type
+            sc_name (str): storage class name
             pvc_name (str): the name of pvc
             project_name (str): name of test project
-
 
         """
         self.navigate_persistentvolumeclaims_page()
