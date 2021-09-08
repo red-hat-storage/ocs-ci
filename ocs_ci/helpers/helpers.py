@@ -778,10 +778,10 @@ def create_bulk_pvcs(
 
 def delete_bulk_pvcs(pvc_yaml_dir):
     """
-       Deletes all the pvcs created from yaml file in a provided dir
-       Args:
-           pvc_yaml_dir (str): Directory in which yaml file resides
-       """
+    Deletes all the pvcs created from yaml file in a provided dir
+    Args:
+        pvc_yaml_dir (str): Directory in which yaml file resides
+    """
     oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     cmd = f"delete -f {pvc_yaml_dir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
