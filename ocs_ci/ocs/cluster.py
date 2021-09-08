@@ -841,9 +841,9 @@ def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
     Args:
         pvc_names (list): names of all PVCs you would like to validate with.
         validated_pods(set): set to store already validated pods - if you pass
-            empty set outside of this function, this will speed up the next
-            validation when re-tries as it will skip those already validated
-            pods stored in this set.
+            an empty set from outside of this function, it will speed up the next
+            validation when re-tries, as it will skip those already validated
+            pods added to this set by previous run of this function.
     Raises:
         AssertionError: when the claim name does not match one of PVC name.
 
