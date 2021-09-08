@@ -40,7 +40,7 @@ class TestPVCCreationPerformance(E2ETest):
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 60],
+                *[constants.CEPHBLOCKPOOL, 120],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
@@ -48,7 +48,7 @@ class TestPVCCreationPerformance(E2ETest):
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 60],
+                *[constants.CEPHFILESYSTEM, 120],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
