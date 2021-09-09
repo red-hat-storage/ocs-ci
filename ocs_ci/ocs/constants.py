@@ -1386,3 +1386,13 @@ SHA_SEPARATOR = "@sha256:"
 
 # ibmcloud related constants
 IBMCLOUD_VOLUME_NAME = "ibmvolume"
+
+# manifest.json and background.js files used for Chrome extention configuring
+# authenticated proxy, see also:
+# https://botproxy.net/docs/how-to/setting-chromedriver-proxy-auth-with-selenium-using-python/
+CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-manifest.json.j2"
+)
+CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-background.js.j2"
+)
