@@ -1178,6 +1178,13 @@ SCALE_WORKER_DICT = {
     9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
+SCALE_PVC_ROUND_UP_VALUE = {
+    1500: 1520,
+    3000: 3040,
+    4500: 4560,
+    6000: 6080,
+    9000: 9120,
+}
 
 # Production config instance type
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
