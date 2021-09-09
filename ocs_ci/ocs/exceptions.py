@@ -350,3 +350,7 @@ class IPAMAssignUpdateFailed(Exception):
 
 class NodeHasNoAttachedVolume(Exception):
     pass
+
+
+class NotSupportedProxyConfiguration(Exception):
+    pass
