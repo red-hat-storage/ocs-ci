@@ -249,6 +249,10 @@ class FioPodScale(object):
                     config.ENV_DATA["deployment_type"] == "ipi"
                     and config.ENV_DATA["platform"].lower() == "rhv"
                 )
+                or (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+                )
             ):
                 for obj in machine.get_machineset_objs():
                     if "app" in obj.name:
@@ -934,7 +938,6 @@ def check_and_add_enough_worker(worker_count):
                     label_key="scale-label",
                     label_value="app-scale",
                 )
-
             return True
 
         elif (
