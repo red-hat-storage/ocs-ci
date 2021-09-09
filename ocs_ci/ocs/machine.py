@@ -560,107 +560,42 @@ def create_custom_machineset(
         )
         for machine in machinesets_obj.get()["items"]:
             # Get inputs from existing machineset config.
-            cls_id = (
-                machine.get("spec")
-                .get("selector")
-                .get("matchLabels")
-                .get("machine.openshift.io/cluster-api-cluster")
-            )
-            disk_size = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("diskGiB")
-            )
-            memory = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("memoryMiB")
-            )
-            network_name = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("network")
-                .get("devices")[0]
-                .get("networkName")
-            )
-            num_cpu = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("numCPUs")
-            )
-            num_core = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("numCoresPerSocket")
-            )
-            vm_template = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("template")
-            )
-            datacenter = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("workspace")
-                .get("datacenter")
-            )
-            datastore = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("workspace")
-                .get("datastore")
-            )
-            ds_folder = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("workspace")
-                .get("folder")
-            )
-            ds_resourcepool = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("workspace")
-                .get("resourcepool")
-            )
-            ds_server = (
-                machine.get("spec")
-                .get("template")
-                .get("spec")
-                .get("providerSpec")
-                .get("value")
-                .get("workspace")
-                .get("server")
-            )
+            cls_id = machine.get["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ]
+            disk_size = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["diskGiB"]
+            memory = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "memoryMiB"
+            ]
+            network_name = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["network"]["devices"][0]["networkName"]
+            num_cpu = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "numCPUs"
+            ]
+            num_core = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "numCoresPerSocket"
+            ]
+            vm_template = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["template"]
+            datacenter = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["datacenter"]
+            datastore = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["datastore"]
+            ds_folder = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["folder"]
+            ds_resourcepool = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["resourcepool"]
+            ds_server = machine.get["spec"]["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["server"]
 
             machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_VMWARE)
 

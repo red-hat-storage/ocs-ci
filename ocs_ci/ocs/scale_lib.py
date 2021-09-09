@@ -251,7 +251,8 @@ class FioPodScale(object):
                 )
                 or (
                     config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+                    and config.ENV_DATA["platform"].lower()
+                    == constants.VSPHERE_PLATFORM
                 )
             ):
                 for obj in machine.get_machineset_objs():
@@ -663,7 +664,7 @@ def get_expected_worker_count(scale_count=1500):
             expected_worker_count = worker_count_dict[scale_count]["rhv"]
         elif (
             config.ENV_DATA["deployment_type"] == "ipi"
-            and config.ENV_DATA["platform"].lower() == "vsphere"
+            and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
         ):
             expected_worker_count = worker_count_dict[scale_count]["vmware"]
         else:
