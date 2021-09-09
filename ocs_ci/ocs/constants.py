@@ -576,6 +576,9 @@ MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )
 MACHINESET_YAML_RHV = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-rhv.yaml")
+MACHINESET_YAML_VMWARE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-vmware.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
