@@ -110,7 +110,7 @@ deployment_4_7 = {
 
 deployment_4_9 = {
     "click_odf_operator": (
-        'a[data-test="odf-operator-odf-catalogsource-openshift-marketplace"]',
+        'a[data-test="odf-operator-ocs-catalogsource-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
     "enable_console_plugin": ('input[data-test="Enable-radio-input"]', By.CSS_SELECTOR),

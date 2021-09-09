@@ -214,7 +214,12 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal")
-        self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
+        if self.operator == ODF_OPERATOR:
+            self.do_click(
+                locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
+            )
+        else:
+            self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
 
         logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
         self.do_click(
