@@ -4,6 +4,7 @@ import random
 import time
 import datetime
 import re
+import os
 import pathlib
 
 from ocs_ci.helpers import helpers
@@ -83,7 +84,15 @@ class FioPodScale(object):
         else:
             self.sa_name = None
 
-    def create_multi_pvc_pod(self, pvc_count=760, pvcs_per_pod=20, obj_name="obj1"):
+    def create_multi_pvc_pod(
+        self,
+        pvc_count=760,
+        pvcs_per_pod=20,
+        obj_name="obj1",
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+    ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
 
@@ -92,7 +101,9 @@ class FioPodScale(object):
             pvcs_per_pod (int): No of PVCs to be attached to single pod
             Example, If 20 then a POD will be created with 20PVCs attached
             obj_name (string): Object name prefix string
-            tmp_path (pathlib.Path): Directory where a temporary yaml file will
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -118,6 +129,7 @@ class FioPodScale(object):
                 no_of_pvc=int(pvc_count / 2),
                 access_mode=constants.ACCESS_MODE_RWO,
                 sc_name=rbd_sc_obj,
+                pvc_size=pvc_size,
             )
         )
         cephfs_pvc_dict_list.extend(
@@ -125,6 +137,7 @@ class FioPodScale(object):
                 no_of_pvc=int(pvc_count / 2),
                 access_mode=constants.ACCESS_MODE_RWX,
                 sc_name=cephfs_sc_obj,
+                pvc_size=pvc_size,
             )
         )
 
@@ -169,8 +182,10 @@ class FioPodScale(object):
                 pvc_list=rbd_pvc_name,
                 namespace=self.namespace,
                 pvcs_per_pod=pvcs_per_pod,
-                deployment_config=True,
+                deployment_config=self.dc_deployment,
                 node_selector=self.node_selector,
+                start_io=start_io,
+                io_runtime=io_runtime,
             )
         )
         pod_data_list.extend(
@@ -178,8 +193,10 @@ class FioPodScale(object):
                 pvc_list=fs_pvc_name,
                 namespace=self.namespace,
                 pvcs_per_pod=pvcs_per_pod,
-                deployment_config=True,
+                deployment_config=self.dc_deployment,
                 node_selector=self.node_selector,
+                start_io=start_io,
+                io_runtime=io_runtime,
             )
         )
 
@@ -208,7 +225,14 @@ class FioPodScale(object):
 
         return rbd_pvc_name, fs_pvc_name, pod_running_list
 
-    def create_scale_pods(self, scale_count=1500, pvc_per_pod_count=20):
+    def create_scale_pods(
+        self,
+        scale_count=1500,
+        pvc_per_pod_count=20,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+    ):
         """
         Main Function with scale pod creation flow and checks to add nodes
         for the supported platforms, validates pg-balancer after scaling
@@ -219,6 +243,9 @@ class FioPodScale(object):
             scale_count (int): No of PVCs to be Scaled
             pvc_per_pod_count (int): Number of PVCs to be attached to single POD
             Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
 
         """
 
@@ -266,7 +293,8 @@ class FioPodScale(object):
         while True:
             if actual_itr_counter == expected_itr_counter:
                 logging.info(
-                    f"Scaled {scale_count} PVCs and created {scale_count/20} PODs"
+                    f"Scaled {scale_count} PVCs and created "
+                    f"{scale_count/pvc_per_pod_count} PODs"
                 )
                 # TODO: Removing PG balancer validation, due to PG auto_scale enabled
                 # TODO: sometime PG's can't be equally distributed across OSDs
@@ -279,6 +307,9 @@ class FioPodScale(object):
                     pvc_count=max_pvc_count + 10,
                     pvcs_per_pod=pvc_per_pod_count,
                     obj_name=f"obj{actual_itr_counter}",
+                    start_io=start_io,
+                    io_runtime=io_runtime,
+                    pvc_size=pvc_size,
                 )
                 logging.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
@@ -287,7 +318,8 @@ class FioPodScale(object):
 
         logging.info(
             f"Scaled {actual_itr_counter * (max_pvc_count+10)} PVC's and "
-            f"Created {int((actual_itr_counter * (max_pvc_count+10))/20)} PODs"
+            f"Created {int((actual_itr_counter * (max_pvc_count+10))/pvc_per_pod_count)} "
+            f"PODs"
         )
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
@@ -295,11 +327,39 @@ class FioPodScale(object):
     def pvc_expansion(self, pvc_new_size):
         """
         Function to expand PVC size and verify the new size is reflected.
+
+        Args:
+            pvc_new_size (int): Updated/extended PVC size
+
         """
-        logging.info(f"PVC size is expanding to {pvc_new_size}")
-        for pvc_object in self.pvc_obj:
-            pvc_object.resize_pvc(new_size=pvc_new_size, verify=True)
-        logging.info(f"Verified: Size of all PVCs are expanded to {pvc_new_size}G")
+
+        logging.info(f"PVC size is expanding to {pvc_new_size}Gi")
+        kube_job_objs = self.kube_job_pvc_list
+
+        for kube_job in kube_job_objs:
+            # Convert PosixPath to string
+            yaml_file = os.path.abspath(str(kube_job.yaml_file))
+            yaml_data = list(templating.load_yaml(yaml_file, multi_document=True))
+
+            # Update the yaml dict with extended value
+            for i in range(0, len(yaml_data)):
+                yaml_data[i]["spec"]["resources"]["requests"][
+                    "storage"
+                ] = f"{pvc_new_size}Gi"
+            templating.dump_data_to_temp_yaml(
+                yaml_data, os.path.abspath(str(kube_job.yaml_file))
+            )
+
+            # Apply PVC changes to extend PVC
+            kube_job.apply(namespace=self.namespace)
+
+            # Validate PVC size is extended or not
+            validate_all_expanded_pvc_size_in_kube_job(
+                kube_job_obj=kube_job,
+                namespace=self.namespace,
+                no_of_pvc=len(yaml_data),
+                resize_value=pvc_new_size,
+            )
 
     def cleanup(self):
         """
@@ -706,7 +766,7 @@ def check_and_add_enough_worker(worker_count):
             f"Setup has expected worker count {worker_count} "
             "to continue scale of pods"
         )
-        return True
+        return False
     else:
         logging.info(
             "There is no enough worker in the setup, will add enough worker "
@@ -1205,7 +1265,10 @@ def attach_multiple_pvc_to_pod_dict(
     raw_block_pv=False,
     pvcs_per_pod=10,
     deployment_config=False,
+    start_io=True,
     node_selector=None,
+    io_runtime=None,
+    io_size=None,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1217,8 +1280,11 @@ def attach_multiple_pvc_to_pod_dict(
         raw_block_pv (bool): Either PVC is raw block PV or not
         pvcs_per_pod (int): No of PVCs to be attached to single pod
         deployment_config (bool): If True then DC enabled else not
+        start_io (bool): Binary value to start IO default it's True
         node_selector (dict): Pods will be created in this node_selector
             Example, {'nodetype': 'app-pod'}
+        io_runtime (seconds): Runtime in Seconds to continue IO
+        io_size (str value with M|K|G): io_size with respective unit
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1269,6 +1335,19 @@ def attach_multiple_pvc_to_pod_dict(
                     mount_list.append({"name": volume_name, "mountPath": mount_path})
 
                 liveness_check_path = device_path if raw_block_pv else mount_path
+                runtime = io_runtime if io_runtime else 3600000
+                size = io_size if io_size else "512M"
+                if start_io:
+                    io_cmd = (
+                        f"fio --name=fio-rand-readwrite "
+                        f"--filename={liveness_check_path}/abc "
+                        f"--readwrite=randrw --bs=4K --direct=1 "
+                        f"--numjobs=1 --time_based=1 --runtime={runtime} "
+                        f"--size={size} --iodepth=4 --fsync_on_close=1 "
+                        f"--rwmixread=25 --ioengine=libaio --rate=2k"
+                    )
+                else:
+                    io_cmd = "while true; do echo hello; sleep 10;done"
 
                 if flag and deployment_config:
                     # Update pod yaml with DeploymentConfig liveness probe and IO
@@ -1284,10 +1363,7 @@ def attach_multiple_pvc_to_pod_dict(
                     pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = [
                         "/bin/sh",
                         "-c",
-                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
-                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
-                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
-                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
+                        io_cmd,
                     ]
                     liveness = {
                         "exec": {"command": ["sh", "-ec", "df /mnt"]},
@@ -1309,10 +1385,7 @@ def attach_multiple_pvc_to_pod_dict(
                     pod_data["spec"]["containers"][0]["args"] = [
                         "/bin/sh",
                         "-c",
-                        f"fio --name=fio-rand-readwrite --filename={liveness_check_path}/abc "
-                        f"--readwrite=randrw --bs=4K --direct=1 --numjobs=1 --time_based=1 "
-                        f"--runtime=3600000 --size=512M --iodepth=4 --fsync_on_close=1 "
-                        f"--rwmixread=25 --ioengine=libaio --rate=2k",
+                        io_cmd,
                     ]
                     liveness = {
                         "exec": {"command": ["sh", "-ec", "df /mnt"]},
@@ -1326,7 +1399,12 @@ def attach_multiple_pvc_to_pod_dict(
                     flag = 0
 
                 if node_selector:
-                    pod_data["spec"]["template"]["metadata"]["labels"] = node_selector
+                    if deployment_config:
+                        pod_data["spec"]["template"]["metadata"][
+                            "labels"
+                        ] = node_selector
+                    else:
+                        pod_data["spec"]["nodeSelector"] = node_selector
 
             temp_list.clear()
             pods_list.append(pod_data)
@@ -1571,3 +1649,63 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
     except Exception as e:
         logging.warning(f"Exception in validate_node_and_oc_services {e}")
         return False
+
+
+def validate_all_expanded_pvc_size_in_kube_job(
+    kube_job_obj, namespace, no_of_pvc, resize_value, timeout=30
+):
+    """
+    Function to check either bulk created PVCs has extended size using kube_job
+
+    Args:
+        kube_job_obj (obj): Kube Job Object
+        namespace (str): Namespace of PVC's created
+        no_of_pvc (int): Bulk PVC count
+        resize_value (int): Updated/extended PVC size
+        timeout: a timeout for all the pvc in kube job to get extended size
+
+    Returns:
+        pvc_extended_list (list): List of all PVCs which have extended size.
+
+    Asserts:
+        If not all PVC has the extended size.
+
+    """
+    # Check all the PVC extended size
+    pvc_extended_list, pvc_not_extended_list = ([] for i in range(2))
+    while_iteration_count = 0
+    while True:
+        # Get kube_job obj and fetch either all PVC size are extended
+        # If not extended adding those PVCs to pvc_not_extended_list
+        job_get_output = kube_job_obj.get(namespace=namespace)
+        for i in range(0, no_of_pvc):
+            pvc_size = job_get_output["items"][i]["status"]["capacity"]["storage"]
+            logging.info(
+                f"pvc {job_get_output['items'][i]['metadata']['name']} size {pvc_size}"
+            )
+            if pvc_size != f"{resize_value}Gi":
+                pvc_not_extended_list.append(
+                    job_get_output["items"][i]["metadata"]["name"]
+                )
+
+        # Check the length of pvc_not_extended_list to decide either all PVCs
+        # size extended If not then wait for timeout secs and re-iterate while loop
+        if len(pvc_not_extended_list):
+            time.sleep(timeout)
+            while_iteration_count += 1
+            # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
+            # And if PVCs still not in bound state then there will be assert.
+            if while_iteration_count >= 10:
+                assert logging.error(
+                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_extended_list}"
+                )
+                break
+            pvc_not_extended_list.clear()
+            continue
+        elif not len(pvc_not_extended_list):
+            for i in range(no_of_pvc):
+                pvc_extended_list.append(job_get_output["items"][i]["metadata"]["name"])
+            logging.info("All PVCs Size are Extended")
+            logging.info(f"Verified: Size of all PVCs are expanded to {resize_value}G")
+            break
+    return pvc_extended_list

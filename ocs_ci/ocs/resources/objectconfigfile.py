@@ -113,6 +113,17 @@ class ObjectConfFile:
         """
         return self._run_command("delete", namespace)
 
+    def apply(self, namespace=None):
+        """
+        Run ``oc apply`` on in this object file.
+
+        Args:
+            namespace (str): Name of the namespace where to deploy, overriding
+            self.project.namespace value (in a similar way how you can specify
+            any value to ``-n`` option of ``oc apply``.
+        """
+        return self._run_command("apply", namespace)
+
     def get(self, namespace=None):
         """
         Run ``oc get`` on in this object file.
