@@ -10,7 +10,7 @@ from shutil import rmtree
 import time
 
 import tempfile
-import hcl
+import hcl2
 import yaml
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
@@ -415,6 +415,9 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # generate terraform variable file
             generate_terraform_vars_and_update_machine_conf()
+
+            # Add shutdown_wait_timeout to compute and control-plane VM's
+            add_shutdown_wait_timeout()
 
             # sync guest time with host
             vm_file = (
@@ -1057,7 +1060,7 @@ def change_mem_and_cpu():
     master_memory = config.ENV_DATA.get("master_memory")
     if worker_num_cpus or master_num_cpus or master_memory or worker_memory:
         with open(constants.VSPHERE_MAIN, "r") as fd:
-            obj = hcl.load(fd)
+            obj = hcl2.load(fd)
             if worker_num_cpus:
                 obj["module"]["compute"]["num_cpu"] = worker_num_cpus
             if master_num_cpus:
@@ -1086,6 +1089,30 @@ def update_gw(str_to_replace, config_file):
         replace_content_in_file(
             config_file, str_to_replace, f"{config.ENV_DATA.get('gateway')}"
         )
+
+
+def add_shutdown_wait_timeout():
+    """
+    Add shutdown_wait_timeout to compute and control-plane VM's
+    shutdown_wait_timeout is the amount of time, in minutes, to wait for a graceful guest shutdown
+    when making necessary updates to the virtual machine. If force_power_off is set to true, the VM will be
+    force powered-off after this timeout, otherwise an error is returned. Default: 3 minutes.
+
+    """
+    with open(constants.VSPHERE_MAIN, "r") as fd:
+        obj = hcl2.load(fd)
+        count = 0
+        for index in range(len(obj["module"]) - 1, -1, -1):
+            if "compute_vm" in obj["module"][index].keys():
+                obj["module"][index]["compute_vm"]["shutdown_wait_timeout"] = 10
+                count += 1
+            if "control_plane_vm" in obj["module"][index].keys():
+                obj["module"][index]["control_plane_vm"]["shutdown_wait_timeout"] = 10
+                count += 1
+            if count == 2:
+                break
+    dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
+    os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
 
 
 def update_dns():

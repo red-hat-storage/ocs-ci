@@ -35,7 +35,7 @@ setup(
         "oauth2client==4.1.3",
         "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
-        "pyhcl==0.4.4",
+        "python-hcl2==3.0.1",
         # issue opened for botocore
         # https://github.com/boto/botocore/issues/1872
         # till above issue fixed, manually pointing python-dateutil to 2.8.0
