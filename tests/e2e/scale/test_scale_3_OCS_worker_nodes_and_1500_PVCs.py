@@ -1,8 +1,10 @@
 import logging
 import pytest
+import os
 
-from ocs_ci.utility import utils
 from ocs_ci.ocs.node import get_nodes
+from ocs_ci.utility import utils, templating
+from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
@@ -15,6 +17,10 @@ from ocs_ci.framework.pytest_customization.marks import (
 
 log = logging.getLogger(__name__)
 
+# Scale data file
+log_path = ocsci_log_path()
+SCALE_DATA_FILE = f"{log_path}/scale_3ocs_worker_data_file.yaml"
+
 
 @pytest.fixture(scope="session")
 def fioscale(request):
@@ -22,11 +28,25 @@ def fioscale(request):
     FIO Scale fixture to create expected number of POD+PVC
     """
 
+    scale_pvc = 1500
+    pvc_per_pod_count = 20
+
     # Scale FIO pods in the cluster
     fioscale = FioPodScale(
-        kind=constants.POD, node_selector=constants.SCALE_NODE_SELECTOR
+        kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
     )
-    fioscale.create_scale_pods(scale_count=1500, pvc_per_pod_count=20)
+    kube_pod_obj_list, kube_pvc_obj_list = fioscale.create_scale_pods(
+        scale_count=scale_pvc, pvc_per_pod_count=pvc_per_pod_count
+    )
+
+    scale_lib.collect_scale_data_in_file(
+        namespace=fioscale.namespace,
+        kube_pod_obj_list=kube_pod_obj_list,
+        kube_pvc_obj_list=kube_pvc_obj_list,
+        scale_count=scale_pvc,
+        pvc_per_pod_count=pvc_per_pod_count,
+        scale_data_file=SCALE_DATA_FILE,
+    )
 
     def teardown():
         fioscale.cleanup()
@@ -62,6 +82,15 @@ class TestScaleRespinCephPods(E2ETest):
         Test case to scale PVC+POD with multi projects and reach expected PVC count
         """
 
+        # Get info from SCALE_DATA_FILE for validation
+        if os.path.exists(SCALE_DATA_FILE):
+            file_data = templating.load_yaml(SCALE_DATA_FILE)
+            namespace = file_data.get("NAMESPACE")
+            pod_scale_list = file_data.get("POD_SCALE_LIST")
+            pvc_scale_list = file_data.get("PVC_SCALE_LIST")
+        else:
+            raise FileNotFoundError
+
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
         no_of_resource = disruption.resource_count
@@ -69,6 +98,16 @@ class TestScaleRespinCephPods(E2ETest):
             disruption.delete_resource(resource_id=i)
 
         utils.ceph_health_check()
+
+        # Validate all PVCs from namespace are in Bound state
+        assert scale_lib.validate_all_pvcs_and_check_state(
+            namespace=namespace, pvc_scale_list=pvc_scale_list
+        )
+
+        # Validate all PODs from namespace are up and running
+        assert scale_lib.validate_all_pods_and_check_state(
+            namespace=namespace, pod_scale_list=pod_scale_list
+        )
 
 
 @scale
@@ -97,6 +136,15 @@ class TestRebootNodes(E2ETest):
         """
         node_list = list()
 
+        # Get info from SCALE_DATA_FILE for validation
+        if os.path.exists(SCALE_DATA_FILE):
+            file_data = templating.load_yaml(SCALE_DATA_FILE)
+            namespace = file_data.get("NAMESPACE")
+            pod_scale_list = file_data.get("POD_SCALE_LIST")
+            pvc_scale_list = file_data.get("PVC_SCALE_LIST")
+        else:
+            raise FileNotFoundError
+
         # Rolling reboot nodes
         if node_type == constants.WORKER_MACHINE:
             tmp_list = get_nodes(node_type=node_type)
@@ -121,3 +169,13 @@ class TestRebootNodes(E2ETest):
         assert utils.ceph_health_check(
             delay=180
         ), "Ceph health in bad state after node reboots"
+
+        # Validate all PVCs from namespace are in Bound state
+        assert scale_lib.validate_all_pvcs_and_check_state(
+            namespace=namespace, pvc_scale_list=pvc_scale_list
+        )
+
+        # Validate all PODs from namespace are up and running
+        assert scale_lib.validate_all_pods_and_check_state(
+            namespace=namespace, pod_scale_list=pod_scale_list
+        )

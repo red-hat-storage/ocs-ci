@@ -114,52 +114,14 @@ class TestAddNode(E2ETest):
                 scale_count=scale_count, pvc_per_pod_count=pvcs_per_pod
             )
 
-            namespace = fioscale.namespace
-            scale_round_up_count = scale_count + 80
-
-            # Get PVCs and PODs count and list
-            pod_running_list, pvc_bound_list = ([], [])
-            for pod_objs in kube_pod_obj_list:
-                pod_running_list.extend(
-                    scale_lib.check_all_pod_reached_running_state_in_kube_job(
-                        kube_job_obj=pod_objs,
-                        namespace=namespace,
-                        no_of_pod=int(scale_round_up_count / 160),
-                    )
-                )
-            for pvc_objs in kube_pvc_obj_list:
-                pvc_bound_list.extend(
-                    scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-                        kube_job_obj=pvc_objs,
-                        namespace=namespace,
-                        no_of_pvc=int(scale_round_up_count / 16),
-                    )
-                )
-
-            logging.info(
-                f"Running PODs count {len(pod_running_list)} & "
-                f"Bound PVCs count {len(pvc_bound_list)} "
-                f"in namespace {fioscale.namespace}"
+            scale_lib.collect_scale_data_in_file(
+                namespace=fioscale.namespace,
+                kube_pod_obj_list=kube_pod_obj_list,
+                kube_pvc_obj_list=kube_pvc_obj_list,
+                scale_count=scale_count,
+                pvc_per_pod_count=pvcs_per_pod,
+                scale_data_file=SCALE_DATA_FILE,
             )
-
-            # Get kube obj files in the list to update in scale_data_file
-            pod_obj_file_list, pvc_obj_file_list = ([], [])
-            files = os.listdir(ocsci_log_path())
-            for f in files:
-                if "pod" in f:
-                    pod_obj_file_list.append(f)
-                elif "pvc" in f:
-                    pvc_obj_file_list.append(f)
-
-            # Write namespace, PVC and POD data in a SCALE_DATA_FILE which
-            # will be used during post_upgrade validation tests
-            with open(SCALE_DATA_FILE, "a+") as w_obj:
-                w_obj.write(str("# Scale Data File\n"))
-                w_obj.write(str(f"NAMESPACE: {namespace}\n"))
-                w_obj.write(str(f"POD_SCALE_LIST: {pod_running_list}\n"))
-                w_obj.write(str(f"PVC_SCALE_LIST: {pvc_bound_list}\n"))
-                w_obj.write(str(f"POD_OBJ_FILE_LIST: {pod_obj_file_list}\n"))
-                w_obj.write(str(f"PVC_OBJ_FILE_LIST: {pvc_obj_file_list}\n"))
 
             # Check ceph health status
             utils.ceph_health_check(tries=30)

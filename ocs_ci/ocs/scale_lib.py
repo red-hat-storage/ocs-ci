@@ -54,7 +54,7 @@ class FioPodScale(object):
         self._node_selector = node_selector
         self._set_dc_deployment()
         self.namespace_list = list()
-        self.kube_job_pvc_list, self.kube_job_pod_list = ([] for i in range(2))
+        self.kube_job_pvc_list, self.kube_job_pod_list = ([], [])
 
     @property
     def kind(self):
@@ -123,7 +123,7 @@ class FioPodScale(object):
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
-        rbd_pvc_dict_list, cephfs_pvc_dict_list = ([] for i in range(2))
+        rbd_pvc_dict_list, cephfs_pvc_dict_list = ([], [])
         rbd_pvc_dict_list.extend(
             construct_pvc_creation_yaml_bulk_for_kube_job(
                 no_of_pvc=int(pvc_count / 2),
@@ -249,14 +249,19 @@ class FioPodScale(object):
 
         """
 
+        # Get Scale round up value from dict
+        scale_count_dict = constants.SCALE_PVC_ROUND_UP_VALUE
+        if scale_count in scale_count_dict:
+            scale_pvc_count = scale_count_dict[scale_count]
+
         # Minimal scale creation count should be 750, code is optimized to
         # scale PVC's not more than 750 count.
         # Used max_pvc_count+10 in certain places to round up the value.
         # i.e. while attaching 20 PVCs to single pod with 750 PVCs last pod
         # will left out with 10 PVCs so to avoid the problem scaling 10 more.
-        max_pvc_count = 750
-        if scale_count < max_pvc_count:
-            raise UnexpectedBehaviour("Minimal scale PVC creation count should be 750")
+        min_pvc_count = 760
+        if scale_pvc_count < min_pvc_count:
+            raise UnexpectedBehaviour("Minimal scale PVC creation count should be 760")
 
         self.ms_name = list()
 
@@ -286,15 +291,15 @@ class FioPodScale(object):
         # Create namespace
         self.create_and_set_namespace()
 
-        expected_itr_counter = int(scale_count / max_pvc_count)
+        expected_itr_counter = int(scale_pvc_count / min_pvc_count)
         actual_itr_counter = 0
 
         # Continue to iterate till the scale pvc limit is reached
         while True:
             if actual_itr_counter == expected_itr_counter:
                 logging.info(
-                    f"Scaled {scale_count} PVCs and created "
-                    f"{scale_count/pvc_per_pod_count} PODs"
+                    f"Scaled {scale_pvc_count} PVCs and created "
+                    f"{scale_pvc_count/pvc_per_pod_count} PODs"
                 )
                 # TODO: Removing PG balancer validation, due to PG auto_scale enabled
                 # TODO: sometime PG's can't be equally distributed across OSDs
@@ -304,7 +309,7 @@ class FioPodScale(object):
             else:
                 actual_itr_counter += 1
                 rbd_pvc, fs_pvc, pod_running = self.create_multi_pvc_pod(
-                    pvc_count=max_pvc_count + 10,
+                    pvc_count=min_pvc_count,
                     pvcs_per_pod=pvc_per_pod_count,
                     obj_name=f"obj{actual_itr_counter}",
                     start_io=start_io,
@@ -317,9 +322,8 @@ class FioPodScale(object):
                 )
 
         logging.info(
-            f"Scaled {actual_itr_counter * (max_pvc_count+10)} PVC's and "
-            f"Created {int((actual_itr_counter * (max_pvc_count+10))/pvc_per_pod_count)} "
-            f"PODs"
+            f"Scaled {actual_itr_counter * min_pvc_count} PVC's and Created "
+            f"{int(actual_itr_counter * (min_pvc_count/pvc_per_pod_count))} PODs"
         )
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
@@ -496,7 +500,7 @@ def add_worker_based_on_cpu_utilization(
         uti_dict = node.get_node_resource_utilization_from_oc_describe(
             node_type=role_type
         )
-        uti_high_nodes, uti_less_nodes = ([] for i in range(2))
+        uti_high_nodes, uti_less_nodes = ([], [])
         for node_obj in app_nodes:
             utilization_percent = uti_dict[f"{node_obj.name}"]["cpu"]
             if utilization_percent > expected_percent:
@@ -552,7 +556,7 @@ def add_worker_based_on_pods_count_per_node(
     ):
         app_nodes = node.get_nodes(node_type=role_type)
         pod_count_dict = node.get_running_pod_count_from_node(node_type=role_type)
-        high_count_nodes, less_count_nodes = ([] for i in range(2))
+        high_count_nodes, less_count_nodes = ([], [])
         for node_obj in app_nodes:
             count = pod_count_dict[f"{node_obj.name}"]
             if count >= expected_count:
@@ -1113,7 +1117,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
 
     """
     # Check all the PVC reached Bound state
-    pvc_bound_list, pvc_not_bound_list = ([] for i in range(2))
+    pvc_bound_list, pvc_not_bound_list = ([], [])
     while_iteration_count = 0
     while True:
         # Get kube_job obj and fetch either all PVC's are in Bound state
@@ -1191,7 +1195,7 @@ def check_all_pod_reached_running_state_in_kube_job(
     """
 
     # Check all the POD reached Running state
-    pod_running_list, pod_not_running_list = ([] for i in range(2))
+    pod_running_list, pod_not_running_list = ([], [])
     while_iteration_count = 0
     dc_pod = 0
     while True:
@@ -1291,7 +1295,7 @@ def attach_multiple_pvc_to_pod_dict(
 
     """
 
-    pods_list, temp_list = ([] for i in range(2))
+    pods_list, temp_list = ([], [])
     for pvc_name in pvc_list:
         temp_list.append(pvc_name)
         if len(temp_list) == pvcs_per_pod:
@@ -1518,6 +1522,7 @@ def scale_capacity_with_deviceset(add_deviceset_count=2, timeout=300):
 
     Args:
         add_deviceset_count (int): Deviceset count to be added to existing value
+        timeout (sec): Timeout for wait_for_resource function call
 
     """
     existing_deviceset_count = storage_cluster.get_deviceset_count()
@@ -1672,7 +1677,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
 
     """
     # Check all the PVC extended size
-    pvc_extended_list, pvc_not_extended_list = ([] for i in range(2))
+    pvc_extended_list, pvc_not_extended_list = ([], [])
     while_iteration_count = 0
     while True:
         # Get kube_job obj and fetch either all PVC size are extended
@@ -1709,3 +1714,74 @@ def validate_all_expanded_pvc_size_in_kube_job(
             logging.info(f"Verified: Size of all PVCs are expanded to {resize_value}G")
             break
     return pvc_extended_list
+
+
+def collect_scale_data_in_file(
+    namespace,
+    kube_pod_obj_list,
+    kube_pvc_obj_list,
+    scale_count,
+    pvc_per_pod_count,
+    scale_data_file,
+):
+    """
+    Function to add scale data to a file
+    Args:
+        namespace (str): Namespace of scale resource created
+        kube_pod_obj_list (list): List of pod kube jobs
+        kube_pvc_obj_list (list): List of pvc kube jobs
+        scale_count (int): Scaled PVC count
+        pvc_per_pod_count (int): PVCs per pod count
+        scale_data_file (str): Scale data file with path
+    """
+
+    # Get Scale round up value from dict
+    scale_count_dict = constants.SCALE_PVC_ROUND_UP_VALUE
+    if scale_count in scale_count_dict:
+        pvc_count = scale_count_dict[scale_count]
+
+    pod_count = pvc_count / pvc_per_pod_count
+
+    # Get PVCs and PODs count and list
+    pod_running_list, pvc_bound_list = ([], [])
+    for pod_objs in kube_pod_obj_list:
+        pod_running_list.extend(
+            check_all_pod_reached_running_state_in_kube_job(
+                kube_job_obj=pod_objs,
+                namespace=namespace,
+                no_of_pod=int(pod_count / len(kube_pod_obj_list)),
+            )
+        )
+    for pvc_objs in kube_pvc_obj_list:
+        pvc_bound_list.extend(
+            check_all_pvc_reached_bound_state_in_kube_job(
+                kube_job_obj=pvc_objs,
+                namespace=namespace,
+                no_of_pvc=int(pvc_count / len(kube_pvc_obj_list)),
+            )
+        )
+
+    logging.info(
+        f"Running PODs count {len(pod_running_list)} & "
+        f"Bound PVCs count {len(pvc_bound_list)} "
+        f"in namespace {namespace}"
+    )
+
+    # Get kube obj files in the list to update in scale_data_file
+    pod_obj_file_list, pvc_obj_file_list = ([], [])
+    files = os.listdir(ocsci_log_path())
+    for f in files:
+        if "pod" in f:
+            pod_obj_file_list.append(f)
+        elif "pvc" in f:
+            pvc_obj_file_list.append(f)
+
+    # Write namespace, PVC and POD data in a SCALE_DATA_FILE which
+    # will be used during post_upgrade validation tests
+    with open(scale_data_file, "a+") as w_obj:
+        w_obj.write(str("# Scale Data File\n"))
+        w_obj.write(str(f"NAMESPACE: {namespace}\n"))
+        w_obj.write(str(f"POD_SCALE_LIST: {pod_running_list}\n"))
+        w_obj.write(str(f"PVC_SCALE_LIST: {pvc_bound_list}\n"))
+        w_obj.write(str(f"POD_OBJ_FILE_LIST: {pod_obj_file_list}\n"))
+        w_obj.write(str(f"PVC_OBJ_FILE_LIST: {pvc_obj_file_list}\n"))
