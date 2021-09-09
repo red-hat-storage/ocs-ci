@@ -438,9 +438,11 @@ class OCSUpgrade(object):
         )
 
         if not self.upgrade_in_current_source:
-            if not ocs_catalog.is_exist() and not self.upgrade_in_current_source:
+            if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
+                # We can return here as new CatalogSource contains right images
+                return
             image_url = ocs_catalog.get_image_url()
             image_tag = ocs_catalog.get_image_name()
             log.info(f"Current image is: {image_url}, tag: {image_tag}")
