@@ -123,6 +123,7 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
+    "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
 }
 
 generic_locators = {

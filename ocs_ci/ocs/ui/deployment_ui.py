@@ -89,7 +89,7 @@ class DeploymentUI(PageNavigator):
         """
         self.navigate_operatorhub_page()
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator)
-        logger.info("Choose OCS Version")
+        logger.info("Choose OCS/ODF Version")
         if self.operator is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
         elif self.operator is ODF_OPERATOR:
@@ -109,7 +109,7 @@ class DeploymentUI(PageNavigator):
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
 
-            logger.info("Search OCS Operator")
+            logger.info("Search OCS/ODF Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
             self.do_click(
@@ -129,7 +129,7 @@ class DeploymentUI(PageNavigator):
 
         """
         self.search_operator_installed_operators_page(operator=self.operator)
-        logger.info("Click on ocs operator on Installed Operators")
+        logger.info("Click on OCS/ODF operator on 'Installed Operators' page")
         if self.operator == ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
@@ -146,7 +146,6 @@ class DeploymentUI(PageNavigator):
             )
 
         logger.info("Click on Create Storage Cluster")
-        self.refresh_page()
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
@@ -252,8 +251,15 @@ class DeploymentUI(PageNavigator):
         Review and Create storage cluster
 
         """
-        logger.info("Create on Review and create page")
-        self.do_click(locator=self.dep_loc["create_on_review"], enable_screenshot=True)
+        logger.info("Create storage cluster on 'Review and create' page")
+        if self.operator is OCS_OPERATOR:
+            self.do_click(
+                locator=self.dep_loc["create_on_review"], enable_screenshot=True
+            )
+        elif self.operator is ODF_OPERATOR:
+            self.do_click(
+                locator=self.dep_loc["create_storage_system"], enable_screenshot=True
+            )
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
 
@@ -333,7 +339,7 @@ class DeploymentUI(PageNavigator):
 
     def install_ocs_ui(self):
         """
-        Install OCS via UI
+        Install OCS/ODF via UI
 
         """
         if config.DEPLOYMENT.get("local_storage"):
