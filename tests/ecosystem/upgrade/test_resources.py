@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, defaults
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
     get_osd_pods,
@@ -123,3 +123,25 @@ def test_pod_log_after_upgrade():
     logging.info(
         f"The log '{expected_log_after_upgrade}' appears in all relevant pods."
     )
+
+
+@post_upgrade
+@bugzilla("1973179")
+def test_noobaa_service_mon_after_ocs_upgrade():
+    """
+    test_noobaa_service_mon_after_ocs_upgrade
+
+    Test Procedure:
+    1.Upgrade OCS version [4.6->4.7]
+    2.Check servicemonitors
+    3.Verify 'noobaa-service-monitor' does not exist
+
+    """
+    ocp_obj = ocp.OCP(kind="servicemonitors", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    servicemon = ocp_obj.get()
+    servicemonitors = servicemon["items"]
+    for servicemonitor in servicemonitors:
+        assert (
+            servicemonitor["metadata"]["name"] != "noobaa-service-monitor"
+        ), "noobaa-service-monitor exist"
+    log.info("noobaa-service-monitor does not exist")
