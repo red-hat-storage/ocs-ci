@@ -274,15 +274,27 @@ class PASTest(BaseTest):
         total_time = timeout
         while not Finished and total_time > 0:
             results = run_oc_command(
-                "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
+                f"get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
                 namespace=benchmark_operator.BMO_NAME,
             )
-            fname = ""
+            (fname, status) = ["", ""]
             for name in results:
-                if re.search(self.client_pod_name, name):
-                    (fname, status) = name.split()
-                    continue
+                # looking for the pod which run the benchmark (not the IO)
+                # this pod contain the `client` in his name, and there is only one
+                # pod like this, other pods have the `server` in the name.
+                (fname, status) = name.split()
+                if re.search("client", fname):
+                    break
+                else:
+                    (fname, status) = ["", ""]
+
+            if fname == "":  # there is no `client` pod !
+                err_msg = f"{self.client_pod} Failed to run !!!"
+                log.error(err_msg)
+                raise Exception(err_msg)
+
             if not fname == self.client_pod:
+                # The client pod name is different from previous check, it was restarted
                 log.info(
                     f"The pod {self.client_pod} was restart. the new client pod is {fname}"
                 )
@@ -290,10 +302,12 @@ class PASTest(BaseTest):
                 restarts += 1
                 # in case of restarting the benchmark, reset the timeout as well
                 total_time = timeout
-            if restarts > 3:
+
+            if restarts > 3:  # we are tolerating only 3 restarts
                 err_msg = f"Too much restarts of the benchmark ({restarts})"
                 log.error(err_msg)
                 raise Exception(err_msg)
+
             if status == "Succeeded":
                 # Getting the end time of the benchmark - for reporting.
                 self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
