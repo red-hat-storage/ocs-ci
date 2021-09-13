@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     tier2,
 )
 from ocs_ci.ocs.constants import (
-    BMO_NAME,
     STATUS_COMPLETED,
     VOLUME_MODE_FILESYSTEM,
 )
@@ -17,6 +16,8 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
 log = logging.getLogger(__name__)
+
+BMO_NAME = "benchmark-operator"
 
 
 @tier2

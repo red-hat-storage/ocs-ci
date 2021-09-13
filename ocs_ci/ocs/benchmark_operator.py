@@ -18,12 +18,14 @@ from subprocess import run, CalledProcessError
 
 # Local modules
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.constants import BMO_NAME
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.utility.utils import TimeoutSampler
 
+# BMO stand for : BenchMark Operator
+# The benchmark operator name used for path / namespace etc.
+BMO_NAME = "benchmark-operator"
 # The benchmark operator git repository
 BMO_REPO = "https://github.com/cloud-bulldozer/benchmark-operator"
 # The label used by the benchmark operator for the cache drop pods
