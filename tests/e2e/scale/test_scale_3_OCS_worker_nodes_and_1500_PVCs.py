@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ipi_deployment_required,
+    skipif_vsphere_ipi,
 )
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ class TestScaleRespinCephPods(E2ETest):
 @scale
 @ignore_leftovers
 @skipif_external_mode
+@skipif_vsphere_ipi
 @ipi_deployment_required
 @pytest.mark.parametrize(
     argnames=["node_type"],

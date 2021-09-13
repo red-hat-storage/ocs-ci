@@ -560,40 +560,40 @@ def create_custom_machineset(
         )
         for machine in machinesets_obj.get()["items"]:
             # Get inputs from existing machineset config.
-            cls_id = machine.get["spec"]["selector"]["matchLabels"][
+            cls_id = machine.get("spec")["selector"]["matchLabels"][
                 "machine.openshift.io/cluster-api-cluster"
             ]
-            disk_size = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            disk_size = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["diskGiB"]
-            memory = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+            memory = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
                 "memoryMiB"
             ]
-            network_name = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            network_name = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["network"]["devices"][0]["networkName"]
-            num_cpu = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+            num_cpu = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
                 "numCPUs"
             ]
-            num_core = machine.get["spec"]["template"]["spec"]["providerSpec"]["value"][
+            num_core = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
                 "numCoresPerSocket"
             ]
-            vm_template = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            vm_template = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["template"]
-            datacenter = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            datacenter = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["workspace"]["datacenter"]
-            datastore = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            datastore = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["workspace"]["datastore"]
-            ds_folder = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            ds_folder = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["workspace"]["folder"]
-            ds_resourcepool = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            ds_resourcepool = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
-            ]["workspace"]["resourcepool"]
-            ds_server = machine.get["spec"]["template"]["spec"]["providerSpec"][
+            ]["workspace"]["resourcePool"]
+            ds_server = machine.get("spec")["template"]["spec"]["providerSpec"][
                 "value"
             ]["workspace"]["server"]
 
@@ -603,13 +603,13 @@ def create_custom_machineset(
             machineset_yaml["metadata"]["labels"][
                 "machine.openshift.io/cluster-api-cluster"
             ] = cls_id
-            machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}-{zone}"
+            machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}"
             machineset_yaml["spec"]["selector"]["matchLabels"][
                 "machine.openshift.io/cluster-api-cluster"
             ] = cls_id
             machineset_yaml["spec"]["selector"]["matchLabels"][
                 "machine.openshift.io/cluster-api-machineset"
-            ] = f"{cls_id}-{role}-{zone}"
+            ] = f"{cls_id}-{role}"
             machineset_yaml["spec"]["template"]["metadata"]["labels"][
                 "machine.openshift.io/cluster-api-cluster"
             ] = cls_id
@@ -621,7 +621,7 @@ def create_custom_machineset(
             ] = role
             machineset_yaml["spec"]["template"]["metadata"]["labels"][
                 "machine.openshift.io/cluster-api-machineset"
-            ] = f"{cls_id}-{role}-{zone}"
+            ] = f"{cls_id}-{role}"
             machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                 "diskGiB"
             ] = disk_size
@@ -674,9 +674,9 @@ def create_custom_machineset(
             # Create new custom machineset
             ms_obj = OCS(**machineset_yaml)
             ms_obj.create()
-            if check_machineset_exists(f"{cls_id}-{role}-{zone}"):
-                logging.info(f"Machineset {cls_id}-{role}-{zone} created")
-                return f"{cls_id}-{role}-{zone}"
+            if check_machineset_exists(f"{cls_id}-{role}"):
+                logging.info(f"Machineset {cls_id}-{role} created")
+                return f"{cls_id}-{role}"
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
 

@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
     UnsupportedPlatformError,
+    UnsupportedFeatureError,
 )
 
 logger = logging.getLogger(__name__)
@@ -896,27 +897,15 @@ def check_and_add_enough_worker(worker_count):
             # Create machineset for app worker nodes on vmware
             ms_name = list()
             labels = [("node-role.kubernetes.io/app", "app-scale")]
+            if len(machine.get_machineset_objs()) == 3:
+                raise UnsupportedFeatureError(
+                    "There is no support for 3 zone vmware IPI"
+                )
             for obj in machine.get_machineset_objs():
                 if "app" in obj.name:
                     ms_name.append(obj.name)
-            if not ms_name:
-                if len(machine.get_machineset_objs()) == 3:
-                    for zone in ["3", "4", "5"]:
-                        ms_name.append(
-                            machine.create_custom_machineset(
-                                labels=labels,
-                                zone=zone,
-                            )
-                        )
                 else:
-                    ms_name.append(
-                        machine.create_custom_machineset(
-                            labels=labels,
-                            zone="1",
-                        )
-                    )
-                for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    ms_name.append(machine.create_custom_machineset(labels=labels))
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
