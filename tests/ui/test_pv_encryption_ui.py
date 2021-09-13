@@ -5,7 +5,6 @@ import pytest
 
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
-    create_pods,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -106,7 +105,7 @@ class TestPVEncryption(ManageTest):
 
         # Creating storage class via UI
         logger.info("Creating Storage Class via UI")
-        sc_type = create_storage_class_ui(
+        sc_name = create_storage_class_ui(
             setup_ui,
             encryption=True,
             backend_path=self.vault_resource_name,
@@ -118,12 +117,12 @@ class TestPVEncryption(ManageTest):
         sc_obj = ocs.OCS(
             kind=constants.STORAGECLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        sc_obj._name = sc_type
+        sc_obj._name = sc_name
         teardown_factory(sc_obj)
 
         # Verifying storage class details via UI
         logger.info("Verifying Storage Class Details via UI")
-        verify_storage_class_ui(setup_ui, sc_type=sc_type)
+        verify_storage_class_ui(setup_ui, sc_name=sc_name)
         logger.info("Storage Class Details Verified")
 
         # Create ceph-csi-kms-token in the tenant namespace
@@ -142,7 +141,7 @@ class TestPVEncryption(ManageTest):
                 resource_description="test", resource_type="pvc"
             )
             pvc_ui_obj.create_pvc_ui(
-                project_name, sc_type, pvc_name, mode, pvc_size, vol_mode
+                project_name, sc_name, pvc_name, mode, pvc_size, vol_mode
             )
 
             logger.info("PVC Created via UI")
@@ -160,8 +159,8 @@ class TestPVEncryption(ManageTest):
                 f"\n actual access mode:{pvc[0].get_pvc_access_mode}"
             )
 
-            assert pvc[0].backed_sc == sc_type, (
-                f"storage class error| expected storage class:{sc_type} "
+            assert pvc[0].backed_sc == sc_name, (
+                f"storage class error| expected storage class:{sc_name} "
                 f"\n actual storage class:{pvc[0].backed_sc}"
             )
 
@@ -176,7 +175,7 @@ class TestPVEncryption(ManageTest):
                 pvc_size=pvc_size,
                 access_mode=mode,
                 vol_mode=vol_mode,
-                sc_type=sc_type,
+                sc_name=sc_name,
                 pvc_name=pvc_name,
                 project_name=project_name,
             )
@@ -281,7 +280,7 @@ class TestPVEncryption(ManageTest):
                     )
         # Deleting Storage Class via UI
         logger.info("Deleting Storage Class via UI")
-        sc_deletion_check = delete_storage_class_ui(setup_ui, sc_type)
+        sc_deletion_check = delete_storage_class_ui(setup_ui, sc_name)
 
         # If Storage Class Deletion failed via UI, Delete it using Teardown Factory
         logger.info(

@@ -566,7 +566,6 @@ locators = {
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "validation": {**validation, **validation_4_8},
         "storage_class": storage_class,
-        "storage_class": storage_class
         "add_capacity": add_capacity,
         "block_pool": block_pool,
         "storageclass": storageclass,
