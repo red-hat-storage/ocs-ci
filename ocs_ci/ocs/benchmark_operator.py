@@ -88,6 +88,7 @@ class BenchmarkOperator(object):
         self.ocp = OCP()
         self.ns_obj = OCP(kind="namespace")
         self.pod_obj = OCP(namespace=BMO_NAME, kind="pod")
+        self.job = OCP(namespace=BMO_NAME, kind="job")
         # list of worker nodes to label
         self.worker_nodes = get_worker_nodes()
         self._clone_operator()
@@ -216,3 +217,17 @@ class BenchmarkOperator(object):
                         return uuid
 
         return ""
+
+    def setup_job_timeout(self, timeout=18000):
+        """
+        Patching the benchmark job timeout
+
+        Args:
+            timeout (int): the job timeout in seconds (default is 5 Hours)
+
+        """
+        job_name = self.job.get().get("items")[0].get("metadata").get("name")
+        log.info(f"Setting up the timeout for {job_name} to {timeout} seconds")
+        patch = '\'{"spec": {"activeDeadlineSeconds": ' + str(timeout) + "}}'"
+        patch_cmd = f"patch job {job_name} -p" + patch
+        self.job.exec_oc_cmd(command=patch_cmd)

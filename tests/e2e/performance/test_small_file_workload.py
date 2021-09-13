@@ -415,6 +415,7 @@ class TestSmallFileWorkload(PASTest):
 
         # Getting the UUID from inside the benchmark pod
         self.uuid = self.operator.get_uuid(self.client_pod)
+        self.operator.setup_job_timeout()
         self.wait_for_wl_to_finish(sleep=30)
         try:
             if "RUN STATUS DONE" in self.test_logs:

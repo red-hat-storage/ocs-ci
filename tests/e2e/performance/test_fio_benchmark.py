@@ -367,6 +367,8 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
+        self.operator.setup_job_timeout()
+
         self.wait_for_wl_to_finish(sleep=sleeptime)
 
         try:
