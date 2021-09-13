@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
+    create_pods,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -203,14 +204,14 @@ class TestPVEncryption(ManageTest):
 
         # Creating Pods via CLI
         logger.info("Creating Pods")
-        # pod_objs = create_pods(
-        #     pvc_objs,
-        #     pod_factory,
-        #     constants.CEPHBLOCKPOOL,
-        #     status=constants.STATUS_RUNNING,
-        # )
-        # for pod_obj in pod_objs:
-        #     logger.info(f"Pod {pod_obj.name} created successfully")
+        pod_objs = create_pods(
+            pvc_objs,
+            pod_factory,
+            constants.CEPHBLOCKPOOL,
+            status=constants.STATUS_RUNNING,
+        )
+        for pod_obj in pod_objs:
+            logger.info(f"Pod {pod_obj.name} created successfully")
 
         ocp_version = get_ocp_version()
         self.pvc_loc = locators[ocp_version]["pvc"]
@@ -219,36 +220,36 @@ class TestPVEncryption(ManageTest):
         logger.info(
             "Verify whether encrypted device is present inside the pod and run IO"
         )
-        # for vol_handle, pod_obj in zip(vol_handles, pod_objs):
-        #     if pod_obj.exec_sh_cmd_on_pod(
-        #         command=f"lsblk | grep {vol_handle} | grep crypt"
-        #     ):
-        #         logger.info(f"Encrypted device found in {pod_obj.name}")
-        #     else:
-        #         logger.error(f"Encrypted device not found in {pod_obj.name}")
-        #
-        #     logger.info(f"Running FIO on Pod '{pod_obj.name}'")
-        #     pod_obj.run_io(
-        #         storage_type="block",
-        #         size=(int(pvc_size) - 1),
-        #         io_direction="write",
-        #         runtime=60,
-        #         invalidate=0,
-        #     )
-        #     logger.info(f"IO started on the Pod {pod_obj.name}")
+        for vol_handle, pod_obj in zip(vol_handles, pod_objs):
+            if pod_obj.exec_sh_cmd_on_pod(
+                command=f"lsblk | grep {vol_handle} | grep crypt"
+            ):
+                logger.info(f"Encrypted device found in {pod_obj.name}")
+            else:
+                logger.error(f"Encrypted device not found in {pod_obj.name}")
+
+            logger.info(f"Running FIO on Pod '{pod_obj.name}'")
+            pod_obj.run_io(
+                storage_type="block",
+                size=(int(pvc_size) - 1),
+                io_direction="write",
+                runtime=60,
+                invalidate=0,
+            )
+            logger.info(f"IO started on the Pod {pod_obj.name}")
 
         # Wait for IO completion
         logger.info("Waiting for IO completion on the Pod")
-        # for pod_obj in pod_objs:
-        #     pod_obj.get_fio_results()
-        # logger.info("IO completed on all Pods")
+        for pod_obj in pod_objs:
+            pod_obj.get_fio_results()
+        logger.info("IO completed on all Pods")
 
         # Delete the pod
-        # for pod_obj in pod_objs:
-        #     logger.info(f"Deleting Pod '{pod_obj.name}'")
-        #     pod_obj.delete(wait=True)
-        #     pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
-        #     logger.info(f"Pod '{pod_obj.name}' Deleted Successfully")
+        for pod_obj in pod_objs:
+            logger.info(f"Deleting Pod '{pod_obj.name}'")
+            pod_obj.delete(wait=True)
+            pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
+            logger.info(f"Pod '{pod_obj.name}' Deleted Successfully")
 
         # Deleting the PVC via UI
         logger.info(f"Delete pvc '{pvc_name}' via UI")
