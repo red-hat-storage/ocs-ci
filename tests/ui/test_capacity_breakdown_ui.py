@@ -65,7 +65,6 @@ class TestCapacityBreakdownUI(ManageTest):
             do_reload=False,
             access_mode=constants.ACCESS_MODE_RWO,
         )
-        # teardown_factory(pvc_obj)
         logger.info(
             f"Create new pod. Pod name={pod_name},"
             f"interface_type={constants.CEPHBLOCKPOOL}"
@@ -76,7 +75,6 @@ class TestCapacityBreakdownUI(ManageTest):
             interface_type=constants.CEPHBLOCKPOOL,
             pod_name=pod_name,
         )
-        # teardown_factory(pod_obj)
         logger.info(f"Wait for pod {pod_name} move to Running state")
         helpers.wait_for_resource_state(
             pod_obj, state=constants.STATUS_RUNNING, timeout=300
@@ -85,10 +83,6 @@ class TestCapacityBreakdownUI(ManageTest):
         pod_obj.run_io(
             storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
             size="1GB",
-            io_direction="rw",
-            jobs=1,
-            runtime=60,
-            depth=4,
         )
         fio_result = pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
@@ -98,7 +92,6 @@ class TestCapacityBreakdownUI(ManageTest):
         logging.info(f"Write: {writes}")
 
         validation_ui_obj = ValidationUI(setup_ui)
-        if not validation_ui_obj.check_capacity_breakdown(
+        assert validation_ui_obj.check_capacity_breakdown(
             project_name=project_name, pod_name=pod_name
-        ):
-            assert ValueError("The Project/Pod not created on Capacity Breakdown")
+        ), "The Project/Pod not created on Capacity Breakdown"
