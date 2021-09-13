@@ -4,13 +4,10 @@ import time
 
 from pyautogui import write, press
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from webdriver_manager import driver
-from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.proxy import get_cluster_proxies
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from selenium.webdriver.common.by import By
 
@@ -121,10 +118,10 @@ def create_storage_class_ui(
     logger.info("Create Storage Class")
     base_ui_obj.do_click(pvc_loc["create-sc"])
     logger.info("Storage Class Name")
-    sc_type = create_unique_resource_name(
+    sc_name = create_unique_resource_name(
         resource_description="test", resource_type="storageclass"
     )
-    base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_type}")
+    base_ui_obj.do_send_keys(pvc_loc["sc-name"], f"{sc_name}")
     logger.info("Storage Class Description")
     base_ui_obj.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
     logger.info("Storage Class Reclaim Policy")
@@ -197,22 +194,7 @@ def create_storage_class_ui(
     base_ui_obj.do_click(pvc_loc["create"])
     time.sleep(1)
 
-    return sc_type
-
-def format_locator(locator, string_to_insert):
-    """
-    Use this function format_locator when working with dynamic locators.
-
-    Args:
-        locator (tuple): (GUI element needs to operate on (str), type (By))
-        string_to_insert (str): Name of the variable (string) which contains the dynamic web element
-            when generated on certain action
-
-    return:
-        formats the locator using .format() function which takes string to be inserted as an argument
-
-    """
-    return locator[0].format(string_to_insert), locator[1]
+    return sc_name
 
 
 def ui_add_capacity_conditions():
@@ -308,8 +290,7 @@ def get_element_type(element_name):
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
 
 
-
-def verify_storage_class_ui(setup_ui, sc_type):
+def verify_storage_class_ui(setup_ui, sc_name):
     """
     Test for verifying storage class details via UI
 
@@ -325,21 +306,21 @@ def verify_storage_class_ui(setup_ui, sc_type):
     base_ui_obj.do_click(pvc_loc["sc-dropdown"])
     base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
     logger.info("Search Storage Class with Name")
-    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_type)
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
     logger.info("Click and Select Storage Class")
-    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_type))
+    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_name))
     # Verifying Storage Class Details via UI
     logger.info("Verifying Storage Class Details via UI")
-    sc_name = base_ui_obj.check_element_text(expected_text=sc_type)
+    sc_name = base_ui_obj.check_element_text(expected_text=sc_name)
     if sc_name:
-        logger.info(f"Storage Class '{sc_type}' Found")
+        logger.info(f"Storage Class '{sc_name}' Found")
         return True
     else:
-        logger.error(f"Storage Class '{sc_type}' Not Found, Verification Failed")
+        logger.error(f"Storage Class '{sc_name}' Not Found, Verification Failed")
         return False
 
 
-def delete_storage_class_ui(setup_ui, sc_type):
+def delete_storage_class_ui(setup_ui, sc_name):
     """
     Test for deletion of storage class via UI
 
@@ -354,9 +335,9 @@ def delete_storage_class_ui(setup_ui, sc_type):
     base_ui_obj.do_click(pvc_loc["sc-dropdown"])
     base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
     logger.info("Search Storage Class with Name")
-    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_type)
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
     logger.info("Click and Select Storage Class")
-    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_type))
+    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_name))
     logger.info("Click on Actions")
     base_ui_obj.do_click(pvc_loc["sc-actions"])
     logger.info("Deleting Storage Class")
@@ -368,13 +349,10 @@ def delete_storage_class_ui(setup_ui, sc_type):
     logger.info("Verifying if Storage Class is Deleted or not via UI")
     # base_ui_obj.refresh_page()
     logger.info("Search Storage Class with Name on Storage Class Page")
-    sc_name = base_ui_obj.check_element_text(expected_text=sc_type)
+    sc_name = base_ui_obj.check_element_text(expected_text=sc_name)
     if sc_name:
-        logger.error(f"Storage Class '{sc_type}' Found, Deletion via UI failed")
+        logger.error(f"Storage Class '{sc_name}' Found, Deletion via UI failed")
         return False
     else:
-        logger.info(f"Storage Class '{sc_type}' Not Found, Deletion successful")
+        logger.info(f"Storage Class '{sc_name}' Not Found, Deletion successful")
         return True
-
-
-
