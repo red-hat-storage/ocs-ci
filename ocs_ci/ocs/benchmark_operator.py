@@ -88,7 +88,6 @@ class BenchmarkOperator(object):
         self.ocp = OCP()
         self.ns_obj = OCP(kind="namespace")
         self.pod_obj = OCP(namespace=BMO_NAME, kind="pod")
-        self.job = OCP(namespace=BMO_NAME, kind="job")
         # list of worker nodes to label
         self.worker_nodes = get_worker_nodes()
         self._clone_operator()
