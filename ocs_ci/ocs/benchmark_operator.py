@@ -217,17 +217,3 @@ class BenchmarkOperator(object):
                         return uuid
 
         return ""
-
-    def setup_job_timeout(self, timeout=18000):
-        """
-        Patching the benchmark job timeout
-
-        Args:
-            timeout (int): the job timeout in seconds (default is 5 Hours)
-
-        """
-        job_name = self.job.get().get("items")[0].get("metadata").get("name")
-        log.info(f"Setting up the timeout for {job_name} to {timeout} seconds")
-        patch = '\'{"spec": {"activeDeadlineSeconds": ' + str(timeout) + "}}'"
-        patch_cmd = f"patch job {job_name} -p" + patch
-        self.job.exec_oc_cmd(command=patch_cmd)

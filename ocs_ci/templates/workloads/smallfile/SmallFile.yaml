@@ -30,5 +30,6 @@ spec:
       files: 50000
       storageclass: ocs-storageclass-ceph-rbd
       storagesize: 100Gi
+      job_timeout: 18000
       # un comment the next line when the  drop-cache-kernel will support multi-arch
       drop_cache_kernel: true
