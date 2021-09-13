@@ -271,6 +271,7 @@ class AWSUPI(AWSBase):
                 "IAAS_PLATFORM": "aws",
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
+                "DISABLE_MASTER_MACHINESET": "yes",
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
