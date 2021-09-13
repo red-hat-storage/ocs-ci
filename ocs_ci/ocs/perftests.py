@@ -274,7 +274,7 @@ class PASTest(BaseTest):
         total_time = timeout
         while not Finished and total_time > 0:
             results = run_oc_command(
-                f"get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
+                "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
                 namespace=benchmark_operator.BMO_NAME,
             )
             (fname, status) = ["", ""]
