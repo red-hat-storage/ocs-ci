@@ -10,8 +10,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from selenium.webdriver.common.by import By
-
-
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
@@ -347,7 +345,6 @@ def delete_storage_class_ui(setup_ui, sc_name):
     time.sleep(2)
     # Verifying if Storage Class is Details or not via UI
     logger.info("Verifying if Storage Class is Deleted or not via UI")
-    # base_ui_obj.refresh_page()
     logger.info("Search Storage Class with Name on Storage Class Page")
     sc_name = base_ui_obj.check_element_text(expected_text=sc_name)
     if sc_name:
