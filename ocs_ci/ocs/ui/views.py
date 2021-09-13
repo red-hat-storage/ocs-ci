@@ -215,6 +215,7 @@ pvc = {
         'button[data-test="storageclass-dropdown"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class_name": ('//*[text()="{}"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
         'a[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,

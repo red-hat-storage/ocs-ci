@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -28,25 +28,22 @@ class TestPvcUserInterface(object):
     @skipif_ocs_version("<4.6")
     @skipif_ui_not_support("pvc")
     @pytest.mark.parametrize(
-        argnames=["sc_type", "pvc_name", "access_mode", "pvc_size", "vol_mode"],
+        argnames=["sc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfs",
-                "test-pvc-fs",
                 "ReadWriteMany",
                 "2",
                 "Filesystem",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
                 "ReadWriteMany",
                 "3",
                 "Block",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
                 "ReadWriteMany",
                 "4",
                 "Block",
@@ -54,21 +51,18 @@ class TestPvcUserInterface(object):
             ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
-                "test-pvc-fs",
                 "ReadWriteOnce",
                 "10",
                 "Filesystem",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
                 "ReadWriteOnce",
                 "11",
                 "Block",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
                 "ReadWriteOnce",
                 "12",
                 "Block",
@@ -76,14 +70,12 @@ class TestPvcUserInterface(object):
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
-                "test-pvc-rbd",
                 "ReadWriteOnce",
                 "13",
                 "Filesystem",
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd-thick",
-                "test-pvc-rbd-thick",
                 "ReadWriteOnce",
                 "4",
                 "Filesystem",
@@ -96,8 +88,7 @@ class TestPvcUserInterface(object):
         project_factory,
         teardown_factory,
         setup_ui,
-        sc_type,
-        pvc_name,
+        sc_name,
         access_mode,
         pvc_size,
         vol_mode,
@@ -113,8 +104,9 @@ class TestPvcUserInterface(object):
         pvc_ui_obj = PvcUI(setup_ui)
 
         # Creating PVC via UI
+        pvc_name = create_unique_resource_name("test", "pvc")
         pvc_ui_obj.create_pvc_ui(
-            project_name, sc_type, pvc_name, access_mode, pvc_size, vol_mode
+            project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
         )
 
         pvc_objs = get_all_pvc_objs(namespace=project_name)
@@ -130,8 +122,8 @@ class TestPvcUserInterface(object):
             f"\n actual access mode:{pvc[0].get_pvc_access_mode}"
         )
 
-        assert pvc[0].backed_sc == sc_type, (
-            f"storage class error| expected storage class:{sc_type} "
+        assert pvc[0].backed_sc == sc_name, (
+            f"storage class error| expected storage class:{sc_name} "
             f"\n actual storage class:{pvc[0].backed_sc}"
         )
 
@@ -146,7 +138,7 @@ class TestPvcUserInterface(object):
             pvc_size=pvc_size,
             access_mode=access_mode,
             vol_mode=vol_mode,
-            sc_type=sc_type,
+            sc_name=sc_name,
             pvc_name=pvc_name,
             project_name=project_name,
         )
@@ -154,7 +146,7 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_type in (
+        if sc_name in (
             constants.DEFAULT_STORAGECLASS_RBD_THICK,
             constants.DEFAULT_STORAGECLASS_RBD,
         ):
