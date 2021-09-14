@@ -3624,6 +3624,7 @@ def pvc_clone_factory(request):
             parent_pvc=pvc_obj.name,
             clone_yaml=clone_yaml,
             pvc_name=clone_name,
+            namespace=pvc_obj.namespace,
             storage_size=size,
             access_mode=access_mode,
             volume_mode=volume_mode,

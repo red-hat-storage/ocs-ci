@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     tier2,
 )
 from ocs_ci.ocs.constants import (
-    RIPSAW_NAMESPACE,
     STATUS_COMPLETED,
     VOLUME_MODE_FILESYSTEM,
 )
@@ -17,6 +16,8 @@ from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
 log = logging.getLogger(__name__)
+
+BMO_NAME = "benchmark-operator"
 
 
 @tier2
@@ -47,9 +48,11 @@ class TestPvcCloneOfWorkloads(E2ETest):
         4. Create pgbench benchmark to new pgsql pod
         """
 
+        self.sset_list = []
+
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
-        pgsql = pgsql_factory_fixture(replicas=3, clients=3, transactions=600)
+        pgsql = pgsql_factory_fixture(replicas=3)
 
         # Get postgres pvcs obj list
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
@@ -81,11 +84,10 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
             # Validate cloned pvcs file space matches with parent
             cloned_pods_list = get_pod_name_by_pattern(
-                pattern=f"postgres-cloned-{i}", namespace=RIPSAW_NAMESPACE
+                pattern=f"postgres-cloned-{i}", namespace=BMO_NAME
             )
             cloned_pods_obj = [
-                get_pod_obj(name=pods, namespace=RIPSAW_NAMESPACE)
-                for pods in cloned_pods_list
+                get_pod_obj(name=pods, namespace=BMO_NAME) for pods in cloned_pods_list
             ]
             cloned_obj = pgsql.get_postgres_used_file_space(cloned_pods_obj)
             for pod_obj in parent_pods_obj:
@@ -103,7 +105,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
                                 ].filespace.strip("M")
                             )
                         )
-                        < 2
+                        < 3
                     ):
                         raise Exception(
                             f"Parent pvc {pod_obj.name} used file space is {pod_obj.filespace}. "
