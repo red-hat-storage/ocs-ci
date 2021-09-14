@@ -34,11 +34,11 @@ class TestCapacityBreakdownUI(ManageTest):
         argvalues=[
             pytest.param(
                 *["rbd1", "rbd2", constants.CEPHBLOCKPOOL_SC],
-                marks=pytest.mark.polarion_id("OCS-XXX"),
+                marks=pytest.mark.polarion_id("OCS-2636"),
             ),
             pytest.param(
                 *["fs3", "fs4", constants.CEPHFILESYSTEM_SC],
-                marks=pytest.mark.polarion_id("OCS-XXX"),
+                marks=pytest.mark.polarion_id("OCS-2637"),
             ),
         ],
     )
