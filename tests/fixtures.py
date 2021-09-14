@@ -240,7 +240,7 @@ def create_pvcs(request):
         number_of_pvc=class_instance.num_of_pvcs,
         size=class_instance.pvc_size,
         namespace=class_instance.namespace,
-    )
+    )[0]
     for pvc_obj in class_instance.pvc_objs:
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         pvc_obj.reload()
