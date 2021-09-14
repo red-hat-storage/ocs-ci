@@ -39,7 +39,7 @@ class TestPVCCreationPerformance(E2ETest):
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 120],
+                *[constants.CEPHBLOCKPOOL, 480],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
@@ -75,11 +75,12 @@ class TestPVCCreationPerformance(E2ETest):
         bulk_creation_time_limit = bulk_size / 2
         log.info(f"Start creating new {bulk_size} PVCs")
 
-        pvc_objs, yaml_creation_dir = helpers.create_bulk_pvcs(
+        pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=bulk_size,
             size=self.pvc_size,
+            burst=True,
         )
         logging.info(f"PVC creation dir is {yaml_creation_dir}")
 
@@ -107,13 +108,13 @@ class TestPVCCreationPerformance(E2ETest):
                 f"greater than {bulk_creation_time_limit} seconds"
             )
 
-        logging.info(f"Starting to delete bulk of {bulk_size} PVCs")
-        helpers.delete_bulk_pvcs(yaml_creation_dir)
-        logging.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
-
         pv_names_list = []
         for pvc_obj in pvc_objs:
             pv_names_list.append(pvc_obj.backed_pv)
+
+        logging.info(f"Starting to delete bulk of {bulk_size} PVCs")
+        helpers.delete_bulk_pvcs(yaml_creation_dir, pv_names_list)
+        logging.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
 
         start_deletion_time = helpers.get_pvc_bulk_deletion_time(
             self.interface, pv_names_list, status="start"
@@ -166,7 +167,7 @@ class TestPVCCreationPerformance(E2ETest):
             number_of_pvc=initial_number_of_pvcs,
             size=self.pvc_size,
             burst=True,
-        )
+        )[0]
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
         with ThreadPoolExecutor() as executor:
@@ -187,7 +188,7 @@ class TestPVCCreationPerformance(E2ETest):
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
             burst=True,
-        )
+        )[0]
         start_time = helpers.get_provision_time(
             self.interface, pvc_objs, status="start"
         )

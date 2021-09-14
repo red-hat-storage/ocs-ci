@@ -656,6 +656,7 @@ def create_multiple_pvcs(
         do_reload (bool): True for wait for reloading PVC after its creation,
             False otherwise
         access_mode (str): The kind of access mode for PVC
+        burst (bool): True for bulk creation, False ( default) for multiple creation
 
     Returns:
          list: List of PVC objects
@@ -713,77 +714,24 @@ def create_multiple_pvcs(
     )
     time.sleep(number_of_pvc)
 
-    return ocs_objs
-
-
-def create_bulk_pvcs(
-    sc_name,
-    namespace,
-    number_of_pvc=1,
-    size=None,
-    access_mode=constants.ACCESS_MODE_RWO,
-):
-    """
-    Create one or more PVC as a bulk or one by one
-    Args:
-        sc_name (str): The name of the storage class to provision the PVCs from
-        namespace (str): The namespace for the PVCs creation
-        number_of_pvc (int): Number of PVCs to be created
-        size (str): The size of the PVCs to create
-        access_mode (str): The kind of access mode for PVC
-
-    Returns:
-         list: List of PVC objects and tmp dir where the yamls are created
-    """
-
-    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
-    pvc_data["metadata"]["namespace"] = namespace
-    pvc_data["spec"]["accessModes"] = [access_mode]
-    pvc_data["spec"]["storageClassName"] = sc_name
-    if size:
-        pvc_data["spec"]["resources"]["requests"]["storage"] = size
-    if access_mode == "ReadWriteMany" and "rbd" in sc_name:
-        pvc_data["spec"]["volumeMode"] = "Block"
-    else:
-        pvc_data["spec"]["volumeMode"] = None
-
-    # Creating tem directory to hold the files for the PVC creation
-    tmpdir = tempfile.mkdtemp()
-    logger.info("Creating the PVC yaml files for creation in bulk")
-    ocs_objs = []
-    for _ in range(number_of_pvc):
-        name = create_unique_resource_name("test", "pvc")
-        logger.info(f"Adding PVC with name {name}")
-        pvc_data["metadata"]["name"] = name
-        templating.dump_data_to_temp_yaml(pvc_data, f"{tmpdir}/{name}.yaml")
-        ocs_objs.append(pvc.PVC(**pvc_data))
-
-    logger.info("Creating all PVCs as bulk")
-    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    cmd = f"create -f {tmpdir}/"
-    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
-
-    # Letting the system 1 sec for each PVC to create.
-    # this will prevent any other command from running in the system in this
-    # period of time.
-    logger.info(
-        f"Going to sleep for {number_of_pvc} sec. "
-        "until starting verify that PVCs was created."
-    )
-    time.sleep(number_of_pvc)
-
     return ocs_objs, tmpdir
 
 
-def delete_bulk_pvcs(pvc_yaml_dir):
+def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list):
     """
     Deletes all the pvcs created from yaml file in a provided dir
     Args:
         pvc_yaml_dir (str): Directory in which yaml file resides
+        pv_names_list (str): List of pv objects to be deleted
     """
     oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     cmd = f"delete -f {pvc_yaml_dir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    time.sleep(500)
+
+    for pv_name in pv_names_list:
+        validate_pv_delete(pv_name)
 
 
 def verify_block_pool_exists(pool_name):
@@ -1457,7 +1405,7 @@ def get_pvc_bulk_deletion_time(interface, pv_names, status="start"):
     Returns:
         datetime object: The time of bulk pvc deletion
     """
-
+    logging.info(f"Getting pvc bulk deletion time {status}")
     # Define the operation that need to retrieve
     operation = "started"
     if status.lower() == "end":
@@ -1474,6 +1422,7 @@ def get_pvc_bulk_deletion_time(interface, pv_names, status="start"):
 
     all_stats = []
     for pv_name in pv_names:
+        logging.info(f"Looking for deletion time of pv {pv_name}")
         stat = [i for i in logs if re.search(f'delete "{pv_name}".*{operation}', i)]
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"

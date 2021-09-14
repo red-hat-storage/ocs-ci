@@ -421,7 +421,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             number_of_pvc=number_of_pvcs,
             size=pvc_size,
             burst=True,
-        )
+        )[0]
 
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
