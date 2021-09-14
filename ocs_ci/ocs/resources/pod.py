@@ -23,7 +23,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NonUpgradedImagesFoundError,
-    ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
     ResourceNotFoundError,
@@ -1408,33 +1407,15 @@ def wait_for_storage_pods(timeout=200):
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
+        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
+        not in pod.get_labels().values()
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
             state = constants.STATUS_COMPLETED
-
-        try:
-            helpers.wait_for_resource_state(
-                resource=pod_obj, state=state, timeout=timeout
-            )
-        except ResourceWrongStatusException:
-            # 'rook-ceph-crashcollector' on the failed node stucks at
-            # pending state. BZ 1810014 tracks it.
-            # Ignoring 'rook-ceph-crashcollector' pod health check as
-            # WA and deleting its deployment so that the pod
-            # disappears. Will revert this WA once the BZ is fixed
-            if "rook-ceph-crashcollector" in pod_obj.name:
-                ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-                pod_name = pod_obj.name
-                deployment_name = "-".join(pod_name.split("-")[:-2])
-                command = f"delete deployment {deployment_name}"
-                ocp_obj.exec_oc_cmd(command=command)
-                logger.info(f"Deleted deployment for pod {pod_obj.name}")
-            else:
-                raise
+        helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
@@ -1453,10 +1434,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
 
     namespace = config.ENV_DATA["cluster_namespace"]
-    pod = OCP(
-        kind=constants.POD,
-        namespace=namespace,
-    )
+    pod = OCP(kind=constants.POD, namespace=namespace)
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
         f"and upgraded."
