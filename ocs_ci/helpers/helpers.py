@@ -728,7 +728,7 @@ def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list):
     cmd = f"delete -f {pvc_yaml_dir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
-    time.sleep(500)
+    time.sleep(len(pv_names_list) / 2)
 
     for pv_name in pv_names_list:
         validate_pv_delete(pv_name)
