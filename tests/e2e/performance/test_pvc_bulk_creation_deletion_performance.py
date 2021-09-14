@@ -39,19 +39,19 @@ class TestPVCCreationPerformance(E2ETest):
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 480],
+                *[constants.CEPHBLOCKPOOL, 60],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 720],
+                *[constants.CEPHBLOCKPOOL, 240],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 120],
+                *[constants.CEPHFILESYSTEM, 60],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 720],
+                *[constants.CEPHFILESYSTEM, 240],
                 marks=[pytest.mark.performance],
             ),
         ],
@@ -146,10 +146,10 @@ class TestPVCCreationPerformance(E2ETest):
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
     @polarion_id("OCS-1270")
     @bugzilla("1741612")
-    def test_multiple_pvc_creation_after_deletion_performance(self, teardown_factory):
+    def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
-        Measuring PVC creation time of 75% of initial PVCs (120) in the same
-        rate after deleting 75% of the initial PVCs.
+        Measuring PVC creation time of bulk of 75% of initial PVC bulk (120) in the same
+        rate after deleting ( serial deletion) 75% of the initial PVCs.
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -160,7 +160,7 @@ class TestPVCCreationPerformance(E2ETest):
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
-        log.info("Start creating new 120 PVCs")
+        log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
