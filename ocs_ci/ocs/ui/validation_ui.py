@@ -183,6 +183,8 @@ class ValidationUI(PageNavigator):
 
         """
         self.navigate_overview_page()
+        if self.ocp_version == "4.7":
+            self.do_click(self.validation_loc["persistent_storage_tab"])
         self.choose_expanded_mode(
             mode=True, locator=self.validation_loc["capacity_breakdown_options"]
         )
