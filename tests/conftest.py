@@ -3885,6 +3885,7 @@ def ripsaw(request):
 def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
+
     """
     vault = KMS.Vault()
 
@@ -3892,8 +3893,10 @@ def pv_encryption_kms_setup_factory(request):
         """
         Args:
             kv_version(str): KV version to be used, either v1 or v2
+
         Returns:
             object: Vault(KMS) object
+
         """
         vault.gather_init_vault_conf()
         vault.update_vault_env_vars()
@@ -3948,6 +3951,7 @@ def pv_encryption_kms_setup_factory(request):
     def finalizer():
         """
         Remove the vault config from csi-kms-connection-details configMap
+
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(vault.vault_backend_path)

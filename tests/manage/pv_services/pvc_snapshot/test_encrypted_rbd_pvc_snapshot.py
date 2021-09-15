@@ -41,34 +41,29 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, kv_version, pv_encryption_kms_setup_factory):
-        """ "
+    def setup(
+        self,
+        kv_version,
+        pv_encryption_kms_setup_factory,
+        project_factory,
+        pod_factory,
+        storageclass_factory,
+        multi_pvc_factory,
+    ):
+        """
         Setup csi-kms-connection-details configmap
+
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
         log.info("csi-kms-connection-details setup successful")
 
-    def test_encrypted_rbd_block_pvc_snapshot(
-        self,
-        snapshot_factory,
-        snapshot_restore_factory,
-        pod_factory,
-        project_factory,
-        storageclass_factory,
-        multi_pvc_factory,
-        kv_version,
-    ):
-        """
-        Test to take snapshots of encrypted RBD Block VolumeMode PVCs
-
-        """
         # Create a project
-        proj_obj = project_factory()
+        self.proj_obj = project_factory()
 
         # Create an encryption enabled storageclass for RBD
-        sc_obj = storageclass_factory(
+        self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=self.vault.vault_backend_path,
@@ -76,15 +71,15 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         # Create ceph-csi-kms-token in the tenant namespace
         self.vault.vault_path_token = self.vault.generate_vault_token()
-        self.vault.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        self.vault.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
-        pvc_size = 5
-
-        pvc_objs = multi_pvc_factory(
+        # Create PVC and Pods
+        self.pvc_size = 5
+        self.pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
-            project=proj_obj,
-            storageclass=sc_obj,
-            size=pvc_size,
+            project=self.proj_obj,
+            storageclass=self.sc_obj,
+            size=self.pvc_size,
             access_modes=[
                 f"{constants.ACCESS_MODE_RWX}-Block",
                 f"{constants.ACCESS_MODE_RWO}-Block",
@@ -94,21 +89,20 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             wait_each=False,
         )
 
-        pod_objs = create_pods(
-            pvc_objs,
+        self.pod_objs = create_pods(
+            self.pvc_objs,
             pod_factory,
             constants.CEPHBLOCKPOOL,
             pods_for_rwx=1,
             status=constants.STATUS_RUNNING,
         )
+
         # Verify if the key is created in Vault
-        vol_handles = []
-        for pvc_obj in pvc_objs:
+        self.vol_handles = []
+        for pvc_obj in self.pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
-            vol_handles.append(vol_handle)
-
-            # Check if encryption key is created in Vault
+            self.vol_handles.append(vol_handle)
             if kms.is_key_present_in_path(
                 key=vol_handle, path=self.vault.vault_backend_path
             ):
@@ -116,17 +110,31 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             else:
                 raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
 
+    def test_encrypted_rbd_block_pvc_snapshot(
+        self,
+        snapshot_factory,
+        snapshot_restore_factory,
+        pod_factory,
+        kv_version,
+    ):
+        """
+        Test to take snapshots of encrypted RBD Block VolumeMode PVCs
+
+        """
+
         log.info(
             "Check for encrypted device, find initial md5sum value and run IO on all pods"
         )
-        for vol_handle, pod_obj in zip(vol_handles, pod_objs):
+        for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
             # Verify whether encrypted device is present inside the pod
             if pod_obj.exec_sh_cmd_on_pod(
                 command=f"lsblk | grep {vol_handle} | grep crypt"
             ):
                 log.info(f"Encrypted device found in {pod_obj.name}")
             else:
-                log.error(f"Encrypted device not found in {pod_obj.name}")
+                raise ResourceNotFoundError(
+                    f"Encrypted device not found in {pod_obj.name}"
+                )
 
             # Find initial md5sum
             pod_obj.md5sum_before_io = cal_md5sum(
@@ -136,14 +144,14 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             )
             pod_obj.run_io(
                 storage_type="block",
-                size=f"{pvc_size - 1}G",
+                size=f"{self.pvc_size - 1}G",
                 io_direction="write",
                 runtime=60,
             )
         log.info("IO started on all pods")
 
         # Wait for IO completion
-        for pod_obj in pod_objs:
+        for pod_obj in self.pod_objs:
             pod_obj.get_fio_results()
         log.info("IO completed on all pods")
 
@@ -151,7 +159,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         # Verify md5sum has changed after IO. Create snapshot
         log.info("Verify md5sum has changed after IO and create snapshot from all PVCs")
-        for pod_obj in pod_objs:
+        for pod_obj in self.pod_objs:
             md5sum_after_io = cal_md5sum(
                 pod_obj=pod_obj,
                 file_name=pod_obj.get_storage_path(storage_type="block"),
@@ -189,14 +197,14 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         # Delete pods
         log.info("Deleting the pods")
-        for pod_obj in pod_objs:
+        for pod_obj in self.pod_objs:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
         log.info("Deleted all the pods")
 
         # Delete parent PVCs to verify snapshot is independent
         log.info("Deleting parent PVCs")
-        for pvc_obj in pvc_objs:
+        for pvc_obj in self.pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
@@ -205,9 +213,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
                 f"{pv_obj.name} is deleted."
             )
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
-        log.info(
-            "Deleted parent PVCs before restoring snapshot. " "PVs are also deleted."
-        )
+        log.info("All parent PVCs and PVs are deleted before restoring snapshot.")
 
         restore_pvc_objs, restore_vol_handles = ([] for i in range(2))
 
@@ -217,8 +223,8 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             log.info(f"Creating a PVC from snapshot {snap_obj.name}")
             restore_pvc_obj = snapshot_restore_factory(
                 snapshot_obj=snap_obj,
-                storageclass=sc_obj.name,
-                size=f"{pvc_size}Gi",
+                storageclass=self.sc_obj.name,
+                size=f"{self.pvc_size}Gi",
                 volume_mode=snap_obj.parent_volume_mode,
                 access_mode=snap_obj.parent_access_mode,
                 status="",
@@ -281,7 +287,9 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             ):
                 log.info(f"Encrypted device found in {pod_obj.name}")
             else:
-                log.error(f"Encrypted device not found in {pod_obj.name}")
+                raise ResourceNotFoundError(
+                    f"Encrypted device not found in {pod_obj.name}"
+                )
 
             log.info(f"Verifying md5sum on pod {pod_obj.name}")
             verify_data_integrity(
@@ -326,7 +334,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             log.info(
                 "Verify whether the keys for PVCs and snapshots are deleted in vault"
             )
-            for key in vol_handles + snap_handles + restore_vol_handles:
+            for key in self.vol_handles + snap_handles + restore_vol_handles:
                 if not kms.is_key_present_in_path(
                     key=key, path=self.vault.vault_backend_path
                 ):
