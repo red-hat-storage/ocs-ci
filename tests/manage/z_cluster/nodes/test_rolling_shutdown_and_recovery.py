@@ -53,6 +53,7 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
     def test_rolling_shutdown_and_recovery(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
+        SECONDS_TO_WAIT = 180
         """
         Test rolling shutdown and recovery of OCS worker nodes
 
@@ -64,8 +65,8 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
         log.info("ShutDown OCS worker")
         for node_obj in ocs_node_objs:
             nodes.stop_nodes(nodes=[node_obj])
-            log.info("Keeping node in stopped state for 3 mins")
-            time.sleep(180)
+            log.info(f"Keeping node in stopped state for {SECONDS_TO_WAIT} mins")
+            time.sleep(SECONDS_TO_WAIT)
             nodes.start_nodes(nodes=[node_obj])
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
             log.info("Checking storage pods status")
