@@ -483,6 +483,7 @@ class Deployment(object):
             ocs_operator_names = [
                 defaults.ODF_OPERATOR_NAME,
                 defaults.OCS_OPERATOR_NAME,
+                defaults.NOOBAA_OPERATOR,
             ]
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
