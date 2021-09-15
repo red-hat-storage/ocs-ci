@@ -75,15 +75,16 @@ class TestAddNode(E2ETest):
                 scale_worker_count = expected_worker_count - len(
                     existing_ocs_worker_list
                 )
-                assert scale_lib.scale_ocs_node(node_count=scale_worker_count)
+                scale_lib.scale_ocs_node(node_count=scale_worker_count)
 
             # Check existing OSD count and add OSDs if required
             if existing_deviceset_count < expected_deviceset_count:
-                add_deviceset_count = (
+                add_deviceset_count = int(
                     expected_deviceset_count - existing_deviceset_count
                 )
-                assert scale_lib.scale_capacity_with_deviceset(
-                    add_deviceset_count=add_deviceset_count
+                scale_lib.scale_capacity_with_deviceset(
+                    add_deviceset_count=add_deviceset_count,
+                    timeout=600
                 )
 
             # Check ceph health statuss
