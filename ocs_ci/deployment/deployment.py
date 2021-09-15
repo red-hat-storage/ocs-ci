@@ -819,16 +819,25 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
+        ocs_version = config.ENV_DATA["ocs_version"]
+        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            ocs_operator_names = [
+                defaults.ODF_OPERATOR_NAME,
+                defaults.OCS_OPERATOR_NAME,
+            ]
+        else:
+            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv.wait_for_phase("Succeeded", timeout=720)
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            csv.wait_for_phase("Succeeded", timeout=720)
 
         # Create secret for external cluster
         create_external_secret()
