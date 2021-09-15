@@ -26,6 +26,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnexpectedBehaviour,
     UnsupportedPlatformError,
+    UnsupportedFeatureError,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,6 +276,11 @@ class FioPodScale(object):
                 or (
                     config.ENV_DATA["deployment_type"] == "ipi"
                     and config.ENV_DATA["platform"].lower() == "rhv"
+                )
+                or (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower()
+                    == constants.VSPHERE_PLATFORM
                 )
             ):
                 for obj in machine.get_machineset_objs():
@@ -717,6 +723,11 @@ def get_expected_worker_count(scale_count=1500):
             and config.ENV_DATA["platform"].lower() == "rhv"
         ):
             expected_worker_count = worker_count_dict[scale_count]["rhv"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["vmware"]
         else:
             raise UnsupportedPlatformError("Unsupported Platform")
         return expected_worker_count
@@ -938,14 +949,55 @@ def check_and_add_enough_worker(worker_count):
                 )
             return True
 
+        # Add enough worker for vmware
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        ):
+            # Create machineset for app worker nodes on vmware
+            ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
+            if len(machine.get_machineset_objs()) == 3:
+                raise UnsupportedFeatureError(
+                    "There is no support for 3 zone vmware IPI"
+                )
+            for obj in machine.get_machineset_objs():
+                if "app" in obj.name:
+                    ms_name.append(obj.name)
+                else:
+                    ms_name.append(machine.create_custom_machineset(labels=labels))
+            if len(ms_name) == 3:
+                exp_count = int(worker_count / 3)
+            else:
+                exp_count = worker_count
+            for name in ms_name:
+                machine.add_node(machine_set=name, count=exp_count)
+            for ms in ms_name:
+                machine.wait_for_new_node_to_be_ready(ms)
+            worker_list = node.get_worker_nodes()
+            ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+            ocs_worker_list.extend(scale_label_worker)
+            final_list = list(dict.fromkeys(ocs_worker_list))
+            for node_item in final_list:
+                if node_item in worker_list:
+                    worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
+                )
+            return True
+
         elif (
             config.ENV_DATA["deployment_type"] == "upi"
-            and config.ENV_DATA["platform"].lower() == "vsphere"
+            and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
         ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         elif (
             config.ENV_DATA["deployment_type"] == "upi"
-            and config.ENV_DATA["platform"].lower() == "baremetal"
+            and config.ENV_DATA["platform"].lower() == constants.BAREMETAL_PLATFORM
         ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         else:
