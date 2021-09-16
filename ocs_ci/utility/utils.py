@@ -3014,7 +3014,7 @@ def get_module_ip(terraform_state_file, module):
     """
     ips = []
     with open(terraform_state_file) as fd:
-        obj = hcl.load(fd)
+        obj = json.loads(fd.read())
 
         if config.ENV_DATA.get("folder_structure"):
             resources = obj["resources"]
