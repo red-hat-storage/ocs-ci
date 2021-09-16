@@ -3,6 +3,7 @@ import logging
 
 import boto3
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 
@@ -78,20 +79,22 @@ class NoobaaAccount(object):
         """
         self.account_name = name
         self.email_id = email
-        response = mcg.send_rpc_query(
-            api="account_api",
-            method="create_account",
-            params={
-                "email": email,
-                "name": name,
-                "has_login": admin_access,
-                "s3_access": s3_access,
-                "default_pool": backingstore_name,
-                "allowed_buckets": {
-                    "full_permission": full_bucket_access,
-                    "permission_list": buckets,
-                },
+        params_dict = {
+            "email": email,
+            "name": name,
+            "has_login": admin_access,
+            "s3_access": s3_access,
+            "default_pool": backingstore_name,
+            "allowed_buckets": {
+                "full_permission": full_bucket_access,
+                "permission_list": buckets,
             },
+        }
+        params_dict if float(config.ENV_DATA["ocs_version"]) < 4.9 else params_dict.pop(
+            "default_pool"
+        )
+        response = mcg.send_rpc_query(
+            api="account_api", method="create_account", params=params_dict
         ).json()
         self.access_key_id = response["reply"]["access_keys"][0]["access_key"]
         self.access_key = response["reply"]["access_keys"][0]["secret_key"]
