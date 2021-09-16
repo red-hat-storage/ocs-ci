@@ -3,7 +3,7 @@ All the flexy related classes and functionality lives here
 """
 import base64
 import binascii
-import hcl2
+import json
 import logging
 import os
 import time
@@ -478,11 +478,24 @@ class FlexyBase(object):
         # load cluster info
         load_cluster_info()
 
+<<<<<<< HEAD
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             # Download terraform binary based on version used by Flexy and
             # update the installer path in ENV_DATA
             terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
+=======
+        # Download terraform binary based on version used by Flexy and
+        # update the installer path in ENV_DATA
+        terraform_data_dir = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR
+        )
+        terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
+        with open(terraform_tfstate, "r") as fd:
+            ttc = json.loads(fd.read())
+            terraform_version = ttc.get(
+                "terraform_version", config.DEPLOYMENT["terraform_version"]
+>>>>>>> ddcb89ae... use json in flexy deployment
             )
             terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
             with open(terraform_tfstate, "r") as fd:
