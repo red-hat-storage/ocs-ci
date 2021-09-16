@@ -2441,6 +2441,7 @@ def skipif_ui_not_support(ui_test):
     if (
         config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     ):
         return True
     try:
