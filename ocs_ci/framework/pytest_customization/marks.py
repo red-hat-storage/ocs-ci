@@ -21,6 +21,7 @@ from ocs_ci.ocs.constants import (
     ON_PREM_PLATFORMS,
     IBM_POWER_PLATFORM,
     IBMCLOUD_PLATFORM,
+    ROSA_PLATFORM,
 )
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -212,6 +213,10 @@ skipif_openshift_dedicated = pytest.mark.skipif(
     reason="Test will not run on Openshift dedicated cluster",
 )
 
+skipif_rosa = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
+    reason="Test will not run on ROSA cluster",
+)
 skipif_ibm_cloud = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM cloud",
