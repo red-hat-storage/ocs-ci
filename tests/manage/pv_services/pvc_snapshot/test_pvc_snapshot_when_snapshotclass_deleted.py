@@ -5,6 +5,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import (
+    bugzilla,
     ManageTest,
     tier3,
     skipif_ocs_version,
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 
 
 @tier3
+@bugzilla("1902711")
 @skipif_ocs_version("<4.7")
 @skipif_ocp_version("<4.7")
 @pytest.mark.polarion_id("OCS-2638")
@@ -57,6 +59,9 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
         Args:
             interface (str): Interface type used
 
+        Returns:
+            ocs_obj (obj): Snapshotclass obj instances
+
         """
         if interface == constants.CEPHFILESYSTEM:
             snapshotclass_data = templating.load_yaml(
@@ -71,7 +76,7 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
         snapshotclass_data["metadata"]["name"] = snapclass_name
         ocs_obj = ocs.OCS(**snapshotclass_data)
         created_snapclass = ocs_obj.create(do_reload=True)
-        assert created_snapclass, f"Failed to create snapshot {snapclass_name}"
+        assert created_snapclass, f"Failed to create snapshot class {snapclass_name}"
         return ocs_obj
 
     def test_pvc_snapshot(self, interface_iterate, teardown_factory):
@@ -89,9 +94,11 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
         teardown_factory(snapclass_obj)
 
         # Take a snapshot from created snapshotclass
-        snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
-        if self.interface == constants.CEPHFILESYSTEM:
-            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+        snap_yaml = (
+            constants.CSI_CEPHFS_SNAPSHOT_YAML
+            if self.interface == constants.CEPHFILESYSTEM
+            else constants.CSI_RBD_SNAPSHOT_YAML
+        )
         snap_name = helpers.create_unique_resource_name("test", "snapshot")
         snap_obj = pvc.create_pvc_snapshot(
             self.pvc_obj.name,
