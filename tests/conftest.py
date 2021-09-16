@@ -3933,6 +3933,7 @@ def pv_encryption_kms_setup_factory(request):
             vdict[new_kmsid] = vdict.pop(old_key)
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
             vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+            vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
             else:
@@ -3943,8 +3944,8 @@ def pv_encryption_kms_setup_factory(request):
             if "not found" not in str(cfe):
                 raise
             else:
-                new_kmsid = "1-vault"
-                vault.create_vault_csi_kms_connection_details()
+                vault.kmsid = "1-vault"
+                vault.create_vault_csi_kms_connection_details(kv_version=kv_version)
 
         return vault
 
@@ -3954,7 +3955,7 @@ def pv_encryption_kms_setup_factory(request):
 
         """
         if len(KMS.get_encryption_kmsid()) > 1:
-            KMS.remove_kmsid(vault.vault_backend_path)
+            KMS.remove_kmsid(vault.kmsid)
         # Delete the resources in vault
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()

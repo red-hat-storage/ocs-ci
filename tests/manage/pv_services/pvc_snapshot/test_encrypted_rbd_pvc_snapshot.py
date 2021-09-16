@@ -66,7 +66,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryption_kms_id=self.vault.vault_backend_path,
+            encryption_kms_id=self.vault.kmsid,
         )
 
         # Create ceph-csi-kms-token in the tenant namespace
@@ -126,6 +126,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             "Check for encrypted device, find initial md5sum value and run IO on all pods"
         )
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
+
             # Verify whether encrypted device is present inside the pod
             if pod_obj.exec_sh_cmd_on_pod(
                 command=f"lsblk | grep {vol_handle} | grep crypt"
