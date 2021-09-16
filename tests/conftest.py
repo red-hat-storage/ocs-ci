@@ -203,7 +203,10 @@ def pytest_collection_modifyitems(session, items):
                     items.remove(item)
                     continue
     # skip UI test on openshift dedicated ODF-MS platform
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
         for item in items.copy():
             if "/ui/" in str(item.fspath):
                 log.info(
