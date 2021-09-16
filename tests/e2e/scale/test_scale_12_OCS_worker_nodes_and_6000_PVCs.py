@@ -83,8 +83,7 @@ class TestAddNode(E2ETest):
                     expected_deviceset_count - existing_deviceset_count
                 )
                 scale_lib.scale_capacity_with_deviceset(
-                    add_deviceset_count=add_deviceset_count,
-                    timeout=600
+                    add_deviceset_count=add_deviceset_count, timeout=600
                 )
 
             # Check ceph health statuss
