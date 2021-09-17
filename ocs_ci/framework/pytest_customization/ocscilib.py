@@ -8,6 +8,7 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
+import traceback
 
 import pytest
 from junitparser import JUnitXml
@@ -55,126 +56,131 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(LOG_FORMAT))
 log.addHandler(handler)
 
+def pytest_cmdline_parse(pluginmanager, args):
+    print("INSIDE CMDLINE PARSE")
+    print(args)
+
 
 def pytest_addoption(parser):
-    """
-    Add necessary options to initialize OCS CI library.
-    """
-    parser.addoption(
-        "--ocsci-conf",
-        dest="ocsci_conf",
-        action="append",
-        help="Path to config file of OCS CI",
-    )
-    parser.addoption(
-        "--cluster-path",
-        dest="cluster_path",
-        help="Path to cluster directory",
-    )
-    parser.addoption(
-        "--cluster-name",
-        dest="cluster_name",
-        help="Name of cluster",
-    )
-    parser.addoption(
-        "--teardown",
-        dest="teardown",
-        action="store_true",
-        default=False,
-        help="If provided the test cluster will be destroyed after tests complete",
-    )
-    parser.addoption(
-        "--deploy",
-        dest="deploy",
-        action="store_true",
-        default=False,
-        help="If provided a test cluster will be deployed on AWS to use for testing",
-    )
-    parser.addoption(
-        "--live-deploy",
-        dest="live_deploy",
-        action="store_true",
-        default=False,
-        help="Deploy OCS from live registry like a customer",
-    )
-    parser.addoption(
-        "--email",
-        dest="email",
-        help="Email ID to send results",
-    )
-    parser.addoption(
-        "--squad-analysis",
-        dest="squad_analysis",
-        action="store_true",
-        default=False,
-        help="Include Squad Analysis to email report.",
-    )
-    parser.addoption(
-        "--collect-logs",
-        dest="collect-logs",
-        action="store_true",
-        default=False,
-        help="Collect OCS logs when test case failed",
-    )
-    parser.addoption(
-        "--collect-logs-on-success-run",
-        dest="collect_logs_on_success_run",
-        action="store_true",
-        default=False,
-        help="Collect must gather logs at the end of the execution (also when no failure in the tests)",
-    )
-    parser.addoption(
-        "--io-in-bg",
-        dest="io_in_bg",
-        action="store_true",
-        default=False,
-        help="Run IO in the background",
-    )
-    parser.addoption(
-        "--io-load",
-        dest="io_load",
-        help="IOs throughput target percentage. Value should be between 0 to 100",
-    )
-    parser.addoption(
-        "--log-cluster-utilization",
-        dest="log_cluster_utilization",
-        action="store_true",
-        help="Enable logging of cluster utilization metrics every 10 seconds",
-    )
-    parser.addoption(
-        "--ocs-version",
-        dest="ocs_version",
-        help="ocs version for which ocs-ci to be run",
-    )
-    parser.addoption(
-        "--upgrade-ocs-version",
-        dest="upgrade_ocs_version",
-        help="ocs version to upgrade (e.g. 4.3)",
-    )
-    parser.addoption(
-        "--upgrade-ocp-version",
-        dest="upgrade_ocp_version",
-        help="""
+   """
+   Add necessary options to initialize OCS CI library.
+   """
+   print("INSIDE ADDOPTION")
+   parser.addoption(
+       "--ocsci-conf",
+       dest="ocsci_conf",
+       action="append",
+       help="Path to config file of OCS CI",
+   )
+   parser.addoption(
+       "--cluster-path",
+       dest="cluster_path",
+       help="Path to cluster directory",
+   )
+   parser.addoption(
+       "--cluster-name",
+       dest="cluster_name",
+       help="Name of cluster",
+   )
+   parser.addoption(
+       "--teardown",
+       dest="teardown",
+       action="store_true",
+       default=False,
+       help="If provided the test cluster will be destroyed after tests complete",
+   )
+   parser.addoption(
+       "--deploy",
+       dest="deploy",
+       action="store_true",
+       default=False,
+       help="If provided a test cluster will be deployed on AWS to use for testing",
+   )
+   parser.addoption(
+       "--live-deploy",
+       dest="live_deploy",
+       action="store_true",
+       default=False,
+       help="Deploy OCS from live registry like a customer",
+   )
+   parser.addoption(
+       "--email",
+       dest="email",
+       help="Email ID to send results",
+   )
+   parser.addoption(
+       "--squad-analysis",
+       dest="squad_analysis",
+       action="store_true",
+       default=False,
+       help="Include Squad Analysis to email report.",
+   )
+   parser.addoption(
+       "--collect-logs",
+       dest="collect-logs",
+       action="store_true",
+       default=False,
+       help="Collect OCS logs when test case failed",
+   )
+   parser.addoption(
+       "--collect-logs-on-success-run",
+       dest="collect_logs_on_success_run",
+       action="store_true",
+       default=False,
+       help="Collect must gather logs at the end of the execution (also when no failure in the tests)",
+   )
+   parser.addoption(
+       "--io-in-bg",
+       dest="io_in_bg",
+       action="store_true",
+       default=False,
+       help="Run IO in the background",
+   )
+   parser.addoption(
+       "--io-load",
+       dest="io_load",
+       help="IOs throughput target percentage. Value should be between 0 to 100",
+   )
+   parser.addoption(
+       "--log-cluster-utilization",
+       dest="log_cluster_utilization",
+       action="store_true",
+       help="Enable logging of cluster utilization metrics every 10 seconds",
+   )
+   parser.addoption(
+       "--ocs-version",
+       dest="ocs_version",
+       help="ocs version for which ocs-ci to be run",
+   )
+   parser.addoption(
+       "--upgrade-ocs-version",
+       dest="upgrade_ocs_version",
+       help="ocs version to upgrade (e.g. 4.3)",
+   )
+   parser.addoption(
+       "--upgrade-ocp-version",
+       dest="upgrade_ocp_version",
+       help="""
         OCP version to upgrade to. This version will be used to
         load file from conf/ocp_version/ocp-VERSION-config.yaml.
         For example:
         4.5 (for nightly 4.5 OCP build)
         4.5-ga (for latest GAed 4.5 OCP build)
         """,
-    )
-    parser.addoption(
-        "--upgrade-ocp-image",
-        dest="upgrade_ocp_image",
-        help="""
+   )
+   parser.addoption(
+       "--upgrade-ocp-image",
+       dest="upgrade_ocp_image",
+       help="""
         OCP image to upgrade to. This image string will be split on ':' to
         determine the image source and the specified tag to use.
         (e.g. quay.io/openshift-release-dev/ocp-release:4.6.0-x86_64)
         """,
-    )
-    parser.addoption(
-        "--ocp-version",
-        dest="ocp_version",
-        help="""
+   )
+   parser.addoption(
+       "--ocp-version",
+       dest="ocp_version",
+       help="""
         OCP version to be used for deployment. This version will be used for
         load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
         for example those values:
@@ -182,92 +188,93 @@ def pytest_addoption(parser):
         4.2-ga: for latest GAed 4.2 OCP build
         4.2-ga-minus1: for latest GAed 4.2 build - 1
         """,
-    )
-    parser.addoption(
-        "--ocp-installer-version",
-        dest="ocp_installer_version",
-        help="""
+   )
+   parser.addoption(
+       "--ocp-installer-version",
+       dest="ocp_installer_version",
+       help="""
         Specific OCP installer version to be used for deployment. This option
         will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
         This option will overwrite any values set via --ocp-version.
         """,
-    )
-    parser.addoption(
-        "--ocs-registry-image",
-        dest="ocs_registry_image",
-        help=(
-            "ocs registry image to be used for deployment "
-            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
-        ),
-    )
-    parser.addoption(
-        "--upgrade-ocs-registry-image",
-        dest="upgrade_ocs_registry_image",
-        help=(
-            "ocs registry image to be used for upgrade "
-            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
-        ),
-    )
-    parser.addoption(
-        "--osd-size",
-        dest="osd_size",
-        type=int,
-        help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
-    )
-    parser.addoption(
-        "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
-    )
-    parser.addoption(
-        "--csv-change",
-        dest="csv_change",
-        help=(
-            "Pattern or string to change in the CSV. Should contain the value to replace "
-            "from and the value to replace to, separated by '::'"
-        ),
-    )
-    parser.addoption(
-        "--dev-mode",
-        dest="dev_mode",
-        action="store_true",
-        default=False,
-        help=(
-            "Runs in development mode. It skips few checks like collecting "
-            "versions, collecting logs, etc"
-        ),
-    )
-    parser.addoption(
-        "--ceph-debug",
-        dest="ceph_debug",
-        action="store_true",
-        default=False,
-        help=(
-            "For OCS cluster deployment with Ceph configured in debug mode. Available for OCS 4.7 and above"
-        ),
-    )
-    parser.addoption(
-        "--skip-download-client",
-        dest="skip_download_client",
-        action="store_true",
-        default=False,
-        help="Skip the openshift client download step or not",
-    )
-    parser.addoption(
-        "--disable-components",
-        dest="disable_components",
-        action="append",
-        choices=["rgw", "cephfs", "noobaa", "blockpools"],
-        help=("disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."),
-    )
-    parser.addoption(
-        "--re-trigger-failed-tests",
-        dest="re_trigger_failed_tests",
-        help="""
+   )
+   parser.addoption(
+       "--ocs-registry-image",
+       dest="ocs_registry_image",
+       help=(
+           "ocs registry image to be used for deployment "
+           "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
+       ),
+   )
+   parser.addoption(
+       "--upgrade-ocs-registry-image",
+       dest="upgrade_ocs_registry_image",
+       help=(
+           "ocs registry image to be used for upgrade "
+           "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
+       ),
+   )
+   parser.addoption(
+       "--osd-size",
+       dest="osd_size",
+       type=int,
+       help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+   )
+   parser.addoption(
+       "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
+   )
+   parser.addoption(
+       "--csv-change",
+       dest="csv_change",
+       help=(
+           "Pattern or string to change in the CSV. Should contain the value to replace "
+           "from and the value to replace to, separated by '::'"
+       ),
+   )
+   parser.addoption(
+       "--dev-mode",
+       dest="dev_mode",
+       action="store_true",
+       default=False,
+       help=(
+           "Runs in development mode. It skips few checks like collecting "
+           "versions, collecting logs, etc"
+       ),
+   )
+   parser.addoption(
+       "--ceph-debug",
+       dest="ceph_debug",
+       action="store_true",
+       default=False,
+       help=(
+           "For OCS cluster deployment with Ceph configured in debug mode. Available for OCS 4.7 and above"
+       ),
+   )
+   parser.addoption(
+       "--skip-download-client",
+       dest="skip_download_client",
+       action="store_true",
+       default=False,
+       help="Skip the openshift client download step or not",
+   )
+   parser.addoption(
+       "--disable-components",
+       dest="disable_components",
+       action="append",
+       choices=["rgw", "cephfs", "noobaa", "blockpools"],
+       help=("disable deployment of ocs component:rgw, cephfs, noobaa, blockpools."),
+   )
+   parser.addoption(
+       "--re-trigger-failed-tests",
+       dest="re_trigger_failed_tests",
+       help="""
         Path to the xunit file for xml junit report from the previous execution.
         If the file is provided, the execution will remove all the test cases
         which passed and will run only those test cases which were skipped /
         failed / or had error in the provided report.
         """,
-    )
+   )
+   log.info("INSIDE PYTEST PARSEARGS")
 
 
 def pytest_configure(config):
@@ -285,66 +292,78 @@ def pytest_configure(config):
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
     if ocscilib_module not in config.getoption("-p"):
         return
-    if not (config.getoption("--help") or config.getoption("collectonly")):
-        process_cluster_cli_params(config)
-        config_file = os.path.expanduser(
-            os.path.join(
-                ocsci_config.RUN["log_dir"],
-                f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+    for i in range(ocsci_config.nclusters):
+        log.info(f"Pytest configure switching to: cluster={i}")
+        ocsci_config.switch_ctx(i)
+
+        log.info(f"{ocsci_config.RUN}")
+        log.info(f"{ocsci_config.ENV_DATA}")
+
+        if not (config.getoption("--help") or config.getoption("collectonly")):
+            process_cluster_cli_params(config)
+            config_file = os.path.expanduser(
+                os.path.join(
+                    ocsci_config.RUN["log_dir"],
+                    f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+                )
             )
-        )
-        dump_config_to_file(config_file)
-        log.info(
-            f"Dump of the consolidated config file is located here: " f"{config_file}"
-        )
-        if config.getoption("--reportportal"):
-            set_rp_client_log_level()
-            set_report_portal_config(config)
-
-        # Add OCS related versions to the html report and remove
-        # extraneous metadata
-        markers_arg = config.getoption("-m")
-
-        # add logs url
-        logs_url = ocsci_config.RUN.get("logs_url")
-        if logs_url:
-            config._metadata["Logs URL"] = logs_url
-
-        if ocsci_config.RUN["cli_params"].get("teardown") or (
-            "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
-        ):
+            dump_config_to_file(config_file)
             log.info(
-                "Skipping versions collecting because: Deploy or destroy of "
-                "cluster is performed."
+                f"Dump of the consolidated config file is located here: " f"{config_file}"
             )
-            return
-        elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
-            log.info(
-                "Skipping version collection because we skipped " "the OCS deployment"
-            )
-            return
-        elif ocsci_config.RUN["cli_params"].get("dev_mode"):
-            log.info("Running in development mode")
-            return
-        print("Collecting Cluster versions")
-        # remove extraneous metadata
-        del config._metadata["Python"]
-        del config._metadata["Packages"]
-        del config._metadata["Plugins"]
-        del config._metadata["Platform"]
+            if config.getoption("--reportportal"):
+                set_rp_client_log_level()
+                set_report_portal_config(config)
 
-        config._metadata["Test Run Name"] = get_testrun_name()
-        gather_version_info_for_report(config)
+            # Add OCS related versions to the html report and remove
+            # extraneous metadata
+            markers_arg = config.getoption("-m")
 
-        try:
-            ocs_csv = get_ocs_csv()
-            ocs_csv_version = ocs_csv.data["spec"]["version"]
-            config.addinivalue_line(
-                "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-            )
-        except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
-            # might be using exisitng cluster path using GUI installation
-            log.warning("Unable to get CSV version for Reporting")
+            # add logs url
+            logs_url = ocsci_config.RUN.get("logs_url")
+            if logs_url:
+                config._metadata["Logs URL"] = logs_url
+
+            if ocsci_config.RUN["cli_params"].get("teardown") or (
+                "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
+            ):
+                log.info(
+                    "Skipping versions collecting because: Deploy or destroy of "
+                    "cluster is performed."
+                )
+                return
+            elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
+                log.info(
+                    "Skipping version collection because we skipped " "the OCS deployment"
+                )
+                return
+            elif ocsci_config.RUN["cli_params"].get("dev_mode"):
+                log.info("Running in development mode")
+                return
+            print("Collecting Cluster versions")
+            # remove extraneous metadata
+            for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
+                if config._metadata.get(extra_meta):
+                    del config._metadata[extra_meta]
+            """
+            del config._metadata["Python"]
+            del config._metadata["Packages"]
+            del config._metadata["Plugins"]
+            del config._metadata["Platform"]
+            """
+
+            config._metadata["Test Run Name"] = get_testrun_name()
+            gather_version_info_for_report(config)
+
+            try:
+                ocs_csv = get_ocs_csv()
+                ocs_csv_version = ocs_csv.data["spec"]["version"]
+                config.addinivalue_line(
+                    "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+                )
+            except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
+                # might be using exisitng cluster path using GUI installation
+                log.warning("Unable to get CSV version for Reporting")
 
 
 def gather_version_info_for_report(config):
@@ -435,7 +454,11 @@ def process_cluster_cli_params(config):
     # loaded, so this is OK to import once you sure that config is loaded.
     from ocs_ci.ocs.openshift_ops import OCP
 
+    log.info("SETTING KUBECONFIG")
     OCP.set_kubeconfig(
+        os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
+    )
+    ocsci_config.RUN["kubeconfig"] = (
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
     cluster_name = get_cli_param(config, "cluster_name")
@@ -540,6 +563,8 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
+    import pdb
+    pdb.set_trace()
 
 
 def pytest_collection_modifyitems(session, config, items):

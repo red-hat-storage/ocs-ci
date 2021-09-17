@@ -11,11 +11,13 @@ under section PYTEST_DONT_REWRITE
 import collections
 import os
 import yaml
+import logging
 from dataclasses import dataclass, field, fields
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Config:
@@ -117,4 +119,43 @@ def merge_dict(orig: dict, new: dict) -> dict:
     return orig
 
 
-config = Config()
+class MultiClusterConfig():
+    def __init__(self):
+        self.clusters = list()
+        self.cluster_ctx = None
+        self.nclusters = 1
+        # Index for current cluster in context
+        self.cur_index = 0
+        self.multicluster = False
+
+    def initclusterconfigs(self):
+        for i in range(self.nclusters):
+            self.clusters.append(Config())
+        self.cluster_ctx = self.clusters[0]
+        self._refresh_ctx()
+
+    def _refresh_ctx(self):
+        self.AUTH = self.cluster_ctx.AUTH
+        self.ENV_DATA = self.cluster_ctx.ENV_DATA
+        self.DEPLOYMENT = self.cluster_ctx.DEPLOYMENT
+        self.EXTERNAL_MODE = self.cluster_ctx.EXTERNAL_MODE
+        self.REPORTING = self.cluster_ctx.REPORTING
+        self.RUN = self.cluster_ctx.RUN
+        self.UPGRADE = self.cluster_ctx.UPGRADE
+        self.FLEXY = self.cluster_ctx.FLEXY
+        self.UI_SELENIUM = self.cluster_ctx.UI_SELENIUM
+        self.PERF = self.cluster_ctx.PERF
+        self.COMPONENTS = self.cluster_ctx.COMPONENTS
+        self.to_dict = self.cluster_ctx.to_dict
+        self.update = self.cluster_ctx.update
+        if self.RUN.get("kubeconfig"):
+            logger.info("SWITCHING KUBECONFIG")
+            os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
+
+    def switch_ctx(self, index):
+        self.cluster_ctx = self.clusters[index]
+        self.cur_index = index
+        self._refresh_ctx()
+
+
+config = MultiClusterConfig()

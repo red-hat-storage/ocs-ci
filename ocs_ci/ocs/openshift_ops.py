@@ -5,6 +5,7 @@ from shutil import which
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_client, run_cmd
 import ocs_ci.ocs.defaults as default
