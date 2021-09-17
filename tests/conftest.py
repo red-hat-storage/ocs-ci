@@ -198,7 +198,7 @@ def pytest_collection_modifyitems(session, items):
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
                     log.info(
-                        f"Test: {item} will be skipped due to UI test {skip_condition} is not avalible"
+                        f"Test: {item} will be skipped due to UI test {skip_condition.args} is not available"
                     )
                     items.remove(item)
                     continue
