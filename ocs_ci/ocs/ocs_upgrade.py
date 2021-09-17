@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.deployment.deployment import create_catalog_source
+from ocs_ci.deployment.deployment import create_catalog_source, Deployment
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -524,6 +524,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         upgrade_ocs.update_subscription(channel)
+        if original_ocs_version == "4.8" and upgrade_version == "4.9":
+            deployment = Deployment()
+            deployment.subscribe_ocs()
         if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
             upgrade_in_current_source
         ):
