@@ -110,6 +110,7 @@ LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
+STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
@@ -1399,3 +1400,12 @@ CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
 CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
     "ui", "chrome-proxy-extension-background.js.j2"
 )
+
+# storage system status
+STORAGE_SYSTEM_STATUS = {
+    "Available": "True",
+    "Progressing": "False",
+    "StorageSystemInvalid": "False",
+    "VendorCsvReady": "True",
+    "VendorSystemPresent": "True",
+}
