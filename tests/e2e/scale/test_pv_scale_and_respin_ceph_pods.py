@@ -104,7 +104,8 @@ class BasePvcCreateRespinCephPods(E2ETest):
         delete_resource functions checks for the deleted pod back up and running
 
         Args:
-            resource_to_delete (str): Ceph resource type to be deleted, eg: mgr/mon/osd/mds/cephfsplugin/cephfsplugin_provisioner/rbdplugin_provisioner/rbdplugin_provisioner/rbdplugin
+            resource_to_delete (str): Ceph resource type to be deleted.
+            eg: mgr/mon/osd/mds/cephfsplugin/rbdplugin/cephfsplugin_provisioner/rbdplugin_provisioner/operator
         """
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
