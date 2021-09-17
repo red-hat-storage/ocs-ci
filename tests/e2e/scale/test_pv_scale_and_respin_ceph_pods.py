@@ -104,7 +104,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
         delete_resource functions checks for the deleted pod back up and running
 
         Args:
-            resource_to_delete (str): Ceph resource type to be deleted, eg: mgr/mon/osd/mds
+            resource_to_delete (str): Ceph resource type to be deleted, eg: mgr/mon/osd/mds/rbdplugin_provisioner/cephfsplugin_provisioner/cephfsplugin/rbdplugin/operator
         """
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
@@ -132,6 +132,11 @@ class BasePvcCreateRespinCephPods(E2ETest):
         pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
         pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
         pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
+        pytest.param(*["rbdplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2639")]),
+        pytest.param(*["cephfsplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2641")]),
+        pytest.param(*["cephfsplugin"], marks=[pytest.mark.polarion_id("OCS-2642")]),
+        pytest.param(*["rbdplugin"], marks=[pytest.mark.polarion_id("OCS-2643")]),
+        pytest.param(*["operator"], marks=[pytest.mark.polarion_id("OCS-2640")]),
     ],
 )
 class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
