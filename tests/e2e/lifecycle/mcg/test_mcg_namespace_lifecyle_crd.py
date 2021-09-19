@@ -9,6 +9,7 @@ import botocore.exceptions as boto3exception
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_openshift_dedicated,
+    skipif_rosa,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -64,6 +65,7 @@ def setup_base_objects(awscli_pod, amount=2):
 
 
 @skipif_openshift_dedicated
+@skipif_rosa
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
 class TestMcgNamespaceLifecycleCrd(E2ETest):

@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier3,
     skipif_openshift_dedicated,
+    skipif_rosa,
     skipif_ocs_version,
     skipif_external_mode,
 )
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.bugzilla("1924047")
 @skipif_ocs_version("<4.6")
 @skipif_openshift_dedicated
+@skipif_rosa
 @skipif_external_mode
 class TestNoobaaBackupAndRecovery(E2ETest):
     """

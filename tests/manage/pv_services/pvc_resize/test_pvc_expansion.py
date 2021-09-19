@@ -183,7 +183,11 @@ class TestPvcExpand(ManageTest):
         """
         # Expand PVC with a small amount to fall behind default quota (100 Gi) for
         # openshift dedicated
-        if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+
+        if (
+            config.ENV_DATA["platform"].lower() == "openshiftdedicated"
+            or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        ):
             pvc_size_new = 15
         else:
             pvc_size_new = 25
@@ -201,6 +205,7 @@ class TestPvcExpand(ManageTest):
         if (
             config.ENV_DATA["platform"].lower()
             == constants.OPENSHIFT_DEDICATED_PLATFORM
+            or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
         ):
             pvc_size_expanded_1 = 19
             pvc_size_expanded_2 = 20

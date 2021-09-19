@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_rosa,
+)
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes, get_node_zone
 from ocs_ci.helpers.helpers import get_failure_domin
 from ocs_ci.framework import config
@@ -29,6 +32,7 @@ logger = logging.getLogger(__name__)
 @bugzilla("1898808")
 @skipif_external_mode
 @skipif_openshift_dedicated
+@skipif_rosa
 @pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
     """

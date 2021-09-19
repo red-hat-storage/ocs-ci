@@ -1870,7 +1870,10 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
         log.warning("As openshift dedicated is used, no MCG resource is returned")
         return None
 
@@ -3008,6 +3011,7 @@ def ceph_toolbox(request):
     deploy_teardown = deploy or teardown
     ocp_dedicated = (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     )
     if not (deploy_teardown or skip_ocs) or (ocp_dedicated and not deploy_teardown):
         try:

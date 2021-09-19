@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
     skipif_openshift_dedicated,
+    skipif_rosa,
     tier4,
     tier4a,
 )
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
 @skipif_openshift_dedicated
+@skipif_rosa
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
@@ -94,6 +96,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_openshift_dedicated
+@skipif_rosa
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """
     Test that there are appropriate alerts when target bucket used of

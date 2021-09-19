@@ -59,7 +59,10 @@ class TestRawBlockPV(ManageTest):
         pvcs = list()
         size_mb = "500Mi"
         size_gb = "10Gi"
-        if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+        if (
+            config.ENV_DATA["platform"].lower() == "openshiftdedicated"
+            or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        ):
             size_tb = str(convert_device_size("50Gi", "TB")) + "Ti"
         else:
             size_tb = "1Ti"

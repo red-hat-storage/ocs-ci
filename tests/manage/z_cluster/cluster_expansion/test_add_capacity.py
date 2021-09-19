@@ -28,7 +28,10 @@ from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
 )
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_rosa,
+)
 from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 
 
@@ -97,6 +100,7 @@ def add_capacity_test():
 @polarion_id("OCS-1191")
 @pytest.mark.second_to_last
 @skipif_openshift_dedicated
+@skipif_rosa
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi

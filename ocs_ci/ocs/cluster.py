@@ -265,8 +265,8 @@ class CephCluster(object):
         if (
             config.ENV_DATA["platform"].lower()
             != constants.OPENSHIFT_DEDICATED_PLATFORM
-            and not config.COMPONENTS["disable_noobaa"]
-        ):
+            or config.ENV_DATA["platform"].lower() != constants.ROSA_PLATFORM
+        ) and not config.COMPONENTS["disable_noobaa"]:
             self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):

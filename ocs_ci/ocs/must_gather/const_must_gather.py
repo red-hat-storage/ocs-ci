@@ -739,7 +739,10 @@ GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE = [
     "ocs-storagecluster-rbdplugin-snapclass.yaml",
 ]
 
-if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+if (
+    config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+    or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+):
     GATHER_COMMANDS_OTHERS = list(
         set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
     )

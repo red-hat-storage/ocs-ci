@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 
@@ -169,3 +170,32 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         return pvcs, pods
 
     return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to skip certain tests when running on
+    openshift dedicated platform
+    Args:
+        items: list of collected tests
+    """
+    # Skip the below test till node implementation completed for ODF-MS platform
+    skip_till_node_implement = [
+        "test_rwo_pvc_fencing_node_short_network_failure",
+        "test_rwo_pvc_fencing_node_prolonged_network_failure",
+        "test_worker_node_restart_during_pvc_clone",
+        "test_rwo_pvc_fencing_node_prolonged_and_short_network_failure",
+    ]
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
+        for item in items.copy():
+            for testname in skip_till_node_implement:
+                if testname in str(item):
+                    log.info(
+                        f"Test {item} is removed from the collected items"
+                        f" till node implementation is in place"
+                    )
+                    items.remove(item)
+                    break

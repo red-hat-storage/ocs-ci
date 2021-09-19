@@ -32,7 +32,7 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_size,
     get_node_pv_objs,
 )
-
+from ocs_ci.ocs.constants import ROSA_PLATFORM
 
 log = logging.getLogger(__name__)
 
@@ -78,8 +78,8 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     if (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
-        and node_type == constants.WORKER_MACHINE
-    ):
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ) and node_type == constants.WORKER_MACHINE:
         typed_nodes = [
             node
             for node in get_node_objs()
@@ -1108,7 +1108,10 @@ def get_worker_nodes():
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
     # Eliminate infra nodes from worker nodes in case of openshift dedicated
-    if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+    if (
+        config.ENV_DATA["platform"].lower() == "openshiftdedicated"
+        or config.ENV_DATA["platform"].lower() == ROSA_PLATFORM
+    ):
         infra_nodes = ocp_node_obj.get(selector=constants.INFRA_NODE_LABEL).get("items")
         infra_node_ids = [
             infra_node.get("metadata").get("name") for infra_node in infra_nodes
