@@ -267,7 +267,7 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.page_nav = locators[self.ocp_version]["page"]
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
-            self.generic_locators = locators[self.ocp_version]["generic"]
+            self.generic_locators = locators["4.8"]["generic"]
 
     def navigate_overview_page(self):
         """

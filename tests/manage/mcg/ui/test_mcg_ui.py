@@ -35,7 +35,7 @@ class TestStoreUserInterface(object):
                 ).delete(resource_name=store_name)
 
     @tier1
-    @skipif_ocs_version("<4.8")
+    @skipif_ocs_version("!=4.8")
     @skipif_disconnected_cluster
     @pytest.mark.parametrize(
         argnames=["kind"],
@@ -85,7 +85,7 @@ class TestStoreUserInterface(object):
 
 
 @tier1
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("!=4.8")
 @skipif_disconnected_cluster
 class TestBucketclassUserInterface(object):
     """
@@ -232,7 +232,7 @@ class TestObcUserInterface(object):
             )
 
     @tier1
-    @skipif_ocs_version("<4.8")
+    @skipif_ocs_version("!=4.8")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass"],
         argvalues=[
