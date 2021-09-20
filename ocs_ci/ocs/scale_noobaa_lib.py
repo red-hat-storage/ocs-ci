@@ -5,12 +5,15 @@ import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -310,3 +313,88 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
         obc_dict[obc_name] = total.total_seconds()
 
     return obc_dict
+
+
+def noobaa_running_node_restart(pod_name):
+    """
+    Function to restart node which has noobaa pod's running
+
+    Args:
+        pod_name (str): Name of noobaa pod
+
+    """
+    node_name = get_node_where_noobaa_pod_running(pod_name=pod_name)
+    log.info(f"{pod_name} is running on: {node_name}")
+    log.info(f"Restating node: {node_name}")
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    ocp_nodes = get_node_objs(node_names=node_name)
+    nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=True)
+
+    # Validate nodes are up and running
+    wait_for_nodes_status()
+    ceph_health_check(tries=30, delay=60)
+
+    # Validate noobaa pod is re-spinned and in running state
+    pod_obj = pod.get_pod_obj(
+        (
+            get_pod_name_by_pattern(
+                pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+        )[0],
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+
+
+def get_node_where_noobaa_pod_running(pod_name):
+    """
+    Get the node name where noobaa pod is running
+
+    Args:
+        pod_name (str): Name of noobaa pod
+
+    Returns:
+        ocs_nodes: A list of ocs nodes
+
+    """
+    pods_openshift_storage = pod.get_all_pods(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    ocs_nodes = list()
+    for pod_obj in pods_openshift_storage:
+        if (
+            pod_name in pod_obj.name
+            and "noobaa-endpoint" not in pod_obj.name
+            and "noobaa-operator" not in pod_obj.name
+        ):
+            try:
+                ocs_nodes.append(pod_obj.data["spec"]["nodeName"])
+            except Exception as e:
+                log.info(e)
+    return set(ocs_nodes)
+
+
+def check_all_obcs_status(namespace):
+    """
+    Check all OBCs status in given namespace
+
+    Args:
+        namespace (str): Namespace where endpoint is running
+
+    Returns:
+        obc_bound_list: A list of all OBCs in Bound state
+
+    """
+    all_obcs_in_namespace = (
+        OCP(namespace=namespace, kind="ObjectBucketClaim").get().get("items")
+    )
+    obc_bound_list, obc_not_bound_list = ([] for i in range(2))
+    for obc in all_obcs_in_namespace:
+        status = obc.get("status").get("phase")
+        if status == constants.STATUS_BOUND:
+            obc_bound_list.append(status)
+        else:
+            obc_not_bound_list.append(status)
+    return obc_bound_list
+
