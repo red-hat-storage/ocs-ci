@@ -659,7 +659,9 @@ def create_multiple_pvcs(
         burst (bool): True for bulk creation, False ( default) for multiple creation
 
     Returns:
-         list: List of PVC objects
+         ocs_objs (list): List of PVC objects
+         tmpdir (str): The full path of the directory in which the yamls for pvc objects creation reside
+
     """
     if not burst:
         if access_mode == "ReadWriteMany" and "rbd" in sc_name:
@@ -1395,48 +1397,6 @@ def get_provision_time(interface, pvc_name, status="start"):
     return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
 
 
-def get_pvc_bulk_deletion_time(interface, pv_names, status="start"):
-    """
-    Get the deletion time of PVC bulk based on csi provisioner logs
-    Args:
-        interface (str): The interface backed the PVC
-        pv_names (list): Names of the PVs which are backend objects for PVCs deleted
-        status (str): the status that we want to get - start / end time of bulk deletion
-    Returns:
-        datetime object: The time of bulk pvc deletion
-    """
-    logging.info(f"Getting pvc bulk deletion time {status}")
-    # Define the operation that need to retrieve
-    operation = "started"
-    if status.lower() == "end":
-        operation = "succeeded"
-
-    this_year = str(datetime.datetime.now().year)
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
-    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
-
-    logs = logs.split("\n")
-
-    all_stats = []
-    for pv_name in pv_names:
-        logging.info(f"Looking for deletion time of pv {pv_name}")
-        stat = [i for i in logs if re.search(f'delete "{pv_name}".*{operation}', i)]
-        mon_day = " ".join(stat[0].split(" ")[0:2])
-        stat = f"{this_year} {mon_day}"
-        all_stats.append(stat)
-
-    all_stats = sorted(all_stats)
-    if status.lower() == "end":
-        stat = all_stats[-1]  # return the latest time
-    elif status.lower() == "start":
-        stat = all_stats[0]  # return the earliest time
-
-    return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-
-
 def get_start_creation_time(interface, pvc_name):
     """
     Get the starting creation time of a PVC based on provisioner logs
@@ -1577,7 +1537,9 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
+def measure_pv_deletion_time_bulk(
+    interface, pv_name_list, wait_time=60, return_log_times=False
+):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
@@ -1585,9 +1547,14 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
         wait_time (int): Seconds to wait before collecting CSI log
+        return_log_times (bool): Determines the return value -- if False, dictionary of pv_names with the deletion time
+                is returned; if True -- the dictionary of pv_names with the tuple of (srart_deletion_time,
+                end_deletion_time) is returned
 
     Returns:
-        pv_dict (dict): Dictionary of pv_name with deletion time.
+        pv_dict (dict): Dictionary where the pv_names are the keys. The value of the dictionary depend on the
+                return_log_times argument value and are either the corresponding deletion times (when return_log_times
+                is False) or a tuple of (start_deletion_time, end_deletion_time) as they appear in the logs
 
     """
     # Get the correct provisioner pod based on the interface
@@ -1633,15 +1600,18 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         # Extract the deletion start time for the PV
         start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
-        start = f"{this_year} {mon_day}"
-        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
+        start_tm = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
         end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
         total = end_time - start_time
-        pv_dict[pv_name] = total.total_seconds()
+        if not return_log_times:
+            pv_dict[pv_name] = total.total_seconds()
+        else:
+            pv_dict[pv_name] = (start_tm, end_tm)
 
     return pv_dict
 

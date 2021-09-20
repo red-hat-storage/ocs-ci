@@ -235,12 +235,12 @@ def create_pvcs(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.pvc_objs = helpers.create_multiple_pvcs(
+    class_instance.pvc_objs,_ = helpers.create_multiple_pvcs(
         sc_name=class_instance.sc_obj.name,
         number_of_pvc=class_instance.num_of_pvcs,
         size=class_instance.pvc_size,
         namespace=class_instance.namespace,
-    )[0]
+    )
     for pvc_obj in class_instance.pvc_objs:
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         pvc_obj.reload()

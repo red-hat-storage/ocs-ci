@@ -4,6 +4,7 @@ Test to verify PVC creation performance
 import logging
 import pytest
 import math
+import datetime
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
@@ -63,7 +64,7 @@ class TestPVCCreationPerformance(E2ETest):
     ):
 
         """
-        Measuring PVC creation and deletion time of bulk_size (120/720) PVCs
+        Measuring PVC creation and deletion time of bulk_size PVCs
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -116,11 +117,20 @@ class TestPVCCreationPerformance(E2ETest):
         helpers.delete_bulk_pvcs(yaml_creation_dir, pv_names_list)
         logging.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
 
-        start_deletion_time = helpers.get_pvc_bulk_deletion_time(
-            self.interface, pv_names_list, status="start"
+        log_deletion_times = helpers.measure_pv_deletion_time_bulk(
+            self.interface, pv_names_list, return_log_times=True
         )
-        end_deletion_time = helpers.get_pvc_bulk_deletion_time(
-            self.interface, pv_names_list, status="end"
+
+        all_start_times = [a_tuple[0] for a_tuple in log_deletion_times.values()]
+        bulk_start_time = sorted(all_start_times)[0]  # the eariles start time
+        start_deletion_time = datetime.datetime.strptime(
+            bulk_start_time, helpers.DATE_TIME_FORMAT
+        )
+
+        all_end_times = [a_tuple[1] for a_tuple in log_deletion_times.values()]
+        bulk_deletion_time = sorted(all_end_times)[-1]  # the latest end time
+        end_deletion_time = datetime.datetime.strptime(
+            bulk_deletion_time, helpers.DATE_TIME_FORMAT
         )
 
         total_deletion_time = (end_deletion_time - start_deletion_time).total_seconds()
@@ -161,13 +171,13 @@ class TestPVCCreationPerformance(E2ETest):
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
         log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
-        pvc_objs = helpers.create_multiple_pvcs(
+        pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=initial_number_of_pvcs,
             size=self.pvc_size,
             burst=True,
-        )[0]
+        )
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
         with ThreadPoolExecutor() as executor:
@@ -182,13 +192,13 @@ class TestPVCCreationPerformance(E2ETest):
             pvc_objs[:number_of_pvcs], True
         ), "Deletion of 75% of PVCs failed"
         log.info("Re-creating the 90 PVCs")
-        pvc_objs = helpers.create_multiple_pvcs(
+        pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
             burst=True,
-        )[0]
+        )
         start_time = helpers.get_provision_time(
             self.interface, pvc_objs, status="start"
         )
