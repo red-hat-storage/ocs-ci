@@ -140,7 +140,6 @@ class FlexyBase(object):
             "availability_zone_count", "1"
         )
         config.FLEXY["OPENSHIFT_SSHKEY_PATH"] = config.DEPLOYMENT["ssh_key_private"]
-        # translate vSphere secret configuration to Flexy variable BUSHSLICER_CONFIG
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             config.FLEXY["LAUNCHER_VARS"].update(
                 {
@@ -160,6 +159,45 @@ class FlexyBase(object):
                         ),
                     }
                 )
+                logger.info(
+                    "Configured parameters in LAUNCHER_VARS for Proxy cluster: "
+                    f"{config.FLEXY['LAUNCHER_VARS']}"
+                )
+            if config.DEPLOYMENT.get("disconnected"):
+                base_domain = config.ENV_DATA["base_domain"]
+                cluster_name = config.ENV_DATA["cluster_name"]
+                cluster_domain = f".{cluster_name}.{base_domain}"
+                config.FLEXY["LAUNCHER_VARS"].update(
+                    {
+                        "http_proxy": config.ENV_DATA["disconnected_http_proxy"],
+                        "https_proxy": config.ENV_DATA.get(
+                            "proxy_https_proxy",
+                            config.ENV_DATA["disconnected_http_proxy"],
+                        ),
+                        "no_proxy": f"{cluster_domain},ocs-qe-proxy-dc-eco.usersys.redhat.com",
+                        "enable_proxy": "yes",
+                        "proxy_for_client_on_install": config.ENV_DATA.get(
+                            "client_http_proxy", ""
+                        ),
+                    }
+                )
+                if config.DEPLOYMENT.get("mirror_registry"):
+                    config.FLEXY["LAUNCHER_VARS"].update(
+                        {
+                            "mirror_reg_url": config.DEPLOYMENT["mirror_registry"],
+                            "mirror_reg_user": config.DEPLOYMENT.get(
+                                "mirror_registry_user", ""
+                            ),
+                            "mirror_reg_passwd": config.DEPLOYMENT.get(
+                                "mirror_registry_password", ""
+                            ),
+                        }
+                    )
+                logger.info(
+                    "Configured parameters in LAUNCHER_VARS for Disconnected cluster: "
+                    f"{config.FLEXY['LAUNCHER_VARS']}"
+                )
+            # translate vSphere secret configuration to Flexy variable BUSHSLICER_CONFIG
             config.FLEXY["BUSHSLICER_CONFIG"].update(
                 {
                     "services": {
@@ -455,7 +493,7 @@ class FlexyBase(object):
         """
         Perform a few actions required after flexy execution:
         - update global pull-secret
-        - login to mirror registry (disconected cluster)
+        - login to mirror registry (disconnected cluster)
         - configure proxy server (disconnected cluster)
         - configure ntp (if required)
         """
@@ -505,7 +543,8 @@ class FlexyBase(object):
             # login to mirror registry
             login_to_mirror_registry(pull_secret_path)
             # configure additional allowed domains in proxy
-            configure_allowed_domains_in_proxy()
+            if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+                configure_allowed_domains_in_proxy()
 
         # update pull-secret
         secret_cmd = (
