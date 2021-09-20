@@ -131,6 +131,20 @@ def ocs_install_verification(
                 f"with CSV version {csv_version}"
             )
 
+    # Verify Storage System status
+    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        log.info("Verifying storage system status")
+        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
+        storage_system_data = storage_system.get()
+        storage_system_status = {}
+        for condition in storage_system_data["items"][0]["status"]["conditions"]:
+            storage_system_status[condition["type"]] = condition["status"]
+        log.debug(f"storage system status: {storage_system_status}")
+        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
+            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+            f" but found {storage_system_status}"
+        )
+
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
     log.info("Verifying status of storage cluster: %s", storage_cluster_name)
