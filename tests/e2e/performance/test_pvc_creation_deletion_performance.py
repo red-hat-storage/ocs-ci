@@ -415,13 +415,13 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         log.info(f"{msg_prefix} Start creating new 120 PVCs")
 
-        pvc_objs = helpers.create_multiple_pvcs(
+        pvc_objs,_ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=self.namespace,
             number_of_pvc=number_of_pvcs,
             size=pvc_size,
             burst=True,
-        )[0]
+        )
 
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
