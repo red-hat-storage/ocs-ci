@@ -15,3 +15,6 @@ ENV_DATA:
   master_memory: '16384'
   compute_memory: '65536'
   fio_storageutilization_min_mbps: 10.0
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2635'
