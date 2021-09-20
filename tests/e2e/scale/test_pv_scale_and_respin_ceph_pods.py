@@ -105,7 +105,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
 
         Args:
             resource_to_delete (str): Ceph resource type to be deleted.
-            eg: mgr/mon/osd/mds/cephfsplugin/rbdplugin/cephfsplugin_provisioner/rbdplugin_provisioner/operator
+            eg: mgr/mon/osd/mds/cephfsplugin/rbdplugin/cephfsplugin_provisioner/rbdplugin_provisioner
         """
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
@@ -140,7 +140,6 @@ class BasePvcCreateRespinCephPods(E2ETest):
             *["rbdplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2639")]
         ),
         pytest.param(*["rbdplugin"], marks=[pytest.mark.polarion_id("OCS-2643")]),
-        pytest.param(*["operator"], marks=[pytest.mark.polarion_id("OCS-2640")]),
         pytest.param(*["cephfsplugin"], marks=[pytest.mark.polarion_id("OCS-2642")]),
     ],
 )
