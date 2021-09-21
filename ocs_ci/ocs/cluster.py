@@ -527,8 +527,8 @@ class CephCluster(object):
              int : the default replica count - 0 if not found.
         """
         ceph_pod = pod.get_ceph_tools_pod()
-        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        av_mod = ceph_status.get("mgrmap").get("available_modules")
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph mgr dump")
+        av_mod = ceph_status.get("available_modules")
         for mod in av_mod:
             if mod["name"] == "localpool":
                 return mod.get("module_options").get("num_rep").get("default_value")
