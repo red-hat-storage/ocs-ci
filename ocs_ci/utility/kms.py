@@ -83,6 +83,7 @@ class Vault(KMS):
         self.vault_backend_version = config.ENV_DATA.get(
             "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
+        self.kmsid = None
         # Base64 encoded (with padding) token
         self.vault_path_token = None
         self.vault_policy_name = None
