@@ -105,7 +105,7 @@ class TestScaleOCBCreation(E2ETest):
         scale_noobaa_lib.noobaa_running_node_restart(pod_name=pod_name)
 
         # Verify all OBCs are in Bound state after node restart
-        log.info(f"Verify all OBCs are in Bound state after node restart.....")
+        log.info("Verify all OBCs are in Bound state after node restart.....")
         obc_status_list = scale_noobaa_lib.check_all_obcs_status(
             namespace=self.namespace
         )
@@ -115,4 +115,4 @@ class TestScaleOCBCreation(E2ETest):
         )
         assert (
             len(obc_status_list) == self.scale_obc_count
-        ), f"Not all OBCs in Bound state"
+        ), "Not all OBCs in Bound state"
