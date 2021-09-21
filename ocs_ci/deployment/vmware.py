@@ -107,6 +107,7 @@ class VSPHEREBASE(Deployment):
             vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
+        config.ENV_DATA["ocp_version"] = self.ocp_version
 
         self.wait_time = 90
 
