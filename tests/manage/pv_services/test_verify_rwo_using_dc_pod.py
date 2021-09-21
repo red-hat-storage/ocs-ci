@@ -60,7 +60,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         except TimeoutExpiredError:
             # The test cannot be continued if all the pods are created on the same node
             pods = pod.get_all_pods(namespace=pvc_obj.namespace)
-            pod_nodes = [pod.get_pod_node(pod_obj).resource_name for pod_obj in pods]
+            pod_nodes = [pod.get_pod_node(pod_obj).name for pod_obj in pods]
             if set(pod_nodes) == 1:
                 pytest.skip(
                     "All pods are created on same node and reached Running state"
