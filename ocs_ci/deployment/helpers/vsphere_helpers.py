@@ -8,6 +8,7 @@ import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.utility.templating import (
     Templating,
     load_yaml,
@@ -144,7 +145,14 @@ class VSPHEREHELPERS(object):
                 "root_disk_size", "120"
             )
 
-            dict_data["vsphere"]["vcsa-qe"]["image"] = config.ENV_DATA["rhel_template"]
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_9:
+                dict_data["vsphere"]["vcsa-qe"]["image_7"] = config.ENV_DATA[
+                    "rhel_template"
+                ]
+            else:
+                dict_data["vsphere"]["vcsa-qe"]["image"] = config.ENV_DATA[
+                    "rhel_template"
+                ]
 
             dump_data_to_temp_yaml(dict_data, default_map_path)
         else:
