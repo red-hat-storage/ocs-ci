@@ -915,6 +915,13 @@ class Deployment(object):
             # validate PDB creation of MON, MDS, OSD pods
             validate_pdb_creation()
 
+            # check for odf-console
+            ocs_version = config.ENV_DATA["ocs_version"]
+            if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+                assert pod.wait_for_resource(
+                    condition="Running", selector="app=odf-console", timeout=600
+                )
+
             # Creating toolbox pod
             setup_ceph_toolbox()
 
