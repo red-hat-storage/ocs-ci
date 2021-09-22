@@ -71,6 +71,7 @@ setup(
         "junitparser",
         "flaky==3.7.0",
         "ocp-network-split",
+        "pyopenssl",
         "pyparsing ==2.4.7",
     ],
     entry_points={
@@ -82,6 +83,7 @@ setup(
             "aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup",
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
+            "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
         ],
     },
     zip_safe=True,
