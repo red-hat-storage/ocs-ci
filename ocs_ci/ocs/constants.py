@@ -1447,3 +1447,12 @@ PATCH_SPECIFIC_SOURCES_CMD = (
     '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
     "}}]}}}}' --type=merge"
 )
+
+# OpenSSL Certificate parameters
+OPENSSL_KEY_SIZE = 2048
+OPENSSL_CERT_COUNTRY_NAME = ".."
+OPENSSL_CERT_STATE_OR_PROVINCE_NAME = "."
+OPENSSL_CERT_LOCALITY_NAME = "."
+OPENSSL_CERT_ORGANIZATION_NAME = "OCS"
+OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME = "OCS-QE"
+OPENSSL_CERT_EMAIL_ADDRESS = "ocs-qe@redhat.com"
