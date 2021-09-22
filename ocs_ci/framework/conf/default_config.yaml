@@ -95,7 +95,10 @@ DEPLOYMENT:
   # on all master and worker nodes via MachineConfig during deployment.
   # See also: https://mbukatov.gitlab.io/ocp-network-split/
   network_split_setup: False
-
+  # Custom Ingress SSL certificate, key and CA certificate
+  ingress_ssl_cert: "data/ingress-cert.crt"
+  ingress_ssl_key: "data/ingress-cert.key"
+  ingress_ssl_ca_cert: "data/ca.crt"
 
 # Section for reporting configuration
 REPORTING:

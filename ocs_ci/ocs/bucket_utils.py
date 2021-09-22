@@ -13,6 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
 
@@ -990,8 +991,11 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 def retrieve_verification_mode():
     if config.ENV_DATA["platform"].lower() == "ibm_cloud":
         verify = True
+    elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+        verify = get_root_ca_cert()
     else:
         verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+    logger.debug(f"verification: '{verify}'")
     return verify
 
 

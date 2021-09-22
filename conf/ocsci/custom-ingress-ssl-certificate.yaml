@@ -1,0 +1,10 @@
+---
+DEPLOYMENT:
+  use_custom_ingress_ssl_cert: true
+  # Custom paths for certificate and key files
+  #ingress_ssl_cert: "data/ingress-cert.crt"
+  #ingress_ssl_key: "data/ingress-cert.key"
+  #ingress_ssl_ca_cert: "data/ca.crt"
+  # If the above defined files are not present, provide Automatic Signing
+  # Certificate Authority service URL bellow
+  #cert_signing_service_url: ""
