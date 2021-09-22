@@ -16,7 +16,7 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import oc_get_all_obc_names
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -55,7 +55,7 @@ class OBC(object):
         ).get()
         obn_str = (
             constants.OBJECTBUCKETNAME_46ANDBELOW
-            if float(config.ENV_DATA["ocs_version"]) < 4.7
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7
             else constants.OBJECTBUCKETNAME_47ANDABOVE
         )
         self.ob_name = obc_resource.get("spec").get(obn_str)

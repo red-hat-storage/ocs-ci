@@ -3,9 +3,9 @@ import logging
 
 import boto3
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,9 @@ class NoobaaAccount(object):
                 "permission_list": buckets,
             },
         }
-        params_dict if float(config.ENV_DATA["ocs_version"]) < 4.9 else params_dict.pop(
-            "default_pool"
-        )
+        params_dict if (
+            version.get_semantic_ocs_version_from_config() < version.VERSION_4_9
+        ) else params_dict.pop("default_pool")
         response = mcg.send_rpc_query(
             api="account_api", method="create_account", params=params_dict
         ).json()
