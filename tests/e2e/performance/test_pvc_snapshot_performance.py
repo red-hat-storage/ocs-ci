@@ -68,12 +68,11 @@ class TestPvcSnapshotPerformance(PASTest):
         self.pvc_obj = pvc_factory(
             interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
         )
-
         self.pod_object = pod_factory(
             interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-    def measure_create_snapshot_time(self, pvc_name, snap_name, interface):
+    def measure_create_snapshot_time(self, pvc_name, snap_name, namespace, interface):
         """
         Creation volume snapshot, and measure the creation time
 
@@ -97,6 +96,7 @@ class TestPvcSnapshotPerformance(PASTest):
             pvc_name=pvc_name,
             snap_yaml=snap_yaml,
             snap_name=snap_name,
+            namespace=namespace,
             sc_name=helpers.default_volumesnapshotclass(interface).name,
         )
 
@@ -178,7 +178,6 @@ class TestPvcSnapshotPerformance(PASTest):
             log.info(f"Starting IO on the POD {self.pod_object.name}")
             # Going to run only write IO to fill the PVC for the snapshot
             self.pod_object.fillup_fs(size=file_size, fio_filename=file_name)
-
             # Wait for fio to finish
             fio_result = self.pod_object.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
@@ -203,10 +202,10 @@ class TestPvcSnapshotPerformance(PASTest):
                 "pvc-test", f"snapshot-test{test_num}"
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
-
             test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name,
                 snap_name=snap_name,
+                namespace=self.pod_object.namespace,
                 interface=self.interface,
             )
             test_results["create"]["speed"] = int(
