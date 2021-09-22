@@ -204,7 +204,7 @@ class TestPvcSnapshotPerformance(PASTest):
                 "pvc-test", f"snapshot-test{test_num}"
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
-            
+
             test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name,
                 snap_name=snap_name,
