@@ -210,6 +210,13 @@ def ocs_install_verification(
             }
         )
 
+    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        resources_dict.update(
+            {
+                constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
+            }
+        )
+
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if (
