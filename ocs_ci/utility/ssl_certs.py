@@ -3,11 +3,18 @@ This module is used for generating custom SSL certificates.
 """
 
 import argparse
+import logging
+import os
 import requests
 
 from OpenSSL import crypto
 
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, exceptions
+from ocs_ci.utility.utils import download_file, exec_cmd
+
+
+logger = logging.getLogger(__name__)
 
 
 class Key(crypto.PKey):
@@ -113,7 +120,7 @@ class OCSCertificate:
         subj.organizationalUnitName = constants.OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME
         subj.emailAddress = constants.OPENSSL_CERT_EMAIL_ADDRESS
 
-        sans = ", ".join([f"DNS: {san}" for san in self.sans])
+        sans = ", ".join(self.sans)
         self.csr.add_extensions(
             [crypto.X509Extension(b"subjectAltName", False, sans.encode())]
         )
@@ -126,7 +133,7 @@ class OCSCertificate:
         Use automatic signing CA service to sign the CSR
         """
         r = requests.post(
-            self.signing_service,
+            f"{self.signing_service}/get_cert",
             crypto.dump_certificate_request(crypto.FILETYPE_PEM, self.csr),
         )
         self.crt = r.content.decode()
@@ -163,6 +170,102 @@ class OCSCertificate:
         """
         with open(path, "w") as f:
             f.write(str(self.crt))
+
+
+def get_root_ca_cert():
+    """
+    If not available, download Root CA Certificate for custom Ingress
+    certificate.
+
+    Returns
+        str: Path to Root CA Certificate
+
+    """
+    signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
+    ssl_ca_cert = config.DEPLOYMENT.get("ingress_ssl_ca_cert", "")
+    if ssl_ca_cert and not os.path.exists(ssl_ca_cert):
+        if not signing_service_url:
+            msg = (
+                f"CA Certificate file {ssl_ca_cert} doesn't exists and "
+                "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
+                "Unable to download CA Certificate!"
+            )
+            logger.error(msg)
+            raise exceptions.ConfigurationError(msg)
+        download_file(f"{signing_service_url}/root-ca.crt", ssl_ca_cert)
+        logger.info(f"CA Certificate downloaded and saved to '{ssl_ca_cert}'")
+    return ssl_ca_cert
+
+
+def configure_custom_ingress_cert():
+    """
+    Configure custom SSL certificate for ingress. If the certificate doesn't
+    exists, generate new one signed by automatic certificate signing service.
+
+    Raises:
+        ConfigurationError: when some required parameter is not configured
+
+    """
+    logger.info("Configure custom ingress certificate")
+    base_domain = config.ENV_DATA["base_domain"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+    apps_domain = f"*.apps.{cluster_name}.{base_domain}"
+
+    ssl_key = config.DEPLOYMENT.get("ingress_ssl_key")
+    ssl_cert = config.DEPLOYMENT.get("ingress_ssl_cert")
+
+    signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
+
+    if not (os.path.exists(ssl_key) and os.path.exists(ssl_cert)):
+        if not signing_service_url:
+            msg = (
+                "Custom certificate files for ingress doesn't exists and "
+                "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
+                "Unable to generate custom Ingress certificate!"
+            )
+            logger.error(msg)
+            raise exceptions.ConfigurationError(msg)
+
+        logger.debug(
+            f"Files '{ssl_key}' and '{ssl_cert}' doesn't exist, generate certificate"
+        )
+        cert = OCSCertificate(
+            signing_service=signing_service_url,
+            cn=apps_domain,
+            sans=[f"DNS:{apps_domain}"],
+        )
+        logger.debug(f"Certificate key: {cert.key}")
+        logger.debug(f"Certificate: {cert.crt}")
+        cert.save_key(ssl_key)
+        cert.save_crt(ssl_cert)
+        logger.info(f"Certificate saved to '{ssl_cert}' and key to '{ssl_key}'")
+
+    ssl_ca_cert = get_root_ca_cert()
+    if ssl_ca_cert:
+        logger.debug(f"Configure '{ssl_ca_cert}' for proxy configuration object")
+        cmd = (
+            "oc create configmap ocs-ca -n openshift-config "
+            f"--from-file=ca-bundle.crt={ssl_ca_cert}"
+        )
+        exec_cmd(cmd)
+        cmd = (
+            "oc patch proxy/cluster --type=merge "
+            '--patch=\'{"spec":{"trustedCA":{"name":"ocs-ca"}}}\''
+        )
+        exec_cmd(cmd)
+
+    logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for ingress")
+    cmd = (
+        "oc create secret tls ocs-cert -n openshift-ingress "
+        f"--cert={ssl_cert} --key={ssl_key}"
+    )
+    exec_cmd(cmd)
+
+    cmd = (
+        "oc patch ingresscontroller.operator default -n openshift-ingress-operator "
+        '--type=merge -p \'{"spec":{"defaultCertificate": {"name": "ocs-cert"}}}\''
+    )
+    exec_cmd(cmd)
 
 
 def init_arg_parser():
