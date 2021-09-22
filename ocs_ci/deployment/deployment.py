@@ -4,7 +4,6 @@ platforms like AWS, VMWare, Baremetal etc.
 """
 
 from copy import deepcopy
-from semantic_version import Version
 import json
 import logging
 import tempfile
@@ -58,6 +57,7 @@ from ocs_ci.utility import (
     templating,
     ibmcloud,
     kms as KMS,
+    version,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
@@ -66,7 +66,6 @@ from ocs_ci.utility.utils import (
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
-    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
@@ -348,8 +347,8 @@ class Deployment(object):
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         # For OCS version >= 4.9, we have odf-operator
-        ocs_version = config.ENV_DATA["ocs_version"]
-        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
             ocs_operator_name = defaults.ODF_OPERATOR_NAME
             subscription_file = constants.SUBSCRIPTION_ODF_YAML
         else:
@@ -479,8 +478,8 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = config.ENV_DATA["ocs_version"]
-        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
             ocs_operator_names = [
                 defaults.ODF_OPERATOR_NAME,
                 defaults.OCS_OPERATOR_NAME,
@@ -511,7 +510,7 @@ class Deployment(object):
                     )
                     is_ibm_sa_linked = True
             csv.wait_for_phase("Succeeded", timeout=720)
-        ocp_version = float(get_ocp_version())
+        ocp_version = version.get_semantic_ocp_version_from_config()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
                 kind="configmap",
@@ -562,7 +561,7 @@ class Deployment(object):
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # create storage system
-        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        if ocs_version >= version.VERSION_4_9:
             exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         # Set rook log level
@@ -624,11 +623,10 @@ class Deployment(object):
         logger.info(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
-        ocs_version = config.ENV_DATA["ocs_version"]
         zone_num = get_az_count()
         if (
             config.DEPLOYMENT.get("local_storage")
-            and Version.coerce(ocs_version) >= Version.coerce("4.7")
+            and ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
         ):
@@ -657,8 +655,6 @@ class Deployment(object):
                 "storageClassName"
             ] = self.DEFAULT_STORAGECLASS
 
-        ocs_version = float(config.ENV_DATA["ocs_version"])
-
         # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get("local_storage"):
             cluster_data["spec"]["manageNodes"] = False
@@ -677,7 +673,7 @@ class Deployment(object):
             # setting resource limits for AWS i3
             # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
             if (
-                ocs_version >= 4.5
+                ocs_version >= version.VERSION_4_5
                 and config.ENV_DATA.get("worker_instance_type")
                 == constants.AWS_LSO_WORKER_INSTANCE
             ):
@@ -685,7 +681,9 @@ class Deployment(object):
                     "limits": {"cpu": 2, "memory": "5Gi"},
                     "requests": {"cpu": 1, "memory": "5Gi"},
                 }
-            if (ocp_version >= 4.6) and (ocs_version >= 4.6):
+            if (ocp_version >= version.VERSION_4_6) and (
+                ocs_version >= version.VERSION_4_6
+            ):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
                 }
@@ -707,12 +705,12 @@ class Deployment(object):
                 "noobaa-core",
                 "noobaa-db",
             ]
-            if ocs_version >= 4.5:
+            if ocs_version >= version.VERSION_4_5:
                 resources.append("noobaa-endpoint")
             cluster_data["spec"]["resources"] = {
                 resource: deepcopy(none_resources) for resource in resources
             }
-            if ocs_version >= 4.5:
+            if ocs_version >= version.VERSION_4_5:
                 cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
                     "limits": {"cpu": 1, "memory": "500Mi"},
                     "requests": {"cpu": 1, "memory": "500Mi"},
@@ -727,7 +725,7 @@ class Deployment(object):
                         "requests": {"cpu": 1, "memory": "8Gi"},
                     }
                 }
-                if ocs_version < 4.5:
+                if ocs_version < version.VERSION_4_5:
                     resources["noobaa-core"] = {
                         "limits": {"cpu": 2, "memory": "8Gi"},
                         "requests": {"cpu": 1, "memory": "8Gi"},
@@ -759,7 +757,7 @@ class Deployment(object):
             cluster_data["spec"]["manageNodes"] = False
 
         if config.ENV_DATA.get("encryption_at_rest"):
-            if ocs_version < 4.6:
+            if ocs_version < version.VERSION_4_6:
                 error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
                 logger.error(error_message)
                 raise UnsupportedFeatureError(error_message)
@@ -824,8 +822,8 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = config.ENV_DATA["ocs_version"]
-        if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
             ocs_operator_names = [
                 defaults.ODF_OPERATOR_NAME,
                 defaults.OCS_OPERATOR_NAME,
@@ -928,8 +926,8 @@ class Deployment(object):
             validate_pdb_creation()
 
             # check for odf-console
-            ocs_version = config.ENV_DATA["ocs_version"]
-            if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version >= version.VERSION_4_9:
                 assert pod.wait_for_resource(
                     condition="Running", selector="app=odf-console", timeout=600
                 )
@@ -1074,8 +1072,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
     if config.DEPLOYMENT.get("stage_rh_osbs"):
         image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
+        ocp_version = version.get_semantic_ocp_version_from_config()
         osbs_image_tag = config.DEPLOYMENT.get(
-            "stage_index_image_tag", f"v{get_ocp_version()}"
+            "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
         run_cmd(
