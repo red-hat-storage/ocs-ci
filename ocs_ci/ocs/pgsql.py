@@ -287,7 +287,7 @@ class Postgresql(BenchmarkOperator):
                     resource=pgbench_pod_obj, state=status, timeout=timeout
                 )
             except ResourceWrongStatusException:
-                output = run_cmd(f"oc logs {pgbench_pod_obj.name}")
+                output = run_cmd(f"oc logs {pgbench_pod_obj.name} -n {BMO_NAME}")
                 error_msg = f"{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}"
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
@@ -447,7 +447,7 @@ class Postgresql(BenchmarkOperator):
             "tps_excl",
         ]
         for pgbench_pod in pgbench_pods:
-            output = run_cmd(f"oc logs {pgbench_pod.name}")
+            output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             for pod_output in pg_output:
                 for pod in pod_output.values():
