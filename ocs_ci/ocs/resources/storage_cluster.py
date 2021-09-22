@@ -6,7 +6,6 @@ import tempfile
 import yaml
 
 from jsonschema import validate
-from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -31,7 +30,13 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
-from ocs_ci.utility import localstorage, utils, templating, kms as KMS
+from ocs_ci.utility import (
+    localstorage,
+    utils,
+    templating,
+    kms as KMS,
+    version,
+)
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -104,10 +109,10 @@ def ocs_install_verification(
     ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
     csv_version = ocs_csv.data["spec"]["version"]
-    ocs_version = config.ENV_DATA["ocs_version"]
+    ocs_version = version.get_semantic_ocs_version_from_config()
     log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
     assert (
-        ocs_version in csv_version
+        f"{ocs_version}" in csv_version
     ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
     # Verify if OCS CSV has the same version in provided CI build.
     ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
@@ -132,7 +137,7 @@ def ocs_install_verification(
             )
 
     # Verify Storage System status
-    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+    if ocs_version >= version.VERSION_4_9:
         log.info("Verifying storage system status")
         storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
         storage_system_data = storage_system.get()
@@ -168,14 +173,12 @@ def ocs_install_verification(
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
             rgw_count = get_rgw_count(
-                ocs_version, post_upgrade_verification, version_before_upgrade
+                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
             )
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
     max_eps = (
-        constants.MAX_NB_ENDPOINT_COUNT
-        if float(config.ENV_DATA["ocs_version"]) >= 4.6
-        else 1
+        constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
     )
 
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
@@ -184,7 +187,7 @@ def ocs_install_verification(
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        if ocs_version < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
     resources_dict = {
@@ -210,7 +213,7 @@ def ocs_install_verification(
             }
         )
 
-    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+    if ocs_version >= version.VERSION_4_9:
         resources_dict.update(
             {
                 constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
@@ -254,7 +257,7 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
-    if Version.coerce(ocs_version) >= Version.coerce("4.10"):
+    if ocs_version >= version.VERSION_4_10:
         # TODO: Add rbd-thick storage class verification in external mode cluster upgraded
         # to OCS 4.8 when the bug 1978542 is fixed
         # Skip rbd-thick storage class verification in external mode upgraded cluster. This is blocked by bug 1978542
@@ -397,7 +400,7 @@ def ocs_install_verification(
 
     # Verify CSI snapshotter sidecar container is not present
     # if the OCS version is < 4.6
-    if float(config.ENV_DATA["ocs_version"]) < 4.6:
+    if ocs_version < version.VERSION_4_6:
         log.info("Verifying CSI snapshotter is not present.")
         provisioner_pods = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -478,7 +481,7 @@ def ocs_install_verification(
             f" the actaul failure domain is {failure_domain}"
         )
 
-    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
+    if ocs_version >= version.VERSION_4_7:
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
 
@@ -495,8 +498,8 @@ def osd_encryption_verification():
         EnvironmentError: The OSD is not encrypted
 
     """
-    ocs_version = float(config.ENV_DATA["ocs_version"])
-    if ocs_version < 4.6:
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
         raise UnsupportedFeatureError(error_message)
 
@@ -737,8 +740,8 @@ def setup_ceph_debug():
     ceph_debug_log_configmap_data = templating.load_yaml(
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
-    ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) < Version.coerce("4.8"):
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_8:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
     else:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
