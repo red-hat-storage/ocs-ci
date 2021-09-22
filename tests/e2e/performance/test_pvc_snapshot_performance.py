@@ -73,7 +73,7 @@ class TestPvcSnapshotPerformance(PASTest):
             interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-    def measure_create_snapshot_time(self, pvc_name, snap_name, interface):
+    def measure_create_snapshot_time(self, pvc_name, snap_name, namespace, interface):
         """
         Creation volume snapshot, and measure the creation time
 
@@ -97,6 +97,7 @@ class TestPvcSnapshotPerformance(PASTest):
             pvc_name=pvc_name,
             snap_yaml=snap_yaml,
             snap_name=snap_name,
+            namespace=namespace,
             sc_name=helpers.default_volumesnapshotclass(interface).name,
         )
 
@@ -207,6 +208,7 @@ class TestPvcSnapshotPerformance(PASTest):
             test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name,
                 snap_name=snap_name,
+                namespace=self.pod_object.namespace,
                 interface=self.interface,
             )
             test_results["create"]["speed"] = int(
