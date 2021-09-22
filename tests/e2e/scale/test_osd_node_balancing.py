@@ -3,7 +3,6 @@ Test osd node balancing by adding nodes and osds and checking their distribution
 """
 import logging
 import pytest
-import re
 from uuid import uuid4
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
@@ -17,11 +16,10 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import scale_changed_layout, ignore_leftovers
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.node import get_nodes
-from ocs_ci.ocs.ocp import get_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.scale_lib import scale_capacity_with_deviceset, scale_ocs_node
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import ceph_health_check
 
 FINAL_REPORT = "Final Report"
@@ -50,9 +48,9 @@ def is_balanced(this_skew, maxov):
     balanced = True
     if this_skew > 1 and maxov > MAX_OSDS_PER_NODE:
         balanced = False
-    ocs_version = float(re.findall(r"\d.\d", get_ocs_version())[0])
+    ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
     if not balanced:
-        if ocs_version < 4.9:
+        if ocs_version < version.VERSION_4_9:
             logging.info(NOT_BALANCED)
             return True
     return balanced
