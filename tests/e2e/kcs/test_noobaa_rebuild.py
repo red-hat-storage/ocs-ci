@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -73,7 +74,6 @@ class TestNoobaaRebuild(E2ETest):
         6. Delete the noobaa secrets.
         7. Restart noobaa-operator by setting the replicas back to 1.
         8. Monitor the pods in openshift-storage for noobaa pods to be Running.
-            Also checks for the status of backingstore/bucketclass.
 
         """
         dep_ocp = OCP(
@@ -156,10 +156,23 @@ class TestNoobaaRebuild(E2ETest):
             timeout=900,
         )
 
-        # Create OBCs
-        logger.info("Creating OBCs")
-        bucket_factory(amount=3, interface="OC", verify_health=True)
-
         # Verify everything running fine
         logger.info("Verifying all resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
+
+        # Verify default backingstore/bucketclass
+        default_bs = OCP(
+            kind="backingstore", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
+        default_bc = OCP(
+            kind="bucketclass", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
+        assert (
+            default_bs["status"]["phase"]
+            == default_bc["status"]["phase"]
+            == constants.STATUS_READY
+        ), "Failed: Default bs/bc are not in ready state"
+
+        # Create OBCs
+        logger.info("Creating OBCs after noobaa rebuild")
+        bucket_factory(amount=3, interface="OC", verify_health=True)
