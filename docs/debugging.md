@@ -61,3 +61,14 @@ chroot /host
 ```
 
 Now you can start running commands on the node.
+
+
+## Enable debug log level for rook-ceph-operator
+
+To enable DEBUG log level for rook-ceph-operator you can pass:
+
+`--ocsci-conf conf/ocsci/set_debug_rook_log_level.yaml`
+
+This will update the config map to change the log level.
+This happens after subscription to the OCS/ODF and before creating the storage
+cluster CR.

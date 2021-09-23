@@ -109,6 +109,8 @@ anywhere else.
   already defined. Labeling happens during post OCP deployment procedures.
   If proper labeling is not possible, an exception (which will fail OCP
   deployment) is raised. The default is False.
+* `rook_log_level` - If defined, it will change rook_log_level to specified value (e.g. DEBUG),
+   after the subscription to the OCS.
 
 
 #### REPORTING
