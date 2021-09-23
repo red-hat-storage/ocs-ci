@@ -77,6 +77,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
@@ -564,6 +565,9 @@ class Deployment(object):
         if Version.coerce(ocs_version) >= Version.coerce("4.9"):
             exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
+        # Set rook log level
+        self.set_rook_log_level()
+
         # creating StorageCluster
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
@@ -840,6 +844,9 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             csv.wait_for_phase("Succeeded", timeout=720)
 
+        # Set rook log level
+        self.set_rook_log_level()
+
         # Create secret for external cluster
         create_external_secret()
 
@@ -852,6 +859,11 @@ class Deployment(object):
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
         self.external_post_deploy_validation()
         setup_ceph_toolbox()
+
+    def set_rook_log_level(self):
+        rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+        if rook_log_level:
+            set_configmap_log_level_rook_ceph_operator(rook_log_level)
 
     def external_post_deploy_validation(self):
         """
