@@ -25,7 +25,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_lso,
     ipi_deployment_required,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour,
+    OCSWorkerScaleFailed,
+    OSDScaleFailed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +54,6 @@ class TestAddNode(E2ETest):
 
     skip_all = False
 
-    @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.polarion_id("OCS-2610")
     def test_scale_node_and_capacity(self):
         """
@@ -75,24 +78,28 @@ class TestAddNode(E2ETest):
                 scale_worker_count = expected_worker_count - len(
                     existing_ocs_worker_list
                 )
-                assert scale_lib.scale_ocs_node(node_count=scale_worker_count)
+                if not scale_lib.scale_ocs_node(node_count=scale_worker_count):
+                    raise OCSWorkerScaleFailed("OCS worker nodes scaling Failed")
 
             # Check existing OSD count and add OSDs if required
             if existing_deviceset_count < expected_deviceset_count:
-                add_deviceset_count = (
+                additional_deviceset = int(
                     expected_deviceset_count - existing_deviceset_count
                 )
-                assert scale_lib.scale_capacity_with_deviceset(
-                    add_deviceset_count=add_deviceset_count
-                )
+                if not scale_lib.scale_capacity_with_deviceset(
+                    add_deviceset_count=additional_deviceset, timeout=600
+                ):
+                    raise OSDScaleFailed("Scaling OSDs Failed")
 
             # Check ceph health statuss
             utils.ceph_health_check(tries=30)
 
-        except UnexpectedBehaviour:
+        except (OCSWorkerScaleFailed, OSDScaleFailed, Exception) as ex:
             TestAddNode.skip_all = True
-            logging.info("Cluster is not in expected state, unexpected behaviour")
-            raise
+            logging.warning(
+                f"Due to Exception set TestAddNode.skip_all to {TestAddNode.skip_all}"
+            )
+            logging.error(f"Cluster not in expected state. {ex}")
 
     @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.polarion_id("OCS-609")
