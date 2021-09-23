@@ -354,3 +354,11 @@ class NodeHasNoAttachedVolume(Exception):
 
 class NotSupportedProxyConfiguration(Exception):
     pass
+
+
+class OCSWorkerScaleFailed(Exception):
+    pass
+
+
+class OSDScaleFailed(Exception):
+    pass

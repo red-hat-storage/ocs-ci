@@ -1549,7 +1549,10 @@ def scale_ocs_node(node_count=3):
         new_spun_node = list(set(nodes_after_new_spun_node) - set(initial_nodes))
         logging.info(f"New spun node is {new_spun_node}")
 
-        # Label it
+        if not len(new_spun_node) == node_count:
+            return False
+
+        # Label OCS worker nodes
         node_obj = OCP(kind="node")
         for new_node in new_spun_node:
             node_obj.add_label(
