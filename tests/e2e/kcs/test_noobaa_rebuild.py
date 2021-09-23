@@ -102,10 +102,10 @@ class TestNoobaaRebuild(E2ETest):
         pvc_obj.delete(resource_name="db-noobaa-db-pg-0", wait=True)
 
         # Patch and delete existing backingstores
-        bs_obj = OCP(
-            kind="backingstore", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
         params = '{"metadata": {"finalizers":null}}'
+        bs_obj = OCP(
+            kind=constants.BACKINGSTORE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
         for bs in bs_obj.get()["items"]:
             assert bs_obj.patch(
                 resource_name=bs["metadata"]["name"],
@@ -117,7 +117,7 @@ class TestNoobaaRebuild(E2ETest):
 
         # Patch and delete existing bucketclass
         bc_obj = OCP(
-            kind="bucketclass", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BUCKETCLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         for bc in bc_obj.get()["items"]:
             assert bc_obj.patch(
@@ -143,7 +143,7 @@ class TestNoobaaRebuild(E2ETest):
             condition=constants.STATUS_BOUND,
             resource_name=noobaa_pvc_obj[0].name,
             timeout=600,
-            sleep=15,
+            sleep=60,
         )
 
         # Validate noobaa pods are up and running
@@ -162,10 +162,10 @@ class TestNoobaaRebuild(E2ETest):
 
         # Verify default backingstore/bucketclass
         default_bs = OCP(
-            kind="backingstore", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BACKINGSTORE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
         default_bc = OCP(
-            kind="bucketclass", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BUCKETCLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
         assert (
             default_bs["status"]["phase"]
