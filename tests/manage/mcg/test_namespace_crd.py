@@ -829,7 +829,7 @@ class TestNamespace(MCGTest):
             awscli_pod_session,
             bucket_to_write=bucket_obj.name,
             original_dir=original_folder,
-            amount=3,
+            amount=1,
         )
         wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
 
