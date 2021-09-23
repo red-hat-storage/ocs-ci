@@ -56,11 +56,13 @@ def init_ocsci_conf(arguments=None):
 
     Args:
         arguments (list): Arguments for pytest execution
+
     """
     if 'multicluster' in arguments:
         parser = argparse.ArgumentParser(add_help=False)
         subparser = parser.add_subparsers(title='subcommand', dest='subcommand')
         mcluster_parser = subparser.add_parser("multicluster", description="multicluster nclusters --cluster1 <> --cluster2 <> ...")
+
         # We need this nclusters here itself to do add_arguments for
         # N number of clusters in the function init_multicluster_ocsci_conf()
         mcluster_parser.add_argument("nclusters", type=int, help="Number of clusters to be deployed")
@@ -70,6 +72,22 @@ def init_ocsci_conf(arguments=None):
         for i in range(args.nclusters):
             arguments.remove(f"--cluster{i+1}")
         arguments.remove(str(args.nclusters))
+
+        # Remove original args and replace them with args with suffix
+        # i.e --cluster-name will be translated to --cluster-name1 etc and --cluster-name along with
+        # values will be removed from the list to make parse happy
+        for each in framework.config.multicluster_args:
+            for arg in each:
+                if arg.startswith("--"):
+                    match = re.search(r'\d+$', arg)
+                    if match:
+                        arguments.remove(re.sub(r'\d+$', '', arg))
+                else:
+                    arguments.remove(arg)
+        # Add only suffixed(cluster number) cluster args in the args list
+        # i.e only --cluster-name1, --cluster-path1, --ocsci-conf1 etc
+        for each in framework.config.multicluster_args:
+            arguments.extend(each)
     else:
         framework.config.initclusterconfigs()
         process_ocsci_conf(arguments)
@@ -134,13 +152,12 @@ def process_ocsci_conf(arguments):
 
 def init_multicluster_ocsci_conf(args, nclusters):
     """
-    Here we need to parser multicluster specific arguments
-    and seperate out each cluster's configuration.
+    Parse multicluster specific arguments and seperate out each cluster's configuration.
     Then instantiate Config class for each cluster
 
     Params:
         args (list): of arguments passed
-        nclusters (int): Number of clusters (>1) we will be handling
+        nclusters (int): Number of clusters (>1)
 
     """
     parser = argparse.ArgumentParser(add_help=False)
@@ -149,18 +166,24 @@ def init_multicluster_ocsci_conf(args, nclusters):
     # options so that separation of per cluster conf will be easier
     for i in range(nclusters):
         parser.add_argument(f"--cluster{i+1}", required=True, action='store_true', help=f"cluster{i}-conf")
-    arguments, unknown = parser.parse_known_args(args[2:])
+
+    # Parsing just to enforce `nclusters` number of  --cluster{i} arguments are passed
+    _, _ = parser.parse_known_args(args[2:])
     multicluster_conf, common_argv = tokenize_per_cluster_args(args[2:], nclusters)
-    for i in multicluster_conf:
-        print(i)
-    # We need to seperate common arguments and cluster specific carguments
+
+    # We need to seperate common arguments and cluster specific arguments
     framework.config.multicluster = True
     framework.config.nclusters = nclusters
     framework.config.initclusterconfigs()
+    framework.config.reset_ctx()
     for i in range(nclusters):
-        process_ocsci_conf(unknown + multicluster_conf[i][1:])
-        check_config_requirements()
         framework.config.switch_ctx(i)
+        process_ocsci_conf(common_argv + multicluster_conf[i][1:])
+        for j in range(len(multicluster_conf[i][1:])):
+            if multicluster_conf[i][j+1].startswith("--"):
+                multicluster_conf[i][j+1] = f"{multicluster_conf[i][j+1]}{i + 1}"
+        framework.config.multicluster_args.append(multicluster_conf[i][1:])
+        check_config_requirements()
 
 
 def tokenize_per_cluster_args(args, nclusters):
@@ -198,10 +221,6 @@ def tokenize_per_cluster_args(args, nclusters):
         multi_cluster_argv.append(per_cluster_argv)
         per_cluster_argv = []
     return multi_cluster_argv, common_argv
-
-
-
-
 
 
 def main(argv=None):

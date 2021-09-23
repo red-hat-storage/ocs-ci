@@ -33,6 +33,7 @@ class Config:
     PERF: dict = field(default_factory=dict)
     COMPONENTS: dict = field(default_factory=dict)
 
+
     def __post_init__(self):
         self.reset()
 
@@ -120,42 +121,55 @@ def merge_dict(orig: dict, new: dict) -> dict:
 
 
 class MultiClusterConfig():
+    # This class wraps Config() objects so that we can handle
+    # multiple cluster contexts
     def __init__(self):
+        # Holds all cluster's Config() object
         self.clusters = list()
+        # This member always points to current cluster's Config() object
         self.cluster_ctx = None
         self.nclusters = 1
         # Index for current cluster in context
         self.cur_index = 0
         self.multicluster = False
+        # A list of lists which holds CLI args clusterwise
+        self.multicluster_args = list()
+        # Points to cluster config objects which holds ACM cluster conf
+        # Applicable only if we are deploying ACM cluster
+        self.acm_index = None
 
     def initclusterconfigs(self):
         for i in range(self.nclusters):
             self.clusters.append(Config())
         self.cluster_ctx = self.clusters[0]
+        self.attr_list = (
+            [attr for attr in self.cluster_ctx.__dataclass_fields__.keys()]
+        )
+        self.method_list = (
+            [func for func in dir(Config) if callable(getattr(Config, func))
+             and not func.startswith("__")]
+        )
+        self._refresh_ctx()
+
+    def reset_ctx(self):
+        self.cluster_ctx = self.clusters[0]
         self._refresh_ctx()
 
     def _refresh_ctx(self):
-        self.AUTH = self.cluster_ctx.AUTH
-        self.ENV_DATA = self.cluster_ctx.ENV_DATA
-        self.DEPLOYMENT = self.cluster_ctx.DEPLOYMENT
-        self.EXTERNAL_MODE = self.cluster_ctx.EXTERNAL_MODE
-        self.REPORTING = self.cluster_ctx.REPORTING
-        self.RUN = self.cluster_ctx.RUN
-        self.UPGRADE = self.cluster_ctx.UPGRADE
-        self.FLEXY = self.cluster_ctx.FLEXY
-        self.UI_SELENIUM = self.cluster_ctx.UI_SELENIUM
-        self.PERF = self.cluster_ctx.PERF
-        self.COMPONENTS = self.cluster_ctx.COMPONENTS
-        self.to_dict = self.cluster_ctx.to_dict
-        self.update = self.cluster_ctx.update
+        [self.__setattr__(attr, self.cluster_ctx.__getattribute__(attr)) for attr in self.attr_list]
+        [self.__setattr__(method, self.cluster_ctx.__getattribute__(method)) for method in self.method_list]
+
         if self.RUN.get("kubeconfig"):
-            logger.info("SWITCHING KUBECONFIG")
+            logger.debug("switching kubeconfig")
             os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
 
-    def switch_ctx(self, index):
+    def switch_ctx(self, index=0):
         self.cluster_ctx = self.clusters[index]
         self.cur_index = index
         self._refresh_ctx()
+
+    def switch_acm_ctx(self):
+        self.switch_ctx(self.acm_index)
 
 
 config = MultiClusterConfig()

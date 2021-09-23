@@ -461,14 +461,6 @@ validation = {
     "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
 }
 
-# acm_cluster_create = {
-#     "clusters_drop_down": ('li[data-ouia-component-type="PF4/NavItem"]', By.CSS_SELECTOR)
-#     "create_cluster": ('button[data-ouia-component-id="OUIA-Generated-Button-primary-15"]', By.CSS_SELECTOR)
-#     "infrastructure_vsphere": ("//*[@id='vmware-vsphere']', By.XPATH),
-#
-#
-# }
-
 validation_4_7 = {
     "object_service_tab": (
         'a[data-test-id="horizontal-link-Object Service"]',
