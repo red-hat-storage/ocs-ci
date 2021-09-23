@@ -3216,6 +3216,7 @@ def snapshot_factory(request):
 
         """
         snap_obj = pvc_obj.create_snapshot(snapshot_name=snapshot_name, wait=wait)
+        instances.append(snap_obj)
         return snap_obj
 
     def finalizer():
