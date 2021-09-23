@@ -3195,6 +3195,7 @@ def set_configmap_log_level_rook_ceph_operator(value):
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
+    logger.info(f"Setting ROOK_LOG_LEVEL to: {value}")
     configmap_obj.patch(params=params, format_type="json")
 
 
