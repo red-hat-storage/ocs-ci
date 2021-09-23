@@ -1363,8 +1363,8 @@ def get_provision_time(interface, pvc_name, status="start"):
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
-        for pv_name in pvc_name:
-            name = pv_name.name
+        for i in range(0, len(pvc_name)):
+            name = pvc_name[i].name
             stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"

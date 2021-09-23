@@ -482,7 +482,10 @@ class TestPvcSnapshotPerformance(PASTest):
             log.info(f"Taking snapshot of the PVC {pvc_name}")
             log.info(f"Snapshot name : {snap_name}")
             creation_time = self.measure_create_snapshot_time(
-                pvc_name=pvc_name, snap_name=snap_name, interface=interface
+                pvc_name=pvc_name,
+                snap_name=snap_name,
+                namespace=BMO_NAME,
+                interface=interface,
             )
             log.info(f"Snapshot creation time is {creation_time} seconds")
             all_results.append(creation_time)
