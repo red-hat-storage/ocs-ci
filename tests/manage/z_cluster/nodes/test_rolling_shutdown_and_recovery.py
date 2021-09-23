@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud,
 )
 from ocs_ci.ocs.node import get_ocs_nodes
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 
@@ -71,7 +71,7 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
             log.info("Checking storage pods status")
             # Validate storage pods are running
-            wait_for_storage_pods()
+            wait_for_pods_to_be_running(timeout=600)
 
         # Check basic cluster functionality by creating some resources
         self.sanity_helpers.create_resources(
