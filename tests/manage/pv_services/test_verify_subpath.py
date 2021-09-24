@@ -32,7 +32,7 @@ class TestVerifySubpath(ManageTest):
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             size=3,
-            access_mode=constants.ACCESS_MODE_RWO,
+            access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
         )
         self.pod_obj = pod_factory(
