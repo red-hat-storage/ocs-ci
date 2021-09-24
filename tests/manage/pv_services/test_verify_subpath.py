@@ -42,7 +42,7 @@ class TestVerifySubpath(ManageTest):
         )
 
     @tier2
-    @polarion_id("")
+    @polarion_id("OCS-2654")
     def test_verify_subpath(self, multi_pvc_factory, pod_factory):
         """
         Test case to verify subpath
