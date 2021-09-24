@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")
 @pytest.mark.bugzilla("1991361")
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("<4.9")
 @skipif_openshift_dedicated
 @skipif_external_mode
 class TestNoobaaRebuild(E2ETest):
