@@ -714,8 +714,8 @@ class Deployment(object):
             }
             if ocs_version >= 4.5:
                 cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                    "limits": {"cpu": 1, "memory": "500Mi"},
-                    "requests": {"cpu": 1, "memory": "500Mi"},
+                    "limits": {"cpu": "100m", "memory": "100Mi"},
+                    "requests": {"cpu": "100m", "memory": "100Mi"},
                 }
         else:
             local_storage = config.DEPLOYMENT.get("local_storage")
