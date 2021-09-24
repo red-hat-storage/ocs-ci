@@ -1,11 +1,10 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
+from ocs_ci.framework.pytest_customization.marks import on_prem_platform_required
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class TestScaleOCBCreation(E2ETest):
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     scale_obc_count = 1000
-    num_obc_batch = 50
+    num_obc_batch = 100
 
     @pytest.mark.parametrize(
         argnames=["pod_name", "sc_name"],
@@ -49,14 +48,14 @@ class TestScaleOCBCreation(E2ETest):
             pytest.param(
                 *["noobaa-core", constants.DEFAULT_STORAGECLASS_RGW],
                 marks=[
-                    vsphere_platform_required,
+                    on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2647"),
                 ],
             ),
             pytest.param(
                 *["noobaa-db", constants.DEFAULT_STORAGECLASS_RGW],
                 marks=[
-                    vsphere_platform_required,
+                    on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2648"),
                 ],
             ),
@@ -89,7 +88,6 @@ class TestScaleOCBCreation(E2ETest):
             )
             # Create kube_job
             job_file.create(namespace=self.namespace)
-            time.sleep(timeout * 5)
 
             # Check all the OBCs reached Bound state
             obc_bound_list = (
@@ -101,7 +99,8 @@ class TestScaleOCBCreation(E2ETest):
             )
             log.info(f"Number of OBCs in Bound state: {len(obc_bound_list)}")
 
-        # Reset node which noobaa pod is running on
+        # Reset node which noobaa pods is running on
+        # And validate noobaa pods are re-spinned and in running state
         scale_noobaa_lib.noobaa_running_node_restart(pod_name=pod_name)
 
         # Verify all OBCs are in Bound state after node restart

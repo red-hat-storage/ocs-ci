@@ -323,12 +323,12 @@ def noobaa_running_node_restart(pod_name):
         pod_name (str): Name of noobaa pod
 
     """
-    node_name = get_node_where_noobaa_pod_running(pod_name=pod_name)
-    log.info(f"{pod_name} is running on: {node_name}")
-    log.info(f"Restating node: {node_name}")
+    nb_node_name = get_node_where_noobaa_pod_running(pod_name=pod_name)
+    log.info(f"{pod_name} is running on: {nb_node_name}")
+    log.info(f"Restating node: {nb_node_name}")
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
-    ocp_nodes = get_node_objs(node_names=node_name)
+    ocp_nodes = get_node_objs(node_names=nb_node_name)
     nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=True)
 
     # Validate nodes are up and running
@@ -361,7 +361,7 @@ def get_node_where_noobaa_pod_running(pod_name):
     pods_openshift_storage = pod.get_all_pods(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
-    ocs_nodes = list()
+    noobaa_nodes = list()
     for pod_obj in pods_openshift_storage:
         if (
             pod_name in pod_obj.name
@@ -369,10 +369,10 @@ def get_node_where_noobaa_pod_running(pod_name):
             and "noobaa-operator" not in pod_obj.name
         ):
             try:
-                ocs_nodes.append(pod_obj.data["spec"]["nodeName"])
+                noobaa_nodes.append(pod_obj.data["spec"]["nodeName"])
             except Exception as e:
                 log.info(e)
-    return set(ocs_nodes)
+    return set(noobaa_nodes)
 
 
 def check_all_obcs_status(namespace):
