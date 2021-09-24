@@ -103,7 +103,7 @@ class PagerDutyAPI(object):
         """
         pattern = f"/{resource}"
         headers = {
-            "Authorization": f"Token {self._token}",
+            "Authorization": f"Token token={self._token}",
             "Accept": "application/vnd.pagerduty+json;version=2",
         }
 
@@ -133,7 +133,7 @@ class PagerDutyAPI(object):
         """
         pattern = f"/{resource}"
         headers = {
-            "Authorization": f"Token {self._token}",
+            "Authorization": f"Token token={self._token}",
             "Accept": "application/vnd.pagerduty+json;version=2",
             "Content-Type": "application/json",
         }
@@ -163,7 +163,7 @@ class PagerDutyAPI(object):
         """
         pattern = f"/{resource}"
         headers = {
-            "Authorization": f"Token {self._token}",
+            "Authorization": f"Token token={self._token}",
             "Accept": "application/vnd.pagerduty+json;version=2",
         }
 
