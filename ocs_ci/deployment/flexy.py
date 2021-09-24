@@ -478,25 +478,26 @@ class FlexyBase(object):
         # load cluster info
         load_cluster_info()
 
-        # Download terraform binary based on version used by Flexy and
-        # update the installer path in ENV_DATA
-        terraform_data_dir = os.path.join(
-            self.cluster_path, constants.TERRAFORM_DATA_DIR
-        )
-        terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
-        with open(terraform_tfstate, "r") as fd:
-            ttc = hcl.load(fd)
-            terraform_version = ttc.get(
-                "terraform_version", config.DEPLOYMENT["terraform_version"]
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            # Download terraform binary based on version used by Flexy and
+            # update the installer path in ENV_DATA
+            terraform_data_dir = os.path.join(
+                self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
-        terraform_installer = get_terraform(version=terraform_version)
-        config.ENV_DATA["terraform_installer"] = terraform_installer
+            terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
+            with open(terraform_tfstate, "r") as fd:
+                ttc = hcl.load(fd)
+                terraform_version = ttc.get(
+                    "terraform_version", config.DEPLOYMENT["terraform_version"]
+                )
+            terraform_installer = get_terraform(version=terraform_version)
+            config.ENV_DATA["terraform_installer"] = terraform_installer
 
-        # Download terraform ignition provider
-        # ignition provider dependancy from OCP 4.6
-        ocp_version = get_ocp_version()
-        if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-            get_terraform_ignition_provider(terraform_data_dir)
+            # Download terraform ignition provider
+            # ignition provider dependancy from OCP 4.6
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+                get_terraform_ignition_provider(terraform_data_dir)
 
         # if on disconnected cluster, perform required tasks
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
