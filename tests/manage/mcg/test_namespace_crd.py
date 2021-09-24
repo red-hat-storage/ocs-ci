@@ -1061,6 +1061,7 @@ class TestNamespace(MCGTest):
         namespace_store_factory,
         bucket_factory,
         cld_mgr,
+        test_directory_setup,
     ):
         """
         Test blocking namespace resource in namespace bucket.
@@ -1079,11 +1080,15 @@ class TestNamespace(MCGTest):
         ns_store1 = namespace_store_factory(*nss_tup)[0]
         ns_store2 = namespace_store_factory(*nss_tup)[0]
 
+        original_folder = test_directory_setup.origin_dir
+        result_folder = test_directory_setup.result_dir
+
         logger.info("Upload files to NS resources")
         self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod_session,
             bucket_to_write=ns_store1.uls_name,
+            original_dir=original_folder,
             amount=3,
             s3_creds=s3_creds,
         )
@@ -1091,6 +1096,7 @@ class TestNamespace(MCGTest):
             mcg_obj,
             awscli_pod_session,
             bucket_to_write=ns_store2.uls_name,
+            original_dir=original_folder,
             amount=2,
             s3_creds=s3_creds,
         )
@@ -1115,7 +1121,12 @@ class TestNamespace(MCGTest):
 
         logger.info("Read files directly from AWS")
         try:
-            self.download_files(mcg_obj, awscli_pod_session, bucket_to_read=ns_bucket)
+            self.download_files(
+                mcg_obj,
+                awscli_pod_session,
+                bucket_to_read=ns_bucket,
+                download_dir=result_folder,
+            )
         except CommandFailed:
             logger.info("Attempt to read files failed as expected")
             logger.info("Bring ns_store1 up")
