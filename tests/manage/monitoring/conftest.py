@@ -9,9 +9,12 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
@@ -807,4 +810,52 @@ def measure_noobaa_ns_target_bucket_deleted(
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
     ns_stores[0].delete()
+    return measured_op
+
+
+@pytest.fixture
+def measure_stop_worker_node(measurement_dir, nodes):
+    """
+    Stop one worker node, measure the time when it was stopped and monitors
+    alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for stopping
+            worker node
+
+    """
+    node = get_nodes(node_type="worker")[0]
+
+    def stop_node():
+        """
+        Turn off one worker node for 6 minutes.
+
+        Returns:
+            str: Node that was turned down
+
+        """
+        # run_time of operation
+        run_time = 60 * 6
+        nonlocal node
+        logger.info(f"Turning off node {node.name}")
+        nodes.stop_nodes(nodes=[node])
+        # Validate node reached NotReady state
+        wait_for_nodes_status(node_names=[node.name], status=constants.NODE_NOT_READY)
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return node.name
+
+    test_file = os.path.join(measurement_dir, "measure_stop_node.json")
+    measured_op = measure_operation(stop_node, test_file)
+    logger.info(f"Turning on node {node.name}")
+    nodes.start_nodes(nodes=[node])
+    # Validate all nodes are in READY state and up
+    retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
+        wait_for_nodes_status
+    )(timeout=900)
+
+    # wait for ceph to return into HEALTH_OK state after mgr deployment
+    # is returned back to normal
+    ceph_health_check(tries=20, delay=15)
+
     return measured_op
