@@ -76,6 +76,8 @@ class PlatformNodesFactory:
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
+            "rosa": AWSNodes,
+            "openshiftdedicated": AWSNodes,
         }
 
     def get_nodes_platform(self):
