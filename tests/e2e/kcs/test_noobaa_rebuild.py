@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")
 @pytest.mark.bugzilla("1991361")
-@skipif_ocs_version("<4.9")
+@skipif_ocs_version("<4.8")
 @skipif_openshift_dedicated
 @skipif_external_mode
 class TestNoobaaRebuild(E2ETest):
@@ -40,7 +40,6 @@ class TestNoobaaRebuild(E2ETest):
         Initialize Sanity instance
 
         """
-        self.noobaa_op = "noobaa-operator"
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
@@ -56,9 +55,16 @@ class TestNoobaaRebuild(E2ETest):
                 kind=constants.DEPLOYMENT,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            noobaa_deploy_obj = deploy_obj.get(resource_name=self.noobaa_op)
+            noobaa_deploy_obj = deploy_obj.get(
+                resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
+            )
             if noobaa_deploy_obj["spec"]["replicas"] != 1:
-                deploy_obj.exec_oc_cmd("scale deployment noobaa-operator --replicas=1")
+                logger.info(
+                    f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
+                )
+                deploy_obj.exec_oc_cmd(
+                    f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+                )
 
         request.addfinalizer(finalizer)
 
@@ -76,6 +82,7 @@ class TestNoobaaRebuild(E2ETest):
         8. Monitor the pods in openshift-storage for noobaa pods to be Running.
 
         """
+
         dep_ocp = OCP(
             kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
@@ -85,21 +92,26 @@ class TestNoobaaRebuild(E2ETest):
         noobaa_pvc_obj = get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
 
         # Scale down noobaa operator
-        logger.info("Scaling down noobaa-operator to replica: 0")
-        dep_ocp.exec_oc_cmd("scale deployment noobaa-operator --replicas=0")
+        logger.info(
+            f"Scaling down {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 0"
+        )
+        dep_ocp.exec_oc_cmd(
+            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=0"
+        )
 
         # Delete noobaa deployments and statefulsets
         logger.info("Deleting noobaa deployments and statefulsets")
-        dep_ocp.delete(resource_name="noobaa-endpoint")
-        state_ocp.delete(resource_name="noobaa-db-pg")
-        state_ocp.delete(resource_name="noobaa-core")
+        dep_ocp.delete(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        state_ocp.delete(resource_name=constants.NOOBAA_DB_STATEFULSET)
+        state_ocp.delete(resource_name=constants.NOOBAA_CORE_STATEFULSET)
 
         # Delete noobaa-db pvc
         pvc_obj = OCP(
             kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        logger.info("Deleting noobaa db pvc")
-        pvc_obj.delete(resource_name="db-noobaa-db-pg-0", wait=True)
+        logger.info("Deleting noobaa-db pvc")
+        pvc_obj.delete(resource_name=noobaa_pvc_obj[0].name, wait=True)
+        pvc_obj.wait_for_delete(resource_name=noobaa_pvc_obj[0].name, timeout=300)
 
         # Patch and delete existing backingstores
         params = '{"metadata": {"finalizers":null}}'
@@ -135,15 +147,19 @@ class TestNoobaaRebuild(E2ETest):
         )
 
         # Scale back noobaa-operator deployment
-        logger.info("Scaling back noobaa-operator to replica: 0")
-        dep_ocp.exec_oc_cmd("scale deployment noobaa-operator --replicas=1")
+        logger.info(
+            f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
+        )
+        dep_ocp.exec_oc_cmd(
+            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+        )
 
-        # Validate noobaa PVC is in bound state
+        # Wait and validate noobaa PVC is in bound state
         pvc_obj.wait_for_resource(
             condition=constants.STATUS_BOUND,
             resource_name=noobaa_pvc_obj[0].name,
             timeout=600,
-            sleep=60,
+            sleep=120,
         )
 
         # Validate noobaa pods are up and running
