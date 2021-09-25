@@ -14,7 +14,6 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -101,11 +100,28 @@ def format_locator(locator, string_to_insert):
 
 
 def create_storage_class_ui(
-    setup_ui, encryption=False, backend_path=None, namespace=None
+    setup_ui,
+    encryption=False,
+    backend_path=None,
+    vault_namespace=None,
+    reclaim_policy="Delete",
+    provisioner="rbd",
+    vol_binding_mode="WaitForFirstConsumer",
 ):
     """
     Test for creation of storage class with or without encryption via UI
 
+    Args:
+            setup_ui: login function on conftest file
+            encryption (bool): By default set to False, should be True for Encryption enabled Storage Class
+            backend_path (str): name of the vault backend path
+            vault_namespace (str): name of the vault namespace
+            reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
+            provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
+            vol_binding_mode (str): value of the volume binding mode, it could be 'WaitForFirstConsumer' or 'Immediate'
+
+    Returns:
+            sc_name (str) if the storage class creation is successful, returns False otherwise
     """
     base_ui_obj = PageNavigator(setup_ui)
 
@@ -124,10 +140,27 @@ def create_storage_class_ui(
     base_ui_obj.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
     logger.info("Storage Class Reclaim Policy")
     base_ui_obj.do_click(pvc_loc["reclaim-policy"])
-    base_ui_obj.do_click(pvc_loc["reclaim-policy-delete"])
+    if reclaim_policy == "Delete":
+        base_ui_obj.do_click(pvc_loc["reclaim-policy-delete"])
+    elif reclaim_policy == "Retain":
+        base_ui_obj.do_click(pvc_loc["reclaim-policy-retain"])
+
+    if ocp_version >= "4.9":
+        logger.info("Volume binding mode")
+        base_ui_obj.do_click(pvc_loc["volume_binding_mode"])
+        if vol_binding_mode == "WaitForFirstConsumer":
+            logger.info("select WaitForFirstConsumer")
+            base_ui_obj.do_click(pvc_loc["wait_for_first_consumer"])
+        elif vol_binding_mode == "Immediate":
+            logger.info("select Immediate")
+            base_ui_obj.do_click(pvc_loc["immediate"])
+
     logger.info("Storage Class Provisioner")
     base_ui_obj.do_click(pvc_loc["provisioner"])
-    base_ui_obj.do_click(pvc_loc["rbd-provisioner"])
+    if provisioner == "rbd":
+        base_ui_obj.do_click(pvc_loc["rbd-provisioner"])
+    elif provisioner == "cephfs":
+        base_ui_obj.do_click(pvc_loc["cephfs-provisioner"])
     logger.info("Storage Class Storage Pool")
     base_ui_obj.do_click(pvc_loc["storage-pool"])
     base_ui_obj.do_click(pvc_loc["ceph-block-pool"])
@@ -141,6 +174,9 @@ def create_storage_class_ui(
         if conn_details:
             logger.info("Click on Change Connection Details")
             base_ui_obj.do_click(pvc_loc["connections-details"])
+        if ocp_version >= "4.9":
+            logger.info("Click on Create new KMS connection")
+            base_ui_obj.do_click(pvc_loc["new_kms"])
         logger.info("Storage Class Service Name")
         base_ui_obj.do_clear(pvc_loc["service-name"])
         base_ui_obj.do_send_keys(pvc_loc["service-name"], "vault")
@@ -160,7 +196,7 @@ def create_storage_class_ui(
         base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], "vault.qe.rh-ocs.com")
         logger.info("Enter Vault Enterprise Namespace")
         base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
-        base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], namespace)
+        base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
         logger.info("Selecting CA Certificate")
         base_ui_obj.do_click(pvc_loc["browse-ca-certificate"])
         time.sleep(1)
@@ -188,11 +224,29 @@ def create_storage_class_ui(
         logger.info("Save Key Management Service details")
         base_ui_obj.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
         time.sleep(1)
-    logger.info("Creating Storage Class with Encryption")
+        logger.info("Creating Storage Class with Encryption")
+    else:
+        logger.info("Creating storage class without Encryption")
     base_ui_obj.do_click(pvc_loc["create"])
     time.sleep(1)
-
-    return sc_name
+    logger.info("Verifying if Storage Class is created or not")
+    base_ui_obj.navigate_storageclasses_page()
+    logger.info("Click on Dropdown and Select Name")
+    base_ui_obj.do_click(pvc_loc["sc-dropdown"])
+    base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
+    logger.info("Search Storage Class with Name")
+    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
+    logger.info("Click and Select Storage Class")
+    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_name))
+    # Verifying Storage Class Details via UI
+    logger.info("Verifying Storage Class Details via UI")
+    sc_check = base_ui_obj.check_element_text(expected_text=sc_name)
+    if sc_check:
+        logger.info(f"Storage Class '{sc_name}' Found")
+        return sc_name
+    else:
+        logger.error(f"Storage Class '{sc_name}' Not Found, Creation Failed")
+        return False
 
 
 def ui_add_capacity_conditions():
@@ -288,39 +342,16 @@ def get_element_type(element_name):
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
 
 
-def verify_storage_class_ui(setup_ui, sc_name):
-    """
-    Test for verifying storage class details via UI
-
-    """
-    base_ui_obj = PageNavigator(setup_ui)
-
-    ocp_version = get_ocp_version()
-    pvc_loc = locators[ocp_version]["storage_class"]
-
-    base_ui_obj.refresh_page()
-    base_ui_obj.navigate_storageclasses_page()
-    logger.info("Click on Dropdown and Select Name")
-    base_ui_obj.do_click(pvc_loc["sc-dropdown"])
-    base_ui_obj.do_click(pvc_loc["name-from-dropdown"])
-    logger.info("Search Storage Class with Name")
-    base_ui_obj.do_send_keys(pvc_loc["sc-search"], text=sc_name)
-    logger.info("Click and Select Storage Class")
-    base_ui_obj.do_click(format_locator(pvc_loc["select-sc"], sc_name))
-    # Verifying Storage Class Details via UI
-    logger.info("Verifying Storage Class Details via UI")
-    sc_name = base_ui_obj.check_element_text(expected_text=sc_name)
-    if sc_name:
-        logger.info(f"Storage Class '{sc_name}' Found")
-        return True
-    else:
-        logger.error(f"Storage Class '{sc_name}' Not Found, Verification Failed")
-        return False
-
-
 def delete_storage_class_ui(setup_ui, sc_name):
     """
     Test for deletion of storage class via UI
+
+    Args:
+            setup_ui: login function on conftest file
+            sc_name (str): Storage class name to be deleted via UI
+
+     Returns:
+            Returns True if the Storage class name is not found on Storage class Console page, returns False otherwise
 
     """
     base_ui_obj = PageNavigator(setup_ui)
@@ -345,9 +376,9 @@ def delete_storage_class_ui(setup_ui, sc_name):
     time.sleep(2)
     # Verifying if Storage Class is Details or not via UI
     logger.info("Verifying if Storage Class is Deleted or not via UI")
-    logger.info("Search Storage Class with Name on Storage Class Page")
-    sc_name = base_ui_obj.check_element_text(expected_text=sc_name)
-    if sc_name:
+    logger.info("Search Storage Class Name on Storage Class Page")
+    sc_check = base_ui_obj.check_element_text(expected_text=sc_name)
+    if sc_check:
         logger.error(f"Storage Class '{sc_name}' Found, Deletion via UI failed")
         return False
     else:

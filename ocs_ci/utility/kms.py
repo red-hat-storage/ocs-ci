@@ -35,8 +35,6 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_cluster_name,
 )
-from subprocess import CalledProcessError
-
 
 logger = logging.getLogger(__name__)
 
