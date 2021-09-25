@@ -1,6 +1,5 @@
 import logging
 import os
-
 import pytest
 
 from ocs_ci.helpers.helpers import (
@@ -16,7 +15,6 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ui.helpers_ui import (
     create_storage_class_ui,
-    verify_storage_class_ui,
     delete_storage_class_ui,
 )
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
@@ -110,7 +108,10 @@ class TestPVEncryption(ManageTest):
             setup_ui,
             encryption=True,
             backend_path=self.vault_resource_name,
-            namespace=self.vault_resource_name,
+            vault_namespace=self.vault_resource_name,
+            reclaim_policy="Delete",
+            provisioner="rbd",
+            vol_binding_mode="WaitForFirstConsumer",
         )
         logger.info("Storage Class Created via UI")
 
@@ -120,11 +121,6 @@ class TestPVEncryption(ManageTest):
         )
         sc_obj._name = sc_name
         teardown_factory(sc_obj)
-
-        # Verifying storage class details via UI
-        logger.info("Verifying Storage Class Details via UI")
-        verify_storage_class_ui(setup_ui, sc_name=sc_name)
-        logger.info("Storage Class Details Verified")
 
         # Create ceph-csi-kms-token in the tenant namespace
         logger.info("Creating ceph-csi-kms-token")
@@ -182,6 +178,17 @@ class TestPVEncryption(ManageTest):
             )
             logger.info("PVC Details Verified via UI")
 
+        # Creating Pods via CLI
+        logger.info("Creating Pods")
+        pod_objs = create_pods(
+            pvc_objs,
+            pod_factory,
+            constants.CEPHBLOCKPOOL,
+            status=constants.STATUS_RUNNING,
+        )
+        for pod_obj in pod_objs:
+            logger.info(f"Pod {pod_obj.name} created successfully")
+
         # Verify if the key is created in Vault
         logger.info("Verifying if the key is created in Vault")
         vol_handles = []
@@ -201,17 +208,6 @@ class TestPVEncryption(ManageTest):
                 logger.info(f"Vault: Found key for {pvc[0].name}")
             else:
                 raise ResourceNotFoundError(f"Vault: Key not found for {pvc[0].name}")
-
-        # Creating Pods via CLI
-        logger.info("Creating Pods")
-        pod_objs = create_pods(
-            pvc_objs,
-            pod_factory,
-            constants.CEPHBLOCKPOOL,
-            status=constants.STATUS_RUNNING,
-        )
-        for pod_obj in pod_objs:
-            logger.info(f"Pod {pod_obj.name} created successfully")
 
         ocp_version = get_ocp_version()
         self.pvc_loc = locators[ocp_version]["pvc"]

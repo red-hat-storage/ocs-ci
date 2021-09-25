@@ -334,6 +334,11 @@ pvc_4_9 = {
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
 
+pvc_4_9 = {
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+}
 storage_class = {
     "create-sc": (
         "#yaml-create",
@@ -346,9 +351,14 @@ storage_class = {
     "sc-description": ("#storage-class-description", By.CSS_SELECTOR),
     "reclaim-policy": ("#storage-class-reclaim-policy", By.CSS_SELECTOR),
     "reclaim-policy-delete": ("//button[@id='Delete-link']", By.XPATH),
+    "reclaim-policy-retain": ("#Retain-link", By.CSS_SELECTOR),
     "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
     "rbd-provisioner": (
         "//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']",
+        By.XPATH,
+    ),
+    "cephfs-provisioner": (
+        "//a[normalize-space()='openshift-storage.cephfs.csi.ceph.com']",
         By.XPATH,
     ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
@@ -397,6 +407,19 @@ storage_class = {
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
 }
 
+storage_class_4_9 = {
+    "volume_binding_mode": (
+        "#storage-class-volume-binding-mode",
+        By.CSS_SELECTOR,
+    ),
+    "wait_for_first_consumer": (
+        "#WaitForFirstConsumer-link",
+        By.CSS_SELECTOR,
+    ),
+    "immediate": ("#Immediate-link", By.CSS_SELECTOR),
+    "new_kms": ("#create-new-kms-connection", By.CSS_SELECTOR),
+    "toggle_switch": ("no-label-switch-on-on", By.ID),
+}
 
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
@@ -663,6 +686,15 @@ validation_4_9 = {
 }
 
 locators = {
+    "4.9": {
+        "login": login,
+        "page": page_nav,
+        "generic": generic_locators,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "storage_class": {**storage_class, **storage_class_4_9},
+        "validation": {**validation, **validation_4_8},
+        "deployment": {**deployment, **deployment_4_7},
+    },
     "4.9": {
         "login": login,
         "page": page_nav,
