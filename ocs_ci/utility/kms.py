@@ -40,8 +40,6 @@ from ocs_ci.utility.utils import (
     get_cluster_name,
     encode,
 )
-from subprocess import CalledProcessError
-
 
 logger = logging.getLogger(__name__)
 

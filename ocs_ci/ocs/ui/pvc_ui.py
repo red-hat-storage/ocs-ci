@@ -76,6 +76,7 @@ class PvcUI(PageNavigator):
     ):
         """
         Verifying PVC details via UI
+
         Args:
             pvc_size (str): the size of pvc (GB)
             access_mode (str): access mode
