@@ -79,6 +79,7 @@ class PlatformNodesFactory:
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
+            "rosa": AWSNodes,
         }
 
     def get_nodes_platform(self):
@@ -102,7 +103,11 @@ class NodesBase(object):
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.platform = config.ENV_DATA["platform"]
         self.deployment_type = config.ENV_DATA["deployment_type"]
-        self.nodes_map = {"AWSUPINode": AWSUPINode, "VSPHEREUPINode": VSPHEREUPINode}
+        self.nodes_map = {
+            "AWSUPINode": AWSUPINode,
+            "VSPHEREUPINode": VSPHEREUPINode,
+            "ROSAMANAGEDNode": ROSANodes,
+        }
         self.wait_time = 120
 
     def get_data_volumes(self):
@@ -2642,3 +2647,13 @@ class VMWareIPINodes(VMWareNodes):
         if wait:
             for vm in vms:
                 self.vsphere.wait_for_vm_delete(vm)
+
+
+class ROSANodes(AWSNodes):
+    """
+    ROSA EC2 instances class
+
+    """
+
+    def __init__(self):
+        super(ROSANodes, self).__init__()
