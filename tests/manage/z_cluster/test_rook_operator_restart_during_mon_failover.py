@@ -53,7 +53,7 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=1,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         log.info("Get worker node name where monitoring pod run")
@@ -69,13 +69,13 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=0,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         timeout = 1400
         log.info(f"Verify the number of mon pods is 3 for {timeout} seconds")
         sample = TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.check_mon_pods_eq_3
+            timeout=timeout, sleep=10, func=check_number_of_mon_pods
         )
         if sample.wait_for_func_status(result=False):
             assert "There are more than 3 mon pods."
@@ -96,7 +96,7 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=1,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         ceph_health_check()

@@ -497,7 +497,7 @@ class TestNodesMaintenance(ManageTest):
                     sleep=10,
                     func=helpers.check_number_of_mon_pods,
                 )
-                if sample.wait_for_func_status(result=False):
+                if not sample.wait_for_func_status(result=True):
                     assert "Number of mon pods not equal to expected_mon_count=3"
         except TimeoutExpired:
             # Mark the node-A back to schedulable and let drain finish in Node-B
@@ -529,7 +529,7 @@ class TestNodesMaintenance(ManageTest):
                 sleep=10,
                 func=helpers.check_number_of_mon_pods,
             )
-            if sample.wait_for_func_status(result=False):
+            if not sample.wait_for_func_status(result=True):
                 assert "Number of Mon pods not equal to expected_mon_count=3"
 
         sample = TimeoutSampler(
@@ -539,7 +539,7 @@ class TestNodesMaintenance(ManageTest):
             disruptions_allowed=1,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "The expected mon-pdb is not equal to actual mon pdb"
 
         # wait for storage pods

@@ -3491,7 +3491,6 @@ def check_number_of_mon_pods(expected_mon_num=3):
 
     """
     mon_pod_list = pod.get_mon_pods()
-    logger.info("Hello getting into func")
     if len(mon_pod_list) == expected_mon_num:
         logger.info(f"Number of mons equal to {expected_mon_num}")
         return True
