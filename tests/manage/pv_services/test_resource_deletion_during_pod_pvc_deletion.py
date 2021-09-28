@@ -111,7 +111,11 @@ class DisruptionBase(ManageTest):
 
         if operation_to_disrupt == "delete_pods":
             ret = wait_for_resource_count_change(
-                get_all_pods, initial_num_of_pods, self.namespace, "decrease"
+                get_all_pods,
+                initial_num_of_pods,
+                self.namespace,
+                "decrease",
+                timeout=50,
             )
             assert ret, "Wait timeout: Pods are not being deleted."
             log.info("Pods deletion has started.")
@@ -149,7 +153,7 @@ class DisruptionBase(ManageTest):
 
         if operation_to_disrupt == "delete_pvcs":
             ret = wait_for_resource_count_change(
-                get_all_pvcs, initial_num_of_pvc, self.namespace, "decrease"
+                get_all_pvcs, initial_num_of_pvc, self.namespace, "decrease", timeout=50
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
             log.info("PVCs deletion has started.")
