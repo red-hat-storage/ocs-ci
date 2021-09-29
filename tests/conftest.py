@@ -763,6 +763,7 @@ def pod_factory_fixture(request, pvc_factory):
         replica_count=1,
         command=None,
         command_args=None,
+        subpath=None,
     ):
         """
         Args:
@@ -787,6 +788,7 @@ def pod_factory_fixture(request, pvc_factory):
             command (list): The command to be executed on the pod
             command_args (list): The arguments to be sent to the command running
                 on the pod
+            subpath (str): Value of subPath parameter in pod yaml
 
         Returns:
             object: helpers.create_pod instance
@@ -809,6 +811,7 @@ def pod_factory_fixture(request, pvc_factory):
                 replica_count=replica_count,
                 command=command,
                 command_args=command_args,
+                subpath=subpath,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
