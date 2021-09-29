@@ -868,6 +868,45 @@ def validate_cephfilesystem(fs_name):
     return True if (ceph_validate and ocp_validate) else False
 
 
+def create_ocs_object_from_kind_and_name(
+    kind, resource_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
+    """
+    Create OCS object from kind and name
+
+    Args:
+        kind (str): resource kind like CephBlockPool, pvc.
+        resource_name (str): name of the resource.
+        namespace (str) the namespace of the resource.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS (obj): returns OCS object from kind and name.
+
+    """
+    ocp_object = OCP(kind=kind, resource_name=resource_name, namespace=namespace).get()
+    return OCS(**ocp_object)
+
+
+def remove_ocs_object_from_list(kind, resource_name, object_list):
+    """
+    Given a list of OCS objects, the function removes the object with kind and resource from the list
+
+    Args:
+        kind (str): resource kind like CephBlockPool, pvc.
+        resource_name (str): name of the resource.
+        object_list (array): Array of OCS objects.
+
+    Returns:
+        (array): Array of OCS objects without removed object.
+
+    """
+
+    for obj in object_list:
+        if obj.name == resource_name and obj.kind == kind:
+            object_list.remove(obj)
+            return object_list
+
+
 def get_all_storageclass_names():
     """
     Function for getting all storageclass

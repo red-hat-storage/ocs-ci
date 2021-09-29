@@ -16,7 +16,12 @@ import time
 from semantic_version import Version
 
 import ocs_ci.ocs.resources.pod as pod
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour,
+    PoolSizeWrong,
+    PoolCompressionWrong,
+    CommandFailed,
+)
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs import defaults
@@ -991,7 +996,69 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="json-pretty")
+
+
+def get_ceph_pool_property(pool_name, prop):
+    """
+    The fuction preform ceph osd pool get on a specific property.
+
+    Args:
+        pool_name (str): The pool name to get the property.
+        prop (str): The property to get for example size, compression_mode etc.
+    Returns:
+        (str) property value as string and incase there is no property None.
+
+    """
+    ceph_cmd = f"ceph osd pool get {pool_name} {prop}"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        ceph_pool_prop_output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+        if ceph_pool_prop_output[prop]:
+            return ceph_pool_prop_output[prop]
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command {err}")
+        return None
+
+
+def check_pool_compression_replica_ceph_level(pool_name, compression, replica):
+    """
+    Validate compression and replica values in ceph level
+
+    Args:
+         pool_name (str): The pool name to check values.
+         compression (bool): True for compression otherwise False.
+         replica (int): size of pool to verify.
+
+    Returns:
+        (bool) True if replica and compression are validated. Otherwise raise Exception.
+
+    """
+    compression_output = None
+    expected_compression_output = None
+
+    if compression:
+        expected_compression_output = "aggressive"
+        compression_output = get_ceph_pool_property(pool_name, "compression_mode")
+    else:
+        if get_ceph_pool_property(pool_name, "compression_mode") is None:
+            expected_compression_output = True
+            compression_output = True
+
+    replica_output = get_ceph_pool_property(pool_name, "size")
+    if compression_output == expected_compression_output and replica_output == replica:
+        logger.info(
+            f"Pool {pool_name} was validated in ceph level with compression {compression}"
+            f" and replica {replica}"
+        )
+        return True
+    else:
+        if compression_output != expected_compression_output:
+            raise PoolCompressionWrong(
+                f"Expected compression to be {expected_compression_output} but found {compression_output}"
+            )
+        if replica_output != replica:
+            raise PoolSizeWrong(f"Replica should be {replica} but is {replica_output}")
 
 
 def validate_replica_data(pool_name, replica):
@@ -1090,16 +1157,16 @@ def validate_compression(pool_name):
         bool: True if compression works. False if not
 
     """
+    pool_replica = get_ceph_pool_property(pool_name, "size")
     ceph_df_detail_output = get_ceph_df_detail()
     pool_list = ceph_df_detail_output.get("pools")
     for pool in pool_list:
         if pool.get("name") == pool_name:
             logger.info(f"{pool_name}")
-            byte_used = pool["stats"]["bytes_used"]
-            compress_bytes_used = pool["stats"]["compress_bytes_used"]
+            stored = pool["stats"]["stored"]
+            used_without_compression = stored * pool_replica
             compress_under_bytes = pool["stats"]["compress_under_bytes"]
-            all_byte_used = byte_used + compress_under_bytes - compress_bytes_used
-            compression_ratio = byte_used / all_byte_used
+            compression_ratio = compress_under_bytes / used_without_compression
             logger.info(f"this is the comp_ratio {compression_ratio}")
             if 0.6 < compression_ratio:
                 logger.info(
