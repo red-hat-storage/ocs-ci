@@ -1,6 +1,6 @@
 import logging
 
-from semantic_version import Version
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -24,22 +24,24 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
         int: RGW Count
 
     """
-
+    semantic_ocs_version = version.get_semantic_version(
+        ocs_version, only_major_minor=True
+    )
     # Assume upgrade from prior version if one is not provided
     if is_upgrade:
-        semantic_ocs_version = Version.coerce(ocs_version)
-        version_before_upgrade = (
-            f"{semantic_ocs_version.major}.{semantic_ocs_version.minor - 1}"
+        version_before_upgrade = version.get_semantic_version(
+            f"{semantic_ocs_version.major}.{semantic_ocs_version.minor - 1}",
+            only_major_minor=True,
         )
         log.info(
-            "version_before_upgrade not provided, assuming prior release is %s",
-            version_before_upgrade,
+            "version_before_upgrade not provided, assuming prior release is "
+            f"{version_before_upgrade}",
         )
 
     if (
-        float(ocs_version) == 4.5
-        and not (is_upgrade and float(version_before_upgrade) < 4.5)
-        or float(ocs_version) == 4.6
+        semantic_ocs_version == version.VERSION_4_5
+        and not (is_upgrade and version_before_upgrade < version.VERSION_4_5)
+        or semantic_ocs_version == version.VERSION_4_6
     ):
         log.debug("RGW Count: 2")
         return 2
