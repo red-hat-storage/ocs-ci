@@ -135,6 +135,8 @@ HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
 STATEFULSET = "StatefulSet"
+BACKINGSTORE = "Backingstore"
+BUCKETCLASS = "Bucketclass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -290,6 +292,12 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+
+# Noobaa Deployments and Statefulsets
+NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
+NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
+NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
+NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
