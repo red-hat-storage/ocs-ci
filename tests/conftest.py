@@ -3991,6 +3991,9 @@ def pv_encryption_kms_setup_factory(request):
         vault.remove_vault_policy()
         vault.remove_vault_namespace()
 
+    request.addfinalizer(finalizer)
+    return factory
+
 
 @pytest.fixture(scope="class")
 def cephblockpool_factory_ui_class(request, setup_ui_class):
