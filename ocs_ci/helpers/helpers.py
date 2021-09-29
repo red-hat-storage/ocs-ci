@@ -666,9 +666,12 @@ def create_multiple_pvcs(
         do_reload (bool): True for wait for reloading PVC after its creation,
             False otherwise
         access_mode (str): The kind of access mode for PVC
+        burst (bool): True for bulk creation, False ( default) for multiple creation
 
     Returns:
-         list: List of PVC objects
+         ocs_objs (list): List of PVC objects
+         tmpdir (str): The full path of the directory in which the yamls for pvc objects creation reside
+
     """
     if not burst:
         if access_mode == "ReadWriteMany" and "rbd" in sc_name:
@@ -723,7 +726,24 @@ def create_multiple_pvcs(
     )
     time.sleep(number_of_pvc)
 
-    return ocs_objs
+    return ocs_objs, tmpdir
+
+
+def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list):
+    """
+    Deletes all the pvcs created from yaml file in a provided dir
+    Args:
+        pvc_yaml_dir (str): Directory in which yaml file resides
+        pv_names_list (str): List of pv objects to be deleted
+    """
+    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"delete -f {pvc_yaml_dir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    time.sleep(len(pv_names_list) / 2)
+
+    for pv_name in pv_names_list:
+        validate_pv_delete(pv_name)
 
 
 def verify_block_pool_exists(pool_name):
@@ -1527,7 +1547,9 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
+def measure_pv_deletion_time_bulk(
+    interface, pv_name_list, wait_time=60, return_log_times=False
+):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
@@ -1535,9 +1557,14 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
         wait_time (int): Seconds to wait before collecting CSI log
+        return_log_times (bool): Determines the return value -- if False, dictionary of pv_names with the deletion time
+                is returned; if True -- the dictionary of pv_names with the tuple of (srart_deletion_time,
+                end_deletion_time) is returned
 
     Returns:
-        pv_dict (dict): Dictionary of pv_name with deletion time.
+        pv_dict (dict): Dictionary where the pv_names are the keys. The value of the dictionary depend on the
+                return_log_times argument value and are either the corresponding deletion times (when return_log_times
+                is False) or a tuple of (start_deletion_time, end_deletion_time) as they appear in the logs
 
     """
     # Get the correct provisioner pod based on the interface
@@ -1583,15 +1610,18 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         # Extract the deletion start time for the PV
         start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
-        start = f"{this_year} {mon_day}"
-        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
+        start_tm = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
         end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
         total = end_time - start_time
-        pv_dict[pv_name] = total.total_seconds()
+        if not return_log_times:
+            pv_dict[pv_name] = total.total_seconds()
+        else:
+            pv_dict[pv_name] = (start_tm, end_tm)
 
     return pv_dict
 
