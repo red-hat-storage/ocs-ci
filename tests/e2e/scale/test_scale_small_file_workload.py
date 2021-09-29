@@ -91,12 +91,6 @@ class TestSmallFileWorkloadScale(E2ETest):
         argvalues=[
             # 500K Files, ~4GB
             pytest.param(*[8, 125000, 4, constants.CEPHFILESYSTEM]),
-            # 1.5M Files, ~22GB
-            pytest.param(*[16, 375000, 4, constants.CEPHFILESYSTEM]),
-            # 2.5M Files, ~38GB
-            pytest.param(*[16, 625000, 4, constants.CEPHFILESYSTEM]),
-            # 3.5M Files, ~106GB
-            pytest.param(*[32, 875000, 4, constants.CEPHFILESYSTEM]),
             # 5M Files, ~152GB
             pytest.param(*[32, 1250000, 4, constants.CEPHFILESYSTEM]),
         ],
