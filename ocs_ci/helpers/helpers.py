@@ -139,6 +139,7 @@ def create_pod(
     command=None,
     command_args=None,
     deploy_pod_status=constants.STATUS_COMPLETED,
+    subpath=None,
 ):
     """
     Create a pod
@@ -163,6 +164,7 @@ def create_pod(
             on the pod
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
+        subpath (str): Value of subPath parameter in pod yaml
 
     Returns:
         Pod: A Pod instance
@@ -275,6 +277,14 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
+
+    if subpath:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
+                "subPath"
+            ] = subpath
+        else:
+            pod_data["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = subpath
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
