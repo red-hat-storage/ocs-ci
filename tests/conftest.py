@@ -30,6 +30,10 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ResourceWrongStatusException,
     UnsupportedPlatformError,
+    PoolDidNotReachReadyState,
+    StorageclassNotCreated,
+    PoolNotDeletedFromUI,
+    StorageClassNotDeletedFromUI,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -98,6 +102,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
+    create_ocs_object_from_kind_and_name,
     setup_pod_directories,
     get_current_test_name,
 )
@@ -110,6 +115,9 @@ from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.storageclass import StorageClassUI
+
 
 log = logging.getLogger(__name__)
 
@@ -3854,8 +3862,22 @@ def es(request):
     return es
 
 
+@pytest.fixture(scope="session")
+def setup_ui_session(request):
+    return setup_ui_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def setup_ui_class(request):
+    return setup_ui_fixture(request)
+
+
 @pytest.fixture(scope="function")
 def setup_ui(request):
+    return setup_ui_fixture(request)
+
+
+def setup_ui_fixture(request):
     driver = login_ui()
 
     def finalizer():
@@ -3968,6 +3990,186 @@ def pv_encryption_kms_setup_factory(request):
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
         vault.remove_vault_namespace()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def cephblockpool_factory_ui_class(request, setup_ui_class):
+    return cephblockpool_factory_ui_fixture(request, setup_ui_class)
+
+
+@pytest.fixture(scope="session")
+def cephblockpool_factory_ui_session(request, setup_ui_session):
+    return cephblockpool_factory_ui_fixture(request, setup_ui_session)
+
+
+@pytest.fixture(scope="function")
+def cephblockpool_factory_ui(request, setup_ui):
+    return cephblockpool_factory_ui_fixture(request, setup_ui)
+
+
+def cephblockpool_factory_ui_fixture(request, setup_ui):
+    """
+    This funcion create new cephblockpool
+    """
+    instances = []
+
+    def factory(
+        replica=3,
+        compression=False,
+    ):
+        """
+        Args:
+            replica (int): size of pool 2,3 supported for now
+            compression (bool): True to enable compression otherwise False
+        Return:
+            (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
+
+        """
+        blockpool_ui_object = BlockPoolUI(setup_ui)
+        pool_name, pool_status = blockpool_ui_object.create_pool(
+            replica=replica, compression=compression
+        )
+        if pool_status:
+            log.info(
+                f"Pool {pool_name} with replica {replica} and compression {compression} was created and "
+                f"is in ready state"
+            )
+            ocs_blockpool_obj = create_ocs_object_from_kind_and_name(
+                kind=constants.CEPHBLOCKPOOL,
+                resource_name=pool_name,
+            )
+            instances.append(ocs_blockpool_obj)
+            return ocs_blockpool_obj
+        else:
+            blockpool_ui_object.take_screenshot()
+            if pool_name:
+                instances.append(
+                    create_ocs_object_from_kind_and_name(
+                        kind=constants.CEPHBLOCKPOOL, resource_name=pool_name
+                    )
+                )
+            raise PoolDidNotReachReadyState(
+                f"Pool {pool_name} with replica {replica} and compression {compression}"
+                f" did not reach ready state"
+            )
+
+    def finalizer():
+        """
+        Delete the cephblockpool from ui and if fails from cli
+        """
+
+        for instance in instances:
+            try:
+                instance.get()
+            except CommandFailed:
+                log.warning("Pool is already deleted")
+                continue
+            blockpool_ui_obj = BlockPoolUI(setup_ui)
+            if not blockpool_ui_obj.delete_pool(instance.name):
+                instance.delete()
+                raise PoolNotDeletedFromUI(
+                    f"Could not delete block pool {instances.name} from UI."
+                    f" Deleted from CLI"
+                )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def storageclass_factory_ui_class(
+    request, cephblockpool_factory_ui_class, setup_ui_class
+):
+    return storageclass_factory_ui_fixture(
+        request, cephblockpool_factory_ui_class, setup_ui_class
+    )
+
+
+@pytest.fixture(scope="session")
+def storageclass_factory_ui_session(
+    request, cephblockpool_factory_ui_session, setup_ui_session
+):
+    return storageclass_factory_ui_fixture(
+        request, cephblockpool_factory_ui_session, setup_ui_session
+    )
+
+
+@pytest.fixture(scope="function")
+def storageclass_factory_ui(request, cephblockpool_factory_ui, setup_ui):
+    return storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
+
+
+def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui):
+    """
+    The function create new storageclass
+    """
+    instances = []
+
+    def factory(
+        provisioner=constants.OCS_PROVISIONERS[0],
+        compression=False,
+        replica=3,
+        create_new_pool=False,
+        encryption=False,  # not implemented yet
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,  # not implemented yet
+        default_pool=constants.DEFAULT_BLOCKPOOL,
+        existing_pool=None,
+    ):
+        """
+        Args:
+            provisioner (str): The name of the provisioner. Default is openshift-storage.rbd.csi.ceph.com
+            compression (bool): if create_new_pool is True, compression will be set if True.
+            replica (int): if create_new_pool is True, replica will be set.
+            create_new_pool (bool): True to create new pool with factory.
+            encryption (bool): enable PV encryption if True.
+            reclaim_policy (str): Reclaim policy for the storageclass.
+            existing_pool(str): Use pool name for storageclass.
+        Return:
+            (ocs_ci.ocs.resource.ocs) ocs object of the storageclass.
+
+        """
+        storageclass_ui_object = StorageClassUI(setup_ui)
+        if existing_pool is None and create_new_pool is False:
+            pool_name = default_pool
+        if create_new_pool is True:
+            pool_ocs_obj = cephblockpool_factory_ui(
+                replica=replica, compression=compression
+            )
+            pool_name = pool_ocs_obj.name
+        if existing_pool is not None:
+            pool_name = existing_pool
+        sc_name = storageclass_ui_object.create_storageclass(pool_name)
+        if sc_name is None:
+            log.error("Storageclass was not created")
+            raise StorageclassNotCreated(
+                "Storageclass is not found in storageclass list page"
+            )
+        else:
+            log.info(f"Storageclass created with name {sc_name}")
+            sc_obj = create_ocs_object_from_kind_and_name(
+                resource_name=sc_name, kind=constants.STORAGECLASS
+            )
+            instances.append(sc_obj)
+            log.info(f"{sc_obj.get()}")
+            return sc_obj
+
+    def finalizer():
+        for instance in instances:
+            try:
+                instance.get()
+            except CommandFailed:
+                log.warning("Storageclass is already deleted")
+                continue
+            storageclass_ui_obj = StorageClassUI(setup_ui)
+            if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
+                instance.delete()
+                raise StorageClassNotDeletedFromUI(
+                    f"Could not delete storageclass {instances.name} from UI."
+                    f"Deleted from CLI"
+                )
 
     request.addfinalizer(finalizer)
     return factory
