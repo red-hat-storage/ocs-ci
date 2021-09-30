@@ -4151,10 +4151,11 @@ def pv_encryption_kms_setup_factory(request):
     """
     vault = KMS.Vault()
 
-    def factory(kv_version):
+    def factory(kv_version, kms_type="vaulttokens"):
         """
         Args:
-            kv_version(str): KV version to be used, either v1 or v2
+            kv_version (str): KV version to be used, either v1 or v2
+            kms_type (str): KMS_PROVIDER to be used, either 'vaulttoken' or 'vaulttenantsa'
 
         Returns:
             object: Vault(KMS) object
@@ -4189,17 +4190,32 @@ def pv_encryption_kms_setup_factory(request):
                 resource_name="csi-kms-connection-details", column="NAME"
             )
             new_kmsid = vault_resource_name
-            vdict = defaults.VAULT_CSI_CONNECTION_CONF
-            for key in vdict.keys():
-                old_key = key
-            vdict[new_kmsid] = vdict.pop(old_key)
-            vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
-            vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
-            vault.kmsid = vault_resource_name
-            if kv_version == "v1":
-                vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
+            if kms_type == "vaulttenantsa":
+                vault.create_token_reviewer_resources()
+                vault.vault_kube_auth_setup()
+                vdict = defaults.VAULT_TENANT_SA_CONNECTION_CONF
+                for key in vdict.keys():
+                    old_key = key
+                vdict[new_kmsid] = vdict.pop(old_key)
+                vdict[new_kmsid]["vaultBackendPath"] = vault_resource_name
+                vdict[new_kmsid]["vaultNamespace"] = vault_resource_name
+                vault.kmsid = vault_resource_name
+                if kv_version == "v1":
+                    vdict[new_kmsid]["vaultBackend"] = "kv"
+                else:
+                    vdict[new_kmsid]["vaultBackend"] = "kv-v2"
             else:
-                vdict[new_kmsid]["VAULT_BACKEND"] = "kv-v2"
+                vdict = defaults.VAULT_CSI_CONNECTION_CONF
+                for key in vdict.keys():
+                    old_key = key
+                vdict[new_kmsid] = vdict.pop(old_key)
+                vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+                vault.kmsid = vault_resource_name
+                if kv_version == "v1":
+                    vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
+                else:
+                    vdict[new_kmsid]["VAULT_BACKEND"] = "kv-v2"
             KMS.update_csi_kms_vault_connection_details(vdict)
 
         except CommandFailed as cfe:
@@ -4207,7 +4223,9 @@ def pv_encryption_kms_setup_factory(request):
                 raise
             else:
                 vault.kmsid = "1-vault"
-                vault.create_vault_csi_kms_connection_details(kv_version=kv_version)
+                vault.create_vault_csi_kms_connection_details(
+                    kv_version=kv_version, kms_type=kms_type
+                )
 
         return vault
 

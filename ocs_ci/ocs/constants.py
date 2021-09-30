@@ -603,6 +603,13 @@ EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(TEMPLATE_CSI_RBD_DIR, "csi-kms-secre
 EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details.yaml"
 )
+RBD_CSI_VAULT_TOKEN_REVIEWER = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "rbd-csi-vault-token-reviewer.yaml"
+)
+RBD_CSI_VAULT_TENANT_SA = os.path.join(TEMPLATE_CSI_RBD_DIR, "tenant-sa.yaml")
+RBD_CSI_VAULT_TENANT_CONFIGMAP = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "tenant-vault-configmap.yaml"
+)
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )

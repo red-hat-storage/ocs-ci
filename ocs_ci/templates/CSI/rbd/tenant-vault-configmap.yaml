@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ceph-csi-kms-config
+  namespace: openshift-storage
+data:
+  encryptionKMSType: vaulttenantsa
+  vaultBackend: ""
+  vaultBackendPath: ""
+  vaultNamespace: ""
+  vaultAuthNamespace: ""
+  vaultAuthPath: ""
+  vaultRole: ""
