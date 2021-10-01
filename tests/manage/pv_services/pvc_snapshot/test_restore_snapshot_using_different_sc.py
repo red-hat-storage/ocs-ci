@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -95,21 +96,26 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 timeout=180,
             )
 
-        # Create storage classes. Create two RBD storage class.
-        # One storage class will use new pool to verify the bug 1901954
+        # Create storage classes.
         sc_objs = {
             constants.CEPHBLOCKPOOL: [
                 storageclass_factory(
                     interface=constants.CEPHBLOCKPOOL,
-                ).name,
-                storageclass_factory(
-                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
-                ).name,
+                ).name
             ],
             constants.CEPHFILESYSTEM: [
                 storageclass_factory(interface=constants.CEPHFILESYSTEM).name
             ],
         }
+
+        # If ODF >=4.9 create one more storage class that will use new pool
+        # to verify the bug 1901954
+        if float(config.ENV_DATA["ocs_version"]) >= 4.9:
+            sc_objs[constants.CEPHBLOCKPOOL].append(
+                storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
+                ).name
+            )
 
         # Create PVCs out of the snapshots
         restore_pvc_objs = []
