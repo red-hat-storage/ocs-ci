@@ -37,7 +37,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -487,6 +487,7 @@ class Deployment(object):
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         is_ibm_sa_linked = False
+
         for ocs_operator_name in ocs_operator_names:
             package_manifest = PackageManifest(
                 resource_name=ocs_operator_name,
@@ -507,6 +508,13 @@ class Deployment(object):
                         constants.OCS_SECRET, self.namespace
                     )
                     is_ibm_sa_linked = True
+            # create storage system
+            if ocs_version >= version.VERSION_4_9 and (
+                defaults.ODF_OPERATOR_NAME in ocs_operator_name
+            ):
+                csv.wait_for_phase("Installing", timeout=720)
+                time.sleep(30)
+                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
             csv.wait_for_phase("Succeeded", timeout=720)
         ocp_version = version.get_semantic_ocp_version_from_config()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
@@ -557,10 +565,6 @@ class Deployment(object):
             # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
             self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
-
-        # create storage system
-        if ocs_version >= version.VERSION_4_9:
-            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         # Set rook log level
         self.set_rook_log_level()
@@ -1069,6 +1073,10 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
+    # Because custom catalog source will be called: redhat-operators, we need to disable
+    # default sources. This should not be an issue as OCS internal registry images
+    # are now based on OCP registry image
+    disable_default_sources()
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
