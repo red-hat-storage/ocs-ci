@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -95,21 +96,26 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 timeout=180,
             )
 
-        # Create storage classes. Create two RBD storage class.
-        # One storage class will use new pool to verify the bug 1901954
+        # Create storage classes.
         sc_objs = {
             constants.CEPHBLOCKPOOL: [
                 storageclass_factory(
                     interface=constants.CEPHBLOCKPOOL,
-                ).name,
-                storageclass_factory(
-                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
-                ).name,
+                ).name
             ],
             constants.CEPHFILESYSTEM: [
                 storageclass_factory(interface=constants.CEPHFILESYSTEM).name
             ],
         }
+
+        # If ODF >=4.9 create one more storage class that will use new pool
+        # to verify the bug 1901954
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+            sc_objs[constants.CEPHBLOCKPOOL].append(
+                storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
+                ).name
+            )
 
         # Create PVCs out of the snapshots
         restore_pvc_objs = []
