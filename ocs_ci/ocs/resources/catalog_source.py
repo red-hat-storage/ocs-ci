@@ -4,8 +4,9 @@ CatalogSource related functionalities
 import logging
 
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.retry import retry
 
 
@@ -122,3 +123,19 @@ class CatalogSource(OCP):
                 f"Catalog source: {self.resource_name} is not in expected "
                 f"state: {state}"
             )
+
+
+def disable_default_sources():
+    """
+    Disable default sources
+    """
+    logger.info("Disabling default sources")
+    run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="true"))
+
+
+def enable_default_sources():
+    """
+    Enable default sources
+    """
+    logger.info("Enabling default sources")
+    run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="false"))

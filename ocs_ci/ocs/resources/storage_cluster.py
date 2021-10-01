@@ -119,7 +119,7 @@ def ocs_install_verification(
         "ocs_registry_image"
     )
     if ocs_registry_image and ocs_registry_image.endswith(".ci"):
-        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1]
+        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1].split("-")[0]
         log.info(
             f"Check if OCS registry image: {ocs_registry_image} matches with "
             f"CSV: {csv_version}"

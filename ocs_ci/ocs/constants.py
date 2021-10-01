@@ -683,7 +683,7 @@ INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
 NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
-OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CATALOG_SOURCE_NAME = "redhat-operators"
 OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
@@ -1435,3 +1435,8 @@ STORAGE_SYSTEM_STATUS = {
     "VendorCsvReady": "True",
     "VendorSystemPresent": "True",
 }
+
+PATCH_DEFAULT_SOURCES_CMD = (
+    "oc patch operatorhub.config.openshift.io/cluster -p="
+    '\'{{"spec":{{"disableAllDefaultSources":{disable}}}}}\' --type=merge'
+)
