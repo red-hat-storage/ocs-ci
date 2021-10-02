@@ -8,7 +8,6 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-import traceback
 
 import pytest
 from junitparser import JUnitXml
@@ -71,7 +70,7 @@ def _pytest_addoption_cluster_specific(parser):
 
     for i in range(ocsci_config.nclusters):
         # If it's not multicluster then no suffix will be added
-        suffix = (i+1 if ocsci_config.multicluster else '')
+        suffix = i + 1 if ocsci_config.multicluster else ""
         parser.addoption(
             f"--ocsci-conf{suffix}",
             dest=f"ocsci_conf{suffix}",
@@ -91,7 +90,7 @@ def _pytest_addoption_cluster_specific(parser):
         parser.addoption(
             f"--ocs-version{suffix}",
             dest=f"ocs_version{suffix}",
-            help="ocs version for which ocs-ci to be run"
+            help="ocs version for which ocs-ci to be run",
         )
         parser.addoption(
             f"--ocp-version{suffix}",
@@ -243,8 +242,8 @@ def pytest_addoption(parser):
         "--csv-change",
         dest="csv_change",
         help=(
-        "Pattern or string to change in the CSV. Should contain the value to replace "
-        "from and the value to replace to, separated by '::'"
+            "Pattern or string to change in the CSV. Should contain the value to replace "
+            "from and the value to replace to, separated by '::'"
         ),
     )
     parser.addoption(
@@ -253,8 +252,8 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help=(
-        "Runs in development mode. It skips few checks like collecting "
-        "versions, collecting logs, etc"
+            "Runs in development mode. It skips few checks like collecting "
+            "versions, collecting logs, etc"
         ),
     )
     parser.addoption(
@@ -321,7 +320,8 @@ def pytest_configure(config):
             )
             dump_config_to_file(config_file)
             log.info(
-                f"Dump of the consolidated config file is located here: " f"{config_file}"
+                f"Dump of the consolidated config file is located here: "
+                f"{config_file}"
             )
             if config.getoption("--reportportal"):
                 set_rp_client_log_level()
@@ -337,7 +337,8 @@ def pytest_configure(config):
                 config._metadata["Logs URL"] = logs_url
 
             if ocsci_config.RUN["cli_params"].get("teardown") or (
-                "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
+                "deployment" in markers_arg
+                and ocsci_config.RUN["cli_params"].get("deploy")
             ):
                 log.info(
                     "Skipping versions collecting because: Deploy or destroy of "
@@ -346,7 +347,8 @@ def pytest_configure(config):
                 return
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
                 log.info(
-                    "Skipping version collection because we skipped " "the OCS deployment"
+                    "Skipping version collection because we skipped "
+                    "the OCS deployment"
                 )
                 return
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
@@ -364,9 +366,7 @@ def pytest_configure(config):
     try:
         ocs_csv = get_ocs_csv()
         ocs_csv_version = ocs_csv.data["spec"]["version"]
-        config.addinivalue_line(
-            "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-        )
+        config.addinivalue_line("rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}")
     except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
         # might be using exisitng cluster path using GUI installation
         log.warning("Unable to get CSV version for Reporting")
@@ -450,7 +450,7 @@ def process_cluster_cli_params(config):
         ClusterNameNotProvidedError: If a cluster name is missing
         ClusterNameLengthError: If a cluster name is too short or too long
     """
-    suffix = (ocsci_config.cur_index + 1 if ocsci_config.multicluster else '')
+    suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
     cluster_path = get_cli_param(config, f"cluster_path{suffix}")
     if not cluster_path:
         raise ClusterPathNotProvidedError()
@@ -464,8 +464,8 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
-    ocsci_config.RUN["kubeconfig"] = (
-        os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
+    ocsci_config.RUN["kubeconfig"] = os.path.join(
+        cluster_path, ocsci_config.RUN["kubeconfig_location"]
     )
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(

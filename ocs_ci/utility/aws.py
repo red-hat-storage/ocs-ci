@@ -1781,6 +1781,9 @@ def update_config_from_s3(
             s3.meta.client.download_file(bucket_name, filename, auth.name)
             config_yaml = load_yaml(auth.name)
         # set in config and store it for that scope
+        # this if condition required keep tox happy
+        if not config.cluster_ctx:
+            config.initclusterconfigs()
         config.update(config_yaml)
         return config_yaml
     except NoCredentialsError:

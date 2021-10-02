@@ -58,17 +58,22 @@ def init_ocsci_conf(arguments=None):
         arguments (list): Arguments for pytest execution
 
     """
-    if 'multicluster' in arguments:
+    if "multicluster" in arguments:
         parser = argparse.ArgumentParser(add_help=False)
-        subparser = parser.add_subparsers(title='subcommand', dest='subcommand')
-        mcluster_parser = subparser.add_parser("multicluster", description="multicluster nclusters --cluster1 <> --cluster2 <> ...")
+        subparser = parser.add_subparsers(title="subcommand", dest="subcommand")
+        mcluster_parser = subparser.add_parser(
+            "multicluster",
+            description="multicluster nclusters --cluster1 <> --cluster2 <> ...",
+        )
 
         # We need this nclusters here itself to do add_arguments for
         # N number of clusters in the function init_multicluster_ocsci_conf()
-        mcluster_parser.add_argument("nclusters", type=int, help="Number of clusters to be deployed")
+        mcluster_parser.add_argument(
+            "nclusters", type=int, help="Number of clusters to be deployed"
+        )
         args, _ = parser.parse_known_args(arguments)
         init_multicluster_ocsci_conf(arguments, args.nclusters)
-        arguments.remove('multicluster')
+        arguments.remove("multicluster")
         for i in range(args.nclusters):
             arguments.remove(f"--cluster{i+1}")
         arguments.remove(str(args.nclusters))
@@ -79,9 +84,9 @@ def init_ocsci_conf(arguments=None):
         for each in framework.config.multicluster_args:
             for arg in each:
                 if arg.startswith("--"):
-                    match = re.search(r'\d+$', arg)
+                    match = re.search(r"\d+$", arg)
                     if match:
-                        arguments.remove(re.sub(r'\d+$', '', arg))
+                        arguments.remove(re.sub(r"\d+$", "", arg))
                 else:
                     arguments.remove(arg)
         # Add only suffixed(cluster number) cluster args in the args list
@@ -95,6 +100,7 @@ def init_ocsci_conf(arguments=None):
 
 
 def process_ocsci_conf(arguments):
+    print("INSIDE PROCESS OCSI CONF")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ocsci-conf", action="append", default=[])
     parser.add_argument(
@@ -165,7 +171,12 @@ def init_multicluster_ocsci_conf(args, nclusters):
     # user's to pass --cluster$i param followed by normal cluster conf
     # options so that separation of per cluster conf will be easier
     for i in range(nclusters):
-        parser.add_argument(f"--cluster{i+1}", required=True, action='store_true', help=f"cluster{i}-conf")
+        parser.add_argument(
+            f"--cluster{i+1}",
+            required=True,
+            action="store_true",
+            help=f"cluster{i}-conf",
+        )
 
     # Parsing just to enforce `nclusters` number of  --cluster{i} arguments are passed
     _, _ = parser.parse_known_args(args[2:])
@@ -180,8 +191,8 @@ def init_multicluster_ocsci_conf(args, nclusters):
         framework.config.switch_ctx(i)
         process_ocsci_conf(common_argv + multicluster_conf[i][1:])
         for j in range(len(multicluster_conf[i][1:])):
-            if multicluster_conf[i][j+1].startswith("--"):
-                multicluster_conf[i][j+1] = f"{multicluster_conf[i][j+1]}{i + 1}"
+            if multicluster_conf[i][j + 1].startswith("--"):
+                multicluster_conf[i][j + 1] = f"{multicluster_conf[i][j+1]}{i + 1}"
         framework.config.multicluster_args.append(multicluster_conf[i][1:])
         check_config_requirements()
 
@@ -203,12 +214,12 @@ def tokenize_per_cluster_args(args, nclusters):
     multi_cluster_argv = list()
     common_argv = list()
     cluster_ctx = False
-    regexp = re.compile(r'--cluster[0-9]+')
+    regexp = re.compile(r"--cluster[0-9]+")
     index = 0
 
-    for i in range(1, nclusters+1):
+    for i in range(1, nclusters + 1):
         while index < len(args):
-            if args[index] == f'--cluster{i}':
+            if args[index] == f"--cluster{i}":
                 cluster_ctx = True
             elif regexp.search(args[index]):
                 cluster_ctx = False

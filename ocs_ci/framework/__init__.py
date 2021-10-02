@@ -19,6 +19,7 @@ DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class Config:
     AUTH: dict = field(default_factory=dict)
@@ -32,7 +33,6 @@ class Config:
     UI_SELENIUM: dict = field(default_factory=dict)
     PERF: dict = field(default_factory=dict)
     COMPONENTS: dict = field(default_factory=dict)
-
 
     def __post_init__(self):
         self.reset()
@@ -120,7 +120,7 @@ def merge_dict(orig: dict, new: dict) -> dict:
     return orig
 
 
-class MultiClusterConfig():
+class MultiClusterConfig:
     # This class wraps Config() objects so that we can handle
     # multiple cluster contexts
     def __init__(self):
@@ -139,26 +139,41 @@ class MultiClusterConfig():
         self.acm_index = None
 
     def initclusterconfigs(self):
-        for i in range(self.nclusters):
-            self.clusters.append(Config())
-        self.cluster_ctx = self.clusters[0]
-        self.attr_list = (
-            [attr for attr in self.cluster_ctx.__dataclass_fields__.keys()]
-        )
-        self.method_list = (
-            [func for func in dir(Config) if callable(getattr(Config, func))
-             and not func.startswith("__")]
-        )
+        if not self.cluster_ctx:
+            for i in range(self.nclusters):
+                self.clusters.append(Config())
+            self.cluster_ctx = self.clusters[0]
+            self.attr_list = [
+                attr for attr in self.cluster_ctx.__dataclass_fields__.keys()
+            ]
+            self.method_list = [
+                func
+                for func in dir(Config)
+                if callable(getattr(Config, func)) and not func.startswith("__")
+            ]
+            self._refresh_ctx()
+
+    def update(self, user_dict):
+        self.cluster_ctx.update(user_dict)
         self._refresh_ctx()
+
+    def reset(self):
+        self.cluster_ctx.reset()
+        self._refresh_ctx()
+
+    def get_defaults(self):
+        return self.cluster_ctx.get_defaults()
 
     def reset_ctx(self):
         self.cluster_ctx = self.clusters[0]
         self._refresh_ctx()
 
     def _refresh_ctx(self):
-        [self.__setattr__(attr, self.cluster_ctx.__getattribute__(attr)) for attr in self.attr_list]
-        [self.__setattr__(method, self.cluster_ctx.__getattribute__(method)) for method in self.method_list]
-
+        [
+            self.__setattr__(attr, self.cluster_ctx.__getattribute__(attr))
+            for attr in self.attr_list
+        ]
+        self.to_dict = self.cluster_ctx.to_dict
         if self.RUN.get("kubeconfig"):
             logger.debug("switching kubeconfig")
             os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
