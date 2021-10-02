@@ -323,20 +323,8 @@ def noobaa_running_node_restart(pod_name):
         pod_name (str): Name of noobaa pod
 
     """
-    nb_node_name = get_node_where_noobaa_pod_running(pod_name=pod_name)
-    log.info(f"{pod_name} is running on: {nb_node_name}")
-    log.info(f"Restating node: {nb_node_name}")
-    factory = platform_nodes.PlatformNodesFactory()
-    nodes = factory.get_nodes_platform()
-    ocp_nodes = get_node_objs(node_names=nb_node_name)
-    nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=True)
 
-    # Validate nodes are up and running
-    wait_for_nodes_status()
-    ceph_health_check(tries=30, delay=60)
-
-    # Validate noobaa pod is re-spinned and in running state
-    pod_obj = pod.get_pod_obj(
+    nb_pod_obj = pod.get_pod_obj(
         (
             get_pod_name_by_pattern(
                 pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -344,38 +332,21 @@ def noobaa_running_node_restart(pod_name):
         )[0],
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
-    helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+    nb_node_name = pod.get_pod_node(nb_pod_obj).name
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    nb_nodes = get_node_objs(node_names=nb_node_name)
+    log.info(f"{pod_name} is running on {nb_node_name}")
+    log.info(f"Restating node: {nb_node_name}....")
+    nodes.restart_nodes_by_stop_and_start(nodes=nb_nodes, force=True)
+
+    # Validate nodes are up and running
+    wait_for_nodes_status()
+    ceph_health_check(tries=30, delay=60)
+    helpers.wait_for_resource_state(nb_pod_obj, constants.STATUS_RUNNING, timeout=180)
 
 
-def get_node_where_noobaa_pod_running(pod_name):
-    """
-    Get the node name where noobaa pod is running
-
-    Args:
-        pod_name (str): Name of noobaa pod
-
-    Returns:
-        ocs_nodes: A list of ocs nodes
-
-    """
-    pods_openshift_storage = pod.get_all_pods(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-    )
-    noobaa_nodes = list()
-    for pod_obj in pods_openshift_storage:
-        if (
-            pod_name in pod_obj.name
-            and "noobaa-endpoint" not in pod_obj.name
-            and "noobaa-operator" not in pod_obj.name
-        ):
-            try:
-                noobaa_nodes.append(pod_obj.data["spec"]["nodeName"])
-            except Exception as e:
-                log.info(e)
-    return set(noobaa_nodes)
-
-
-def check_all_obcs_status(namespace):
+def check_all_obcs_status(namespace=None):
     """
     Check all OBCs status in given namespace
 

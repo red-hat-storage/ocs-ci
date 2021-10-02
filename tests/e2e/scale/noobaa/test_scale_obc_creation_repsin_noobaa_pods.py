@@ -28,6 +28,7 @@ class TestScaleOCBCreation(E2ETest):
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     scale_obc_count = 1000
+    scale_obc_count_io = 100
     num_obc_batch = 100
 
     @pytest.mark.parametrize(
@@ -61,11 +62,17 @@ class TestScaleOCBCreation(E2ETest):
             ),
         ],
     )
-    def test_scale_rgw_obc_creation(self, tmp_path, pod_name, sc_name, timeout=60):
+    def test_scale_obc_creation_noobaa_pod_respin(
+        self, tmp_path, pod_name, sc_name, mcg_job_factory
+    ):
         """
         OBC creation using RGW storage class
         This test case only runs on vSphere cluster deployment
         """
+
+        # Create OBCs with FIO running using mcg_job_factory()
+        for i in range(self.scale_obc_count_io):
+            exec(f"job{i} = mcg_job_factory()")
 
         log.info(
             f"Start creating  {self.scale_obc_count} "
