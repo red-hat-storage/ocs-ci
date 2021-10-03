@@ -1,12 +1,10 @@
 from semantic_version import Version
 import logging
-import tempfile
 import time
 
 from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler, run_cmd
-from ocs_ci.utility import templating
+from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -65,19 +63,9 @@ class DeploymentUI(PageNavigator):
 
         """
         try:
-            catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
-            image = config.DEPLOYMENT.get(
-                "ocs_registry_image", config.DEPLOYMENT["default_ocs_registry_image"]
-            )
-            catalog_source_data["spec"]["image"] = image
-            catalog_source_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="catalog_source_manifest", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                catalog_source_data, catalog_source_manifest.name
-            )
-            run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=300)
-            run_cmd(f"oc create -f {constants.OLM_YAML}", timeout=300)
+            from ocs_ci.deployment.deployment import create_catalog_source
+
+            create_catalog_source()
             time.sleep(60)
         except Exception as e:
             logger.info(e)
@@ -99,6 +87,9 @@ class DeploymentUI(PageNavigator):
         if self.operator is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        if self.operator is ODF_OPERATOR:
+            time.sleep(60)
+            self.refresh_page()
         self.verify_operator_succeeded(operator=self.operator)
 
     def install_local_storage_operator(self):
@@ -108,7 +99,6 @@ class DeploymentUI(PageNavigator):
         """
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
-
             logger.info("Search OCS/ODF Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
@@ -128,7 +118,15 @@ class DeploymentUI(PageNavigator):
         Install Storage Cluster
 
         """
-        self.search_operator_installed_operators_page(operator=self.operator)
+        if self.operator == ODF_OPERATOR:
+            self.navigate_installed_operators_page()
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["drop_down_projects"]
+            )
+            self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
+        else:
+            self.search_operator_installed_operators_page(operator=self.operator)
+
         logger.info("Click on OCS/ODF operator on 'Installed Operators' page")
         if self.operator == ODF_OPERATOR:
             self.do_click(
@@ -326,8 +324,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version in ("4.7", "4.8"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -336,6 +333,16 @@ class DeploymentUI(PageNavigator):
         elif self.ocp_version == "4.6":
             self.do_click(self.dep_loc["project_dropdown"], enable_screenshot=True)
             self.do_click(self.dep_loc[operator], enable_screenshot=True)
+        elif self.ocp_version == "4.9":
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["drop_down_projects"]
+            )
+            self.do_click(
+                self.dep_loc["enable_default_porjects"], enable_screenshot=True
+            )
+            self.do_click(
+                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+            )
 
     def install_ocs_ui(self):
         """

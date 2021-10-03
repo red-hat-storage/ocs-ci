@@ -109,6 +109,16 @@ deployment_4_7 = {
 }
 
 deployment_4_9 = {
+    "drop_down_projects": (
+        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_default_porjects": ('span[id="no-label-switch-on-off"]', By.CSS_SELECTOR),
+    "choose_openshift-storage_project": (
+        "//span[text()='openshift-storage']",
+        By.XPATH,
+    ),
+    "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     "click_odf_operator": (
         'a[data-test="odf-operator-ocs-catalogsource-openshift-marketplace"]',
         By.CSS_SELECTOR,
