@@ -349,6 +349,7 @@ class ElasticSearch(object):
         except CommandFailed:
             # in case of the es-dumper did not deployed yet, trying to delete it
             # will failed.
+            log.warning("es-dumper pod does not exist")
             pass
 
         try:
@@ -357,6 +358,7 @@ class ElasticSearch(object):
         except CommandFailed:
             # in case of the elastic-search did not deployed yet, trying to
             # delete it will failed.
+            log.warning("elastic-search pod does not exist")
             pass
 
         log.info("Deleting the es project")
