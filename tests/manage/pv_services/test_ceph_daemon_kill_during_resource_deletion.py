@@ -218,7 +218,12 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
         for pod_obj in self.pod_objs:
-            pod_obj.workload_setup(storage_type="fs")
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                pod_obj.pvc.storage_type = "block"
+            else:
+                pod_obj.pvc.storage_type = "fs"
+            pod_obj.workload_setup(storage_type=pod_obj.pvc.storage_type)
         log.info("Setup for running IO is completed on pods")
 
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
@@ -230,7 +235,10 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
             else:
                 io_size = self.pvc_size - 1
             pod_obj.run_io(
-                storage_type="fs", size=f"{io_size}G", fio_filename=f"{pod_obj.name}_io"
+                storage_type=pod_obj.pvc.storage_type,
+                size=f"{io_size}G",
+                fio_filename=f"{pod_obj.name}_io",
+                end_fsync=1,
             )
         log.info("IO started on all pods.")
 
@@ -300,7 +308,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         # Verify PVs are deleted
         for pv_obj in pv_objs:
             assert pv_obj.ocp.wait_for_delete(
-                pv_obj.name, 120
+                pv_obj.name, 600
             ), f"PV {pv_obj.name} is not deleted"
         log.info("Verified: PVs are deleted.")
 
