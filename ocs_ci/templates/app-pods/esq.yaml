@@ -1,3 +1,4 @@
+---
 apiVersion: elasticsearch.k8s.elastic.co/v1
 kind: Elasticsearch
 metadata:
@@ -9,16 +10,19 @@ spec:
   - name: default
     count: 1
     config:
+      node.store.allow_mmap: false
+
       node.master: true
       node.data: true
       node.ingest: true
-      node.store.allow_mmap: false
       xpack.security.authc:
           anonymous:
             username: anonymous
             roles: superuser
             authz_exception: false
+
   http:
     tls:
       selfSignedCertificate:
         disabled: true
+...

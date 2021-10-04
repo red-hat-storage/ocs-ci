@@ -87,6 +87,7 @@ anywhere else.
 * `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
+* `proxy` - Set if the cluster is deployed in a proxy environment
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
@@ -108,6 +109,8 @@ anywhere else.
   already defined. Labeling happens during post OCP deployment procedures.
   If proper labeling is not possible, an exception (which will fail OCP
   deployment) is raised. The default is False.
+* `rook_log_level` - If defined, it will change rook_log_level to specified value (e.g. DEBUG),
+   after the subscription to the OCS.
 
 
 #### REPORTING
@@ -197,6 +200,8 @@ higher priority).
 * `VAULT_BACKEND_PATH` - Vault path name used in ocs cluster
 * `VAULT_POLICY` - Vault policy name used in ocs cluster
 * `huge_pages` - True if you would like to enable HUGE PAGES.
+* `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
+* `client_http_proxy` - proxy configuration used by client to access OCP cluster
 
 #### UPGRADE
 

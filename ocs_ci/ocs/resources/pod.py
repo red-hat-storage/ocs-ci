@@ -23,7 +23,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NonUpgradedImagesFoundError,
-    ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
     ResourceNotFoundError,
@@ -302,6 +301,9 @@ class Pod(OCS):
         bs="4K",
         end_fsync=0,
         invalidate=None,
+        buffer_compress_percentage=None,
+        buffer_pattern=None,
+        readwrite=None,
     ):
         """
         Execute FIO on a pod
@@ -331,6 +333,10 @@ class Pod(OCS):
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
             invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+            buffer_compress_percentage (int): If this is set, then fio will attempt to provide I/O buffer
+                content (on WRITEs) that compresses to the specified level
+            buffer_pattern (str): fio will fill the I/O buffers with this pattern
+            readwrite (str): Type of I/O pattern default is randrw from yaml
 
         """
         if not self.wl_setup_done:
@@ -341,11 +347,13 @@ class Pod(OCS):
             self.io_params["rwmixread"] = rw_ratio
         else:
             self.io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
-
         if invalidate is not None:
             self.io_params["invalidate"] = invalidate
-
-        self.io_params["runtime"] = runtime
+        if runtime != 0:
+            self.io_params["runtime"] = runtime
+        else:
+            del self.io_params["runtime"]
+            del self.io_params["time_based"]
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params["size"] = size
         if fio_filename:
@@ -354,6 +362,12 @@ class Pod(OCS):
         self.io_params["rate"] = rate
         self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
+        if buffer_compress_percentage:
+            self.io_params["buffer_compress_percentage"] = buffer_compress_percentage
+        if buffer_pattern:
+            self.io_params["buffer_pattern"] = buffer_pattern
+        if readwrite:
+            self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
@@ -503,6 +517,7 @@ def get_all_pods(
     selector_label="app",
     exclude_selector=False,
     wait=False,
+    field_selector=None,
 ):
     """
     Get all pods in a namespace.
@@ -514,12 +529,18 @@ def get_all_pods(
             Example: ['alertmanager','prometheus']
         selector_label (str): Label of selector (default: app).
         exclude_selector (bool): If list of the resource selector not to search with
+        field_selector (str): Selector (field query) to filter on, supports
+            '=', '==', and '!='. (e.g. status.phase=Running)
 
     Returns:
         list: List of Pod objects
 
     """
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(
+        kind=constants.POD,
+        namespace=namespace,
+        field_selector=field_selector,
+    )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
     # So, we are waiting for the pods to come up on new node
@@ -1112,7 +1133,11 @@ def get_pod_obj(name, namespace=None):
 
 
 def get_pod_logs(
-    pod_name, container=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE, previous=False
+    pod_name,
+    container=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    previous=False,
+    all_containers=False,
 ):
     """
     Get logs from a given pod
@@ -1121,6 +1146,7 @@ def get_pod_logs(
     container (str): Name of the container
     namespace (str): Namespace of the pod
     previous (bool): True, if pod previous log required. False otherwise.
+    all_containers (bool): fetch logs from all containers of the resource
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
@@ -1131,6 +1157,9 @@ def get_pod_logs(
         cmd += f" -c {container}"
     if previous:
         cmd += " --previous"
+    if all_containers:
+        cmd += " --all-containers=true"
+
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
 
@@ -1393,33 +1422,15 @@ def wait_for_storage_pods(timeout=200):
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
+        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
+        not in pod.get_labels().values()
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
             state = constants.STATUS_COMPLETED
-
-        try:
-            helpers.wait_for_resource_state(
-                resource=pod_obj, state=state, timeout=timeout
-            )
-        except ResourceWrongStatusException:
-            # 'rook-ceph-crashcollector' on the failed node stucks at
-            # pending state. BZ 1810014 tracks it.
-            # Ignoring 'rook-ceph-crashcollector' pod health check as
-            # WA and deleting its deployment so that the pod
-            # disappears. Will revert this WA once the BZ is fixed
-            if "rook-ceph-crashcollector" in pod_obj.name:
-                ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-                pod_name = pod_obj.name
-                deployment_name = "-".join(pod_name.split("-")[:-2])
-                command = f"delete deployment {deployment_name}"
-                ocp_obj.exec_oc_cmd(command=command)
-                logger.info(f"Deleted deployment for pod {pod_obj.name}")
-            else:
-                raise
+        helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
@@ -1438,10 +1449,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
 
     namespace = config.ENV_DATA["cluster_namespace"]
-    pod = OCP(
-        kind=constants.POD,
-        namespace=namespace,
-    )
+    pod = OCP(kind=constants.POD, namespace=namespace)
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
         f"and upgraded."

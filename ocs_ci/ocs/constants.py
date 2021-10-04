@@ -110,6 +110,7 @@ LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
+STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
@@ -133,6 +134,9 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
+STATEFULSET = "StatefulSet"
+BACKINGSTORE = "Backingstore"
+BUCKETCLASS = "Bucketclass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -208,6 +212,8 @@ RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 
+# Default pools
+DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
@@ -270,6 +276,8 @@ CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
+ODF_OPERATOR_CONTROL_MANAGER_LABEL = "control-plane=controller-manager"
+ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
@@ -287,6 +295,12 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+
+# Noobaa Deployments and Statefulsets
+NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
+NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
+NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
+NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -516,7 +530,13 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
+SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
+
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
+
+STORAGE_SYSTEM_ODF_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
+)
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
@@ -569,6 +589,9 @@ MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )
 MACHINESET_YAML_RHV = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-rhv.yaml")
+MACHINESET_YAML_VMWARE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-vmware.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -690,6 +713,7 @@ RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
+ROSA_PLATFORM = "rosa"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
     BAREMETAL_PLATFORM,
@@ -697,7 +721,14 @@ ON_PREM_PLATFORMS = [
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
 ]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM, IBMCLOUD_PLATFORM]
+CLOUD_PLATFORMS = [
+    AWS_PLATFORM,
+    AZURE_PLATFORM,
+    GCP_PLATFORM,
+    IBMCLOUD_PLATFORM,
+    ROSA_PLATFORM,
+    OPENSHIFT_DEDICATED_PLATFORM,
+]
 BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 
 # AWS i3 worker instance for LSO
@@ -1080,6 +1111,7 @@ FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
 FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
+FLEXY_VSPHERE_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml")
 FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
@@ -1170,6 +1202,13 @@ SCALE_WORKER_DICT = {
     9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
+SCALE_PVC_ROUND_UP_VALUE = {
+    1500: 1520,
+    3000: 3040,
+    4500: 4560,
+    6000: 6080,
+    9000: 9120,
+}
 
 # Production config instance type
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
@@ -1378,3 +1417,22 @@ SHA_SEPARATOR = "@sha256:"
 
 # ibmcloud related constants
 IBMCLOUD_VOLUME_NAME = "ibmvolume"
+
+# manifest.json and background.js files used for Chrome extention configuring
+# authenticated proxy, see also:
+# https://botproxy.net/docs/how-to/setting-chromedriver-proxy-auth-with-selenium-using-python/
+CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-manifest.json.j2"
+)
+CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-background.js.j2"
+)
+
+# storage system status
+STORAGE_SYSTEM_STATUS = {
+    "Available": "True",
+    "Progressing": "False",
+    "StorageSystemInvalid": "False",
+    "VendorCsvReady": "True",
+    "VendorSystemPresent": "True",
+}

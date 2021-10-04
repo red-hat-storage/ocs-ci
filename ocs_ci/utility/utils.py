@@ -2438,7 +2438,11 @@ def skipif_ui_not_support(ui_test):
     from ocs_ci.ocs.ui.views import locators
 
     ocp_version = get_running_ocp_version()
-    if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
         return True
     try:
         locators[ocp_version][ui_test]
@@ -3011,7 +3015,7 @@ def get_module_ip(terraform_state_file, module):
     """
     ips = []
     with open(terraform_state_file) as fd:
-        obj = hcl.load(fd)
+        obj = json.loads(fd.read())
 
         if config.ENV_DATA.get("folder_structure"):
             resources = obj["resources"]

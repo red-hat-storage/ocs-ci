@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -95,35 +96,48 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 timeout=180,
             )
 
-        # Create storage classes
+        # Create storage classes.
         sc_objs = {
-            constants.CEPHBLOCKPOOL: storageclass_factory(
-                interface=constants.CEPHBLOCKPOOL
-            ).name,
-            constants.CEPHFILESYSTEM: storageclass_factory(
-                interface=constants.CEPHFILESYSTEM
-            ).name,
+            constants.CEPHBLOCKPOOL: [
+                storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                ).name
+            ],
+            constants.CEPHFILESYSTEM: [
+                storageclass_factory(interface=constants.CEPHFILESYSTEM).name
+            ],
         }
+
+        # If ODF >=4.9 create one more storage class that will use new pool
+        # to verify the bug 1901954
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+            sc_objs[constants.CEPHBLOCKPOOL].append(
+                storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
+                ).name
+            )
 
         # Create PVCs out of the snapshots
         restore_pvc_objs = []
         log.info("Creating new PVCs from snapshots")
         for snap_obj in snap_objs:
-            log.info(f"Creating a PVC from snapshot {snap_obj.name}")
-            restore_pvc_obj = snapshot_restore_factory(
-                snapshot_obj=snap_obj,
-                storageclass=sc_objs[snap_obj.interface],
-                size=f"{self.pvc_size}Gi",
-                volume_mode=snap_obj.parent_volume_mode,
-                access_mode=snap_obj.parent_access_mode,
-                status="",
-            )
+            for storageclass in sc_objs[snap_obj.interface]:
+                log.info(f"Creating a PVC from snapshot {snap_obj.name}")
+                restore_pvc_obj = snapshot_restore_factory(
+                    snapshot_obj=snap_obj,
+                    storageclass=storageclass,
+                    size=f"{self.pvc_size}Gi",
+                    volume_mode=snap_obj.parent_volume_mode,
+                    access_mode=snap_obj.parent_access_mode,
+                    status="",
+                )
 
-            log.info(
-                f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}"
-            )
-            restore_pvc_obj.md5sum = snap_obj.md5sum
-            restore_pvc_objs.append(restore_pvc_obj)
+                log.info(
+                    f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}."
+                    f"Used the storage class {storageclass}"
+                )
+                restore_pvc_obj.md5sum = snap_obj.md5sum
+                restore_pvc_objs.append(restore_pvc_obj)
         log.info("Created new PVCs from all the snapshots")
 
         # Confirm that the restored PVCs are Bound

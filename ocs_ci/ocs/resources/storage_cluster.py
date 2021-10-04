@@ -3,9 +3,9 @@ StorageCluster related functionalities
 """
 import logging
 import tempfile
+import yaml
 
 from jsonschema import validate
-from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -16,11 +16,27 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
-from ocs_ci.ocs.resources.pod import get_pods_having_label, get_osd_pods
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    get_osd_pods,
+    get_mon_pods,
+    get_mds_pods,
+    get_mgr_pods,
+    get_rgw_pods,
+    get_plugin_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_rbdfsplugin_provisioner_pods,
+)
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
-from ocs_ci.utility import localstorage, utils, templating, kms as KMS
+from ocs_ci.utility import (
+    localstorage,
+    utils,
+    templating,
+    kms as KMS,
+    version,
+)
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -93,10 +109,10 @@ def ocs_install_verification(
     ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
     csv_version = ocs_csv.data["spec"]["version"]
-    ocs_version = config.ENV_DATA["ocs_version"]
+    ocs_version = version.get_semantic_ocs_version_from_config()
     log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
     assert (
-        ocs_version in csv_version
+        f"{ocs_version}" in csv_version
     ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
     # Verify if OCS CSV has the same version in provided CI build.
     ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
@@ -119,6 +135,20 @@ def ocs_install_verification(
                 f"OCS registry image version: {ocs_registry_image} mismatch "
                 f"with CSV version {csv_version}"
             )
+
+    # Verify Storage System status
+    if ocs_version >= version.VERSION_4_9:
+        log.info("Verifying storage system status")
+        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
+        storage_system_data = storage_system.get()
+        storage_system_status = {}
+        for condition in storage_system_data["items"][0]["status"]["conditions"]:
+            storage_system_status[condition["type"]] = condition["status"]
+        log.debug(f"storage system status: {storage_system_status}")
+        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
+            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+            f" but found {storage_system_status}"
+        )
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
@@ -143,14 +173,12 @@ def ocs_install_verification(
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
             rgw_count = get_rgw_count(
-                ocs_version, post_upgrade_verification, version_before_upgrade
+                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
             )
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
     max_eps = (
-        constants.MAX_NB_ENDPOINT_COUNT
-        if float(config.ENV_DATA["ocs_version"]) >= 4.6
-        else 1
+        constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
     )
 
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
@@ -159,7 +187,7 @@ def ocs_install_verification(
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        if ocs_version < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
     resources_dict = {
@@ -182,6 +210,13 @@ def ocs_install_verification(
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
                 constants.RGW_APP_LABEL: rgw_count,
+            }
+        )
+
+    if ocs_version >= version.VERSION_4_9:
+        resources_dict.update(
+            {
+                constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
             }
         )
 
@@ -222,7 +257,7 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
-    if Version.coerce(ocs_version) >= Version.coerce("4.9"):
+    if ocs_version >= version.VERSION_4_10:
         # TODO: Add rbd-thick storage class verification in external mode cluster upgraded
         # to OCS 4.8 when the bug 1978542 is fixed
         # Skip rbd-thick storage class verification in external mode upgraded cluster. This is blocked by bug 1978542
@@ -365,7 +400,7 @@ def ocs_install_verification(
 
     # Verify CSI snapshotter sidecar container is not present
     # if the OCS version is < 4.6
-    if float(config.ENV_DATA["ocs_version"]) < 4.6:
+    if ocs_version < version.VERSION_4_6:
         log.info("Verifying CSI snapshotter is not present.")
         provisioner_pods = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -446,9 +481,12 @@ def ocs_install_verification(
             f" the actaul failure domain is {failure_domain}"
         )
 
-    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
+    if ocs_version >= version.VERSION_4_7:
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
+
+    if config.ENV_DATA.get("is_multus_enabled"):
+        verify_multus_network()
 
 
 def osd_encryption_verification():
@@ -460,8 +498,8 @@ def osd_encryption_verification():
         EnvironmentError: The OSD is not encrypted
 
     """
-    ocs_version = float(config.ENV_DATA["ocs_version"])
-    if ocs_version < 4.6:
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_6:
         error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
         raise UnsupportedFeatureError(error_message)
 
@@ -702,8 +740,8 @@ def setup_ceph_debug():
     ceph_debug_log_configmap_data = templating.load_yaml(
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
-    ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) < Version.coerce("4.8"):
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_8:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
     else:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
@@ -754,3 +792,70 @@ def get_osd_replica_count():
         sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("replica")
     )
     return replica_count
+
+
+def verify_multus_network():
+    """
+    Verify Multus network(s) created successfully and are present on relevant pods.
+    """
+    with open(constants.MULTUS_YAML, mode="r") as f:
+        multus_public_data = yaml.load(f)
+        multus_namespace = multus_public_data["metadata"]["namespace"]
+        multus_name = multus_public_data["metadata"]["name"]
+        multus_public_network_name = f"{multus_namespace}/{multus_name}"
+
+    log.info("Verifying multus NetworkAttachmentDefinitions")
+    ocp.OCP(
+        resource_name=multus_public_network_name,
+        kind="network-attachment-definitions",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    # TODO: also check if private NAD exists
+
+    log.info("Verifying multus public network exists on ceph pods")
+    osd_pods = get_osd_pods()
+    for _pod in osd_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+    # TODO: also check private network if it exists on OSD pods
+
+    mon_pods = get_mon_pods()
+    mds_pods = get_mds_pods()
+    mgr_pods = get_mgr_pods()
+    rgw_pods = get_rgw_pods()
+    ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
+    for _pod in ceph_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+
+    log.info("Verifying multus public network exists on CSI pods")
+    csi_pods = []
+    interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+    for interface in interfaces:
+        plugin_pods = get_plugin_pods(interface)
+        csi_pods += plugin_pods
+
+    cephfs_provisioner_pods = get_cephfsplugin_provisioner_pods()
+    rbd_provisioner_pods = get_rbdfsplugin_provisioner_pods()
+
+    csi_pods += cephfs_provisioner_pods
+    csi_pods += rbd_provisioner_pods
+
+    for _pod in csi_pods:
+        assert (
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
+            == multus_public_network_name
+        )
+
+    log.info("Verifying StorageCluster multus network data")
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    network_data = sc_data["spec"]["network"]
+    assert network_data["provider"] == "multus"
+    selectors = network_data["selectors"]
+    assert selectors["public"] == f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+    # TODO: also check private network if it exists

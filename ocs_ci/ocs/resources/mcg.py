@@ -28,7 +28,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
@@ -170,7 +170,7 @@ class MCG:
             or storagecluster_independent_check()
         ):
             if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
-                float(config.ENV_DATA["ocs_version"]) > 4.5
+                version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
             ):
                 logger.info("Checking whether RGW pod is not present")
                 pods = pod.get_pods_having_label(
@@ -784,7 +784,7 @@ class MCG:
         bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
         placement_parameter = (
             f"{constants.PLACEMENT_BUCKETCLASS} "
-            if float(config.ENV_DATA["ocs_version"]) >= 4.7
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
             else ""
         )
         self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")

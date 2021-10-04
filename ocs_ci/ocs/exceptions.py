@@ -260,11 +260,59 @@ class PoolNotFound(Exception):
     pass
 
 
+class PoolDidNotReachReadyState(Exception):
+    pass
+
+
+class PoolStateIsUnknow(Exception):
+    pass
+
+
+class PoolNotDeleted(Exception):
+    pass
+
+
 class PoolDataNotErased(Exception):
     pass
 
 
+class PoolSizeWrong(Exception):
+    pass
+
+
+class PoolCompressionWrong(Exception):
+    pass
+
+
+class PoolNotDeletedFromUI(Exception):
+    pass
+
+
+class PoolCephValueNotMatch(Exception):
+    pass
+
+
+class StorageClassNotDeletedFromUI(Exception):
+    pass
+
+
 class PvcNotDeleted(Exception):
+    pass
+
+
+class StorageclassNotCreated(Exception):
+    pass
+
+
+class StorageclassIsNotDeleted(Exception):
+    pass
+
+
+class ResourceNotDeleted(Exception):
+    pass
+
+
+class PageNotLoaded(Exception):
     pass
 
 
@@ -349,4 +397,16 @@ class IPAMAssignUpdateFailed(Exception):
 
 
 class NodeHasNoAttachedVolume(Exception):
+    pass
+
+
+class NotSupportedProxyConfiguration(Exception):
+    pass
+
+
+class OCSWorkerScaleFailed(Exception):
+    pass
+
+
+class OSDScaleFailed(Exception):
     pass

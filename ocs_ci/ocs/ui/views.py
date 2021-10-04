@@ -31,6 +31,7 @@ deployment = {
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
@@ -214,6 +215,7 @@ pvc = {
         'button[data-test="storageclass-dropdown"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class_name": ('//*[text()="{}"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
         'a[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,
@@ -283,6 +285,7 @@ pvc_4_8 = {
     ),
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -309,6 +312,10 @@ page_nav = {
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
+    "block_pool_link": (
+        'a[data-test-id="horizontal-link-Block Pools"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 add_capacity = {
@@ -328,8 +335,63 @@ add_capacity = {
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+}
+
+block_pool = {
+    "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
+    "new_pool_name": (
+        'input[data-test="new-pool-name-textbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "first_select_replica": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
+    "second_select_replica_2": ("//button[text()='2-way Replication']", By.XPATH),
+    "second_select_replica_3": ("//button[text()='3-way Replication']", By.XPATH),
+    "conpression_checkbox": (
+        'input[data-test="compression-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "pool_confirm_create": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "actions_inside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
+    "edit_pool_inside_pool": (
+        'button[data-test-action="Edit BlockPool"]',
+        By.CSS_SELECTOR,
+    ),
+    "delete_pool_inside_pool": (
+        'button[data-test-action="Delete BlockPool"]',
+        By.CSS_SELECTOR,
+    ),
+    "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
+    "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
+    "compression_checkbox_edit": (
+        'input[data-test="compression-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+}
+
+storageclass = {
+    "create_storageclass_button": ("Create StorageClass", By.LINK_TEXT),
+    "input_storageclass_name": ('input[id="storage-class-name"]', By.CSS_SELECTOR),
+    "provisioner_dropdown": (
+        'button[data-test="storage-class-provisioner-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "rbd_provisioner": ("openshift-storage.rbd.csi.ceph.com", By.LINK_TEXT),
+    "pool_dropdown": ('button[id="pool-dropdown-id"]', By.CSS_SELECTOR),
+    "save_storageclass": ('button[id="save-changes"]', By.CSS_SELECTOR),
+    "action_inside_storageclass": (
+        'button[data-test-id="actions-menu-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "delete_inside_storageclass": (
+        'button[data-test-action="Delete StorageClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "confirm_delete_inside_storageclass": ("//button[text()='Delete']", By.XPATH),
 }
 
 validation = {
@@ -397,6 +459,8 @@ locators = {
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "validation": {**validation, **validation_4_8},
         "add_capacity": add_capacity,
+        "block_pool": block_pool,
+        "storageclass": storageclass,
     },
     "4.7": {
         "login": login,

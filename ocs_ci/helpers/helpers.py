@@ -139,6 +139,7 @@ def create_pod(
     command=None,
     command_args=None,
     deploy_pod_status=constants.STATUS_COMPLETED,
+    subpath=None,
 ):
     """
     Create a pod
@@ -163,6 +164,7 @@ def create_pod(
             on the pod
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
+        subpath (str): Value of subPath parameter in pod yaml
 
     Returns:
         Pod: A Pod instance
@@ -275,6 +277,14 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
+
+    if subpath:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
+                "subPath"
+            ] = subpath
+        else:
+            pod_data["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = subpath
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
@@ -656,9 +666,12 @@ def create_multiple_pvcs(
         do_reload (bool): True for wait for reloading PVC after its creation,
             False otherwise
         access_mode (str): The kind of access mode for PVC
+        burst (bool): True for bulk creation, False ( default) for multiple creation
 
     Returns:
-         list: List of PVC objects
+         ocs_objs (list): List of PVC objects
+         tmpdir (str): The full path of the directory in which the yamls for pvc objects creation reside
+
     """
     if not burst:
         if access_mode == "ReadWriteMany" and "rbd" in sc_name:
@@ -700,7 +713,7 @@ def create_multiple_pvcs(
         ocs_objs.append(pvc.PVC(**pvc_data))
 
     logger.info("Creating all PVCs as bulk")
-    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    oc = OCP(kind="pod", namespace=namespace)
     cmd = f"create -f {tmpdir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
@@ -713,7 +726,24 @@ def create_multiple_pvcs(
     )
     time.sleep(number_of_pvc)
 
-    return ocs_objs
+    return ocs_objs, tmpdir
+
+
+def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list):
+    """
+    Deletes all the pvcs created from yaml file in a provided dir
+    Args:
+        pvc_yaml_dir (str): Directory in which yaml file resides
+        pv_names_list (str): List of pv objects to be deleted
+    """
+    oc = OCP(kind="pod", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"delete -f {pvc_yaml_dir}/"
+    oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    time.sleep(len(pv_names_list) / 2)
+
+    for pv_name in pv_names_list:
+        validate_pv_delete(pv_name)
 
 
 def verify_block_pool_exists(pool_name):
@@ -836,6 +866,45 @@ def validate_cephfilesystem(fs_name):
         pass
 
     return True if (ceph_validate and ocp_validate) else False
+
+
+def create_ocs_object_from_kind_and_name(
+    kind, resource_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
+    """
+    Create OCS object from kind and name
+
+    Args:
+        kind (str): resource kind like CephBlockPool, pvc.
+        resource_name (str): name of the resource.
+        namespace (str) the namespace of the resource.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS (obj): returns OCS object from kind and name.
+
+    """
+    ocp_object = OCP(kind=kind, resource_name=resource_name, namespace=namespace).get()
+    return OCS(**ocp_object)
+
+
+def remove_ocs_object_from_list(kind, resource_name, object_list):
+    """
+    Given a list of OCS objects, the function removes the object with kind and resource from the list
+
+    Args:
+        kind (str): resource kind like CephBlockPool, pvc.
+        resource_name (str): name of the resource.
+        object_list (array): Array of OCS objects.
+
+    Returns:
+        (array): Array of OCS objects without removed object.
+
+    """
+
+    for obj in object_list:
+        if obj.name == resource_name and obj.kind == kind:
+            object_list.remove(obj)
+            return object_list
 
 
 def get_all_storageclass_names():
@@ -1363,8 +1432,8 @@ def get_provision_time(interface, pvc_name, status="start"):
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
-        for pv_name in pvc_name:
-            name = pv_name.name
+        for i in range(0, len(pvc_name)):
+            name = pvc_name[i].name
             stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
@@ -1517,7 +1586,9 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
+def measure_pv_deletion_time_bulk(
+    interface, pv_name_list, wait_time=60, return_log_times=False
+):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
@@ -1525,9 +1596,14 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
         wait_time (int): Seconds to wait before collecting CSI log
+        return_log_times (bool): Determines the return value -- if False, dictionary of pv_names with the deletion time
+                is returned; if True -- the dictionary of pv_names with the tuple of (srart_deletion_time,
+                end_deletion_time) is returned
 
     Returns:
-        pv_dict (dict): Dictionary of pv_name with deletion time.
+        pv_dict (dict): Dictionary where the pv_names are the keys. The value of the dictionary depend on the
+                return_log_times argument value and are either the corresponding deletion times (when return_log_times
+                is False) or a tuple of (start_deletion_time, end_deletion_time) as they appear in the logs
 
     """
     # Get the correct provisioner pod based on the interface
@@ -1573,15 +1649,18 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         # Extract the deletion start time for the PV
         start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
-        start = f"{this_year} {mon_day}"
-        start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
+        start_tm = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
         end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
         total = end_time - start_time
-        pv_dict[pv_name] = total.total_seconds()
+        if not return_log_times:
+            pv_dict[pv_name] = total.total_seconds()
+        else:
+            pv_dict[pv_name] = (start_tm, end_tm)
 
     return pv_dict
 
@@ -3195,6 +3274,7 @@ def set_configmap_log_level_rook_ceph_operator(value):
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
+    logger.info(f"Setting ROOK_LOG_LEVEL to: {value}")
     configmap_obj.patch(params=params, format_type="json")
 
 
@@ -3235,12 +3315,9 @@ def check_osd_log_exist_on_rook_ceph_operator_pod(
     new_logs = list()
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
-        if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            log_date_time_obj = datetime.datetime.strptime(
-                line[:26], "%Y-%m-%d %H:%M:%S.%f"
-            )
-            if log_date_time_obj > last_log_date_time_obj:
-                new_logs.append(line)
+        log_date_time_obj = get_event_line_datetime(line)
+        if log_date_time_obj and log_date_time_obj > last_log_date_time_obj:
+            new_logs.append(line)
     res_expected = False
     res_unexpected = True
     for new_log in new_logs:
@@ -3273,10 +3350,9 @@ def get_last_log_time_date():
     logger.info("Get last log time")
     rook_ceph_operator_logs = get_logs_rook_ceph_operator()
     for line in rook_ceph_operator_logs.splitlines():
-        if re.search(r"\d{4}-\d{2}-\d{2}", line):
-            last_log_date_time_obj = datetime.datetime.strptime(
-                line[:26], "%Y-%m-%d %H:%M:%S.%f"
-            )
+        log_date_time_obj = get_event_line_datetime(line)
+        if log_date_time_obj:
+            last_log_date_time_obj = log_date_time_obj
     return last_log_date_time_obj
 
 
@@ -3370,3 +3446,117 @@ def get_failure_domain():
 
     storage_cluster_obj = get_storage_cluster()
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
+
+
+def modify_statefulset_replica_count(statefulset_name, replica_count):
+    """
+    Function to modify statefulset replica count,
+    i.e to scale up or down statefulset
+
+    Args:
+        statefulset_namee (str): Name of statefulset
+        replica_count (int): replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return ocp_obj.patch(resource_name=statefulset_name, params=params)
+
+
+def get_event_line_datetime(event_line):
+    """
+    Get the event line datetime
+
+    Args:
+        event_line (str): The event line to get it's datetime
+
+    Returns:
+         datetime object: The event line datetime
+
+    """
+    if re.search(r"\d{4}-\d{2}-\d{2}", event_line):
+        return datetime.datetime.strptime(event_line[:26], "%Y-%m-%d %H:%M:%S.%f")
+    else:
+        return None
+
+
+def get_rook_ceph_pod_events(pod_name):
+    """
+    Get the rook ceph pod events from the rook ceph pod operator logs
+
+    Args:
+        pod_name (str): The rook ceph pod name to get the events
+
+    Returns:
+        list: List of all the event lines with the specific pod
+
+    """
+    rook_ceph_operator_event_lines = get_logs_rook_ceph_operator().splitlines()
+    return [line for line in rook_ceph_operator_event_lines if pod_name in line]
+
+
+def get_rook_ceph_pod_events_by_keyword(pod_name, keyword):
+    """
+    Get the rook ceph pod events with the keyword 'keyword' from the rook ceph pod operator logs
+
+    Args:
+        pod_name (str): The rook ceph pod name to get the events
+        keyword (str): The keyword to search in the events
+
+    Returns:
+        list: List of all the event lines with the specific pod that has the keyword 'keyword'
+
+    """
+    pod_event_lines = get_rook_ceph_pod_events(pod_name)
+    return [
+        event_line
+        for event_line in pod_event_lines
+        if keyword.lower() in event_line.lower()
+    ]
+
+
+def wait_for_rook_ceph_pod_status(pod_obj, desired_status, timeout=420):
+    """
+    Wait for the rook ceph pod to reach the desired status. If the pod didn't reach the
+    desired status, check if the reason is that the pod is not found. If this is the case,
+    check in the rook ceph pod operator logs to see if the pod reached the desired status.
+
+    Args:
+        pod_obj (ocs_ci.ocs.resources.pod.Pod): The rook ceph pod object
+        desired_status (str): The desired status of the pod to wait for
+        timeout (int): time to wait for the pod to reach the desired status
+
+    Returns:
+        bool: True if the rook ceph pod to reach the desired status. False, otherwise
+
+    """
+    start_log_datetime = get_last_log_time_date()
+    try:
+        wait_for_resource_state(pod_obj, desired_status, timeout=timeout)
+    except (ResourceWrongStatusException, CommandFailed) as e:
+        if "not found" in str(e):
+            logger.info(
+                f"Failed to find the pod {pod_obj.name}. Trying to search for the event "
+                f"in rook ceph operator logs..."
+            )
+            pod_event_lines_with_desired_status = get_rook_ceph_pod_events_by_keyword(
+                pod_obj.name, keyword=desired_status
+            )
+            last_pod_event_line = pod_event_lines_with_desired_status[-1]
+            last_pod_event_datetime = get_event_line_datetime(last_pod_event_line)
+            if last_pod_event_datetime > start_log_datetime:
+                logger.info(
+                    f"Found the event of pod {pod_obj.name} with status {desired_status} in "
+                    f"rook ceph operator logs. The event line is: {last_pod_event_line}"
+                )
+                return True
+            else:
+                return False
+        else:
+            logger.info(f"An error has occurred when trying to get the pod object: {e}")
+            return False
+
+    return True

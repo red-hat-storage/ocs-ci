@@ -25,7 +25,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
@@ -760,7 +760,7 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if ocsci_config.ENV_DATA.get("ocs_version") == "4.2":
+    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
@@ -869,8 +869,8 @@ def run_must_gather(log_dir_path, image, command=None):
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
-    ocs_version = float(ocsci_config.ENV_DATA["ocs_version"])
-    timeout = 1500 if ocs_version >= 4.6 else 600
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
@@ -906,20 +906,29 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
+    ocs_version = version.get_semantic_ocs_version_from_config()
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
+        if ocs_version < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
-    nb_db_pod = Pod(
-        **get_pods_having_label(
-            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )[0]
-    )
+    try:
+        nb_db_pod = Pod(
+            **get_pods_having_label(
+                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+    except IndexError:
+        log.warning(
+            "Unable to find pod using label `%s` in namespace `%s`",
+            nb_db_label,
+            defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+    if ocs_version < version.VERSION_4_7:
         cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
     else:
         cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'

@@ -102,7 +102,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
 
             # Wait for setup on pods to complete
             for pod_obj in pods_list:
-                for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
+                for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                     if sample:
                         log.info(
                             f"Setup for running IO is completed on pod "

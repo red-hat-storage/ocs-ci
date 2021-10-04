@@ -101,6 +101,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+        namespace = self.pvc_obj.namespace
         if interface_type == constants.CEPHFILESYSTEM:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
         file_size_mb = convert_device_size(file_size, "MB")
@@ -113,7 +114,7 @@ class TestPVCSingleClonePerformance(E2ETest):
         for i in range(max_num_of_clones):
             logger.info(f"Start creation of clone number {i + 1}.")
             cloned_pvc_obj = pvc.create_pvc_clone(
-                sc_name, parent_pvc, clone_yaml, storage_size=pvc_size + "Gi"
+                sc_name, parent_pvc, clone_yaml, namespace, storage_size=pvc_size + "Gi"
             )
             teardown_factory(cloned_pvc_obj)
             helpers.wait_for_resource_state(

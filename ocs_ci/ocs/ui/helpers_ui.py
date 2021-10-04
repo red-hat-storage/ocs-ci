@@ -1,10 +1,10 @@
 import logging
 
+from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.proxy import get_cluster_proxies
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
@@ -28,8 +28,8 @@ def ui_deployment_conditions():
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
     is_kms = config.DEPLOYMENT.get("kms_deployment")
-    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-    is_proxy = True if http_proxy else False
+    is_proxy = config.DEPLOYMENT.get("proxy")
+    is_infra_nodes = config.DEPLOYMENT.get("infra_nodes")
 
     try:
         locators[ocp_version]["deployment"]
@@ -40,7 +40,11 @@ def ui_deployment_conditions():
         logger.error(e)
         return False
 
-    if platform not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+    if platform not in (
+        constants.AWS_PLATFORM,
+        constants.VSPHERE_PLATFORM,
+        constants.AZURE_PLATFORM,
+    ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
     elif ocs_version != ocp_version or ocp_version == "4.6":
@@ -49,14 +53,24 @@ def ui_deployment_conditions():
             f" is different from the OCP version [{ocp_version}]"
         )
         return False
-    elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
+    elif (
+        is_external
+        or is_disconnected
+        or is_proxy
+        or is_kms
+        or is_arbiter
+        or is_infra_nodes
+    ):
         logger.info(
             "OCS deployment via UI is not supported on "
-            "external/disconnected/proxy/kms/arbiter cluster"
+            "external/disconnected/proxy/kms/arbiter/infra-nodes cluster"
         )
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
         logger.info("OCS deployment via UI is not supported on AWS-LSO")
+        return False
+    elif platform == constants.AZURE_PLATFORM and is_lso is True:
+        logger.info("OCS deployment via UI is not supported on AZURE-LSO")
         return False
     elif ocp_version == "4.6" and is_lso is True:
         logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
@@ -93,8 +107,7 @@ def ui_add_capacity_conditions():
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
     is_lso = config.DEPLOYMENT.get("local_storage")
-    http_proxy, https_proxy, no_proxy = get_cluster_proxies()
-    is_proxy = True if http_proxy else False
+    is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
         locators[ocp_version]["add_capacity"]
@@ -105,7 +118,11 @@ def ui_add_capacity_conditions():
         logger.error(e)
         return False
 
-    if platform.lower() not in (constants.AWS_PLATFORM, constants.VSPHERE_PLATFORM):
+    if platform.lower() not in (
+        constants.AWS_PLATFORM,
+        constants.VSPHERE_PLATFORM,
+        constants.AZURE_PLATFORM,
+    ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
     elif ocp_version not in ("4.7", "4.8"):
@@ -158,3 +175,14 @@ def ui_add_capacity(osd_size_capacity_requested):
     add_ui_obj.add_capacity_ui()
     close_browser(setup_ui)
     return new_storage_devices_sets_count
+
+
+def get_element_type(element_name):
+    """
+    This function accepts an element name as a argument and returns the element type by creating XPATH for it.
+    This is helpful when we are creating dynamic names for PVC's, Pod's, Namespaces's etc. and want to interact
+    with the same on UI.
+
+    """
+
+    return (f"//a[contains(@title,'{element_name}')]", By.XPATH)

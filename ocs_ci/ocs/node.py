@@ -1175,12 +1175,17 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_node_pods = get_node_pods(
-        new_osd_node_name, pods_to_search=pod.get_osd_pods()
-    )
-    if not new_osd_node_pods:
-        log.warning("Didn't find any osd pods running on the new node")
-        return False
+    if new_osd_node_name:
+        new_osd_node_pods = get_node_pods(
+            new_osd_node_name, pods_to_search=pod.get_osd_pods()
+        )
+        if not new_osd_node_pods:
+            log.warning("Didn't find any osd pods running on the new node")
+            return False
+    else:
+        log.info(
+            "New osd node name is not provided. Continue with the other verification steps..."
+        )
 
     log.info("Search for the old osd ids")
     new_osd_pods = pod.get_osd_pods_having_ids(old_osd_ids)
@@ -1225,7 +1230,7 @@ def node_replacement_verification_steps_ceph_side(
         log.warning("Hostname didn't change")
         return False
 
-    wait_for_nodes_status([new_node_name, new_osd_node_name])
+    wait_for_nodes_status([new_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
     if not pod.check_pods_after_node_replacement():
@@ -1238,6 +1243,7 @@ def node_replacement_verification_steps_ceph_side(
     log.info(f"osd node names: {osd_node_names}")
 
     if new_osd_node_name:
+        wait_for_nodes_status([new_osd_node_name])
         log.info(f"New osd node name is: {new_osd_node_name}")
         if new_osd_node_name not in ceph_osd_status:
             log.warning("new osd node name not found in 'ceph osd status' output")

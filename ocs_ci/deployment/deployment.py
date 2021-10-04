@@ -4,7 +4,6 @@ platforms like AWS, VMWare, Baremetal etc.
 """
 
 from copy import deepcopy
-from semantic_version import Version
 import json
 import logging
 import tempfile
@@ -58,14 +57,15 @@ from ocs_ci.utility import (
     templating,
     ibmcloud,
     kms as KMS,
+    version,
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.utils import (
     ceph_health_check,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
-    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
@@ -76,6 +76,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
@@ -342,17 +343,26 @@ class Deployment(object):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and not live_deployment
         ):
-            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
+            link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
+        # For OCS version >= 4.9, we have odf-operator
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
+            ocs_operator_name = defaults.ODF_OPERATOR_NAME
+            subscription_file = constants.SUBSCRIPTION_ODF_YAML
+        else:
+            ocs_operator_name = defaults.OCS_OPERATOR_NAME
+            subscription_file = constants.SUBSCRIPTION_YAML
+
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
+            resource_name=ocs_operator_name,
             selector=operator_selector,
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
         default_channel = package_manifest.get_default_channel()
-        subscription_yaml_data = templating.load_yaml(constants.SUBSCRIPTION_YAML)
+        subscription_yaml_data = templating.load_yaml(subscription_file)
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         if subscription_plan_approval:
             subscription_yaml_data["spec"][
@@ -468,27 +478,39 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
+            ocs_operator_names = [
+                defaults.ODF_OPERATOR_NAME,
+                defaults.OCS_OPERATOR_NAME,
+                defaults.NOOBAA_OPERATOR,
+            ]
+        else:
+            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        if (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and not live_deployment
-        ):
-            csv.wait_for_phase("Installing", timeout=720)
-            logger.info("Sleeping for 30 seconds before applying SA")
-            time.sleep(30)
-            link_all_sa_and_secret(constants.OCS_SECRET, self.namespace)
-            logger.info("Deleting all pods in openshift-storage namespace")
-            exec_cmd(f"oc delete pod --all -n {self.namespace}")
-        csv.wait_for_phase("Succeeded", timeout=720)
-        ocp_version = float(get_ocp_version())
+        is_ibm_sa_linked = False
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and not live_deployment
+            ):
+                if not is_ibm_sa_linked:
+                    logger.info("Sleeping for 60 seconds before applying SA")
+                    time.sleep(60)
+                    link_all_sa_and_secret_and_delete_pods(
+                        constants.OCS_SECRET, self.namespace
+                    )
+                    is_ibm_sa_linked = True
+            csv.wait_for_phase("Succeeded", timeout=720)
+        ocp_version = version.get_semantic_ocp_version_from_config()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
                 kind="configmap",
@@ -537,6 +559,13 @@ class Deployment(object):
             # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
             self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
+
+        # create storage system
+        if ocs_version >= version.VERSION_4_9:
+            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+
+        # Set rook log level
+        self.set_rook_log_level()
 
         # creating StorageCluster
         if config.DEPLOYMENT.get("kms_deployment"):
@@ -594,11 +623,10 @@ class Deployment(object):
         logger.info(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
-        ocs_version = config.ENV_DATA["ocs_version"]
         zone_num = get_az_count()
         if (
             config.DEPLOYMENT.get("local_storage")
-            and Version.coerce(ocs_version) >= Version.coerce("4.7")
+            and ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
         ):
@@ -627,8 +655,6 @@ class Deployment(object):
                 "storageClassName"
             ] = self.DEFAULT_STORAGECLASS
 
-        ocs_version = float(config.ENV_DATA["ocs_version"])
-
         # StorageCluster tweaks for LSO
         if config.DEPLOYMENT.get("local_storage"):
             cluster_data["spec"]["manageNodes"] = False
@@ -647,7 +673,7 @@ class Deployment(object):
             # setting resource limits for AWS i3
             # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
             if (
-                ocs_version >= 4.5
+                ocs_version >= version.VERSION_4_5
                 and config.ENV_DATA.get("worker_instance_type")
                 == constants.AWS_LSO_WORKER_INSTANCE
             ):
@@ -655,7 +681,9 @@ class Deployment(object):
                     "limits": {"cpu": 2, "memory": "5Gi"},
                     "requests": {"cpu": 1, "memory": "5Gi"},
                 }
-            if (ocp_version >= 4.6) and (ocs_version >= 4.6):
+            if (ocp_version >= version.VERSION_4_6) and (
+                ocs_version >= version.VERSION_4_6
+            ):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
                 }
@@ -677,15 +705,15 @@ class Deployment(object):
                 "noobaa-core",
                 "noobaa-db",
             ]
-            if ocs_version >= 4.5:
+            if ocs_version >= version.VERSION_4_5:
                 resources.append("noobaa-endpoint")
             cluster_data["spec"]["resources"] = {
                 resource: deepcopy(none_resources) for resource in resources
             }
-            if ocs_version >= 4.5:
+            if ocs_version >= version.VERSION_4_5:
                 cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                    "limits": {"cpu": 1, "memory": "500Mi"},
-                    "requests": {"cpu": 1, "memory": "500Mi"},
+                    "limits": {"cpu": "100m", "memory": "100Mi"},
+                    "requests": {"cpu": "100m", "memory": "100Mi"},
                 }
         else:
             local_storage = config.DEPLOYMENT.get("local_storage")
@@ -697,7 +725,7 @@ class Deployment(object):
                         "requests": {"cpu": 1, "memory": "8Gi"},
                     }
                 }
-                if ocs_version < 4.5:
+                if ocs_version < version.VERSION_4_5:
                     resources["noobaa-core"] = {
                         "limits": {"cpu": 2, "memory": "8Gi"},
                         "requests": {"cpu": 1, "memory": "8Gi"},
@@ -729,7 +757,7 @@ class Deployment(object):
             cluster_data["spec"]["manageNodes"] = False
 
         if config.ENV_DATA.get("encryption_at_rest"):
-            if ocs_version < 4.6:
+            if ocs_version < version.VERSION_4_6:
                 error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
                 logger.error(error_message)
                 raise UnsupportedFeatureError(error_message)
@@ -794,16 +822,28 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
+            ocs_operator_names = [
+                defaults.ODF_OPERATOR_NAME,
+                defaults.OCS_OPERATOR_NAME,
+            ]
+        else:
+            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv.wait_for_phase("Succeeded", timeout=720)
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            csv.wait_for_phase("Succeeded", timeout=720)
+
+        # Set rook log level
+        self.set_rook_log_level()
 
         # Create secret for external cluster
         create_external_secret()
@@ -817,6 +857,11 @@ class Deployment(object):
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
         self.external_post_deploy_validation()
         setup_ceph_toolbox()
+
+    def set_rook_log_level(self):
+        rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+        if rook_log_level:
+            set_configmap_log_level_rook_ceph_operator(rook_log_level)
 
     def external_post_deploy_validation(self):
         """
@@ -879,6 +924,13 @@ class Deployment(object):
 
             # validate PDB creation of MON, MDS, OSD pods
             validate_pdb_creation()
+
+            # check for odf-console
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version >= version.VERSION_4_9:
+                assert pod.wait_for_resource(
+                    condition="Running", selector="app=odf-console", timeout=600
+                )
 
             # Creating toolbox pod
             setup_ceph_toolbox()
@@ -1005,37 +1057,6 @@ def create_ocs_secret(namespace):
     exec_cmd(f"oc apply -f {secret_manifest.name} -n {namespace}", timeout=2400)
 
 
-def link_sa_and_secret(sa_name, secret_name, namespace):
-    """
-    Link service account and secret for pulling of images.
-
-    Args:
-        sa_name (str): service account name
-        secret_name (str): secret name
-        namespace (str): namespace name
-
-    """
-    exec_cmd(f"oc secrets link {sa_name} {secret_name} --for=pull -n {namespace}")
-
-
-def link_all_sa_and_secret(secret_name, namespace):
-    """
-    Link all service accounts in specified namespace with the secret for pulling
-    of images.
-
-    Args:
-        secret_name (str): secret name
-        namespace (str): namespace name
-
-    """
-    service_account = ocp.OCP(kind="serviceAccount", namespace=namespace)
-    service_accounts = service_account.get()
-    for sa in service_accounts.get("items", []):
-        sa_name = sa["metadata"]["name"]
-        logger.info(f"Linking secret: {secret_name} with SA: {sa_name}")
-        link_sa_and_secret(sa_name, secret_name, namespace)
-
-
 def create_catalog_source(image=None, ignore_upgrade=False):
     """
     This prepare catalog source manifest for deploy OCS operator from
@@ -1051,8 +1072,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
     if config.DEPLOYMENT.get("stage_rh_osbs"):
         image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
+        ocp_version = version.get_semantic_ocp_version_from_config()
         osbs_image_tag = config.DEPLOYMENT.get(
-            "stage_index_image_tag", f"v{get_ocp_version()}"
+            "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
         run_cmd(
@@ -1105,6 +1127,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
+@retry(CommandFailed, tries=8, delay=3)
 def setup_persistent_monitoring():
     """
     Change monitoring backend to OCS

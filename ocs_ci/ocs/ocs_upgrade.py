@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.deployment.deployment import create_catalog_source
+from ocs_ci.deployment.deployment import create_catalog_source, Deployment
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     load_config_file,
     TimeoutSampler,
 )
+from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import (
     TimeoutException,
@@ -70,7 +71,7 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
             _, old_image_sha = old_image.split(constants.SHA_SEPARATOR)
         if old_image_sha:
             for new_image in new_csv_images:
-                if old_image_sha in new_csv_images:
+                if old_image_sha in new_image:
                     log.info(
                         f"There is a new image: {new_image} with the same SHA "
                         f"which is the same as the old image: {old_image}. "
@@ -437,9 +438,11 @@ class OCSUpgrade(object):
         )
 
         if not self.upgrade_in_current_source:
-            if not ocs_catalog.is_exist() and not self.upgrade_in_current_source:
+            if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
+                # We can return here as new CatalogSource contains right images
+                return
             image_url = ocs_catalog.get_image_url()
             image_tag = ocs_catalog.get_image_name()
             log.info(f"Current image is: {image_url}, tag: {image_tag}")
@@ -475,13 +478,12 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     ceph_cluster = CephCluster()
     original_ocs_version = config.ENV_DATA.get("ocs_version")
+    upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
     upgrade_ocs = OCSUpgrade(
         namespace=config.ENV_DATA["cluster_namespace"],
         version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-        upgrade_in_current_source=config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        ),
+        upgrade_in_current_source=upgrade_in_current_source,
     )
     upgrade_version = upgrade_ocs.get_upgrade_version()
     assert (
@@ -522,6 +524,24 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         upgrade_ocs.update_subscription(channel)
+        if original_ocs_version == "4.8" and upgrade_version == "4.9":
+            deployment = Deployment()
+            deployment.subscribe_ocs()
+        if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+            upgrade_in_current_source
+        ):
+            for attempt in range(2):
+                # We need to do it twice, because some of the SA are updated
+                # after the first load of OCS pod after upgrade. So we need to
+                # link updated SA again.
+                log.info(
+                    f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                    "of linking secret/SAs"
+                )
+                time.sleep(60)
+                link_all_sa_and_secret_and_delete_pods(
+                    constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                )
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)

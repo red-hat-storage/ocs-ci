@@ -21,7 +21,9 @@ from ocs_ci.ocs.constants import (
     ON_PREM_PLATFORMS,
     IBM_POWER_PLATFORM,
     IBMCLOUD_PLATFORM,
+    ROSA_PLATFORM,
 )
+from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 
@@ -212,6 +214,10 @@ skipif_openshift_dedicated = pytest.mark.skipif(
     reason="Test will not run on Openshift dedicated cluster",
 )
 
+skipif_rosa = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
+    reason="Test will not run on ROSA cluster",
+)
 skipif_ibm_cloud = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM cloud",
@@ -262,8 +268,13 @@ skipif_tainted_nodes = pytest.mark.skipif(
     reason="Test will not run if nodes are tainted",
 )
 
+skipif_flexy_deployment = pytest.mark.skipif(
+    config.ENV_DATA.get("flexy_deployment"),
+    reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
-    float(config.ENV_DATA["ocs_version"]) < 4.6
+    version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
