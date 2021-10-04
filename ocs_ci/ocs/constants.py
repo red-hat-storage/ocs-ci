@@ -1150,7 +1150,10 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "noobaa-operator",
     "ocs-operator",
+    "odf-multicluster-orchestrator",
+    "odf-operator",
 ]
 
 # PSI-openstack constants
