@@ -57,19 +57,6 @@ class DeploymentUI(PageNavigator):
             logger.error(f" after {timeout} seconds")
             raise TimeoutExpiredError
 
-    def create_catalog_source_yaml(self):
-        """
-        Create OLM YAML file
-
-        """
-        try:
-            from ocs_ci.deployment.deployment import create_catalog_source
-
-            create_catalog_source()
-            time.sleep(60)
-        except Exception as e:
-            logger.info(e)
-
     def install_ocs_operator(self):
         """
         Install OCS/ODF Opeartor
@@ -352,6 +339,5 @@ class DeploymentUI(PageNavigator):
         if config.DEPLOYMENT.get("local_storage"):
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
-        self.create_catalog_source_yaml()
         self.install_ocs_operator()
         self.install_storage_cluster()
