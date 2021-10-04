@@ -77,7 +77,17 @@ class TestMultipleScCompRepDataDelete(ManageTest):
 
         log.info("Running IO on pods")
         for pod_obj in pod_obj_list:
-            pod_obj.run_io("fs", size="1G")
+            pod_obj.run_io(
+                "fs",
+                size="1G",
+                rate="1500m",
+                runtime=0,
+                buffer_compress_percentage=60,
+                buffer_pattern="0xdeadface",
+                bs="8K",
+                jobs=5,
+                readwrite="readwrite",
+            )
 
         for pod_obj in pod_obj_list:
             get_fio_rw_iops(pod_obj)

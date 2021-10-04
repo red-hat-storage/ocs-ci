@@ -81,7 +81,17 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj)
 
         log.info("Running IO on pod")
-        pod_obj.run_io("fs", size="1G")
+        pod_obj.run_io(
+            "fs",
+            size="1G",
+            rate="1500m",
+            runtime=0,
+            buffer_compress_percentage=60,
+            buffer_pattern="0xdeadface",
+            bs="8K",
+            jobs=5,
+            readwrite="readwrite",
+        )
         get_fio_rw_iops(pod_obj)
 
         log.info(f"validating info on pool {pool}")
