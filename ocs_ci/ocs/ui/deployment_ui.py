@@ -1,6 +1,6 @@
-from semantic_version import Version
 import logging
 import time
+
 
 from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
@@ -10,6 +10,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,9 @@ class DeploymentUI(PageNavigator):
         super().__init__(driver)
         self.ocp_version = get_ocp_version()
         self.dep_loc = locators[self.ocp_version]["deployment"]
+        ocs_version = version.get_semantic_ocs_version_from_config()
         self.operator = (
-            OCS_OPERATOR
-            if Version.coerce(self.ocp_version) < Version.coerce("4.9")
-            else ODF_OPERATOR
+            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
         )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
