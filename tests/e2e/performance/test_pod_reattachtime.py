@@ -7,6 +7,7 @@ import statistics
 from uuid import uuid4
 
 from ocs_ci.framework.testlib import performance
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
@@ -74,7 +75,6 @@ class TestPVCCreationPerformance(PASTest):
             interface_iterate: A fixture to iterate over ceph interfaces
 
         """
-        self.uuid = uuid4().hex
         self.interface = interface_iterate
 
         # if self.interface.lower() == "cephfs":
@@ -93,6 +93,26 @@ class TestPVCCreationPerformance(PASTest):
 
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{self.sc}"
+
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_reattach_time_performance(self, pvc_factory, teardown_factory):
@@ -222,31 +242,39 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         os.remove(file_path)
-        logging.info("")
+        logging.info("*******KUKU*********")
         os.rmdir(dir_path)
+        logging.info("*******PERSKY*********")
 
         # Produce ES report
 
         # Collecting environment information
         self.get_env_info()
+        logging.info("*******YASHA*********")
 
         # Initialize the results doc file.
         full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
+        logging.info("*******YULI*********")
         full_results.add_key("storageclass", self.sc)
+        logging.info("*******URIEL*********")
         full_results.add_key("pod_reattach_time", time_measures)
+        logging.info("*******AYUSHA*********")
         full_results.add_key("pod_reattach_time_average", average)
+        logging.info("*******PAPA*********")
 
         test_end_time = performance_lib.get_time()
+        logging.info("*******MAMA*********")
 
         # Add the test time to the ES report
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
 
+        logging.info("*******URIEL22*********")
         # Write the test results into the ES server
         full_results.es_write()
-
+        logging.info("*******URIEL32*********")
         # write the ES link to the test results in the test log.
         logging.info(f"The Result can be found at : {full_results.results_link()}")
