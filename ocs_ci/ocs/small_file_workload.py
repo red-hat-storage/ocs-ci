@@ -203,7 +203,7 @@ class SmallFiles(BenchmarkOperator):
         bench_pod.wait_for_resource(
             condition=constants.STATUS_COMPLETED,
             resource_name=small_file_client_pod,
-            timeout=3600,
+            timeout=18000,
             sleep=60,
         )
         log.info("The SmallFiles benchmark is completed")
