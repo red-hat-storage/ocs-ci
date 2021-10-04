@@ -1,6 +1,7 @@
 import os
 import logging
 import subprocess
+import time
 from datetime import datetime
 
 from ocs_ci.ocs.resources import pod
@@ -212,3 +213,14 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
         f"Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}"
     )
     return (et - st).total_seconds()
+
+
+def get_time():
+    """
+    Getting the current GMT time in a specific format for the ES report
+
+    Returns:
+        str : current date and time in formatted way
+
+    """
+    return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
