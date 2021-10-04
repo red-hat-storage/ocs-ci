@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class DeploymentUI(PageNavigator):
     """
-    Deployment OCS Operator via User Interface
+    Deployment OCS/ODF Operator via User Interface
 
     """
 
@@ -64,12 +64,12 @@ class DeploymentUI(PageNavigator):
         """
         self.navigate_operatorhub_page()
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator)
-        logger.info("Choose OCS/ODF Version")
+        logger.info(f"Choose {self.operator} Version")
         if self.operator is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
         elif self.operator is ODF_OPERATOR:
             self.do_click(self.dep_loc["click_odf_operator"], enable_screenshot=True)
-        logger.info("Click Install OCS")
+        logger.info(f"Click Install {self.operator}")
         self.do_click(self.dep_loc["click_install_ocs"], enable_screenshot=True)
         if self.operator is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
@@ -86,7 +86,7 @@ class DeploymentUI(PageNavigator):
         """
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
-            logger.info("Search OCS/ODF Operator")
+            logger.info(f"Search {self.operator} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
             self.do_click(
@@ -102,7 +102,7 @@ class DeploymentUI(PageNavigator):
 
     def install_storage_cluster(self):
         """
-        Install Storage Cluster
+        Install StorageCluster/StorageSystem
 
         """
         if self.operator == ODF_OPERATOR:
@@ -114,8 +114,9 @@ class DeploymentUI(PageNavigator):
         else:
             self.search_operator_installed_operators_page(operator=self.operator)
 
-        logger.info("Click on OCS/ODF operator on 'Installed Operators' page")
+        logger.info(f"Click on {self.operator} on 'Installed Operators' page")
         if self.operator == ODF_OPERATOR:
+            logger.info("Click on Create StorageSystem")
             self.do_click(
                 locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
             )
@@ -123,6 +124,7 @@ class DeploymentUI(PageNavigator):
                 locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
             )
         elif self.operator == OCS_OPERATOR:
+            logger.info("Click on Create StorageCluster")
             self.do_click(
                 locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
             )
@@ -130,7 +132,6 @@ class DeploymentUI(PageNavigator):
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
 
-        logger.info("Click on Create Storage Cluster")
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
