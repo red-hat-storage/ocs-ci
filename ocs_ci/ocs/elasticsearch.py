@@ -20,7 +20,11 @@ from subprocess import run, CalledProcessError
 from ocs_ci.helpers.helpers import create_pvc, wait_for_resource_state
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    ElasticSearchNotDeployed,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
@@ -155,13 +159,13 @@ class ElasticSearch(object):
         # Deploy the Elastic-Search server
         if not self._deploy_es():
             self.cleanup()
-            raise Exception("Elasticsearch deployment Failed")
+            raise ElasticSearchNotDeployed("Elasticsearch deployment Failed")
 
         # Verify that ES is Up & Running
         sample = TimeoutSampler(timeout=180, sleep=10, func=self.get_health)
         if not sample.wait_for_func_status(True):
             self.cleanup()
-            raise Exception("Elasticsearch deployment Failed")
+            raise ElasticSearchNotDeployed("Elasticsearch deployment Failed")
 
         # Deploy the elasticsearch dumper pod
         self._deploy_data_dumper_client()

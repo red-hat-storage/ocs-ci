@@ -14,6 +14,7 @@ from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs import benchmark_operator, constants, defaults
 from ocs_ci.ocs.elasticsearch import ElasticSearch, elasticsearch_load
+from ocs_ci.ocs.exceptions import ElasticSearchNotDeployed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -141,13 +142,13 @@ class TestElasticsearch:
         log.info("Test with 'Dummy' Storageclass")
         try:
             self.es = ElasticSearch(sc="dummy")
-        except Exception:
+        except ElasticSearchNotDeployed:
             log.info("Raised as expected !")
 
         log.info("Test with 'Real' Storageclass")
         try:
             self.es = ElasticSearch()
-        except Exception as ex:
+        except ElasticSearchNotDeployed as ex:
             log.error("Raise as expected !")
             raise ex
 
