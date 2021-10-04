@@ -34,13 +34,13 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.utility import reporting
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_ceph_version,
     get_cluster_name,
     get_cluster_version,
     get_csi_versions,
-    get_ocp_version,
     get_ocs_build_number,
     get_testrun_name,
     load_config_file,
@@ -641,44 +641,16 @@ def set_report_portal_config(config):
         config (pytest.config): Pytest config object
 
     """
-    rp_tags = list()
-    rp_tags.append(ocsci_config.ENV_DATA.get("platform"))
-    rp_tags.append(ocsci_config.ENV_DATA.get("deployment_type"))
-    if ocsci_config.REPORTING.get("us_ds") == "us":
-        rp_tags.append("upstream")
-    else:
-        rp_tags.append("downstream")
-    worker_instance_type = ocsci_config.ENV_DATA.get("worker_instance_type")
-    rp_tags.append(f"worker_instance_type:{worker_instance_type}")
-    rp_tags.append(f"ocp_version:{get_ocp_version()}")
-    rp_tags.append(f"ocs_version:{ocsci_config.ENV_DATA.get('ocs_version')}")
-    if ocsci_config.DEPLOYMENT.get("ocs_registry_image"):
-        ocs_registry_image = ocsci_config.DEPLOYMENT.get("ocs_registry_image")
-        rp_tags.append(f"ocs_registry_image:{ocs_registry_image}")
-        rp_tags.append(f"ocs_registry_tag:{ocs_registry_image.split(':')[1]}")
-    if ocsci_config.DEPLOYMENT.get("ui_deployment"):
-        rp_tags.append("ui_deployment")
-    if ocsci_config.DEPLOYMENT.get("live_deployment"):
-        rp_tags.append("live_deployment")
-    if ocsci_config.DEPLOYMENT.get("stage"):
-        rp_tags.append("stage_deployment")
-    if not ocsci_config.DEPLOYMENT.get("allow_lower_instance_requirements"):
-        rp_tags.append("production")
-    if ocsci_config.ENV_DATA.get("fips"):
-        rp_tags.append("fips")
-    if ocsci_config.ENV_DATA.get("encryption_at_rest"):
-        rp_tags.append("encryption_at_rest")
+    rp_attrs = reporting.get_rp_launch_attributes()
+    for key, value in rp_attrs.items():
+        if value is True:
+            config.addinivalue_line("rp_launch_tags", key.lower())
+        elif value is False:
+            pass
+        else:
+            config.addinivalue_line("rp_launch_tags", f"{key.lower()}:{value.lower()}")
 
-    for tag in rp_tags:
-        if tag:
-            config.addinivalue_line("rp_launch_tags", tag.lower())
-    description = ""
-    display_name = ocsci_config.REPORTING.get("display_name")
-    if display_name:
-        description += f"Job name: {display_name}"
-    jenkins_job_url = ocsci_config.RUN.get("jenkins_build_url")
-    if jenkins_job_url:
-        description += f" Jenkins job: {jenkins_job_url}"
+    description = reporting.get_rp_launch_description()
     if description:
         config.option.rp_launch_description = description
 

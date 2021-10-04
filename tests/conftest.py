@@ -72,6 +72,7 @@ from ocs_ci.utility import (
     deployment_openshift_logging as ocp_logging_obj,
     ibmcloud,
     kms as KMS,
+    reporting,
     templating,
     users,
 )
@@ -1089,6 +1090,16 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     logs_url = config.RUN.get("logs_url")
     if logs_url:
         record_testsuite_property("logs-url", logs_url)
+
+    # Report Portal
+    launch_name = reporting.get_rp_launch_name()
+    record_testsuite_property("rp_launch_name", launch_name)
+    launch_description = reporting.get_rp_launch_description()
+    record_testsuite_property("rp_launch_description", launch_description)
+    attributes = reporting.get_rp_launch_attributes()
+    for key, value in attributes.items():
+        # Prefix with `rp_` so the rp_preproc upload script knows to use the property
+        record_testsuite_property(f"rp_{key}", value)
 
 
 @pytest.fixture(scope="session")
