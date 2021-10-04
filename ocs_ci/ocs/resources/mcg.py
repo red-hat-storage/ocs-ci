@@ -702,13 +702,16 @@ class MCG:
             "pool_api", "delete_namespace_resource", {"name": ns_resource_name}
         )
 
-    def oc_create_bucketclass(self, name, backingstores, placement, namespace_policy):
+    def oc_create_bucketclass(
+        self, name, backingstores, placement, replication, namespace_policy
+    ):
         """
         Creates a new NooBaa bucket class using a template YAML
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
             placement (str): The placement policy to be used - Mirror | Spread
+            replication (list): A list of replication rules
             namespace_policy (dict): The namespace policy to be used
 
         Returns:
@@ -751,10 +754,18 @@ class MCG:
                 bc_data["spec"]["placementPolicy"] = placement
                 bc_data["spec"]["namespacePolicy"]["cache"] = namespace_policy["cache"]
 
+        if replication:
+            bc_data["spec"]["Replication Policy"] = replication
+
         return create_resource(**bc_data)
 
     def cli_create_bucketclass(
-        self, name, backingstores, placement=None, namespace_policy=None
+        self,
+        name,
+        backingstores,
+        placement=None,
+        replication=None,
+        namespace_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using the noobaa cli
