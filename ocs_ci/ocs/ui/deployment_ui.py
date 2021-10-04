@@ -234,7 +234,7 @@ class DeploymentUI(PageNavigator):
 
     def create_storage_cluster(self):
         """
-        Review and Create storage cluster
+        Review and Create StorageCluster/StorageSystem
 
         """
         logger.info("Create storage cluster on 'Review and create' page")
