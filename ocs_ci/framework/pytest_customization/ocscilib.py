@@ -370,8 +370,7 @@ def gather_version_info_for_report(config):
         config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
-        if ocsci_config.REPORTING["us_ds"] == "DS":
-            config._metadata["OCS operator"] = get_ocs_build_number()
+        config._metadata["OCS operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         skip_list = ["ocs-operator"]
