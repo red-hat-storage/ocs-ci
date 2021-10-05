@@ -44,9 +44,9 @@ class ResultsAnalyse(PerfResult):
 
 @pytest.mark.polarion_id("OCS-2208")
 @performance
-class TestPVCCreationPerformance(PASTest):
+class TestPodReattachTimePerformance(PASTest):
     """
-    Test to verify PVC creation performance
+    Test to verify Pod Reattach Time Performance
     """
 
     def setup(self):
@@ -54,7 +54,7 @@ class TestPVCCreationPerformance(PASTest):
         Setting up test parameters
         """
         logging.info("Starting the test setup")
-        super(TestPVCCreationPerformance, self).setup()
+        super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
         self.uuid = uuid4().hex
         self.crd_data = {
@@ -112,7 +112,7 @@ class TestPVCCreationPerformance(PASTest):
         self.full_log_path += f"-{self.sc}"
 
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_reattach_time_performance(self, pvc_factory, teardown_factory):
+    def test_pod_reattach_time_performance(self, pvc_factory, teardown_factory):
         """
         Test assign nodeName to a pod using RWX pvc
         Performance in test_multiple_pvc_creation_measurement_performance
