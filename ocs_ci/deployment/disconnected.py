@@ -241,7 +241,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
             if len(ocs_registry_image_and_tag) == 2
             else None
         )
-        if not image_tag and config.REPORTING.get("us_ds") == "DS":
+        if not image_tag:
             image_tag = get_latest_ds_olm_tag(
                 upgrade=False if upgrade else config.UPGRADE.get("upgrade", False),
                 latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest"),
