@@ -13,6 +13,7 @@ import os
 import yaml
 import logging
 from dataclasses import dataclass, field, fields
+import pytest
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
@@ -137,21 +138,26 @@ class MultiClusterConfig:
         # Points to cluster config objects which holds ACM cluster conf
         # Applicable only if we are deploying ACM cluster
         self.acm_index = None
+        self.single_cluster_default = True
+        self._single_cluster_initclusterconfigs()
+
+    def _single_cluster_initclusterconfigs(self):
+        self.clusters.insert(0, Config())
+        self.cluster_ctx = self.clusters[0]
+        self.attr_init()
+        self._refresh_ctx()
 
     def initclusterconfigs(self):
-        if not self.cluster_ctx:
+        if self.single_cluster_default:
             for i in range(self.nclusters):
-                self.clusters.append(Config())
+                self.clusters.insert(i, Config())
             self.cluster_ctx = self.clusters[0]
-            self.attr_list = [
-                attr for attr in self.cluster_ctx.__dataclass_fields__.keys()
-            ]
-            self.method_list = [
-                func
-                for func in dir(Config)
-                if callable(getattr(Config, func)) and not func.startswith("__")
-            ]
+            self.attr_init()
             self._refresh_ctx()
+            self.single_cluster_default = False
+
+    def attr_init(self):
+        self.attr_list = [attr for attr in self.cluster_ctx.__dataclass_fields__.keys()]
 
     def update(self, user_dict):
         self.cluster_ctx.update(user_dict)
