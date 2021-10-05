@@ -2,10 +2,8 @@
 This module contains functionality required for disconnected installation.
 """
 
-import copy
 import logging
 import os
-import tempfile
 import time
 
 import yaml
@@ -14,8 +12,6 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_opm_tool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NotFoundError
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
@@ -219,56 +215,6 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
-
-    # if ocs-registry image is not based on redhat-operators-index image,
-    # mirror also required packages from official redhat-operators-index image
-    # and create Red Hat Operators catalog source (this doesn't apply for
-    # live_deployment, because for that the official redhat-operators-index
-    # image is used in the next step)
-    if (
-        not config.DEPLOYMENT.get("live_deployment")
-        and version.get_semantic_ocs_version_from_config() <= version.VERSION_4_7
-    ):
-        index_image = (
-            f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{get_ocp_version()}"
-        )
-        mirrored_index_image = (
-            f"{config.DEPLOYMENT['mirror_registry']}/{constants.MIRRORED_INDEX_IMAGE_NAMESPACE}/"
-            f"{constants.MIRRORED_INDEX_IMAGE_NAME}:v{get_ocp_version()}"
-        )
-
-        required_packages = copy.deepcopy(constants.DISCON_CL_REQUIRED_PACKAGES)
-        required_packages.remove("ocs-operator")
-        prune_and_mirror_index_image(
-            index_image,
-            mirrored_index_image,
-            required_packages,
-        )
-
-        # create redhat-operators CatalogSource
-        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
-
-        catalog_source_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="catalog_source_manifest", delete=False
-        )
-        catalog_source_data["spec"]["image"] = f"{mirrored_index_image}"
-        catalog_source_data["metadata"]["name"] = "redhat-operators"
-        catalog_source_data["spec"]["displayName"] = "Red Hat Operators - Mirrored"
-        # remove ocs-operator-internal label
-        catalog_source_data["metadata"]["labels"].pop("ocs-operator-internal", None)
-
-        templating.dump_data_to_temp_yaml(
-            catalog_source_data, catalog_source_manifest.name
-        )
-        exec_cmd(
-            f"oc {'replace' if upgrade else 'apply'} -f {catalog_source_manifest.name}"
-        )
-        catalog_source = CatalogSource(
-            resource_name="redhat-operators",
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
 
     # prepare main index image (redhat-operators-index for live deployment or
     # ocs-registry image for unreleased version)
