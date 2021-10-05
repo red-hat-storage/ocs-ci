@@ -20,6 +20,9 @@ def couchbase(request):
 
 
 @workloads
+@pytest.mark.skip(
+    reason="Skip the test until cb-example pod Readiness probe fail resolved"
+)
 @pytest.mark.polarion_id("OCS-785")
 class TestCouchBaseWorkload(E2ETest):
     """

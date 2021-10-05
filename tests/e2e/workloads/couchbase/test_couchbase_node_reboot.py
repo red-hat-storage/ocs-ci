@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 
 @workloads
 @ignore_leftovers
+@pytest.mark.skip(
+    reason="Skip the test until cb-example pod Readiness probe fail resolved"
+)
 class TestCouchBaseNodeReboot(E2ETest):
     """
     Deploy an CouchBase workload using operator
