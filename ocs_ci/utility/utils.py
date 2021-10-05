@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedImage,
     UnsupportedOSType,
 )
+from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 
@@ -1438,17 +1439,43 @@ def get_ocs_build_number():
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator
 
     build_num = ""
-    if config.REPORTING["us_ds"] == "DS":
-        build_str = get_csvs_start_with_prefix(
-            defaults.OCS_OPERATOR_NAME,
-            defaults.ROOK_CLUSTER_NAMESPACE,
-        )
-        try:
-            return build_str[0]["metadata"]["name"].partition(".")[2]
-        except (IndexError, AttributeError):
-            logging.warning("No version info found for OCS operator")
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_9
+    ):
+        operator_name = defaults.ODF_OPERATOR_NAME
+    else:
+        operator_name = defaults.OCS_OPERATOR_NAME
+    build_str = get_csvs_start_with_prefix(
+        operator_name,
+        defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+    try:
+        build_num = build_str[0]["spec"]["version"]
+        operator_selector = get_selector_for_ocs_operator()
+        # This is a temporary solution how to get the build id from the registry image.
+        # Because we are now missing build ID in the CSV. If catalog source with our
+        # internal label exists, we will be getting build id from the tag of the image
+        # in catalog source. Boris is working on better way how to populate the internal
+        # build version in the CSV.
+        if operator_selector:
+            catalog_source = CatalogSource(
+                resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+                selector=operator_selector,
+            )
+            cs_data = catalog_source.get()["items"][0]
+            cs_image = cs_data["spec"]["image"]
+            image_tag = cs_image.split(":")[1]
+            build_id = image_tag.split("-")[1]
+            build_num += f"-{build_id}"
+
+    except (IndexError, AttributeError, CommandFailed):
+        logging.exception("No version info found for OCS operator")
     return build_num
 
 
