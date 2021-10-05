@@ -424,6 +424,7 @@ def create_ceph_block_pool(
     cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
+        cbp_data["spec"]["compressionMode"] = compression
         cbp_data["spec"]["parameters"]["compression_mode"] = compression
 
     cbp_obj = create_resource(**cbp_data)
