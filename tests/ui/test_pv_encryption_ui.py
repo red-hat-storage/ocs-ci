@@ -78,6 +78,16 @@ class TestPVEncryption(ManageTest):
         self.vault.vault_create_policy(policy_name=self.vault_resource_name)
         logger.info("Vault setup successful")
 
+    def finalizer(self):
+        # Remove the vault config from csi-kms-connection-details configMap
+        if len(kms.get_encryption_kmsid()) > 1:
+            kms.remove_kmsid(self.new_kmsid)
+
+        # Delete the resources in vault
+        self.vault.remove_vault_backend_path()
+        self.vault.remove_vault_policy()
+        self.vault.remove_vault_namespace()
+
     @tier1
     @skipif_ocs_version("<4.7")
     def test_for_encrypted_pv_ui(
@@ -112,6 +122,9 @@ class TestPVEncryption(ManageTest):
             reclaim_policy="Delete",
             provisioner="rbd",
             vol_binding_mode="WaitForFirstConsumer",
+            service_name=self.vault_resource_name,
+            kms_address="https://vault.qe.rh-ocs.com/",
+            tls_server_name="vault.qe.rh-ocs.com",
         )
         logger.info("Storage Class Created via UI")
 
