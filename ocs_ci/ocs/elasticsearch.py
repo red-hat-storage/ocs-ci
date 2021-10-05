@@ -1,5 +1,7 @@
 """
-Deploying an Elasticsearch server for collecting logs from ripsaw benchmarks.
+Deploying an Elasticsearch server for collecting logs from benchmark-operator
+(ripsaw) benchmarks.
+
 Interface for the Performance ElasticSearch server
 
 """
@@ -11,19 +13,21 @@ import os
 import tempfile
 
 # 3rd party modules
-
 from elasticsearch import Elasticsearch, helpers, exceptions as esexp
 from subprocess import run, CalledProcessError
 
 # Local modules
-
+from ocs_ci.helpers.helpers import create_pvc, wait_for_resource_state
+from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    ElasticSearchNotDeployed,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.performance_lib import run_command
-from ocs_ci.helpers.helpers import create_pvc, wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +134,17 @@ class ElasticSearch(object):
             kind="pod", resource_name="elastic-operator-0", namespace=self.namespace
         )
         self.ns_obj = OCP(kind="namespace", namespace=self.namespace)
+
+        # Verify that the namespace dose not exist, delete it if it is exists.
+        if self.ns_obj.get(dont_raise=True, resource_name=self.namespace) is not None:
+            log.warning(
+                f"The {self.namespace} namespace is already exists!, try to delete it"
+            )
+            self.ns_obj.delete_project(project_name=self.namespace)
+            self.ns_obj.wait_for_delete(
+                resource_name=self.namespace, timeout=180, sleep=5
+            )
+
         self.es = OCP(resource_name="quickstart-es-http", namespace=self.namespace)
         self.elasticsearch = OCP(namespace=self.namespace, kind="elasticsearch")
         self.password = OCP(
@@ -140,13 +155,17 @@ class ElasticSearch(object):
 
         # Deploy the ECK all-in-one.yaml file
         self._deploy_eck()
+
         # Deploy the Elastic-Search server
-        self._deploy_es()
+        if not self._deploy_es():
+            self.cleanup()
+            raise ElasticSearchNotDeployed("Elasticsearch deployment Failed")
 
         # Verify that ES is Up & Running
         sample = TimeoutSampler(timeout=180, sleep=10, func=self.get_health)
         if not sample.wait_for_func_status(True):
-            raise Exception("Elasticsearch deployment Failed")
+            self.cleanup()
+            raise ElasticSearchNotDeployed("Elasticsearch deployment Failed")
 
         # Deploy the elasticsearch dumper pod
         self._deploy_data_dumper_client()
@@ -191,7 +210,6 @@ class ElasticSearch(object):
         self.ocp.apply(self.eck_file)
         log.info("deploy the ECK operator")
         self.ocp.apply(f"{self.eck_path}/operator.yaml")
-
         sample = TimeoutSampler(
             timeout=300, sleep=10, func=self._pod_is_found, pattern="elastic-operator"
         )
@@ -251,14 +269,21 @@ class ElasticSearch(object):
 
         # Creating PVC for the elasticsearch server and wait until it bound
         log.info("Creating 10 GiB PVC for the ElasticSearch cluster on")
-        self.pvc_obj = create_pvc(
-            sc_name=constants.CEPHBLOCKPOOL_SC,
-            namespace=self.namespace,
-            pvc_name="elasticsearch-data-quickstart-es-default-0",
-            access_mode=constants.ACCESS_MODE_RWO,
-            size="10Gi",
-        )
-        wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        try:
+            self.pvc_obj = create_pvc(
+                sc_name=self.args.get("sc") or constants.CEPHBLOCKPOOL_SC,
+                namespace=self.namespace,
+                pvc_name="elasticsearch-data-quickstart-es-default-0",
+                access_mode=constants.ACCESS_MODE_RWO,
+                size="10Gi",
+            )
+
+            # Make sure the PVC bound, or delete it and raise exception
+            wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        except ResourceWrongStatusException:
+            log.error("The PVC couldn't created")
+            return False
+
         self.pvc_obj.reload()
 
         log.info("Deploy the ElasticSearch cluster")
@@ -271,20 +296,25 @@ class ElasticSearch(object):
             pattern="quickstart-es-default",
         )
         if not sample.wait_for_func_status(True):
-            self.cleanup()
-            raise Exception("The ElasticSearch pod deployment Failed")
+            log.error("The ElasticSearch pod deployment Failed")
+            return False
+
         self.espod = get_pod_name_by_pattern("quickstart-es-default", self.namespace)[0]
         log.info(f"The ElasticSearch pod {self.espod} Started")
 
         es_pod = OCP(kind="pod", namespace=self.namespace)
         log.info("Waiting for ElasticSearch to Run")
-        assert es_pod.wait_for_resource(
+        if not es_pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=self.espod,
             sleep=30,
             timeout=600,
-        )
-        log.info("Elastic Search is ready !!!")
+        ):
+            log.error("TThe ElasticSearch pod is not running !")
+            return False
+        else:
+            log.info("Elastic Search is ready !!!")
+            return True
 
     def get_health(self):
         """
@@ -308,21 +338,36 @@ class ElasticSearch(object):
 
     def cleanup(self):
         """
-        Cleanup the environment from all Elasticsearch components, and from the
-        port forwarding process.
+        Cleanup the environment from all Elasticsearch components.
 
         """
         log.info("Teardown the Elasticsearch environment")
         log.info("Deleting all resources")
-        log.info("Deleting the dumper client pod")
-        self.ocp.delete(yaml_file=self.dumper_file)
-        log.info("Deleting the es resource")
-        self.ocp.delete(yaml_file=self.crd)
+        try:
+            log.info("Deleting the dumper client pod")
+            self.ocp.delete(yaml_file=self.dumper_file)
+        except CommandFailed:
+            # in case of the es-dumper did not deployed yet, trying to delete it
+            # will failed.
+            log.warning("es-dumper pod does not exist")
+            pass
+
+        try:
+            log.info("Deleting the es resource")
+            self.ocp.delete(yaml_file=self.crd)
+        except CommandFailed:
+            # in case of the elastic-search did not deployed yet, trying to
+            # delete it will failed.
+            log.warning("elastic-search pod does not exist")
+            pass
+
         log.info("Deleting the es project")
         # self.ns_obj.delete_project(project_name=self.namespace)
         self.ocp.delete(f"{self.eck_path}/operator.yaml")
         self.ocp.delete(yaml_file=self.eck_file)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
+
+        log.info("The ElasticSearch cleaned up from the cluster")
 
     def _es_connect(self):
         """

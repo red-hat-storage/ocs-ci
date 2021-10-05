@@ -410,3 +410,7 @@ class OCSWorkerScaleFailed(Exception):
 
 class OSDScaleFailed(Exception):
     pass
+
+
+class ElasticSearchNotDeployed(Exception):
+    pass
