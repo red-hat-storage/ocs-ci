@@ -289,6 +289,7 @@ class DeploymentUI(PageNavigator):
 
         """
         self.search_operator_installed_operators_page(operator=operator)
+        time.sleep(5)
         sample = TimeoutSampler(
             timeout=timeout_install,
             sleep=sleep,
@@ -299,7 +300,9 @@ class DeploymentUI(PageNavigator):
             logger.error(
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
+            self.take_screenshot()
             raise TimeoutExpiredError
+        self.take_screenshot()
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """
