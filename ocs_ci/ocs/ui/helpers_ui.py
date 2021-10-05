@@ -106,7 +106,10 @@ def create_storage_class_ui(
     vault_namespace=None,
     reclaim_policy="Delete",
     provisioner="rbd",
-    vol_binding_mode="WaitForFirstConsumer",
+    vol_binding_mode="Immediate",
+    service_name=None,
+    kms_address=None,
+    tls_server_name=None,
 ):
     """
     Test for creation of storage class with or without encryption via UI
@@ -119,6 +122,9 @@ def create_storage_class_ui(
             reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
             provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
             vol_binding_mode (str): value of the volume binding mode, it could be 'WaitForFirstConsumer' or 'Immediate'
+            service_name (str): the default the value is None which can be changed in the function call
+            kms_address (str): the default the value is None which can be changed in the function call
+            tls_server_name (str): the default the value is None which can be changed in the function call
 
     Returns:
             sc_name (str) if the storage class creation is successful, returns False otherwise
@@ -179,10 +185,10 @@ def create_storage_class_ui(
             base_ui_obj.do_click(pvc_loc["new_kms"])
         logger.info("Storage Class Service Name")
         base_ui_obj.do_clear(pvc_loc["service-name"])
-        base_ui_obj.do_send_keys(pvc_loc["service-name"], "vault")
+        base_ui_obj.do_send_keys(pvc_loc["service-name"], service_name)
         logger.info("Storage Class Address")
         base_ui_obj.do_clear(pvc_loc["kms-address"])
-        base_ui_obj.do_send_keys(pvc_loc["kms-address"], "https://vault.qe.rh-ocs.com/")
+        base_ui_obj.do_send_keys(pvc_loc["kms-address"], kms_address)
         logger.info("Storage Class Port")
         base_ui_obj.do_clear(pvc_loc["kms-port"])
         base_ui_obj.do_send_keys(pvc_loc["kms-port"], "8200")
@@ -193,7 +199,7 @@ def create_storage_class_ui(
         base_ui_obj.do_send_keys(pvc_loc["backend-path"], backend_path)
         logger.info("Enter TLS Server Name")
         base_ui_obj.do_clear(pvc_loc["tls-server-name"])
-        base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], "vault.qe.rh-ocs.com")
+        base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], tls_server_name)
         logger.info("Enter Vault Enterprise Namespace")
         base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
         base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
