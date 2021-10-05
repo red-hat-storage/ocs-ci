@@ -13,7 +13,6 @@ import os
 import yaml
 import logging
 from dataclasses import dataclass, field, fields
-import pytest
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
@@ -148,7 +147,7 @@ class MultiClusterConfig:
         self._refresh_ctx()
 
     def initclusterconfigs(self):
-        if self.single_cluster_default:
+        if self.nclusters > 1:
             for i in range(self.nclusters):
                 self.clusters.insert(i, Config())
             self.cluster_ctx = self.clusters[0]

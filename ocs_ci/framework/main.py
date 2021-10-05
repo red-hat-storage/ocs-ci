@@ -100,7 +100,6 @@ def init_ocsci_conf(arguments=None):
 
 
 def process_ocsci_conf(arguments):
-    print("INSIDE PROCESS OCSI CONF")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ocsci-conf", action="append", default=[])
     parser.add_argument(

@@ -354,22 +354,28 @@ def pytest_configure(config):
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
                 return
-    print("Collecting Cluster versions")
-    # remove extraneous metadata
-    for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
-        if config._metadata.get(extra_meta):
-            del config._metadata[extra_meta]
+            print("Collecting Cluster versions")
+            # remove extraneous metadata
+            for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
+                if config._metadata.get(extra_meta):
+                    del config._metadata[extra_meta]
 
-    config._metadata["Test Run Name"] = get_testrun_name()
-    gather_version_info_for_report(config)
+            config._metadata["Test Run Name"] = get_testrun_name()
+            gather_version_info_for_report(config)
 
-    try:
-        ocs_csv = get_ocs_csv()
-        ocs_csv_version = ocs_csv.data["spec"]["version"]
-        config.addinivalue_line("rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}")
-    except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
-        # might be using exisitng cluster path using GUI installation
-        log.warning("Unable to get CSV version for Reporting")
+            try:
+                ocs_csv = get_ocs_csv()
+                ocs_csv_version = ocs_csv.data["spec"]["version"]
+                config.addinivalue_line(
+                    "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
+                )
+            except (
+                ResourceNotFoundError,
+                ChannelNotFound,
+                ResourceWrongStatusException,
+            ):
+                # might be using exisitng cluster path using GUI installation
+                log.warning("Unable to get CSV version for Reporting")
 
 
 def gather_version_info_for_report(config):
