@@ -2,28 +2,39 @@
 Testing the Elasticsearch server deployment
 
 """
+# Internal modules
 import logging
 import time
 
+# 3rd party modules
 from elasticsearch import Elasticsearch, exceptions as esexp
 
-from ocs_ci.ocs import defaults
+# Local modules
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_command
+from ocs_ci.ocs import benchmark_operator, constants, defaults
+from ocs_ci.ocs.elasticsearch import ElasticSearch, elasticsearch_load
+from ocs_ci.ocs.exceptions import ElasticSearchNotDeployed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs import constants, benchmark_operator
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.elasticsearch import elasticsearch_load, ElasticSearch
 
 log = logging.getLogger(__name__)
 
 
 class TestElasticsearch:
+    """
+    Testing the ElasticjSearch module used by ocs-ci
+
+    """
+
     def setup(self):
-        self.es = ElasticSearch()
+        """
+        Initialize the test by deploying a benchmark-operator
+
+        """
 
         # Deploy the benchmark operator
         log.info("Apply Operator CRD")
@@ -31,6 +42,10 @@ class TestElasticsearch:
         self.operator.deploy()
 
     def teardown(self):
+        """
+        Clean up the cluster from the ES and Benchmark-Operator
+
+        """
         self.es.cleanup()
         self.operator.cleanup()
 
@@ -113,13 +128,29 @@ class TestElasticsearch:
 
     def test_elasticsearch(self):
         """
-        This test only deploy the elasticsearch module, connect to it with and
-        without credentials and teardown the environment
+        This test do the following operations:
 
-        Args:
-            es (fixture) : fixture that deploy / teardown the elasticsearch
+            * deploy the elasticsearch module
+            * connect to it
+            * run a simple SmallFile benchmark (to verify usability)
+            * dump the results to a file
+            * push the results from the file to the Dev. ES.
+            * teardown the environment
 
         """
+
+        log.info("Test with 'Dummy' Storageclass")
+        try:
+            self.es = ElasticSearch(sc="dummy")
+        except ElasticSearchNotDeployed:
+            log.info("Raised as expected !")
+
+        log.info("Test with 'Real' Storageclass")
+        try:
+            self.es = ElasticSearch()
+        except ElasticSearchNotDeployed as ex:
+            log.error("Raise as expected !")
+            raise ex
 
         full_log_path = get_full_test_logs_path(cname=self)
         log.info(f"Logs file path name is : {full_log_path}")
@@ -152,6 +183,8 @@ class TestElasticsearch:
             f"ls {full_log_path}/FullResults.tgz"
         ), "Results file did not retrieve from pod"
 
+        # Try to use the development ES server for testing the elasticsearch_load
+        # function to push data into ES server
         try:
             main_es = Elasticsearch(
                 [
