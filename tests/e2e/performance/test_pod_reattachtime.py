@@ -15,8 +15,6 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 
-log = logging.getLogger(__name__)
-
 
 class ResultsAnalyse(PerfResult):
     """
@@ -51,6 +49,33 @@ class TestPVCCreationPerformance(PASTest):
     Test to verify PVC creation performance
     """
 
+    def setup(self):
+        """
+        Setting up test parameters
+        """
+        logging.info("Starting the test setup")
+        super(TestPVCCreationPerformance, self).setup()
+        self.benchmark_name = "pod_reattach_time"
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
+
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -75,44 +100,16 @@ class TestPVCCreationPerformance(PASTest):
             interface_iterate: A fixture to iterate over ceph interfaces
 
         """
-        self.interface = interface_iterate
 
-        # if self.interface.lower() == "cephfs":
-        #     self.interface = constants.CEPHFILESYSTEM
-        #     self.sc = "CephFS"
-        #
-        # if self.interface.lower() == "rbd":
-        #     self.interface = constants.CEPHBLOCKPOOL
-        #     self.sc = "RBD"
+        self.interface = interface_iterate
 
         if self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
 
-
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{self.sc}"
-
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
 
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pvc_reattach_time_performance(self, pvc_factory, teardown_factory):
@@ -121,7 +118,6 @@ class TestPVCCreationPerformance(PASTest):
         Performance in test_multiple_pvc_creation_measurement_performance
         Each kernel (unzipped) is 892M and 61694 files
         """
-
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
         # Number of times we copy the kernel
@@ -198,10 +194,10 @@ class TestPVCCreationPerformance(PASTest):
                 rsh_cmd = f"exec {pod_name} -- sync"
                 _ocp.exec_oc_cmd(rsh_cmd)
 
-            log.info("Getting the amount of data written to the PVC")
+            logging.info("Getting the amount of data written to the PVC")
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
             data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            log.info(
+            logging.info(
                 f"The Amount of data that was written to the pod is {data_written}"
             )
             rsh_cmd = f"delete pod {pod_name}"
@@ -242,39 +238,30 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         os.remove(file_path)
-        logging.info("*******KUKU*********")
         os.rmdir(dir_path)
-        logging.info("*******PERSKY*********")
 
         # Produce ES report
 
         # Collecting environment information
         self.get_env_info()
-        logging.info("*******YASHA*********")
 
         # Initialize the results doc file.
         full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
-        logging.info("*******YULI*********")
+
         full_results.add_key("storageclass", self.sc)
-        logging.info("*******URIEL*********")
         full_results.add_key("pod_reattach_time", time_measures)
-        logging.info("*******AYUSHA*********")
         full_results.add_key("pod_reattach_time_average", average)
-        logging.info("*******PAPA*********")
 
         test_end_time = performance_lib.get_time()
-        logging.info("*******MAMA*********")
 
         # Add the test time to the ES report
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
 
-        logging.info("*******URIEL22*********")
         # Write the test results into the ES server
         full_results.es_write()
-        logging.info("*******URIEL32*********")
         # write the ES link to the test results in the test log.
-        logging.info(f"The Result can be found at : {full_results.results_link()}")
+        logging.info(f"The result can be found at : {full_results.results_link()}")
