@@ -18,7 +18,7 @@ def get_semantic_version(version, only_major_minor=False, ignore_pre_release=Fal
         only_major_minor (bool): If True, only major and minor will be parsed.
         ignore_pre_release (bool): If True, the pre release version will be ignored
 
-    Retruns
+    Returns:
        semantic_version.base.Version: Object of semantic version.
 
     """
@@ -47,7 +47,7 @@ def get_semantic_ocs_version_from_config():
     """
     Returning OCS semantic version from config.
 
-    Retruns
+    Returns:
        semantic_version.base.Version: Object of semantic version for OCS.
 
     """
@@ -58,7 +58,7 @@ def get_semantic_ocp_version_from_config():
     """
     Returning OCP semantic version from config.
 
-    Retruns
+    Returns:
        semantic_version.base.Version: Object of semantic version for OCP.
 
     """
@@ -73,7 +73,7 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
         only_major_minor (bool): If True, only major and minor will be parsed.
         ignore_pre_release (bool): If True, the pre release version will be ignored
 
-    Retruns:
+    Returns:
         semantic_version.base.Version: Object of semantic version for OCS.
 
     """
