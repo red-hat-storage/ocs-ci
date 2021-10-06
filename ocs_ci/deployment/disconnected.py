@@ -13,7 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_opm_tool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NotFoundError
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     create_directory_path,
@@ -209,10 +209,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
     )
     # Disable the default OperatorSources
-    exec_cmd(
-        """oc patch OperatorHub cluster --type json """
-        """-p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'"""
-    )
+    disable_default_sources()
 
     pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
 
@@ -267,7 +264,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
             mode="w+", prefix="catalog_source_manifest", delete=False
         )
         catalog_source_data["spec"]["image"] = f"{mirrored_index_image}"
-        catalog_source_data["metadata"]["name"] = "redhat-operators"
+        catalog_source_data["metadata"]["name"] = constants.OPERATOR_CATALOG_SOURCE_NAME
         catalog_source_data["spec"]["displayName"] = "Red Hat Operators - Mirrored"
         # remove ocs-operator-internal label
         catalog_source_data["metadata"]["labels"].pop("ocs-operator-internal", None)
@@ -279,7 +276,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
             f"oc {'replace' if upgrade else 'apply'} -f {catalog_source_manifest.name}"
         )
         catalog_source = CatalogSource(
-            resource_name="redhat-operators",
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
         # Wait for catalog source is ready
