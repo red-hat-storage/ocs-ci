@@ -20,6 +20,7 @@ def couchbase(request):
 
 
 @workloads
+@pytest.mark.skip(reason="ocs-ci issue: 4488, cb-example pod readiness probe fail")
 @pytest.mark.polarion_id("OCS-785")
 class TestCouchBaseWorkload(E2ETest):
     """
