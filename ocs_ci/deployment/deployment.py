@@ -979,10 +979,10 @@ class Deployment(object):
         ):
             logger.info("Enabling console plugin")
             ocp_obj = ocp.OCP()
-            patch = f'\'[{{"op": "add", "path": "/spec", "value": {"plugins": ["odf-console"]}}}]\''
+            patch = '\'[{"op": "add", "path": "/spec", "value": {"plugins": ["odf-console"]}}]\''
             patch_cmd = (
-                f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} --type json -p "
-                + patch
+                f"patch console.operator.openshift.io cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" --type json -p {patch}"
             )
             ocp_obj.exec_oc_cmd(command=patch_cmd)
 
