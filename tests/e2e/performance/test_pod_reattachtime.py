@@ -4,6 +4,7 @@ import ocs_ci.ocs.exceptions as ex
 import urllib.request
 import time
 import statistics
+import os
 from uuid import uuid4
 
 from ocs_ci.framework.testlib import performance
@@ -76,6 +77,8 @@ class TestPodReattachTimePerformance(PASTest):
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
 
+        helpers.pull_images(constants.PERF_IMAGE)
+
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -115,8 +118,8 @@ class TestPodReattachTimePerformance(PASTest):
     def test_pod_reattach_time_performance(self, pvc_factory, teardown_factory):
         """
         Test assign nodeName to a pod using RWX pvc
-        Performance in test_multiple_pvc_creation_measurement_performance
         Each kernel (unzipped) is 892M and 61694 files
+        The test creates samples_num pvcs and pods and calculates average reattach time and standard deviation
         """
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
@@ -127,7 +130,6 @@ class TestPodReattachTimePerformance(PASTest):
         test_start_time = performance_lib.get_time()
 
         # Download a linux Kernel
-        import os
 
         dir_path = os.path.join(os.getcwd(), download_path)
         file_path = os.path.join(dir_path, "file.gz")
@@ -146,24 +148,34 @@ class TestPodReattachTimePerformance(PASTest):
             accessmode = constants.ACCESS_MODE_RWX
             if self.interface == constants.CEPHBLOCKPOOL:
                 accessmode = constants.ACCESS_MODE_RWO
-            pvc_obj = pvc_factory(
-                interface=self.interface,
-                access_mode=accessmode,
-                status=constants.STATUS_BOUND,
-                size="15",
-            )
+
+            try:
+                pvc_obj = pvc_factory(
+                    interface=self.interface,
+                    access_mode=accessmode,
+                    status=constants.STATUS_BOUND,
+                    size="15",
+                )
+            except Exception as e:
+                logging.error(f"The PVC sample was not created, exception {str(e)}")
+                raise Exception("Test was not completed")
 
             # Create a pod on one node
             logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
-            helpers.pull_images(constants.PERF_IMAGE)
-            pod_obj1 = helpers.create_pod(
-                interface_type=self.interface,
-                pvc_name=pvc_obj.name,
-                namespace=pvc_obj.namespace,
-                node_name=node_one,
-                pod_dict_path=constants.PERF_POD_YAML,
-            )
+            try:
+                pod_obj1 = helpers.create_pod(
+                    interface_type=self.interface,
+                    pvc_name=pvc_obj.name,
+                    namespace=pvc_obj.namespace,
+                    node_name=node_one,
+                    pod_dict_path=constants.PERF_POD_YAML,
+                )
+            except Exception as e:
+                logging.error(
+                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
+                )
+                raise Exception("Test was not completed")
 
             # Confirm that pod is running on the selected_nodes
             logging.info("Checking whether pods are running on the selected nodes")
@@ -200,18 +212,25 @@ class TestPodReattachTimePerformance(PASTest):
             logging.info(
                 f"The Amount of data that was written to the pod is {data_written}"
             )
+            logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
             _ocp.exec_oc_cmd(rsh_cmd)
 
             logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_two}")
 
-            pod_obj2 = helpers.create_pod(
-                interface_type=self.interface,
-                pvc_name=pvc_obj.name,
-                namespace=pvc_obj.namespace,
-                node_name=node_two,
-                pod_dict_path=constants.PERF_POD_YAML,
-            )
+            try:
+                pod_obj2 = helpers.create_pod(
+                    interface_type=self.interface,
+                    pvc_name=pvc_obj.name,
+                    namespace=pvc_obj.namespace,
+                    node_name=node_two,
+                    pod_dict_path=constants.PERF_POD_YAML,
+                )
+            except Exception as e:
+                logging.error(
+                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
+                )
+                raise Exception("Test was not completed")
 
             start_time = time.time()
 
@@ -222,6 +241,9 @@ class TestPodReattachTimePerformance(PASTest):
             end_time = time.time()
             total_time = end_time - start_time
             if total_time > 60:
+                logging.error(
+                    f"Pod creation time is {total_time} and greater than 60 seconds"
+                )
                 raise ex.PerformanceException(
                     f"Pod creation time is {total_time} and greater than 60 seconds"
                 )
@@ -235,6 +257,11 @@ class TestPodReattachTimePerformance(PASTest):
         average = statistics.mean(time_measures)
         logging.info(
             f"The average time of {self.interface} pod creation on {samples_num} PVCs is {average} seconds"
+        )
+
+        st_deviation = statistics.stdev(time_measures)
+        logging.info(
+            f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
         )
 
         os.remove(file_path)
@@ -253,6 +280,7 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key("storageclass", self.sc)
         full_results.add_key("pod_reattach_time", time_measures)
         full_results.add_key("pod_reattach_time_average", average)
+        full_results.add_key("pod_reattach_standard_deviation", st_deviation)
 
         test_end_time = performance_lib.get_time()
 
