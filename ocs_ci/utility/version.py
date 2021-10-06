@@ -6,7 +6,7 @@ Module for version related util functions.
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults, ocp
+from ocs_ci.ocs import defaults
 
 
 def get_semantic_version(version, only_major_minor=False, ignore_pre_release=False):
@@ -77,6 +77,8 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
         semantic_version.base.Version: Object of semantic version for OCS.
 
     """
+    # Import ocp here to avoid circular dependency issue
+    from ocs_ci.ocs import ocp
 
     csvs = ocp.OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
