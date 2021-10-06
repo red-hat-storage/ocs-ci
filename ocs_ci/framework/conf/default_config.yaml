@@ -179,6 +179,8 @@ ENV_DATA:
   VAULT_CLIENT_KEY: "ocs-kms-client-key"
   VAULT_SKIP_VERIFY: false
   VAULT_BACKEND: "v1"
+  # enable console plugin
+  enable_console_plugin: true
 
 # This section is related to upgrade
 UPGRADE:
