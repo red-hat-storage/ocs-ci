@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     ignore_leftovers,
     ipi_deployment_required,
+    vsphere_platform_required,
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
@@ -22,7 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
 )
-
+from ocs_ci.ocs import osd_operations
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -301,3 +302,65 @@ class TestNodeReplacementTwice(ManageTest):
             assert not (
                 node_name_to_delete in str(tree_output)
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
+
+
+@tier4b
+@bugzilla("1904302")
+@ignore_leftovers
+@vsphere_platform_required
+class TestDiskReplacementNodeReplacement(ManageTest):
+    """
+    Automates osd disk replacement and new osd running node replacement scenario
+    """
+
+    @pytest.mark.polarion_id("OCS-2658")
+    def test_disk_replacement_node_replacement(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
+        """
+        1. Get osds before node replacement
+        2. Get OSD running nodes
+        3. Replace disk
+        4. Get new osd and its node
+        5. Replace new osd running node
+        6. Health check
+        """
+
+        # OSDs before running disk replacement
+        old_osds = []
+        for osd in pod.get_osd_pods():
+            old_osds.append(osd.name)
+        log.info(f"OSDs before disk replacement {old_osds}")
+
+        # Get osd running nodes
+        osd_nodes = node.get_osd_running_nodes()
+        log.info(f"osd_nodes {osd_nodes}")
+
+        # Fail and replace the osd device
+        osd_operations.osd_device_replacement(nodes)
+
+        # OSDs after running disk replacement
+        current_osds = []
+        for osd in pod.get_osd_pods():
+            current_osds.append(osd.name)
+        log.info(f"OSDs after disk replacement {current_osds}")
+
+        # Get new osd
+        new_osd = [osd_name for osd_name in current_osds if osd_name not in old_osds]
+        log.info(f"New osd {new_osd}")
+
+        # Get new osd running node
+        node_to_replace = pod.get_pod_node(pod.get_pod_obj(name=new_osd[0]))
+        log.info(f"Node to replace {node_to_replace}")
+
+        # Replace osd running node
+        delete_and_create_osd_node(node_to_replace.name)
+
+        # Verify everything running fine
+        log.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=120)
+
+        # Sanity check
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
