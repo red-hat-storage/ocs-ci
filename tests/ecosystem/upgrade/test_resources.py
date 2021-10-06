@@ -1,9 +1,8 @@
 import logging
 import pytest
 
-from semantic_version import Version
-
 from ocs_ci.framework import config
+from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
@@ -140,15 +139,16 @@ def test_noobaa_service_mon_after_ocs_upgrade():
     3.Verify 'noobaa-service-monitor' does not exist
 
     """
-    upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
-    if Version.coerce(upgrade_ocs_version) >= Version.coerce("4.7.4"):
-        ocp_obj = ocp.OCP(
-            kind="servicemonitors", namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-        servicemon = ocp_obj.get()
-        servicemonitors = servicemon["items"]
-        for servicemonitor in servicemonitors:
-            assert (
-                servicemonitor["metadata"]["name"] != "noobaa-service-monitor"
-            ), "noobaa-service-monitor exist"
-        log.info("noobaa-service-monitor does not exist")
+    ocs_version = version.get_ocs_version_from_csv(
+        only_major_minor=False, ignore_pre_release=True
+    )
+    if ocs_version <= version.get_semantic_version("4.7.4"):
+        pytest.skip("The test does not supported on version less than 4.7.4")
+    ocp_obj = ocp.OCP(kind="servicemonitors", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    servicemon = ocp_obj.get()
+    servicemonitors = servicemon["items"]
+    for servicemonitor in servicemonitors:
+        assert (
+            servicemonitor["metadata"]["name"] != "noobaa-service-monitor"
+        ), "noobaa-service-monitor exist"
+    log.info("noobaa-service-monitor does not exist")
