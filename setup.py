@@ -76,6 +76,7 @@ setup(
         "pyopenssl",
         "pyparsing ==2.4.7",
         "mysql-connector-python==8.0.27",
+        "pyautogui==0.9.53",
         "pytest-repeat",
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
