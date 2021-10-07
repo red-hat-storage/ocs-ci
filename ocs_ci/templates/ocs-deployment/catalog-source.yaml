@@ -2,7 +2,7 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
-  name: ocs-catalogsource
+  name: redhat-operators
   namespace: openshift-marketplace
   labels:
       ocs-operator-internal: "true"

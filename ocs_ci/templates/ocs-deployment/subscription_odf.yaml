@@ -7,5 +7,5 @@ metadata:
 spec:
   channel: CHANNEL_PLACEHOLDER
   name: odf-operator
-  source: ocs-catalogsource
+  source: redhat-operators
   sourceNamespace: openshift-marketplace
