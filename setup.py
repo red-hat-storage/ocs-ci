@@ -74,7 +74,6 @@ setup(
         "pyopenssl",
         "pyparsing ==2.4.7",
         "mysql-connector-python==8.0.2",
-        "pyautogui==0.9.53",
     ],
     entry_points={
         "console_scripts": [
