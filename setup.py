@@ -71,6 +71,7 @@ setup(
         "junitparser",
         "flaky==3.7.0",
         "ocp-network-split",
+        "pyautogui==0.9.53",
     ],
     entry_points={
         "console_scripts": [
