@@ -129,6 +129,7 @@ def test_pod_log_after_upgrade():
 @post_upgrade
 @bugzilla("1973179")
 @skipif_ocs_version("<4.7")
+@pytest.mark.polarion_id("OCS-2666")
 def test_noobaa_service_mon_after_ocs_upgrade():
     """
     test_noobaa_service_mon_after_ocs_upgrade
@@ -144,7 +145,9 @@ def test_noobaa_service_mon_after_ocs_upgrade():
     )
     if ocs_version <= version.get_semantic_version("4.7.4"):
         pytest.skip("The test does not supported on version less than 4.7.4")
-    ocp_obj = ocp.OCP(kind="servicemonitors", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = ocp.OCP(
+        kind=constants.SERVICE_MONITORS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
     servicemon = ocp_obj.get()
     servicemonitors = servicemon["items"]
     for servicemonitor in servicemonitors:
