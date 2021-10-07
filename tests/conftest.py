@@ -3687,7 +3687,9 @@ def pvc_clone_factory(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def reportportal_customization(request):
-    if hasattr(request.node.config, "py_test_service"):
+    if config.REPORTING.get("rp_launch_url"):
+        request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
+    elif hasattr(request.node.config, "py_test_service"):
         rp_service = request.node.config.py_test_service
         if not hasattr(rp_service.RP, "rp_client"):
             request.config._metadata[
