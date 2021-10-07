@@ -15,6 +15,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
 
 
 class ResultsAnalyse(PerfResult):
@@ -158,7 +159,7 @@ class TestPodReattachTimePerformance(PASTest):
                 )
             except Exception as e:
                 logging.error(f"The PVC sample was not created, exception {str(e)}")
-                raise Exception("Test was not completed")
+                raise PVCNotCreated("PVC did not reach BOUND state.")
 
             # Create a pod on one node
             logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
@@ -175,7 +176,7 @@ class TestPodReattachTimePerformance(PASTest):
                 logging.error(
                     f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
                 )
-                raise Exception("Test was not completed")
+                raise PodNotCreated("Pod on PVC was not created.")
 
             # Confirm that pod is running on the selected_nodes
             logging.info("Checking whether pods are running on the selected nodes")
@@ -230,7 +231,7 @@ class TestPodReattachTimePerformance(PASTest):
                 logging.error(
                     f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
                 )
-                raise Exception("Test was not completed")
+                raise PodNotCreated("Pod on PVC was not created.")
 
             start_time = time.time()
 

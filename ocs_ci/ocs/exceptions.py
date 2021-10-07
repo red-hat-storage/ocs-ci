@@ -410,3 +410,11 @@ class OCSWorkerScaleFailed(Exception):
 
 class OSDScaleFailed(Exception):
     pass
+
+
+class PVCNotCreated(Exception):
+    pass
+
+
+class PodNotCreated(Exception):
+    pass
