@@ -347,6 +347,8 @@ page_nav = {
         'a[data-test-id="horizontal-link-Block Pools"]',
         By.CSS_SELECTOR,
     ),
+    "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
+
 }
 
 add_capacity = {
@@ -483,12 +485,26 @@ validation_4_8 = {
     ),
 }
 
+dashboard_4_9 = {
+    "storage_systems": ("a[data-test-id='horizontal-link-Storage Systems']", By.CSS_SELECTOR),
+    "ocs-storagecluster-storagesystem-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
+    "ocs-storagecluster-storagesystem": ("a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']", By.CSS_SELECTOR),
+    "overview": ("a[data-test-id='horizontal-link-Overview']", By.CSS_SELECTOR,),
+    "blockandfile": ("a[data-test-id='horizontal-link-Block and File']", By.CSS_SELECTOR),
+    "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
+    "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
+    "ocs-storagecluster-cephblockpool-status": ("td[class='pf-m-hidden pf-m-visible-on-md pf-u-w-8-on-2xl'] span[data-test='status-text']", By.CSS_SELECTOR),
+    "ocs-storagecluster-cephblockpool": (".co-resource-item__resource-name[data-test='ocs-storagecluster-cephblockpool']", By.CSS_SELECTOR),
+
+                }
+
 locators = {
     "4.9": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
+        "dashboard": dashboard_4_9,
     },
     "4.8": {
         "login": login,

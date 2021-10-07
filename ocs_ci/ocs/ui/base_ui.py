@@ -29,6 +29,8 @@ from ocs_ci.ocs.exceptions import (
     PageNotLoaded,
 )
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.version import get_ocs_version
+from ocs_ci.utility import version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -308,6 +310,11 @@ class BaseUI:
             return False
 
 
+    # def verify_icon_with_color(self, locator):
+    #     webicon = self.driver.find_element(By.XPATH, locator)
+    #     String webicon.getCssValue("fill")
+
+
 class PageNavigator(BaseUI):
     """
     Page Navigator Class
@@ -333,6 +340,19 @@ class PageNavigator(BaseUI):
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_odf_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview Page
+
+        """
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version >= version.VERSION_4_9:
+                logger.info("Navigate to ODF tab under Storage")
+                self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+                self.do_click(locator=self.page_nav["odf_tab"])
+                logger.info("Successfully navigated to ODF tab under Storage")
 
     def navigate_quickstarts_page(self):
         """
@@ -418,6 +438,7 @@ class PageNavigator(BaseUI):
 
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
+
 
     def navigate_persistentvolumes_page(self):
         """
@@ -655,7 +676,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 

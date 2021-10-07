@@ -1,7 +1,11 @@
 import logging
 
+from selenium.webdriver.common.by import By
+
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -169,6 +173,82 @@ class ValidationUI(PageNavigator):
         for err in self.err_list:
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
+
+
+    def test_odf_dashboard_ui(self,
+                              ):
+        """
+        Test to verify ODF dashboard changes in ODF 4.9
+
+        """
+
+        self.ocp_version = get_ocp_version()
+        self.page_nav = locators[self.ocp_version]["page"]
+        self.dashboard_items = locators[self.ocp_version]["dashboard"]
+        self.dep_loc = locators[self.ocp_version]["deployment"]
+
+        self.navigate_operatorhub_page()
+        self.navigate_installed_operators_page()
+        self.choose_expanded_mode(
+            mode=True, locator=self.dep_loc["drop_down_projects"]
+        )
+        self.do_click(
+            self.dep_loc["enable_default_porjects"], enable_screenshot=True
+        )
+        self.do_click(
+            self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+        )
+        self.choose_expanded_mode(
+            mode=True, locator=self.dep_loc["drop_down_projects"]
+        )
+        self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
+
+
+        self.navigate_odf_overview_page()
+
+        logger.info("Click on 'Storage Systems' tab")
+        self.do_click(self.dashboard_items["storage_systems"], enable_screenshot=True)
+        logger.info("Verifying the status of ocs-storagecluster-storagesystem")
+        storagesystem_status = self.get_element_text(self.dashboard_items["ocs-storagecluster-storagesystem-status"])
+        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
+        storage_system_data = storage_system.get()
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
+        if ocs_version >= version.VERSION_4_9:
+            logger.info("Verifying storage system status")
+            storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
+            storage_system_data = storage_system.get()
+            storage_system_status = {}
+            for condition in storage_system_data["items"][0]["status"]["conditions"]:
+                storage_system_status[condition["type"]] = condition["status"]
+            log.debug(f"storage system status: {storage_system_status}")
+            assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
+                f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+                f" but found {storage_system_status}"
+            )
+
+        assert "Ready" == storagesystem_status, (
+            f"status error|expected status:Ready \n "
+            f"actual status:{storagesystem_status}")
+        logger.info("Click on ocs-storagecluster-storagesystem link under Storage Systems page")
+        self.do_click(self.dashboard_items["ocs-storagecluster-storagesystem"], enable_screenshot=True)
+        logger.info("Click on Overview tab")
+        self.do_click(self.dashboard_items["overview"])
+        logger.info("Click on 'Block and File' tab")
+        self.do_click(self.dashboard_items["blockandfile"])
+        logger.info("Click on 'BlockPools' tab")
+        self.do_click(self.dashboard_items["blockpools"])
+        logger.info("Verifying the status of ocs-storagecluster-cephblockpool")
+        cephblockpool_status = self.get_element_text(self.dashboard_items["ocs-storagecluster-cephblockpool-status"])
+        assert "Ready" == cephblockpool_status, (
+            f"status error|expected status:Ready \n "
+            f"actual status:{cephblockpool_status}")
+        logger.info("Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab")
+        self.do_click(self.dashboard_items["ocs-storagecluster-cephblockpool"])
+
+
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
