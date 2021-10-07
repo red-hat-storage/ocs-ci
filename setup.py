@@ -73,8 +73,7 @@ setup(
         "ocp-network-split",
         "pyopenssl",
         "pyparsing ==2.4.7",
-        "mysql-connector-python==8.0.27",
-        "pyautogui==0.9.53",
+        "mysql-connector-python==8.0.2",
     ],
     entry_points={
         "console_scripts": [
