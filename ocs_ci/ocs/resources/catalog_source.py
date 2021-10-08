@@ -2,6 +2,7 @@
 CatalogSource related functionalities
 """
 import logging
+from time import sleep
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -131,6 +132,8 @@ def disable_default_sources():
     """
     logger.info("Disabling default sources")
     run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="true"))
+    logger.info("Waiting 5 seconds after disabling default sources")
+    sleep(5)
 
 
 def enable_default_sources():
@@ -139,3 +142,5 @@ def enable_default_sources():
     """
     logger.info("Enabling default sources")
     run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="false"))
+    logger.info("Waiting 20 seconds after enabling default sources")
+    sleep(20)
