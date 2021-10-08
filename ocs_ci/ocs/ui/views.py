@@ -16,7 +16,7 @@ login = {
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
-        'a[data-test="ocs-operator-ocs-catalogsource-openshift-marketplace"]',
+        'a[data-test="ocs-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
@@ -120,7 +120,7 @@ deployment_4_9 = {
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     "click_odf_operator": (
-        'a[data-test="odf-operator-ocs-catalogsource-openshift-marketplace"]',
+        'a[data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
     "enable_console_plugin": ('input[data-test="Enable-radio-input"]', By.CSS_SELECTOR),
