@@ -418,7 +418,7 @@ class PVCNotCreated(Exception):
 
 class PodNotCreated(Exception):
     pass
-  
-  
+
+
 class ElasticSearchNotDeployed(Exception):
     pass
