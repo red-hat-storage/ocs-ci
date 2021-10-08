@@ -441,7 +441,6 @@ class TestNodesMaintenance(ManageTest):
 
     @bugzilla("1861104")
     @bugzilla("1946573")
-    @pytest.mark.polarion_id("OCS-2634")
     @pytest.mark.polarion_id("OCS-2524")
     @tier4b
     def test_pdb_check_simultaneous_node_drains(
