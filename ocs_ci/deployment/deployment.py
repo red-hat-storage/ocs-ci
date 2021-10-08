@@ -512,7 +512,7 @@ class Deployment(object):
             if ocs_version >= version.VERSION_4_9 and (
                 defaults.ODF_OPERATOR_NAME in ocs_operator_name
             ):
-                csv.wait_for_phase("Installing", timeout=720)
+                csv.wait_for_phase("Succeeded", timeout=720)
                 time.sleep(30)
                 exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
             csv.wait_for_phase("Succeeded", timeout=720)
