@@ -20,6 +20,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
+    NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
@@ -29,6 +30,7 @@ from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
@@ -917,11 +919,16 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
+    @retry(NoobaaCliChecksumFailedException, tries=10, delay=15, backoff=1)
     def retrieve_noobaa_cli_binary(self):
         """
         Copy the NooBaa CLI binary from the operator pod
         if it wasn't found locally, or if the hashes between
         the two don't match.
+
+        Raises:
+            NoobaaCliChecksumFailedException: If checksum doesn't match.
+            AssertionError: In the case CLI binary doesn't exist.
 
         """
 
@@ -937,9 +944,11 @@ class MCG:
             remote_cli_bin_md5 = cal_md5sum(
                 self.operator_pod, constants.NOOBAA_OPERATOR_POD_CLI_PATH
             )
+            logger.info(f"Remote noobaa cli md5 hash: {remote_cli_bin_md5}")
             local_cli_bin_md5 = calc_local_file_md5_sum(
                 constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
             )
+            logger.info(f"Local noobaa cli md5 hash: {local_cli_bin_md5}")
             return remote_cli_bin_md5 == local_cli_bin_md5
 
         if (
@@ -965,9 +974,10 @@ class MCG:
             assert os.access(
                 constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
             ), "The MCG CLI binary does not have execution permissions"
-            assert (
-                _compare_cli_hashes()
-            ), "Binary hash doesn't match the one on the operator pod"
+            if not _compare_cli_hashes():
+                raise NoobaaCliChecksumFailedException(
+                    "Binary hash doesn't match the one on the operator pod"
+                )
 
     @property
     def status(self):
