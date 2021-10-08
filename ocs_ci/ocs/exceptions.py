@@ -18,6 +18,10 @@ class NoobaaHealthException(Exception):
     pass
 
 
+class NoobaaCliChecksumFailedException(Exception):
+    pass
+
+
 class UnexpectedBehaviour(Exception):
     pass
 
