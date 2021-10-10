@@ -135,7 +135,10 @@ class PackageManifest(OCP):
         """
         self.check_name_is_specified()
         try:
-            return self.data["status"]["channels"]
+            if isinstance(self.data, list):
+                return self.data[0]["status"]["channels"]
+            else:
+                return self.data["status"]["channels"]
         except KeyError as ex:
             log.error(
                 "Can't get channels for package manifest. "
