@@ -1727,14 +1727,19 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
 
     """
     ocs_version_pattern_dict = {
-        Version.coerce("4.6"): f"ocs-osd-removal-{osd_id}",
-        Version.coerce("4.7"): "ocs-osd-removal-job",
-        Version.coerce("4.8"): "ocs-osd-removal-",
-        Version.coerce("4.9"): "ocs-osd-removal-job",
+        "4.6": f"ocs-osd-removal-{osd_id}",
+        "4.7": "ocs-osd-removal-job",
+        "4.8": "ocs-osd-removal-",
+        "4.9": "ocs-osd-removal-job",
     }
 
     ocs_version = config.ENV_DATA["ocs_version"]
-    pattern = ocs_version_pattern_dict[Version.coerce(ocs_version)]
+    pattern = ocs_version_pattern_dict.get(ocs_version)
+    if not pattern:
+        logger.warning(
+            f"ocs version {ocs_version} didn't match any of the known versions"
+        )
+        return None
 
     try:
         for osd_removal_pod_names in TimeoutSampler(
