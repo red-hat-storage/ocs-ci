@@ -3560,3 +3560,19 @@ def wait_for_rook_ceph_pod_status(pod_obj, desired_status, timeout=420):
             return False
 
     return True
+
+
+def check_number_of_mon_pods(expected_mon_num=3):
+    """
+    Function to check the number of monitoring pods
+
+    Returns:
+        bool: True if number of mon pods is 3, False otherwise
+
+    """
+    mon_pod_list = pod.get_mon_pods()
+    if len(mon_pod_list) == expected_mon_num:
+        logger.info(f"Number of mons equal to {expected_mon_num}")
+        return True
+    logger.error(f"Number of Mons not equal to {expected_mon_num} {mon_pod_list}")
+    return False

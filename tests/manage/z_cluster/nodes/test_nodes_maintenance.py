@@ -39,6 +39,7 @@ from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
     storagecluster_independent_check,
+    verify_pdb_mon,
 )
 from ocs_ci.helpers import helpers
 
@@ -439,6 +440,7 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check()
 
     @bugzilla("1861104")
+    @bugzilla("1946573")
     @pytest.mark.polarion_id("OCS-2524")
     @tier4b
     def test_pdb_check_simultaneous_node_drains(
@@ -454,9 +456,11 @@ class TestNodesMaintenance(ManageTest):
         - Maintenance (mark as unschedulable and drain) 2 worker node with delay of 30 secs
         - Drain will be completed on worker node A
         - Drain will be pending on worker node B due to blocking PDBs
+        - Check mon failover in first 10 mins, then 15 and 20 mins
         - Check the OSD PDBs
         - Mark the node A as schedulable
         - Let drain finish on Node B
+        - Again check mon failover in first 10 mins and then in intervals
         - Mark the node B as schedulable
         - Check cluster and Ceph health
 
@@ -484,6 +488,16 @@ class TestNodesMaintenance(ManageTest):
         time.sleep(30)
         try:
             drain_nodes([node_B])
+            # After the drain check Mon failover in 10th, 15th and 20th min
+            timeout = [600, 300, 300]
+            for failover in timeout:
+                sample = TimeoutSampler(
+                    timeout=failover,
+                    sleep=10,
+                    func=helpers.check_number_of_mon_pods,
+                )
+                if not sample.wait_for_func_status(result=True):
+                    assert "Number of mon pods not equal to expected_mon_count=3"
         except TimeoutExpired:
             # Mark the node-A back to schedulable and let drain finish in Node-B
             schedule_nodes([node_A])
@@ -505,6 +519,27 @@ class TestNodesMaintenance(ManageTest):
         )
         if not sample.wait_for_func_status(result=False):
             log.error("Blocking PDBs still exist")
+
+        # After the drain check mon failover in 10th, 15th and 20th Min
+        timeout = [600, 300, 300]
+        for failover in timeout:
+            sample = TimeoutSampler(
+                timeout=failover,
+                sleep=10,
+                func=helpers.check_number_of_mon_pods,
+            )
+            if not sample.wait_for_func_status(result=True):
+                assert "Number of Mon pods not equal to expected_mon_count=3"
+
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=verify_pdb_mon,
+            disruptions_allowed=1,
+            max_unavailable_mon=1,
+        )
+        if not sample.wait_for_func_status(result=True):
+            assert "The expected mon-pdb is not equal to actual mon pdb"
 
         # wait for storage pods
         pod.wait_for_storage_pods()

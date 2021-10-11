@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.helpers.helpers import verify_pdb_mon
+from ocs_ci.helpers.helpers import verify_pdb_mon, check_number_of_mon_pods
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_operator_pods,
@@ -53,7 +53,7 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=1,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         log.info("Get worker node name where monitoring pod run")
@@ -69,15 +69,15 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=0,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         timeout = 1400
         log.info(f"Verify the number of mon pods is 3 for {timeout} seconds")
         sample = TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.check_mon_pods_eq_3
+            timeout=timeout, sleep=10, func=check_number_of_mon_pods
         )
-        if sample.wait_for_func_status(result=True):
+        if sample.wait_for_func_status(result=False):
             assert "There are more than 3 mon pods."
 
         log.info("Respin pod rook-ceph operator pod")
@@ -96,24 +96,9 @@ class TestDrainNodeMon(ManageTest):
             disruptions_allowed=1,
             max_unavailable_mon=1,
         )
-        if sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=True):
             assert "the expected pdb state is not equal to actual pdb state"
 
         ceph_health_check()
 
-    def check_mon_pods_eq_3(self):
-        """
-        Get number of monitoring pods
-
-        Returns:
-            bool: False if number of mon pods is 3, True otherwise
-
-        """
-        mon_pod_list = get_mon_pods()
-        if len(mon_pod_list) == 3:
-            return False
-        else:
-            log.info(f"There are {len(mon_pod_list)} mon pods")
-            for mon_pod in mon_pod_list:
-                log.info(f"{mon_pod.name}")
-            return True
+        assert check_number_of_mon_pods(), "The number of mon pods not equal to 3"
