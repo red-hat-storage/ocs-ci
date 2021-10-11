@@ -4,6 +4,7 @@ from time import sleep
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
@@ -44,7 +45,6 @@ class QuayOperator(object):
 
         """
         quay_operator_data = templating.load_yaml(file=constants.QUAY_SUB)
-        self.quay_operator_csv = quay_operator_data["spec"]["startingCSV"]
         self.quay_operator = OCS(**quay_operator_data)
         logger.info(f"Installing Quay operator: {self.quay_operator.name}")
         self.quay_operator.create()
@@ -59,6 +59,10 @@ class QuayOperator(object):
                     timeout=600,
                 )
                 break
+        self.quay_operator_csv = get_csvs_start_with_prefix(
+            csv_prefix=constants.QUAY_OPERATOR,
+            namespace=self.namespace,
+        )[0]["metadata"]["name"]
 
     def create_quay_registry(self):
         """
@@ -129,6 +133,8 @@ class QuayOperator(object):
             self.quay_registry.delete()
         if self.quay_operator:
             self.quay_operator.delete()
-        exec_cmd(
-            f"oc delete {constants.CLUSTER_SERVICE_VERSION} {self.quay_operator_csv} -n {self.namespace}"
-        )
+        if self.quay_operator_csv:
+            exec_cmd(
+                f"oc delete {constants.CLUSTER_SERVICE_VERSION} "
+                f"{self.quay_operator_csv} -n {self.namespace}"
+            )
