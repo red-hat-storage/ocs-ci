@@ -1192,9 +1192,12 @@ def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
         dict : head object response
 
     """
-    return s3_obj.s3_client.head_object(
-        Bucket=bucketname, Key=object_key, IfMatch=if_match
-    )
+    if if_match:
+        return s3_obj.s3_client.head_object(
+            Bucket=bucketname, Key=object_key, IfMatch=if_match
+        )
+    else:
+        return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_list_objects_v1(
