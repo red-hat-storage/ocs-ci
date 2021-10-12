@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.framework import config
-from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
@@ -78,8 +78,6 @@ class TestPodReattachTimePerformance(PASTest):
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
 
-        helpers.pull_images(constants.PERF_IMAGE)
-
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -127,9 +125,9 @@ class TestPodReattachTimePerformance(PASTest):
         # Number of times we copy the kernel
         copies = 3
 
-        samples_num = 10
-        test_start_time = performance_lib.get_time()
-
+        samples_num = 2
+        test_start_time = PASTest.get_time()
+        helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
 
         dir_path = os.path.join(os.getcwd(), download_path)
@@ -210,9 +208,12 @@ class TestPodReattachTimePerformance(PASTest):
             logging.info("Getting the amount of data written to the PVC")
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
             data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            logging.info(
-                f"The Amount of data that was written to the pod is {data_written}"
-            )
+            logging.info(f"The amount of written data is {data_written}")
+
+            rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
+            files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
+            logging.info(f"The number of files written to the pod is {files_written}")
+
             logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
             _ocp.exec_oc_cmd(rsh_cmd)
@@ -283,7 +284,7 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key("pod_reattach_time_average", average)
         full_results.add_key("pod_reattach_standard_deviation", st_deviation)
 
-        test_end_time = performance_lib.get_time()
+        test_end_time = PASTest.get_time()
 
         # Add the test time to the ES report
         full_results.add_key(

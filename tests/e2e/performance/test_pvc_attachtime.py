@@ -6,7 +6,7 @@ from uuid import uuid4
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers.helpers import get_full_test_logs_path, pod_start_time
-from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
@@ -163,7 +163,7 @@ class TestPodStartTime(PASTest):
         Test to log pod start times for all the sampled pods
         """
         # Getting the test start time
-        self.test_start_time = performance_lib.get_time()
+        self.test_start_time = PASTest.get_time()
 
         # Start of the actual test
         start_time_dict_list = []
@@ -217,7 +217,7 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key("attach_time_stdev_percent", st_deviation_percent)
 
         # Getting the test end time
-        self.test_end_time = performance_lib.get_time()
+        self.test_end_time = PASTest.get_time()
 
         # Add the test time to the ES report
         self.full_results.add_key(
