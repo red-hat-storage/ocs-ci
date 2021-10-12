@@ -1726,13 +1726,20 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
+    ocs_version_pattern_dict = {
+        "4.6": f"ocs-osd-removal-{osd_id}",
+        "4.7": "ocs-osd-removal-job",
+        "4.8": "ocs-osd-removal-",
+        "4.9": "ocs-osd-removal-job",
+    }
+
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) == Version.coerce("4.7"):
-        pattern = "ocs-osd-removal-job"
-    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
-        pattern = "ocs-osd-removal-"
-    else:
-        pattern = f"ocs-osd-removal-{osd_id}"
+    pattern = ocs_version_pattern_dict.get(ocs_version)
+    if not pattern:
+        logger.warning(
+            f"ocs version {ocs_version} didn't match any of the known versions"
+        )
+        return None
 
     try:
         for osd_removal_pod_names in TimeoutSampler(
@@ -1874,8 +1881,14 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     # Verify OSD removal from the ocs-osd-removal pod logs
     logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
     logs = get_pod_logs(osd_removal_pod_name)
-    pattern = f"purged osd.{osd_id}"
-    if not re.search(pattern, logs):
+    patterns = [
+        f"purged osd.{osd_id}",
+        f"purge osd.{osd_id}",
+        f"completed removal of OSD {osd_id}",
+    ]
+
+    is_osd_pattern_in_logs = any([re.search(pattern, logs) for pattern in patterns])
+    if not is_osd_pattern_in_logs:
         logger.warning(
             f"Didn't find the removal of OSD from {osd_removal_pod_name} pod logs"
         )
