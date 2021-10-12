@@ -334,12 +334,13 @@ class FioPodScale(object):
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
 
-    def pvc_expansion(self, pvc_new_size):
+    def pvc_expansion(self, pvc_new_size, wait_time=30):
         """
         Function to expand PVC size and verify the new size is reflected.
 
         Args:
             pvc_new_size (int): Updated/extended PVC size
+            wait_time: timeout for all the pvc in kube job to get extended size
 
         """
 
@@ -369,6 +370,7 @@ class FioPodScale(object):
                 namespace=self.namespace,
                 no_of_pvc=len(yaml_data),
                 resize_value=pvc_new_size,
+                timeout=wait_time,
             )
 
     def cleanup(self):
@@ -1754,10 +1756,10 @@ def validate_all_expanded_pvc_size_in_kube_job(
             time.sleep(timeout)
             while_iteration_count += 1
             # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
-            # And if PVCs still not in bound state then there will be assert.
+            # And if PVCs size still not extended then there will be assert.
             if while_iteration_count >= 10:
                 assert logging.error(
-                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_extended_list}"
+                    f" Listed PVC size not expanded in {timeout*10} secs, PVCs {pvc_not_extended_list}"
                 )
                 break
             pvc_not_extended_list.clear()
