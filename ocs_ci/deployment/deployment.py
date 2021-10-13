@@ -977,6 +977,23 @@ class Deployment(object):
             # Change registry backend to OCS CEPHFS RWX PVC
             registry.change_registry_backend_to_ocs()
 
+        # Enable console plugin
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (
+            ocs_version >= version.VERSION_4_9
+            and config.ENV_DATA["enable_console_plugin"]
+        ):
+            logger.info("Enabling console plugin")
+            ocp_obj = ocp.OCP()
+            patch = (
+                '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
+            )
+            patch_cmd = (
+                f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" --type json -p {patch}"
+            )
+            ocp_obj.exec_oc_cmd(command=patch_cmd)
+
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
