@@ -69,7 +69,10 @@ class TestPVCExpand(E2ETest):
 
         # Expand PVC to new size
         logging.info(f"Starting expanding PVC size to {pvc_new_size}Gi")
-        resize_pvc.pvc_expansion(pvc_new_size=pvc_new_size)
+        resize_pvc.pvc_expansion(
+            pvc_new_size=pvc_new_size,
+            wait_time=45,
+        )
 
         # Check ceph health status
         utils.ceph_health_check()
