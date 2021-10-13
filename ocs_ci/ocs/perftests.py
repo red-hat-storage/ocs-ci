@@ -441,3 +441,14 @@ class PASTest(BaseTest):
             OK = False
 
         return OK
+
+    @staticmethod
+    def get_time():
+        """
+        Getting the current GMT time in a specific format for the ES report
+
+        Returns:
+            str : current date and time in formatted way
+
+        """
+        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
