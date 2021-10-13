@@ -416,5 +416,13 @@ class OSDScaleFailed(Exception):
     pass
 
 
+class PVCNotCreated(Exception):
+    pass
+
+
+class PodNotCreated(Exception):
+    pass
+
+
 class ElasticSearchNotDeployed(Exception):
     pass

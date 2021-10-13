@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 import statistics
 from uuid import uuid4
 
@@ -159,22 +158,12 @@ class TestPodStartTime(PASTest):
 
         return pod_result_list
 
-    def get_time(self):
-        """
-        Getting the current GMT time in a specific format for the ES report
-
-        Returns:
-            str : current date and time in formatted way
-
-        """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-
     def test_pod_start_time(self, pod_obj_list):
         """
         Test to log pod start times for all the sampled pods
         """
         # Getting the test start time
-        self.test_start_time = self.get_time()
+        self.test_start_time = PASTest.get_time()
 
         # Start of the actual test
         start_time_dict_list = []
@@ -228,7 +217,7 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key("attach_time_stdev_percent", st_deviation_percent)
 
         # Getting the test end time
-        self.test_end_time = self.get_time()
+        self.test_end_time = PASTest.get_time()
 
         # Add the test time to the ES report
         self.full_results.add_key(
