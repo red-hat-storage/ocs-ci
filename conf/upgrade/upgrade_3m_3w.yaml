@@ -3,4 +3,5 @@ REPORTING:
   polarion:
     upgrade_id: 'OCS-1484'
 UPGRADE:
+  skip_upgrade: true
   upgrade: true
