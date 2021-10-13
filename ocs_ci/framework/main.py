@@ -7,10 +7,9 @@ import pytest
 import yaml
 
 from ocs_ci import framework
-from getpass import getuser
-from ocs_ci.utility import utils
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+from ocs_ci.utility import reporting, utils
 
 
 def check_config_requirements():
@@ -117,7 +116,7 @@ def main(argv=None):
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN["log_dir"])
-    launch_name = f"{utils.get_testrun_name()}-{getuser()}"
+    launch_name = reporting.get_rp_launch_name()
     arguments.extend(
         [
             "-p",
