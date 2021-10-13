@@ -3,8 +3,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.ocs.bucket_utils import sync_object_directory
-from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKET, AWSCLI_TEST_OBJ_DIR
+from ocs_ci.ocs.bucket_utils import compare_bucket_contents, sync_object_directory
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -16,38 +16,69 @@ class TestReplication(MCGTest):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["bucketclass_dict"],
+        argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
             pytest.param(
                 {
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                    "replication_policy": [
-                        {
-                            "rule-id": "rule1",
-                            "destination-bucket": DEFAULT_NOOBAA_BUCKET,
-                        }
-                    ],
+                },
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                # TODO: add polarion id
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"gcp": [(1, None)]},
+                },
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id("OCS-")],
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"azure": [(1, None)]},
+                },
+                {"interface": "CLI", "backingstore_dict": {"gcp": [(1, None)]}},
+                # TODO: add polarion id
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                {"interface": "CLI", "backingstore_dict": {"azure": [(1, None)]}},
+                # TODO: add polarion id
+                marks=[tier1],
             ),
         ],
-        ids=[
-            "AWS-OC-1",
-        ],
+        ids=["AWStoAZURE-OC", "GCPtoAWS-OC", "AZUREtoCGP-CLI", "AWStoAZURE-CLI"],
     )
-    @pytest.mark.polarion_id("OCS-2255")
-    def test_uni_direction_replication(
-        self, awscli_pod_session, mcg_obj, bucket_factory, bucketclass_dict
+    def test_unidirectional_replication(
+        self,
+        awscli_pod_session,
+        mcg_obj,
+        bucket_factory,
+        source_bucketclass,
+        target_bucketclass,
     ):
         """
         Test namespace bucket creation using the MCG CRDs.
         """
 
-        # Create the namespace bucket on top of the namespace resource
-        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
-        full_object_path = f"s3://{bucketname}"
+        # Create a bucket that replicates its objects to first.bucket
+        target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
+        replication_policy = ("basic-replication-rule", target_bucket_name, None)
+        source_bucket_name = bucket_factory(
+            1, bucketclass=source_bucketclass, replication_policy=replication_policy
+        )[0].name
+        full_object_path = f"s3://{source_bucket_name}"
         downloaded_files = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
@@ -55,16 +86,10 @@ class TestReplication(MCGTest):
         sync_object_directory(
             awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
         )
-        objects_to_replicate = mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+        written_objects = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
 
-        assert set(downloaded_files).issubset(
-            obj.key for obj in objects_to_replicate
-        ), "Failed to upload files correctly"
+        assert set(downloaded_files) == {
+            obj.key for obj in written_objects
+        }, "Needed uploaded objects could not be found"
 
-        # TODO: Normal timeout sampler replication verification
-        assert set(objects_to_replicate).issubset(
-            obj.key
-            for obj in mcg_obj.s3_list_all_objects_in_bucket(DEFAULT_NOOBAA_BUCKET)
-        ), "Replication failed"
-
-
+        compare_bucket_contents(mcg_obj, source_bucket_name, target_bucket_name)

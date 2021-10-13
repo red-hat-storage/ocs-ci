@@ -1307,3 +1307,39 @@ def get_bucket_available_size(mcg_obj, bucket_name):
     resp = bucket_read_api(mcg_obj, bucket_name)
     bucket_size = resp["storage"]["values"]["free"]
     return bucket_size
+
+
+def compare_bucket_contents(mcg_obj, first_bucket_name, second_bucket_name):
+    """
+    Verify replication was performed within an acceptable time
+
+    """
+
+    def _comparison_logic():
+        first_bucket_object_set = {
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
+        }
+        second_bucket_object_set = {
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
+        }
+        if first_bucket_object_set == second_bucket_object_set:
+            logger.info("Objects in both buckets are identical")
+            return True
+        else:
+            logger.warning(
+                f"""Buckets {first_bucket_name} and {second_bucket_name} do not contain the same objects.
+                    {first_bucket_name} objects:
+                    {first_bucket_object_set}
+                    {second_bucket_name} objects:
+                    {second_bucket_object_set}
+                    """
+            )
+            return False
+
+    try:
+        for comparison_result in TimeoutSampler(300, 30, _comparison_logic):
+            if comparison_result:
+                return True
+    except TimeoutExpiredError:
+        logger.error("The compared buckets do not contain the same set of objects")
+        assert False, "The compared buckets do not contain the same set of objects"
