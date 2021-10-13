@@ -45,6 +45,30 @@ class TestConfig(object):
         assert framework.config.RUN["client_version"] == "2"
         assert framework.config.DEPLOYMENT["installer_version"] == "1"
 
+    def test_custom_conf_multicluster(self):
+        framework.config.nclusters = 2
+        framework.config.initclusterconfigs()
+        framework.config.switch_ctx(0)
+        user_dict1 = dict(
+            REPORTING=dict(email="cluster1@test.com"),
+            RUN=dict(log_dir="/dev/null1"),
+        )
+        user_dict2 = dict(
+            REPORTING=dict(email="cluster2@test.com"),
+            RUN=dict(log_dir="/dev/null2"),
+        )
+        framework.config.update(user_dict1)
+        assert framework.config.REPORTING["email"] == "cluster1@test.com"
+        assert framework.config.RUN["log_dir"] == "/dev/null1"
+        framework.config.switch_ctx(1)
+        framework.config.update(user_dict2)
+        assert framework.config.REPORTING["email"] == "cluster2@test.com"
+        assert framework.config.RUN["log_dir"] == "/dev/null2"
+        framework.config.REPORTING["email"] = "user2@cluster2.com"
+        framework.config.switch_ctx(0)
+        framework.config.switch_ctx(1)
+        assert framework.config.REPORTING["email"] == "user2@cluster2.com"
+
 
 class TestMergeDict:
     def test_merge_dict(self):
