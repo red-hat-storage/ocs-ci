@@ -60,7 +60,7 @@ class TestReplication(MCGTest):
         ],
         ids=["AWStoAZURE-OC", "GCPtoAWS-OC", "AZUREtoCGP-CLI", "AWStoAZURE-CLI"],
     )
-    def test_unidirectional_replication(
+    def test_unidirectional_bucket_replication(
         self,
         awscli_pod_session,
         mcg_obj,
