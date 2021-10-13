@@ -26,6 +26,7 @@ class TestCapacityBreakdownUI(ManageTest):
     4.Run FIO
     5.Verify new project created on Capacity Breakdown UI
     6.Verify new pod created on Capacity Breakdown UI
+    7.Delete the project
 
     """
 
@@ -50,6 +51,10 @@ class TestCapacityBreakdownUI(ManageTest):
     ):
         """
         Test Capacity Breakdown UI
+
+        project_name (str): the project name
+        pod_name (str): pod name
+        sc_type (str): storage class [fs, block]
 
         """
         project_obj = helpers.create_project(project_name=project_name)
