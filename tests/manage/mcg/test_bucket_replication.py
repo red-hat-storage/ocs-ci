@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class TestReplication(MCGTest):
     """
-    Test creation of a namespace resources and buckets via OpenShift CRDs.
+    Test suite for MCG object replication policies
     """
 
     @tier1
