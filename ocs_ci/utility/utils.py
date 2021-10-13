@@ -1584,6 +1584,7 @@ def get_ocp_version(seperator=None):
     else:
         raw_version = config.DEPLOYMENT["installer_version"]
     version = Version.coerce(raw_version)
+    log.info(f"The OCP Version is {str(version.major)}.{str(version.minor)}")
     return char.join([str(version.major), str(version.minor)])
 
 
