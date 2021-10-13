@@ -140,6 +140,7 @@ class CephCluster(object):
     def pods(self):
         return self._ceph_pods
 
+    @retry(CommandFailed, tries=3, delay=10, backoff=1)
     def scan_cluster(self):
         """
         Get accurate info on current state of pods
