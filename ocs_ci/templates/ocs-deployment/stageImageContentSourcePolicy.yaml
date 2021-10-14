@@ -1,37 +1,15 @@
 apiVersion: operator.openshift.io/v1alpha1
 kind: ImageContentSourcePolicy
 metadata:
-  name: stage-image-content-source-policy-ocs
-  namespace: openshift-storage
+  name: brew-registry
 spec:
   repositoryDigestMirrors:
   - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-operator
-    source: registry.redhat.io/ocs4/ocs-rhel8-operator
+    - brew.registry.redhat.io
+    source: registry.redhat.io
   - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/mcg-core
-    source: registry.redhat.io/ocs4/mcg-core-rhel8
+    - brew.registry.redhat.io
+    source: registry.stage.redhat.io
   - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/mcg-operator
-    source: registry.redhat.io/ocs4/mcg-rhel8-operator
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-must-gather
-    source: registry.redhat.io/ocs4/ocs-must-gather-rhel8
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/rook-ceph
-    source: registry.redhat.io/ocs4/rook-ceph-rhel8-operator
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/cephcsi
-    source: registry.redhat.io/ocs4/cephcsi-rhel8
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-olm-operator
-    source: registry.redhat.io/ocs4/ocs-olm-rhel8-operator
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/rhceph
-    source: registry.redhat.io/ocs4/rhceph-rhel8
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/rhceph
-    source: registry.redhat.io/rhceph/rhceph-4-rhel8
-  - mirrors:
-    - registry-proxy.engineering.redhat.com/rh-osbs/ocs-operator-bundle
-    source: registry.redhat.io/ocs4/ocs-operator-bundle
+    - brew.registry.redhat.io
+    source: registry-proxy.engineering.redhat.com
