@@ -25,7 +25,7 @@ class TestReplication(MCGTest):
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 # TODO: add polarion id
-                marks=[tier1],
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -37,7 +37,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 # TODO: add polarion id
-                marks=[tier1],
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -46,7 +46,7 @@ class TestReplication(MCGTest):
                 },
                 {"interface": "CLI", "backingstore_dict": {"gcp": [(1, None)]}},
                 # TODO: add polarion id
-                marks=[tier1],
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -54,11 +54,48 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "CLI", "backingstore_dict": {"azure": [(1, None)]}},
-                # TODO: add polarion id
-                marks=[tier1],
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"gcp": [(1, None)]},
+                    },
+                },
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
             ),
         ],
-        ids=["AWStoAZURE-OC", "GCPtoAWS-OC", "AZUREtoCGP-CLI", "AWStoAZURE-CLI"],
+        ids=[
+            "AWStoAZURE-BS-OC",
+            "GCPtoAWS-BS-OC",
+            "AZUREtoCGP-BS-CLI",
+            "AWStoAZURE-BS-CLI",
+            "AWStoGCP-NS-OC",
+            "AZUREtoAWS-NS-Hybrid",
+        ],
     )
     def test_unidirectional_bucket_replication(
         self,
@@ -93,3 +130,12 @@ class TestReplication(MCGTest):
         }, "Needed uploaded objects could not be found"
 
         compare_bucket_contents(mcg_obj, source_bucket_name, target_bucket_name)
+
+    # def test_bidirectional_bucket_replication(
+    #     self,
+    #     awscli_pod_session,
+    #     mcg_obj,
+    #     bucket_factory,
+    #     source_bucketclass,
+    #     target_bucketclass,
+    # )
