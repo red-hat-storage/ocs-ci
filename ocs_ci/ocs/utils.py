@@ -1184,3 +1184,22 @@ def reboot_node(ceph_node, timeout=300):
     except SSHException:
         log.exception(f"Failed to connect to node {ceph_node.hostname}")
         raise
+
+
+def enable_console_plugin():
+    """
+    Enables console plugin for ODF
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if (
+        ocs_version >= version.VERSION_4_9
+        and ocsci_config.ENV_DATA["enable_console_plugin"]
+    ):
+        log.info("Enabling console plugin")
+        ocp_obj = OCP()
+        patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
+        patch_cmd = (
+            f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" --type json -p {patch}"
+        )
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
