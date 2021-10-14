@@ -130,10 +130,10 @@ def test_pod_log_after_upgrade():
 @pytest.mark.polarion_id("OCS-2666")
 def test_noobaa_service_mon_after_ocs_upgrade():
     """
-    test_noobaa_service_mon_after_ocs_upgrade
+    Verify 'noobaa-service-monitor' does not exist after OCS upgrade.
 
     Test Procedure:
-    1.Upgrade OCS version [4.6->4.7]
+    1.Upgrade OCS version
     2.Check servicemonitors
     3.Verify 'noobaa-service-monitor' does not exist
 
@@ -142,7 +142,7 @@ def test_noobaa_service_mon_after_ocs_upgrade():
         only_major_minor=False, ignore_pre_release=True
     )
     if ocs_version <= version.get_semantic_version("4.7.4"):
-        pytest.skip("The test does not supported on version less than 4.7.4")
+        pytest.skip("The test is not supported on version less than 4.7.4")
     ocp_obj = ocp.OCP(
         kind=constants.SERVICE_MONITORS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
