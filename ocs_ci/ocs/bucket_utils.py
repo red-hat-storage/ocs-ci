@@ -1337,9 +1337,43 @@ def compare_bucket_contents(mcg_obj, first_bucket_name, second_bucket_name):
             return False
 
     try:
-        for comparison_result in TimeoutSampler(300, 30, _comparison_logic):
+        for comparison_result in TimeoutSampler(600, 30, _comparison_logic):
             if comparison_result:
                 return True
     except TimeoutExpiredError:
         logger.error("The compared buckets do not contain the same set of objects")
         assert False, "The compared buckets do not contain the same set of objects"
+
+
+def write_test_objects(
+    mcg_obj,
+    awscli_pod,
+    bucket_to_write,
+    original_dir,
+    amount=1,
+    s3_creds=None,
+):
+    """
+    Upload random objects to a bucket
+    """
+    full_object_path = f"s3://{bucket_to_write}"
+    object_list = []
+
+    for i in range(amount):
+        file_name = f"testfile{i}.txt"
+        object_list.append(file_name)
+        awscli_pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of={original_dir}/{file_name} bs=1M count=1 status=none"
+        )
+    if s3_creds:
+        # Write data directly to target bucket from original dir
+        sync_object_directory(
+            awscli_pod,
+            original_dir,
+            full_object_path,
+            signed_request_creds=s3_creds,
+        )
+    else:
+        # Write data directly to MCG bucket from original dir
+        sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
+    return object_list
