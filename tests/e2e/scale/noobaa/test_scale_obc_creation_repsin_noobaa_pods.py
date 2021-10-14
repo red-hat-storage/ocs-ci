@@ -30,7 +30,7 @@ class TestScaleOCBCreation(E2ETest):
     scale_obc_count = 1000
     # Will increase number of obc with i/o when issue is fixed
     # BZ https://bugzilla.redhat.com/show_bug.cgi?id=2010560
-    scale_obc_count_io = 20
+    scale_obc_count_io = 10
     num_obc_batch = 100
 
     @pytest.mark.parametrize(

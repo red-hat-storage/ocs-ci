@@ -48,7 +48,7 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
 
 
 def check_all_obc_reached_bound_state_in_kube_job(
-    kube_job_obj, namespace, no_of_obc, timeout=60, no_wait_time=10
+    kube_job_obj, namespace, no_of_obc, timeout=60, no_wait_time=20
 ):
     """
     Function to check either bulk created OBCs reached Bound state using kube_job
@@ -78,7 +78,7 @@ def check_all_obc_reached_bound_state_in_kube_job(
                 if not status or status != constants.STATUS_BOUND:
                     obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
                     # Wait 20 secs to ensure the next obc on the list has status field populated
-                    time.sleep(20)
+                    time.sleep(30)
                     job_get_output = kube_job_obj.get(namespace=namespace).get("items")
         else:
             while_iteration_count_1 += 1
