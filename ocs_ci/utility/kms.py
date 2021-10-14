@@ -131,8 +131,9 @@ class Vault(KMS):
         self.port = self.vault_conf["PORT"]
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.ca_cert_base64 = self.vault_conf["VAULT_CACERT_BASE64"]
-            self.client_cert_base64 = self.vault_conf["VAULT_CLIENT_CERT_BASE64"]
-            self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                self.client_cert_base64 = self.vault_conf["VAULT_CLIENT_CERT_BASE64"]
+                self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
 
