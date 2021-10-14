@@ -125,7 +125,7 @@ class TestPodReattachTimePerformance(PASTest):
         # Number of times we copy the kernel
         copies = 3
 
-        samples_num = 2
+        samples_num = 10
         test_start_time = PASTest.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
