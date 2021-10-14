@@ -138,15 +138,15 @@ class MultiClusterConfig:
         # Applicable only if we are deploying ACM cluster
         self.acm_index = None
         self.single_cluster_default = True
-        self._single_cluster_initclusterconfigs()
+        self._single_cluster_init_cluster_configs()
 
-    def _single_cluster_initclusterconfigs(self):
+    def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
         self.cluster_ctx = self.clusters[0]
         self.attr_init()
         self._refresh_ctx()
 
-    def initclusterconfigs(self):
+    def init_cluster_configs(self):
         if self.nclusters > 1:
             for i in range(self.nclusters):
                 self.clusters.insert(i, Config())

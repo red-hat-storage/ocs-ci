@@ -47,7 +47,7 @@ class TestConfig(object):
 
     def test_custom_conf_multicluster(self):
         framework.config.nclusters = 2
-        framework.config.initclusterconfigs()
+        framework.config.init_cluster_configs()
         framework.config.switch_ctx(0)
         user_dict1 = dict(
             REPORTING=dict(email="cluster1@test.com"),

@@ -94,7 +94,7 @@ def init_ocsci_conf(arguments=None):
         for each in framework.config.multicluster_args:
             arguments.extend(each)
     else:
-        framework.config.initclusterconfigs()
+        framework.config.init_cluster_configs()
         process_ocsci_conf(arguments)
         check_config_requirements()
 
@@ -184,7 +184,7 @@ def init_multicluster_ocsci_conf(args, nclusters):
     # We need to seperate common arguments and cluster specific arguments
     framework.config.multicluster = True
     framework.config.nclusters = nclusters
-    framework.config.initclusterconfigs()
+    framework.config.init_cluster_configs()
     framework.config.reset_ctx()
     for i in range(nclusters):
         framework.config.switch_ctx(i)

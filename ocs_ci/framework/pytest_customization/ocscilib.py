@@ -315,7 +315,7 @@ def pytest_configure(config):
             config_file = os.path.expanduser(
                 os.path.join(
                     ocsci_config.RUN["log_dir"],
-                    f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+                    f"run-{ocsci_config.RUN['run_id']}-cl{i}-config.yaml",
                 )
             )
             dump_config_to_file(config_file)
