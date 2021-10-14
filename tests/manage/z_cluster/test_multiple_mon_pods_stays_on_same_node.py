@@ -30,6 +30,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import is_lso_cluster
 
 log = logging.getLogger(__name__)
 POD_OBJ = OCP(kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE)
@@ -102,6 +103,12 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         node that doesn't currently have a mon (compute-0) and start mon-d
 
         """
+        if not is_lso_cluster():
+            pytest.skip(
+                "Skip the test because mons are not node assignment from Rook, if cluster is not"
+                " LSO based. See more details in the issue"
+                " https://github.com/red-hat-storage/ocs-ci/issues/4937"
+            )
         # Initialize
         rook_ceph_mon = "rook-ceph-mon"
 
