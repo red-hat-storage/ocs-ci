@@ -1,8 +1,8 @@
 import logging
-
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, defaults
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
     get_osd_pods,
@@ -123,3 +123,33 @@ def test_pod_log_after_upgrade():
     logging.info(
         f"The log '{expected_log_after_upgrade}' appears in all relevant pods."
     )
+
+
+@post_upgrade
+@bugzilla("1973179")
+@pytest.mark.polarion_id("OCS-2666")
+def test_noobaa_service_mon_after_ocs_upgrade():
+    """
+    Verify 'noobaa-service-monitor' does not exist after OCS upgrade.
+
+    Test Procedure:
+    1.Upgrade OCS version
+    2.Check servicemonitors
+    3.Verify 'noobaa-service-monitor' does not exist
+
+    """
+    ocs_version = version.get_ocs_version_from_csv(
+        only_major_minor=False, ignore_pre_release=True
+    )
+    if ocs_version <= version.get_semantic_version("4.7.4"):
+        pytest.skip("The test is not supported on version less than 4.7.4")
+    ocp_obj = ocp.OCP(
+        kind=constants.SERVICE_MONITORS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    servicemon = ocp_obj.get()
+    servicemonitors = servicemon["items"]
+    for servicemonitor in servicemonitors:
+        assert (
+            servicemonitor["metadata"]["name"] != "noobaa-service-monitor"
+        ), "noobaa-service-monitor exist"
+    log.info("noobaa-service-monitor does not exist")
