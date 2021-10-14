@@ -50,7 +50,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs, enable_console_plugin
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
@@ -978,21 +978,7 @@ class Deployment(object):
             registry.change_registry_backend_to_ocs()
 
         # Enable console plugin
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if (
-            ocs_version >= version.VERSION_4_9
-            and config.ENV_DATA["enable_console_plugin"]
-        ):
-            logger.info("Enabling console plugin")
-            ocp_obj = ocp.OCP()
-            patch = (
-                '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
-            )
-            patch_cmd = (
-                f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-                f" --type json -p {patch}"
-            )
-            ocp_obj.exec_oc_cmd(command=patch_cmd)
+        enable_console_plugin()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
