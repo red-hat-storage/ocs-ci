@@ -175,7 +175,18 @@ def bucket_class_factory(
             placement_policy = "Spread"
 
         if "replication_policy" in bucket_class_dict:
-            replication_policy = bucket_class_dict["replication_policy"]
+            replication_policy_tuple = bucket_class_dict["replication_policy"]
+            replication_policy = [
+                {
+                    "rule_id": replication_policy_tuple[0],
+                    "destination_bucket": replication_policy_tuple[1],
+                    "filter": {
+                        "prefix": replication_policy_tuple[2]
+                        if replication_policy_tuple[2] is not None
+                        else ""
+                    },
+                }
+            ]
         else:
             replication_policy = None
 
@@ -185,9 +196,9 @@ def bucket_class_factory(
         interfaces[interface.lower()](
             name=bucket_class_name,
             backingstores=backingstores,
-            placement=placement_policy,
-            replication=replication_policy,
+            placement_policy=placement_policy,
             namespace_policy=namespace_policy,
+            replication_policy=replication_policy,
         )
         bucket_class_object = BucketClass(
             bucket_class_name,
