@@ -53,6 +53,14 @@ $ oc create -f ocs_ci/templates/ocs-deployment/local-storage-optional-operators.
 When you skip OCS installation, you will be able to install already released
 (so called live) version of OCS only.
 
+**From ODF 4.9 (build: 4.9.0-166.ci) catalog source has to be named redhat-operators, hence before
+creating one from template, you should disable the default one by following
+command:**
+
+```console
+oc patch operatorhub.config.openshift.io/cluster -p='{"spec":{"sources":[{"disabled":true,"name":"redhat-operators"}]}}' --type=merge
+```
+
 If you need to use dev. builds of OCS, you need to create a catalog source for
 these images first using
 ``ocs_ci/templates/ocs-deployment/catalog-source.yaml`` template.
