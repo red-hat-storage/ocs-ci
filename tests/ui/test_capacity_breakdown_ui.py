@@ -61,12 +61,12 @@ class TestCapacityBreakdownUI(ManageTest):
         teardown_project_factory(project_obj)
         logger.info(
             f"Created new pvc sc_name={sc_type} namespace={project_name}, "
-            f"size=3Gi, access_mode={constants.ACCESS_MODE_RWO}"
+            f"size=6Gi, access_mode={constants.ACCESS_MODE_RWO}"
         )
         pvc_obj = helpers.create_pvc(
             sc_name=sc_type,
             namespace=project_name,
-            size="3Gi",
+            size="6Gi",
             do_reload=False,
             access_mode=constants.ACCESS_MODE_RWO,
         )
@@ -87,7 +87,7 @@ class TestCapacityBreakdownUI(ManageTest):
         logger.info("Run fio workload")
         pod_obj.run_io(
             storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
-            size="1GB",
+            size="4GB",
         )
         fio_result = pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
