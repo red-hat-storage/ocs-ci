@@ -132,8 +132,11 @@ class DeploymentUI(PageNavigator):
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
 
+        self.refresh_page()
         self.do_click(
-            locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
+            locator=self.dep_loc["create_storage_cluster"],
+            enable_screenshot=True,
+            timeout=60,
         )
 
         if config.DEPLOYMENT.get("local_storage"):
