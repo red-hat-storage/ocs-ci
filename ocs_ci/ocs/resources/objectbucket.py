@@ -466,7 +466,7 @@ class MCGOCBucket(OCBucket):
             )
         if self.replication_policy:
             obc_data["spec"]["additionalConfig"].setdefault(
-                "replicationPolicy", f"{json.dumps(self.replication_policy)}"
+                "replicationPolicy", json.dumps(self.replication_policy)
             )
         create_resource(**obc_data)
 

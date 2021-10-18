@@ -762,7 +762,7 @@ class MCG:
 
         if replication_policy:
             bc_data["spec"].setdefault(
-                "replicationPolicy", f"{json.dumps(replication_policy)}"
+                "replicationPolicy", json.dumps(replication_policy)
             )
 
         return create_resource(**bc_data)
