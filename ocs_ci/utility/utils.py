@@ -1450,12 +1450,16 @@ def get_ocs_build_number():
         operator_name = defaults.ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
-    build_str = get_csvs_start_with_prefix(
+    ocs_csvs = get_csvs_start_with_prefix(
         operator_name,
         defaults.ROOK_CLUSTER_NAMESPACE,
     )
     try:
-        build_num = build_str[0]["spec"]["version"]
+        ocs_csv = ocs_csvs[0]
+        csv_labels = ocs_csv["metadata"]["labels"]
+        if "full_version" in csv_labels:
+            return csv_labels["full_version"]
+        build_num = ocs_csv["spec"]["version"]
         operator_selector = get_selector_for_ocs_operator()
         # This is a temporary solution how to get the build id from the registry image.
         # Because we are now missing build ID in the CSV. If catalog source with our
@@ -1471,11 +1475,12 @@ def get_ocs_build_number():
             cs_data = catalog_source.get()["items"][0]
             cs_image = cs_data["spec"]["image"]
             image_tag = cs_image.split(":")[1]
-            build_id = image_tag.split("-")[1]
-            build_num += f"-{build_id}"
+            if "-" in image_tag:
+                build_id = image_tag.split("-")[1]
+                build_num += f"-{build_id}"
 
-    except (IndexError, AttributeError, CommandFailed):
-        logging.exception("No version info found for OCS operator")
+    except (IndexError, AttributeError, CommandFailed, KeyError):
+        log.exception("No version info found for OCS operator")
     return build_num
 
 
@@ -2797,7 +2802,7 @@ def mirror_image(image):
         mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
-        logging.info(
+        log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
         )
         exec_cmd(
