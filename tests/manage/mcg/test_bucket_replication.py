@@ -4,16 +4,18 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_contents,
     sync_object_directory,
     write_random_test_objects_to_bucket,
+    verify_s3_object_integrity,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import cal_md5sum
 
 logger = logging.getLogger(__name__)
 
@@ -387,3 +389,119 @@ class TestReplication(MCGTest):
         assert compare_bucket_contents(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
+
+    @tier1
+    @bugzilla("2015210")
+    @pytest.mark.parametrize(
+        argnames=["source_bucketclass", "target_bucketclass"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                {"interface": "OC", "backingstore_dict": {"aws": [(1, None)]}},
+                # TODO: add polarion id
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+            ),
+        ],
+        ids=[
+            "AWStoAZURE-BS-OC",
+        ],
+    )
+    def test_unidirectional_bucket_object_change_replication(
+        self,
+        awscli_pod_session,
+        mcg_obj,
+        bucket_factory,
+        source_bucketclass,
+        target_bucketclass,
+        test_directory_setup,
+    ):
+        """
+        Test unidirectional bucket replication when objects are changed
+
+        """
+        target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
+
+        replication_policy = ("basic-replication-rule", target_bucket_name, None)
+        source_bucket = bucket_factory(
+            1, bucketclass=source_bucketclass, replication_policy=replication_policy
+        )[0]
+        source_bucket_name = source_bucket.name
+
+        origin_dir = test_directory_setup.origin_dir
+        target_dir = test_directory_setup.result_dir
+
+        written_random_objects = write_random_test_objects_to_bucket(
+            mcg_obj,
+            awscli_pod_session,
+            source_bucket_name,
+            origin_dir,
+            amount=3,
+        )
+
+        listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+
+        assert compare_bucket_contents(
+            mcg_obj, source_bucket_name, target_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
+
+        assert set(written_random_objects) == {
+            obj.key for obj in listed_obejcts
+        }, "Some of the uploaded objects are missing"
+
+        sync_object_directory(
+            awscli_pod_session, f"s3://{target_bucket_name}", target_dir, mcg_obj
+        )
+        (
+            original_obj_sums,
+            obj_sums_after_rewrite,
+            obj_sums_after_rw_and_replication,
+        ) = (
+            [],
+            [],
+            [],
+        )
+
+        for i in range(3):
+            original_obj_sums.append(
+                cal_md5sum(awscli_pod_session, f"{origin_dir}/ObjKey-{i}", True)
+            )
+            assert verify_s3_object_integrity(
+                f"{origin_dir}/ObjKey-{i}",
+                f"{target_dir}/ObjKey-{i}",
+                awscli_pod_session,
+            ), "The uploaded and downloaded objects have different hashes"
+
+        written_random_objects = write_random_test_objects_to_bucket(
+            mcg_obj,
+            awscli_pod_session,
+            source_bucket_name,
+            origin_dir,
+            amount=4,
+        )
+
+        assert compare_bucket_contents(
+            mcg_obj, source_bucket_name, target_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
+
+        sync_object_directory(
+            awscli_pod_session, f"s3://{target_bucket_name}", target_dir, mcg_obj
+        )
+
+        for i in range(4):
+            obj_sums_after_rewrite.append(
+                cal_md5sum(awscli_pod_session, f"{origin_dir}/ObjKey-{i}", True)
+            )
+            obj_sums_after_rw_and_replication.append(
+                cal_md5sum(awscli_pod_session, f"{target_dir}/ObjKey-{i}", True)
+            )
+
+        for i in range(3):
+            assert (
+                obj_sums_after_rewrite[i] == obj_sums_after_rw_and_replication[i]
+            ), "Object change was not uploaded/downloaded correctly"
+            assert (
+                original_obj_sums[i] != obj_sums_after_rw_and_replication[i]
+            ), "Object change was not replicated"
