@@ -64,10 +64,41 @@ class TestConfig(object):
         framework.config.update(user_dict2)
         assert framework.config.REPORTING["email"] == "cluster2@test.com"
         assert framework.config.RUN["log_dir"] == "/dev/null2"
-        framework.config.REPORTING["email"] = "user2@cluster2.com"
-        framework.config.switch_ctx(0)
-        framework.config.switch_ctx(1)
-        assert framework.config.REPORTING["email"] == "user2@cluster2.com"
+        framework.config.reset_ctx()
+
+    def test_multicluster_ctx_switch(self):
+        framework.config.nclusters = 3
+        framework.config.init_cluster_configs()
+        user_dict = [
+            dict(
+                REPORTING=dict(email="USER1@CLUSTER1.com"),
+                ENV_DATA=dict(cluster_name="cluster1"),
+            ),
+            dict(
+                REPORTING=dict(email="USER1@CLUSTER2.com"),
+                ENV_DATA=dict(cluster_name="cluster2"),
+            ),
+            dict(
+                REPORTING=dict(email="USER1@CLUSTER3.com"),
+                ENV_DATA=dict(cluster_name="cluster3"),
+            ),
+        ]
+
+        for i in range(framework.config.nclusters):
+            framework.config.switch_ctx(i)
+            framework.config.update(user_dict[i])
+
+        for i in range(framework.config.nclusters):
+            framework.config.switch_ctx(i)
+            assert (
+                framework.config.REPORTING["email"]
+                == user_dict[i]["REPORTING"]["email"]
+            )
+            assert (
+                framework.config.ENV_DATA["cluster_name"]
+                == user_dict[i]["ENV_DATA"]["cluster_name"]
+            )
+        framework.config.reset_ctx()
 
 
 class TestMergeDict:
