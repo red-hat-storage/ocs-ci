@@ -1019,6 +1019,17 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
     )
 
 
+def write_random_objects(awscli_pod, original_dir, amount):
+    obj_lst = []
+    for i in range(amount):
+        object_key = f"ObjKey-{i}"
+        obj_lst.append(object_key)
+        awscli_pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of={original_dir}/{object_key} bs=1M count=1 status=none"
+        )
+    return obj_lst
+
+
 def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
     """
     Prepares two directories and populate one of them with objects
@@ -1031,12 +1042,7 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
 
     """
     awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-
-    for i in range(amount):
-        object_key = f"ObjKey-{i}"
-        awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={original_dir}/{object_key} bs=1M count=1 status=none"
-        )
+    write_random_objects(awscli_pod, original_dir, amount)
 
 
 def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=None):
@@ -1342,10 +1348,10 @@ def compare_bucket_contents(mcg_obj, first_bucket_name, second_bucket_name):
                 return True
     except TimeoutExpiredError:
         logger.error("The compared buckets do not contain the same set of objects")
-        assert False, "The compared buckets do not contain the same set of objects"
+        return False
 
 
-def write_test_objects(
+def write_random_test_objects_to_bucket(
     mcg_obj,
     awscli_pod,
     bucket_to_write,
@@ -1357,14 +1363,7 @@ def write_test_objects(
     Upload random objects to a bucket
     """
     full_object_path = f"s3://{bucket_to_write}"
-    object_list = []
-
-    for i in range(amount):
-        file_name = f"testfile{i}.txt"
-        object_list.append(file_name)
-        awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={original_dir}/{file_name} bs=1M count=1 status=none"
-        )
+    obj_lst = write_random_objects(awscli_pod, original_dir, amount)
     if s3_creds:
         # Write data directly to target bucket from original dir
         sync_object_directory(
@@ -1376,4 +1375,4 @@ def write_test_objects(
     else:
         # Write data directly to MCG bucket from original dir
         sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
-    return object_list
+    return obj_lst

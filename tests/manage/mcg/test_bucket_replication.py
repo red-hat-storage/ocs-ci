@@ -6,10 +6,11 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_contents,
     sync_object_directory,
-    write_test_objects,
+    write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.ocp import OCP
@@ -115,8 +116,8 @@ class TestReplication(MCGTest):
     ):
         """
         Test unidirectional bucket replication using CLI and YAML
-        """
 
+        """
         # Create a bucket that replicates its objects to first.bucket
         target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
         replication_policy = ("basic-replication-rule", target_bucket_name, None)
@@ -137,7 +138,85 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        compare_bucket_contents(mcg_obj, source_bucket_name, target_bucket_name)
+        assert compare_bucket_contents(
+            mcg_obj, source_bucket_name, target_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["source_bucketclass", "target_bucketclass"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                },
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"azure": [(1, None)]},
+                },
+                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+            ),
+        ],
+        ids=[
+            "AZUREtoAWS-NS-Hybrid",
+        ],
+    )
+    def test_unidirectional_namespace_bucket_replication(
+        self,
+        awscli_pod_session,
+        mcg_obj,
+        cld_mgr,
+        bucket_factory,
+        source_bucketclass,
+        target_bucketclass,
+        test_directory_setup,
+    ):
+        """
+        Test unidirectional bucket replication by adding objects to a
+        namespacestore-backed bucket
+
+        """
+        # Create a bucket that replicates its objects to first.bucket
+        target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
+
+        replication_policy = ("basic-replication-rule", target_bucket_name, None)
+        source_bucket = bucket_factory(
+            1, bucketclass=source_bucketclass, replication_policy=replication_policy
+        )[0]
+        source_bucket_name = source_bucket.name
+        source_bucket_uls_name = source_bucket.bucketclass.namespacestores[0].uls_name
+
+        namespacestore_aws_s3_creds = {
+            "access_key_id": cld_mgr.aws_client.access_key,
+            "access_key": cld_mgr.aws_client.secret_key,
+            "endpoint": constants.AWS_S3_ENDPOINT,
+            "region": source_bucketclass["namespace_policy_dict"][
+                "namespacestore_dict"
+            ]["aws"][0][1],
+        }
+
+        written_random_objects = write_random_test_objects_to_bucket(
+            mcg_obj,
+            awscli_pod_session,
+            source_bucket_uls_name,
+            test_directory_setup.origin_dir,
+            amount=5,
+            s3_creds=namespacestore_aws_s3_creds,
+        )
+
+        listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+
+        assert compare_bucket_contents(
+            mcg_obj, source_bucket_name, target_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
+
+        assert set(written_random_objects) == {
+            obj.key for obj in listed_obejcts
+        }, "Some of the uploaded objects are missing"
 
     @tier1
     @pytest.mark.parametrize(
@@ -212,8 +291,10 @@ class TestReplication(MCGTest):
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_contents(mcg_obj, first_bucket_name, second_bucket_name)
-        written_objects = write_test_objects(
+        assert compare_bucket_contents(
+            mcg_obj, first_bucket_name, second_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
+        written_objects = write_random_test_objects_to_bucket(
             mcg_obj,
             awscli_pod_session,
             second_bucket_name,
@@ -225,7 +306,9 @@ class TestReplication(MCGTest):
         assert second_bucket_set == {
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
         }, "Needed uploaded objects could not be found"
-        assert compare_bucket_contents(mcg_obj, first_bucket_name, second_bucket_name)
+        assert compare_bucket_contents(
+            mcg_obj, first_bucket_name, second_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
 
     @tier1
     @pytest.mark.parametrize(
@@ -277,8 +360,8 @@ class TestReplication(MCGTest):
     ):
         """
         Test unidirectional bucketclass replication using CLI and YAML
-        """
 
+        """
         # Create a bucket that replicates its objects to first.bucket
         target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
         source_bucketclass["replication_policy"] = (
@@ -301,4 +384,6 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        compare_bucket_contents(mcg_obj, source_bucket_name, target_bucket_name)
+        assert compare_bucket_contents(
+            mcg_obj, source_bucket_name, target_bucket_name
+        ), "The compared buckets do not contain the same set of objects"
