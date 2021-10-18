@@ -26,6 +26,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.utility import version
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -334,8 +335,12 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
 
         """
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+            subscription_name = constants.ODF_SUBSCRIPTION
+        else:
+            subscription_name = constants.OCS_SUBSCRIPTION
         subscription = OCP(
-            resource_name=constants.OCS_SUBSCRIPTION,
+            resource_name=subscription_name,
             kind="subscription",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
@@ -347,7 +352,7 @@ class OCSUpgrade(object):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {constants.OCS_SUBSCRIPTION} "
+            f"patch subscription {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
@@ -524,7 +529,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
-        upgrade_ocs.update_subscription(channel)
+        if upgrade_version != "4.9":
+            # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+            # OCS automatically.
+            upgrade_ocs.update_subscription(channel)
         if original_ocs_version == "4.8" and upgrade_version == "4.9":
             deployment = Deployment()
             deployment.subscribe_ocs()
