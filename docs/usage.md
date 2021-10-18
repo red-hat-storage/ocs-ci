@@ -80,6 +80,11 @@ to the pytest.
 * `-m "tier1 and ecosystem"` - This will select just tests marked with
     tier1 and ecosystem marks.
 
+### Subcommand:
+* `multicluster <int>` - to be used if multiple clusters needs to be handled by ocs-ci, this subcommand is useful in the
+   DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and `run-ci multicluster --help`.
+    
+
 ### Additional arguments:
 
 * `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
@@ -239,6 +244,27 @@ run-ci tests/
     --html=report.html --self-contained-html \
     --email=<emailid1>,<emailid2>,<emailid3>
  ```
+
+#### Running tests on multicluster environment
+
+If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci
+```bash
+run-ci multicluster 2/
+    tests/ -m tier1 \
+    --cluster1 \
+    --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+    --cluster2 \
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
+    --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2 \ 
+```
+`multicluster` cluster subcommand is slightly different from usual CLI used in run-ci.
+`multicluster` subcommand should be followed by an integer which indicates how many clusters we want to handle with this run, which 
+will be followed by common arguments like pytest directory path, pytest markers, `deploy`, `teardown` etc. All the common options should appear before
+any cluster specific options in the CLI. 
+Towards the end of CLI, user needs to pass individual cluster specific arguments with cluster sequence numbers like `--cluster1 <cluster1 options>`, `--cluster2 <cluster2 options>` so on.
+Cluster specific options will be passed within `--cluster<n>` argument boundary i.e. anything starting from `--cluster1` and before `--cluster2` will be considered 
+as arguments of `cluster1`.
 
 #### Running tests with background IO load
 
