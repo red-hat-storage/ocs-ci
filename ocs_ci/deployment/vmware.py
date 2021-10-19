@@ -55,7 +55,6 @@ from ocs_ci.utility.utils import (
     set_aws_region,
     get_terraform_ignition_provider,
     get_ocp_upgrade_history,
-    load_auth_config,
     add_chrony_to_ocp_deployment,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
@@ -809,7 +808,6 @@ class VSPHEREIPI(VSPHEREBASE):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
-            self.ipi_details = load_auth_config()["vmware_ipi"]
 
         def deploy_prereq(self):
             """
