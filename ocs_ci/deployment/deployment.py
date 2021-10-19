@@ -37,7 +37,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
-from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -1079,7 +1079,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # Because custom catalog source will be called: redhat-operators, we need to disable
     # default sources. This should not be an issue as OCS internal registry images
     # are now based on OCP registry image
-    disable_default_sources()
+    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")

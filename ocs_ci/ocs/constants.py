@@ -1442,3 +1442,8 @@ PATCH_DEFAULT_SOURCES_CMD = (
     "oc patch operatorhub.config.openshift.io/cluster -p="
     '\'{{"spec":{{"disableAllDefaultSources":{disable}}}}}\' --type=merge'
 )
+PATCH_SPECIFIC_SOURCES_CMD = (
+    "oc patch operatorhub.config.openshift.io/cluster -p="
+    '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
+    "}}]}}}}' --type=merge"
+)
