@@ -132,8 +132,8 @@ def disable_default_sources():
     """
     logger.info("Disabling default sources")
     run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="true"))
-    logger.info("Waiting 5 seconds after disabling default sources")
-    sleep(5)
+    logger.info("Waiting 20 seconds after disabling default sources")
+    sleep(20)
 
 
 def enable_default_sources():
@@ -143,4 +143,40 @@ def enable_default_sources():
     logger.info("Enabling default sources")
     run_cmd(constants.PATCH_DEFAULT_SOURCES_CMD.format(disable="false"))
     logger.info("Waiting 20 seconds after enabling default sources")
+    sleep(20)
+
+
+def disable_specific_source(source_name):
+    """
+    Disable specific default source
+
+    Args:
+        source_name (str): Source name (e.g. redhat-operators)
+
+    """
+    logger.info(f"Disabling default source: {source_name}")
+    run_cmd(
+        constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+            disable="true", source_name=source_name
+        )
+    )
+    logger.info(f"Waiting 20 seconds after disabling source: {source_name}")
+    sleep(20)
+
+
+def enable_specific_source(source_name):
+    """
+    Enable specific default source
+
+    Args:
+        source_name (str): Source name (e.g. redhat-operators)
+
+    """
+    logger.info(f"Enabling default source: {source_name}")
+    run_cmd(
+        constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+            disable="false", source_name=source_name
+        )
+    )
+    logger.info(f"Waiting 20 seconds after enabling source: {source_name}")
     sleep(20)
