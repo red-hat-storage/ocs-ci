@@ -123,9 +123,9 @@ class TestPodReattachTimePerformance(PASTest):
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
         # Number of times we copy the kernel
-        copies = 3
+        copies = 16
 
-        samples_num = 10
+        samples_num = 2
         test_start_time = PASTest.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
@@ -153,7 +153,7 @@ class TestPodReattachTimePerformance(PASTest):
                     interface=self.interface,
                     access_mode=accessmode,
                     status=constants.STATUS_BOUND,
-                    size="15",
+                    size="100",
                 )
             except Exception as e:
                 logging.error(f"The PVC sample was not created, exception {str(e)}")
@@ -179,7 +179,7 @@ class TestPodReattachTimePerformance(PASTest):
             # Confirm that pod is running on the selected_nodes
             logging.info("Checking whether pods are running on the selected nodes")
             helpers.wait_for_resource_state(
-                resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=120
+                resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=5400
             )
 
             pod_name = pod_obj1.name
@@ -212,7 +212,7 @@ class TestPodReattachTimePerformance(PASTest):
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
-            logging.info(f"The number of files written to the pod is {files_written}")
+            logging.info(f"For {self.interface} - The number of files written to the pod is {files_written}")
 
             logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
@@ -238,20 +238,20 @@ class TestPodReattachTimePerformance(PASTest):
 
             pod_name = pod_obj2.name
             helpers.wait_for_resource_state(
-                resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=120
+                resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=5400
             )
             end_time = time.time()
             total_time = end_time - start_time
-            if total_time > 60:
-                logging.error(
-                    f"Pod creation time is {total_time} and greater than 60 seconds"
-                )
-                raise ex.PerformanceException(
-                    f"Pod creation time is {total_time} and greater than 60 seconds"
-                )
-            logging.info(
-                f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds"
-            )
+            #if total_time > 60:
+            #    logging.error(
+            #        f"Pod creation time is {total_time} and greater than 60 seconds"
+            #    )
+            #    raise ex.PerformanceException(
+            #        f"Pod creation time is {total_time} and greater than 60 seconds"
+            #    )
+            #logging.info(
+            #    f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds"
+            #)
             time_measures.append(total_time)
 
             teardown_factory(pod_obj2)
