@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
+from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -391,7 +391,6 @@ class TestReplication(MCGTest):
         ), "The compared buckets do not contain the same set of objects"
 
     @tier1
-    @bugzilla("2015210")
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -485,6 +484,8 @@ class TestReplication(MCGTest):
         assert compare_bucket_contents(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
+
+        awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
 
         sync_object_directory(
             awscli_pod_session, f"s3://{target_bucket_name}", target_dir, mcg_obj
