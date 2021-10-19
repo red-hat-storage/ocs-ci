@@ -568,34 +568,7 @@ def project_factory_fixture(request):
         return proj_obj
 
     def finalizer():
-        """
-        Delete the project
-        """
-        for instance in instances:
-            try:
-                ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
-                events = ocp_event.get()
-                event_count = len(events["items"])
-                warn_event_count = 0
-                for event in events["items"]:
-                    if event["type"] == "Warning":
-                        warn_event_count += 1
-                log.info(
-                    (
-                        "There were %d events in %s namespace before it's"
-                        " removal (out of which %d were of type Warning)."
-                        " For a full dump of this event list, see DEBUG logs."
-                    ),
-                    event_count,
-                    instance.namespace,
-                    warn_event_count,
-                )
-            except Exception:
-                # we don't want any problem to disrupt the teardown itself
-                log.exception("Failed to get events for project %s", instance.namespace)
-            ocp.switch_to_default_rook_cluster_project()
-            instance.delete(resource_name=instance.namespace)
-            instance.wait_for_delete(instance.namespace, timeout=300)
+        delete_projects(instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -630,37 +603,44 @@ def teardown_project_factory_fixture(request):
             instances.append(resource_obj)
 
     def finalizer():
-        """
-        Delete the project
-        """
-        for instance in instances:
-            try:
-                ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
-                events = ocp_event.get()
-                event_count = len(events["items"])
-                warn_event_count = 0
-                for event in events["items"]:
-                    if event["type"] == "Warning":
-                        warn_event_count += 1
-                log.info(
-                    (
-                        "There were %d events in %s namespace before it's"
-                        " removal (out of which %d were of type Warning)."
-                        " For a full dump of this event list, see DEBUG logs."
-                    ),
-                    event_count,
-                    instance.namespace,
-                    warn_event_count,
-                )
-            except Exception:
-                # we don't want any problem to disrupt the teardown itself
-                log.exception("Failed to get events for project %s", instance.namespace)
-            ocp.switch_to_default_rook_cluster_project()
-            instance.delete(resource_name=instance.namespace)
-            instance.wait_for_delete(instance.namespace, timeout=300)
+        delete_projects(instances)
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def delete_projects(instances):
+    """
+    Delete the project
+
+    instances (list): list of OCP objects (kind is Project)
+
+    """
+    for instance in instances:
+        try:
+            ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
+            events = ocp_event.get()
+            event_count = len(events["items"])
+            warn_event_count = 0
+            for event in events["items"]:
+                if event["type"] == "Warning":
+                    warn_event_count += 1
+            log.info(
+                (
+                    "There were %d events in %s namespace before it's"
+                    " removal (out of which %d were of type Warning)."
+                    " For a full dump of this event list, see DEBUG logs."
+                ),
+                event_count,
+                instance.namespace,
+                warn_event_count,
+            )
+        except Exception:
+            # we don't want any problem to disrupt the teardown itself
+            log.exception("Failed to get events for project %s", instance.namespace)
+        ocp.switch_to_default_rook_cluster_project()
+        instance.delete(resource_name=instance.namespace)
+        instance.wait_for_delete(instance.namespace, timeout=300)
 
 
 @pytest.fixture(scope="class")
