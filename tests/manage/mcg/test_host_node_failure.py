@@ -42,9 +42,9 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
     """
 
     labels_map = {
-        "noobaa_core": constants.NOOBAA_CORE_POD_LABEL,
-        "noobaa_db": constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
+        constants.NOOBAA_CORE_STATEFULSET: constants.NOOBAA_CORE_POD_LABEL,
+        constants.NOOBAA_DB_STATEFULSET: constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        constants.NOOBAA_OPERATOR_DEPLOYMENT: constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
     @pytest.fixture(autouse=True)
@@ -62,16 +62,20 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         argnames=["noobaa_sts", "respin_noobaa_operator"],
         argvalues=[
             pytest.param(
-                *["noobaa_core", False], marks=pytest.mark.polarion_id("OCS-2672")
+                *[constants.NOOBAA_CORE_STATEFULSET, False],
+                marks=pytest.mark.polarion_id("OCS-2672"),
             ),
             pytest.param(
-                *["noobaa_db", False], marks=pytest.mark.polarion_id("OCS-2668")
+                *[constants.NOOBAA_DB_STATEFULSET, False],
+                marks=pytest.mark.polarion_id("OCS-2668"),
             ),
             pytest.param(
-                *["noobaa_core", True], marks=pytest.mark.polarion_id("OCS-2669")
+                *[constants.NOOBAA_CORE_STATEFULSET, True],
+                marks=pytest.mark.polarion_id("OCS-2669"),
             ),
             pytest.param(
-                *["noobaa_db", True], marks=pytest.mark.polarion_id("OCS-2670")
+                *[constants.NOOBAA_DB_STATEFULSET, True],
+                marks=pytest.mark.polarion_id("OCS-2670"),
             ),
         ],
     )
@@ -102,7 +106,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         # Get the NooBaa operator pod and node where it is hosted
         # Check if NooBaa operator and statefulset pod are hosted on same node
         noobaa_operator_pod = get_noobaa_pods(
-            noobaa_label=self.labels_map["noobaa_operator"]
+            noobaa_label=self.labels_map[constants.NOOBAA_OPERATOR_DEPLOYMENT]
         )[0]
         noobaa_operator_pod_node = get_pod_node(noobaa_operator_pod)
         log.info(
@@ -147,7 +151,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         # Wait for NooBaa operator pod to reach running state
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=self.labels_map["noobaa_operator"],
+            selector=self.labels_map[constants.NOOBAA_OPERATOR_DEPLOYMENT],
             resource_count=1,
         )
 
@@ -179,8 +183,8 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[noobaa_sts],
             resource_count=1,
-            timeout=600 if noobaa_sts == "noobaa_db" else 60,
-            sleep=30 if noobaa_sts == "noobaa_db" else 3,
+            timeout=600 if noobaa_sts == constants.NOOBAA_DB_STATEFULSET else 60,
+            sleep=30 if noobaa_sts == constants.NOOBAA_DB_STATEFULSET else 3,
         )
 
         # Start the node
