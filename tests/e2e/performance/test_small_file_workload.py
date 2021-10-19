@@ -13,19 +13,23 @@ port 9200, this test can not be running in your host.
 import logging
 
 # 3ed party modules
-import pytest
-import numpy as np
+import os.path
+
 from elasticsearch import Elasticsearch, exceptions as ESExp
+import numpy as np
+import pytest
+import time
 
 # Local modules
 from ocs_ci.framework import config
-from ocs_ci.utility import templating
-from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance
-from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs import benchmark_operator, constants, exceptions
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.ocs.perfresult import PerfResult
+from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
@@ -89,9 +93,19 @@ class SmallFileResultsAnalyse(PerfResult):
         self.add_key("full-res", {})
 
         # Calculate the number of records for the test
+
+        # Total threads for one sample - one operation
         self.records = self.results["clients"] * self.results["threads"]
+
+        # Number of threads for all samples
         self.records *= self.results["samples"]
-        self.records *= len(self.results["operations"])
+
+        # Number of records for all operation - cleanup does not count
+        numofops = len(self.results["operations"])
+        if "cleanup" in self.results["operations"]:
+            numofops -= 1
+
+        self.records *= numofops
 
     def read(self):
         """
@@ -102,14 +116,42 @@ class SmallFileResultsAnalyse(PerfResult):
         query = {"query": {"match": {"uuid": self.uuid}}}
         log.info("Reading all data from ES server")
         try:
-            self.all_results = self.es.search(
-                index=self.index, body=query, size=self.records
+            # Initialize the scroll
+            page = self.es.search(index=self.index, scroll="2m", size=1000, body=query)
+            sid = page["_scroll_id"]
+            scroll_size = page["hits"]["total"]["value"]
+            log.info(
+                f"Looking for {self.records} records and found {scroll_size} records."
             )
+            self.all_results = page["hits"]["hits"]
+
+            # Start scrolling
+            while scroll_size > 0:
+                page = self.es.scroll(scroll_id=sid, scroll="2m")
+
+                # Update the scroll ID
+                sid = page["_scroll_id"]
+                self.all_results += page["hits"]["hits"]
+
+                # Get the number of results that we returned in the last scroll
+                scroll_size = len(page["hits"]["hits"])
+                log.debug(f"{scroll_size} records was read")
+
+            log.info(f"The total record that was read : {len(self.all_results)}")
             log.debug(self.all_results)
 
-            if not self.all_results["hits"]["hits"]:
+            total_rec_found = len(self.all_results)
+            if total_rec_found < 1:
                 log.warning("No data in ES server, disabling results calculation")
                 self.dont_check = True
+
+            if total_rec_found < self.records:
+                log.error("Not all data read from ES server")
+                self.dont_check = True
+
+            if total_rec_found > self.records:
+                log.warning("More records then expected was read, check the results!")
+
         except ESExp.NotFoundError:
             log.warning("No data in ES server, disabling results calculation")
             self.dont_check = True
@@ -130,8 +172,7 @@ class SmallFileResultsAnalyse(PerfResult):
 
         res = {}
         log.debug(f"Reading all threads for {op} / {snum} / {host}")
-        for hit in self.all_results["hits"]["hits"]:
-
+        for hit in self.all_results:
             if (
                 hit["_source"]["host"] == host
                 and hit["_source"]["optype"] == op
@@ -249,6 +290,7 @@ class SmallFileResultsAnalyse(PerfResult):
             for key in self.managed_keys.keys():
                 if self.managed_keys[key]["name"] in results.keys():
                     results[key] = np.average(results[self.managed_keys[key]["name"]])
+                    results[key] = float("{:.2f}".format(results[key]))
                     if key == "IOPS":
                         st_deviation = np.std(results[self.managed_keys[key]["name"]])
                         mean = np.mean(results[self.managed_keys[key]["name"]])
@@ -275,7 +317,7 @@ class SmallFileResultsAnalyse(PerfResult):
         """
 
         res = []
-        for hit in self.all_results["hits"]["hits"]:
+        for hit in self.all_results:
             host = hit["_source"]["host"]
             if host not in res:
                 res.append(host)
@@ -344,7 +386,7 @@ class TestSmallFileWorkload(PASTest):
         # deploy the benchmark-operator
         self.deploy_benchmark_operator()
 
-    def setting_storage_usage(self, file_size, files, threads, samples):
+    def setting_storage_usage(self, file_size, files, threads, samples, clients):
         """
         Getting the storage capacity, calculate the usage of the storage and
         setting the workload CR rile parameters.
@@ -354,12 +396,14 @@ class TestSmallFileWorkload(PASTest):
             files (int) : number of files to use
             threads (int) : number of threads to be use in the test
             samples (int) : how meany samples to run for each test
+            clients (int) : number of clients (pods) to use in the test
 
         """
         self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
         self.crd_data["spec"]["workload"]["args"]["files"] = files
         self.crd_data["spec"]["workload"]["args"]["threads"] = threads
         self.crd_data["spec"]["workload"]["args"]["samples"] = samples
+        self.crd_data["spec"]["workload"]["args"]["clients"] = clients
 
         # Calculating the size of the volume that need to be test, it should
         # be at least twice in the size then the size of the files, and at
@@ -409,6 +453,33 @@ class TestSmallFileWorkload(PASTest):
         )
         return full_results
 
+    def generate_kibana_link(self, index, columns):
+        """
+        Generating full link to the Kibana server with full test results information
+
+        Args:
+            index (str): the kibana index name (results, response time, etc.)
+            columns (str): list of all columns to display
+
+        Return:
+            str : an http link to the appropriate kibana report
+
+        """
+
+        stime = self.start_time.replace("GMT", ".000Z")
+        etime = self.end_time.replace("GMT", ".000Z")
+        kibana_id = self.get_kibana_indexid(
+            self.crd_data["spec"]["elasticsearch"]["server"],
+            index,
+        )
+        result = (
+            f"http://{self.crd_data['spec']['elasticsearch']['server']}:5601/app/discover#/"
+            f"?_a=(columns:!({columns}),filters:!(),index:'{kibana_id}',interval:auto,"
+            f"query:(language:kuery,query:'uuid:{self.uuid}'),sort:!())"
+            f"&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:'{stime}',to:'{etime}'))"
+        )
+        return result
+
     def run(self):
         log.info("Running SmallFile bench")
         self.deploy_and_wait_for_wl_to_start(timeout=240, sleep=10)
@@ -437,34 +508,22 @@ class TestSmallFileWorkload(PASTest):
         # operation completed.
         log.info("Verify (and wait if needed) that ceph health is OK")
         ceph_health_check(tries=45, delay=60)
+        # Let the background operation (delete backed images) to finish
+        time.sleep(120)
 
     @pytest.mark.parametrize(
-        argnames=["file_size", "files", "threads", "samples", "interface"],
+        argnames=["file_size", "files", "threads", "samples", "clients", "interface"],
         argvalues=[
-            pytest.param(
-                *[4, 50000, 4, 3, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-1295"),
-            ),
-            pytest.param(
-                *[16, 50000, 4, 3, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2020"),
-            ),
-            pytest.param(
-                *[16, 200000, 4, 3, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2021"),
-            ),
-            pytest.param(
-                *[4, 50000, 4, 3, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id("OCS-2022"),
-            ),
-            pytest.param(
-                *[16, 50000, 4, 3, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id("OCS-2023"),
-            ),
+            pytest.param(*[4, 5000, 22, 5, 33, constants.CEPHBLOCKPOOL]),
+            pytest.param(*[16, 5000, 8, 5, 21, constants.CEPHBLOCKPOOL]),
+            pytest.param(*[4, 2500, 4, 5, 9, constants.CEPHFILESYSTEM]),
+            pytest.param(*[16, 1500, 4, 5, 9, constants.CEPHFILESYSTEM]),
         ],
     )
     @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(self, file_size, files, threads, samples, interface):
+    def test_smallfile_workload(
+        self, file_size, files, threads, samples, clients, interface
+    ):
         """
         Run SmallFile Workload
 
@@ -483,11 +542,14 @@ class TestSmallFileWorkload(PASTest):
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{file_size}-{files}-{threads}-{samples}-{interface}"
+        self.results_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += (
+            f"-{file_size}-{files}-{threads}-{samples}-{clients}-{interface}"
+        )
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Loading the main template yaml file for the benchmark
-        log.info("Create resource file for smallfiles workload")
+        log.info("Create resource file for small_files workload")
         self.crd_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
         # Saving the Original elastic-search IP and PORT - if defined in yaml
@@ -496,13 +558,31 @@ class TestSmallFileWorkload(PASTest):
         self.set_storageclass(interface=interface)
 
         # Setting the data set to 40% of the total storage capacity
-        self.setting_storage_usage(file_size, files, threads, samples)
+        self.setting_storage_usage(file_size, files, threads, samples, clients)
 
         self.get_env_info()
 
         if not self.run():
             log.error("The benchmark failed to run !")
             return
+
+        # Getting full list of benchmark clients
+        self.full_client_list = get_pod_name_by_pattern(
+            self.client_pod_name, benchmark_operator.BMO_NAME
+        )
+        log.info(f"The full clients list is : {self.full_client_list}")
+
+        # Collecting logs from each pod
+        for clpod in self.full_client_list:
+            test_logs = self.pod_obj.exec_oc_cmd(f"logs {clpod}", out_yaml_format=False)
+            log_file_name = f"{self.full_log_path}/{clpod}-pod.log"
+            try:
+                with open(log_file_name, "w") as f:
+                    f.write(test_logs)
+                log.info(f"The Test log can be found at : {log_file_name}")
+            except Exception:
+                log.warning(f"Cannot write the log to the file {log_file_name}")
+        log.info("Logs from all client pods got successfully")
 
         # Setting back the original elastic-search information
         if self.backup_es:
@@ -544,10 +624,54 @@ class TestSmallFileWorkload(PASTest):
             full_results.init_full_results()
             full_results.aggregate_host_results()
             test_status = full_results.aggregate_samples_results()
-            full_results.all_results = None
+
+            # Generate link for the all data in the kibana
+            columens = "optype,files,elapsed,sample,tid"
+            klink = self.generate_kibana_link("ripsaw-smallfile-results", columens)
+
+            # Generate link for the all response-time data in the kibana
+            columens = "optype,sample,iops,max,min,mean,'90%25','95%25','99%25'"
+            rtlink = self.generate_kibana_link("ripsaw-smallfile-rsptimes", columens)
+
+            full_results.all_results = {"kibana_all": klink, "kibana_rsptime": rtlink}
+
             if full_results.es_write():
-                log.info(f"The Result can be found at : {full_results.results_link()}")
+                res_link = full_results.results_link()
+                log.info(f"The Result can be found at : {res_link}")
+
+                # Create text file with results of all subtest (4 - according to the parameters)
+                self.write_result_to_file(res_link)
+
         else:
             test_status = True
 
         assert test_status, "Test Failed !"
+
+    def test_smallfile_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        # TODO : This function will push the results (if exists) to the performance dashboard.
+
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_smallfile_workload"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}")
+        try:
+            input_file = open(self.results_file, "r")
+            data = input_file.read().split("\n")
+            data.pop()  # remove the last empty element
+            input_file.close()
+            if len(data) != 4:
+                log.error("Not all tests finished")
+                raise exceptions.BenchmarkTestFailed()
+            else:
+                log.info("All test finished OK, and the results can be found at :")
+                for res in data:
+                    log.info(res)
+        except OSError as err:
+            log.error(f"OS error: {err}")
+            raise err

@@ -3100,7 +3100,7 @@ def fetch_used_size(cbp_name, exp_val=None):
     return used_in_gb
 
 
-def get_full_test_logs_path(cname):
+def get_full_test_logs_path(cname, fname=None):
     """
     Getting the full path of the logs file for particular test
 
@@ -3111,6 +3111,7 @@ def get_full_test_logs_path(cname):
 
     Args:
         cname (obj): the Class object which was run and called this function
+        fname (str): the function name for different tests log path
 
     Return:
         str : full path of the test logs relative to the ocs-ci base logs path
@@ -3123,10 +3124,11 @@ def get_full_test_logs_path(cname):
     # The name of the class
     mname = type(cname).__name__
 
+    if fname is None:
+        fname = inspect.stack()[1][3]
+
     # the full log path (relative to ocs-ci base path)
-    full_log_path = (
-        f"{ocsci_log_path()}/{log_file_name}/{mname}/{inspect.stack()[1][3]}"
-    )
+    full_log_path = f"{ocsci_log_path()}/{log_file_name}/{mname}/{fname}"
 
     return full_log_path
 
