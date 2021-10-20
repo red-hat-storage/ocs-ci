@@ -184,6 +184,8 @@ ENV_DATA:
   VAULT_BACKEND: "v1"
   # enable console plugin
   enable_console_plugin: true
+  # MCG only deployment
+  mcg_only_deployment: false
 
 # This section is related to upgrade
 UPGRADE:
