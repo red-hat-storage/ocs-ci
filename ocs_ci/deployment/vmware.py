@@ -872,7 +872,7 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"{self.installer} create cluster "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=5400,
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
