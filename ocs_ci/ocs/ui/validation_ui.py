@@ -1,15 +1,11 @@
 import logging
 
-from selenium.webdriver.common.by import By
-
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-
 
 logger = logging.getLogger(__name__)
 
@@ -174,81 +170,211 @@ class ValidationUI(PageNavigator):
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
 
-
-    def test_odf_dashboard_ui(self,
-                              ):
+    def odf_overview_ui(
+        self,
+    ):
         """
-        Test to verify ODF dashboard changes in ODF 4.9
+        Test to verify changes and validate elements on ODF Overview tab for ODF 4.9
 
         """
 
         self.ocp_version = get_ocp_version()
-        self.page_nav = locators[self.ocp_version]["page"]
-        self.dashboard_items = locators[self.ocp_version]["dashboard"]
-        self.dep_loc = locators[self.ocp_version]["deployment"]
-
-        self.navigate_operatorhub_page()
-        self.navigate_installed_operators_page()
-        self.choose_expanded_mode(
-            mode=True, locator=self.dep_loc["drop_down_projects"]
-        )
-        self.do_click(
-            self.dep_loc["enable_default_porjects"], enable_screenshot=True
-        )
-        self.do_click(
-            self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
-        )
-        self.choose_expanded_mode(
-            mode=True, locator=self.dep_loc["drop_down_projects"]
-        )
-        self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
-
-
-        self.navigate_odf_overview_page()
-
-        logger.info("Click on 'Storage Systems' tab")
-        self.do_click(self.dashboard_items["storage_systems"], enable_screenshot=True)
-        logger.info("Verifying the status of ocs-storagecluster-storagesystem")
-        storagesystem_status = self.get_element_text(self.dashboard_items["ocs-storagecluster-storagesystem-status"])
-        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
-        storage_system_data = storage_system.get()
-
-        namespace = config.ENV_DATA["cluster_namespace"]
         ocs_version = version.get_semantic_ocs_version_from_config()
+        if self.ocp_version >= "4.9" and ocs_version >= version.VERSION_4_9:
 
-        if ocs_version >= version.VERSION_4_9:
-            logger.info("Verifying storage system status")
-            storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
-            storage_system_data = storage_system.get()
-            storage_system_status = {}
-            for condition in storage_system_data["items"][0]["status"]["conditions"]:
-                storage_system_status[condition["type"]] = condition["status"]
-            log.debug(f"storage system status: {storage_system_status}")
-            assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-                f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
-                f" but found {storage_system_status}"
+            self.page_nav = locators[self.ocp_version]["page"]
+            self.dash_items = locators[self.ocp_version]["dashboard"]
+            self.dep_loc = locators[self.ocp_version]["deployment"]
+
+            self.navigate_installed_operators_page()
+            logger.info("Click on project dropdown")
+            self.do_click(self.dep_loc["project-dropdown"])
+            logger.info("Search for 'openshift-storage' project")
+            self.do_send_keys(
+                self.dep_loc["project-search-bar"], text="openshift-storage"
+            )
+            logger.info("Select 'openshift-storage' project")
+            self.do_click(
+                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+            )
+            logger.info(
+                "Check if 'Plugin available' option is available on the Installed Operators page"
+            )
+            plugin_availability_check = self.check_element_text(
+                expected_text="Plugin available"
+            )
+            if plugin_availability_check:
+                logger.info(
+                    "Storage plugin is disabled, navigate to Operator details page further confirmation"
+                )
+                self.do_click(self.dep_loc["odf-operator"])
+                self.page_has_loaded(retries=15, sleep_time=5)
+                console_plugin_status = self.get_element_text(
+                    self.dep_loc["console_plugin_option"]
+                )
+                if console_plugin_status == "Disabled":
+                    logger.info(
+                        "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+                    )
+                    self.do_click(self.dep_loc["console_plugin_option"])
+                    self.do_click(self.dep_loc["enable_console_plugin"])
+                    self.do_click(self.dep_loc["save_console_plugin_settings"])
+                    logger.info("Waiting for warning alert to refresh the web console")
+                    refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                        locator=self.dep_loc["warning-alert"],
+                        expected_text="Refresh web console",
+                    )
+                    if refresh_web_console_popup:
+                        logger.info(
+                            "Refresh web console option is now available, click on it to see the changes"
+                        )
+                        self.do_click(self.dep_loc["refresh-web-console"])
+            self.navigate_odf_overview_page()
+            logger.info(
+                "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
+            )
+            self.do_click(self.dash_items["odf-capacityCardLink"])
+            navigate_to_storagesystem_details_page = self.check_element_text(
+                "StorageSystem details"
+            )
+            if navigate_to_storagesystem_details_page:
+                logger.info(
+                    "Successfully navigated to 'StorageSystem details' page from System Capacity Card"
+                )
+            else:
+                logger.error(
+                    "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
+                )
+            logger.info("Click on StorageSystems breadcrumb")
+            self.do_click((self.dash_items["storagesystems"]))
+            logger.info("Navigate back to ODF Overview page")
+            self.do_click((self.dash_items["overview"]))
+            logger.info(
+                "Now navigate to Performance Card and Click on 'ocs-storagecluster-storagesystem'"
+            )
+            self.do_click(self.dash_items["odf-performanceCardLink"])
+            navigate_to_storagesystem_details_page = self.check_element_text(
+                "StorageSystem details"
+            )
+            if navigate_to_storagesystem_details_page:
+                logger.info(
+                    "Successfully navigated to 'StorageSystem details' page from Performance Card"
+                )
+            else:
+                logger.error(
+                    "Couldn't navigate to 'StorageSystem details' page from Performance Card"
+                )
+            logger.info("Now again click on StorageSystems breadcrumb")
+            self.do_click((self.dash_items["storagesystems"]))
+            logger.info("Navigate again to ODF Overview page")
+            self.do_click((self.dash_items["overview"]))
+            self.page_has_loaded(retries=15, sleep_time=5)
+            logger.info(
+                "Successfully navigated back to ODF tab under Storage, test successful!"
             )
 
+    def odf_storagesystems_ui(self):
+        """
+        Test to verify changes and validate elements on ODF Storage Systems tab for ODF 4.9
+
+        """
+        self.ocp_version = get_ocp_version()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if self.ocp_version >= "4.9" and ocs_version >= version.VERSION_4_9:
+
+            self.page_nav = locators[self.ocp_version]["page"]
+            self.dash_items = locators[self.ocp_version]["dashboard"]
+            self.dep_loc = locators[self.ocp_version]["deployment"]
+
+            self.navigate_installed_operators_page()
+            logger.info("Click on project dropdown")
+            self.do_click(self.dep_loc["project-dropdown"])
+            logger.info("Search for 'openshift-storage' project")
+            self.do_send_keys(
+                self.dep_loc["project-search-bar"], text="openshift-storage"
+            )
+            logger.info("Select 'openshift-storage' project")
+            self.do_click(
+                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+            )
+            logger.info(
+                "Check if 'Plugin available' option is available on the Installed Operators page"
+            )
+            plugin_availability_check = self.check_element_text(
+                expected_text="Plugin available"
+            )
+            if plugin_availability_check:
+                logger.info(
+                    "Storage plugin is disabled, navigate to Operator details page for further confirmation"
+                )
+                self.do_click(self.dep_loc["odf-operator"])
+                self.page_has_loaded(retries=15, sleep_time=5)
+                console_plugin_status = self.get_element_text(
+                    self.dep_loc["console_plugin_option"]
+                )
+                if console_plugin_status == "Disabled":
+                    logger.info(
+                        "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+                    )
+                    self.do_click(self.dep_loc["console_plugin_option"])
+                    self.do_click(self.dep_loc["enable_console_plugin"])
+                    self.do_click(self.dep_loc["save_console_plugin_settings"])
+                    logger.info("Waiting for warning alert to refresh the web console")
+                    refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                        locator=self.dep_loc["warning-alert"],
+                        expected_text="Refresh web console",
+                    )
+                    logger.info(
+                        "Refresh web console option is now available, click on it to see the changes"
+                    )
+                    self.wait_until_expected_text_is_found(
+                        locator=self.dep_loc["refresh-web-console"],
+                        expected_text="Refresh web console",
+                    )
+                    if refresh_web_console_popup:
+                        self.do_click(self.dep_loc["refresh-web-console"])
+        self.navigate_odf_overview_page()
+        logger.info("Click on 'Storage Systems' tab")
+        self.do_click(self.dash_items["storage_systems"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info("Verifying the status of ocs-storagecluster-storagesystem")
+        storagesystem_status = self.get_element_text(
+            self.dash_items["ocs-storagecluster-storagesystem-status"]
+        )
         assert "Ready" == storagesystem_status, (
-            f"status error|expected status:Ready \n "
-            f"actual status:{storagesystem_status}")
-        logger.info("Click on ocs-storagecluster-storagesystem link under Storage Systems page")
-        self.do_click(self.dashboard_items["ocs-storagecluster-storagesystem"], enable_screenshot=True)
-        logger.info("Click on Overview tab")
-        self.do_click(self.dashboard_items["overview"])
+            f"storage system status error on UI | expected status:Ready \n "
+            f"actual status:{storagesystem_status}"
+        )
+        logger.info(
+            "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
+        )
+        self.do_click(
+            self.dash_items["ocs-storagecluster-storagesystem"], enable_screenshot=True
+        )
+        logger.info("Click on 'Object' tab")
+        self.do_click(self.dash_items["object"])
         logger.info("Click on 'Block and File' tab")
-        self.do_click(self.dashboard_items["blockandfile"])
+        self.do_click(self.dash_items["blockandfile"])
+        logger.info("Click on Overview tab")
+        self.do_click(self.dash_items["overview"])
         logger.info("Click on 'BlockPools' tab")
-        self.do_click(self.dashboard_items["blockpools"])
-        logger.info("Verifying the status of ocs-storagecluster-cephblockpool")
-        cephblockpool_status = self.get_element_text(self.dashboard_items["ocs-storagecluster-cephblockpool-status"])
+        self.do_click(self.dash_items["blockpools"])
+        logger.info(
+            "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
+        )
+        self.do_click(self.dash_items["ocs-storagecluster-cephblockpool"])
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info("Verifying the status of 'ocs-storagecluster-cephblockpool'")
+        cephblockpool_status = self.get_element_text(
+            self.dash_items["ocs-storagecluster-cephblockpool-status"]
+        )
         assert "Ready" == cephblockpool_status, (
-            f"status error|expected status:Ready \n "
-            f"actual status:{cephblockpool_status}")
-        logger.info("Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab")
-        self.do_click(self.dashboard_items["ocs-storagecluster-cephblockpool"])
-
-
+            f"cephblockpool status error | expected status:Ready \n "
+            f"actual status:{cephblockpool_status}"
+        )
+        logger.info(
+            "Successfully verified the status of cephblockpool, test successful!"
+        )
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """

@@ -9,6 +9,7 @@ from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
+    NoSuchElementException,
 )
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -29,7 +30,6 @@ from ocs_ci.ocs.exceptions import (
     PageNotLoaded,
 )
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.version import get_ocs_version
 from ocs_ci.utility import version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
@@ -309,10 +309,26 @@ class BaseUI:
             )
             return False
 
+    def check_element_presence(self, locator, timeout=5):
+        """
+        Check if an web element is present on the web console or not.
 
-    # def verify_icon_with_color(self, locator):
-    #     webicon = self.driver.find_element(By.XPATH, locator)
-    #     String webicon.getCssValue("fill")
+        Args:
+             locator (tuple): (GUI element needs to operate on (str), type (By))
+             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+        return:
+            bool: True if the element is found, raises NoSuchElementException and returns False otherwise
+
+        """
+
+        try:
+            wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
+            wait.until(ec.presence_of_element_located(locator))
+            return True
+        except NoSuchElementException:
+            self.take_screenshot()
+            logger.error("Expected element not found on UI")
+            return False
 
 
 class PageNavigator(BaseUI):
@@ -349,10 +365,12 @@ class PageNavigator(BaseUI):
         if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
             ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_9:
-                logger.info("Navigate to ODF tab under Storage")
+                logger.info("Navigate to ODF tab under Storage section")
                 self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-                self.do_click(locator=self.page_nav["odf_tab"])
-                logger.info("Successfully navigated to ODF tab under Storage")
+                self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+                self.page_has_loaded(retries=15, sleep_time=5)
+                time.sleep(1)
+                logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
         """
@@ -421,6 +439,11 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version >= version.VERSION_4_9:
+                self.page_has_loaded(retries=10, sleep_time=5)
+                time.sleep(1)
 
     def navigate_to_ocs_operator_page(self):
         """
@@ -438,7 +461,6 @@ class PageNavigator(BaseUI):
 
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
-
 
     def navigate_persistentvolumes_page(self):
         """
@@ -676,7 +698,7 @@ def login_ui():
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
