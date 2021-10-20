@@ -625,6 +625,8 @@ def login_ui(console_url=None):
     """
     Login to OpenShift Console
 
+    Args:
+        console_url (str): ocp console url
 
     return:
         driver (Selenium WebDriver)
