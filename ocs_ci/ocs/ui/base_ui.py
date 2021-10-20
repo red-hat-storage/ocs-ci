@@ -28,8 +28,8 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     PageNotLoaded,
 )
+from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.helpers_ui import get_ocp_url
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -621,14 +621,17 @@ def take_screenshot(driver):
 
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
 @retry(WebDriverException, tries=3, delay=3, backoff=2)
-def login_ui(console_url=get_ocp_url()):
+def login_ui(console_url=None):
     """
     Login to OpenShift Console
+
 
     return:
         driver (Selenium WebDriver)
 
     """
+    if not console_url:
+        console_url = get_ocp_url()
     logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()
