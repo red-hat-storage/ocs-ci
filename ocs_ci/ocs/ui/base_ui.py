@@ -618,9 +618,23 @@ def take_screenshot(driver):
     time.sleep(0.5)
 
 
+def get_ocp_url():
+    """
+    Getting default URL for OCP console
+    Returns:
+        str: OCP console URL
+
+    """
+    logger.info("Get URL of OCP console")
+    return run_cmd(
+        "oc get consoles.config.openshift.io cluster -o"
+        "jsonpath='{.status.consoleURL}'"
+    )
+
+
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
 @retry(WebDriverException, tries=3, delay=3, backoff=2)
-def login_ui():
+def login_ui(console_url=get_ocp_url()):
     """
     Login to OpenShift Console
 
@@ -628,11 +642,6 @@ def login_ui():
         driver (Selenium WebDriver)
 
     """
-    logger.info("Get URL of OCP console")
-    console_url = run_cmd(
-        "oc get consoles.config.openshift.io cluster -o"
-        "jsonpath='{.status.consoleURL}'"
-    )
     logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()
