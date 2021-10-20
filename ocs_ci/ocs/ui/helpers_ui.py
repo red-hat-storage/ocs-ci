@@ -1,6 +1,7 @@
 import logging
 
 from selenium.webdriver.common.by import By
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
@@ -186,3 +187,21 @@ def get_element_type(element_name):
     """
 
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
+
+def get_ocp_url():
+    """
+    Getting default URL for OCP console
+    Returns:
+        str: OCP console URL
+
+    """
+    oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    logger.info("Get URL of OCP console")
+    url = oc_cmd.exec_oc_cmd(
+        "get consoles.config.openshift.io cluster -o" "jsonpath='{.status.consoleURL}'",
+        out_yaml_format=False,
+    )
+    logger.info(f"OCP URL: {url}")
+
+    return str(url)

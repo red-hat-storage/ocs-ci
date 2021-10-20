@@ -29,14 +29,15 @@ from ocs_ci.ocs.exceptions import (
     PageNotLoaded,
 )
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.helpers_ui import get_ocp_url
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_kubeadmin_password,
     get_ocp_version,
-    run_cmd,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -616,20 +617,6 @@ def take_screenshot(driver):
     logger.info(f"Creating snapshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
-
-
-def get_ocp_url():
-    """
-    Getting default URL for OCP console
-    Returns:
-        str: OCP console URL
-
-    """
-    logger.info("Get URL of OCP console")
-    return run_cmd(
-        "oc get consoles.config.openshift.io cluster -o"
-        "jsonpath='{.status.consoleURL}'"
-    )
 
 
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
