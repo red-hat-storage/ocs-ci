@@ -1100,6 +1100,9 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     for key, value in attributes.items():
         # Prefix with `rp_` so the rp_preproc upload script knows to use the property
         record_testsuite_property(f"rp_{key}", value)
+    launch_url = config.REPORTING.get("rp_launch_url")
+    if launch_url:
+        record_testsuite_property("rp_launch_url", launch_url)
 
 
 @pytest.fixture(scope="session")
