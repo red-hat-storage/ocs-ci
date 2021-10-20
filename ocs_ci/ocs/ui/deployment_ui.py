@@ -301,7 +301,9 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
             self.take_screenshot()
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(
+                f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
+            )
         self.take_screenshot()
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
