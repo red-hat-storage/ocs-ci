@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, tier2
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -48,7 +48,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -57,7 +57,7 @@ class TestReplication(MCGTest):
                 },
                 {"interface": "CLI", "backingstore_dict": {"gcp": [(1, None)]}},
                 # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -82,7 +82,7 @@ class TestReplication(MCGTest):
                         "namespacestore_dict": {"gcp": [(1, None)]},
                     },
                 },
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -323,7 +323,7 @@ class TestReplication(MCGTest):
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
@@ -335,7 +335,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id()],  # TODO
             ),
             pytest.param(
                 {
