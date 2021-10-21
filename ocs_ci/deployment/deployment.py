@@ -1090,7 +1090,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         run_cmd(
             "oc patch image.config.openshift.io/cluster --type merge -p '"
             '{"spec": {"registrySources": {"insecureRegistries": '
-            '["registry-proxy.engineering.redhat.com"]}}}\''
+            '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
+            "}}}'"
         )
         run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
