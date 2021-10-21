@@ -117,7 +117,8 @@ class TestReplication(MCGTest):
         target_bucketclass,
     ):
         """
-        Test unidirectional bucket replication using CLI and YAML
+        Test unidirectional bucket replication using CLI and YAML by adding objects
+        to a backingstore-backed bucket
 
         """
         # Create a bucket that replicates its objects to first.bucket
@@ -246,6 +247,7 @@ class TestReplication(MCGTest):
     ):
         """
         Test bidirectional bucket replication using CLI and YAML
+
         """
 
         # Create a bucket that replicates its objects to first.bucket
