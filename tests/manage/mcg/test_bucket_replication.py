@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import tier1, tier2
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    compare_bucket_contents,
+    compare_bucket_object_list,
     sync_object_directory,
     write_random_test_objects_to_bucket,
     verify_s3_object_integrity,
@@ -141,7 +141,7 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
@@ -212,7 +212,7 @@ class TestReplication(MCGTest):
 
         listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
@@ -293,7 +293,7 @@ class TestReplication(MCGTest):
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, first_bucket_name, second_bucket_name
         ), "The compared buckets do not contain the same set of objects"
         written_objects = write_random_test_objects_to_bucket(
@@ -308,7 +308,7 @@ class TestReplication(MCGTest):
         assert second_bucket_set == {
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
         }, "Needed uploaded objects could not be found"
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, first_bucket_name, second_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
@@ -385,7 +385,7 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
@@ -440,7 +440,7 @@ class TestReplication(MCGTest):
 
         listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
@@ -479,7 +479,7 @@ class TestReplication(MCGTest):
             amount=4,
         )
 
-        assert compare_bucket_contents(
+        assert compare_bucket_object_list(
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 

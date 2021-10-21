@@ -80,7 +80,13 @@ def bucket_class_factory(
                 - backingstore_dict (dict): A dictionary compatible with the backing store factory
                   requirements. (Described in backingstore.py, under _create_backingstore)
 
-                - replication_policy (list): A list of rules to be added to the bucketclass.
+                - replication_policy (tuple): A tuple representing the replication policy
+                  to be added to the bucketclass, containing the following fields,
+                  in this particular order:
+                    - rule_id (str): A rule ID / name
+                    - destination_bucket (str): The name of the bucket to replicate all objects to
+                    - prefix (str): A prefix to limit replication only to objects beginning
+                      with the chosen prefix.
 
                 - namespace_policy_dict (dict):  A dictionary compatible with the namespace store factory.
                 Needs to contain the following keys and values:

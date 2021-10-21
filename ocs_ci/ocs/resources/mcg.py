@@ -716,9 +716,9 @@ class MCG:
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
-            replication (list): A list of replication rules
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (tuple): A tuple representing the replication policy to use
 
         Returns:
             OCS: The bucket class resource
@@ -772,16 +772,17 @@ class MCG:
         name,
         backingstores,
         placement_policy,
-        replication_policy=None,
         namespace_policy=None,
+        replication_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using the noobaa cli
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (tuple): A tuple representing the replication policy to use
 
         Returns:
             OCS: The bucket class resource
