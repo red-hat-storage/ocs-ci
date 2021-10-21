@@ -1177,7 +1177,7 @@ def s3_get_object_acl(s3_obj, bucketname, object_key):
     return s3_obj.s3_client.get_object_acl(Bucket=bucketname, Key=object_key)
 
 
-def s3_head_object(s3_obj, bucketname, object_key):
+def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
     """
     Boto3 client based head_object operation to retrieve only metadata
 
@@ -1185,12 +1185,19 @@ def s3_head_object(s3_obj, bucketname, object_key):
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier for copied object
+        if_match (str): Return the object only if its entity tag (ETag)
+                        is the same as the one specified,
 
     Returns:
         dict : head object response
 
     """
-    return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+    if if_match:
+        return s3_obj.s3_client.head_object(
+            Bucket=bucketname, Key=object_key, IfMatch=if_match
+        )
+    else:
+        return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_list_objects_v1(
