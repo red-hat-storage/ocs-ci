@@ -1091,6 +1091,9 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     if logs_url:
         record_testsuite_property("logs-url", logs_url)
 
+    # add run_id
+    record_testsuite_property("run_id", config.RUN["run_id"])
+
     # Report Portal
     launch_name = reporting.get_rp_launch_name()
     record_testsuite_property("rp_launch_name", launch_name)
