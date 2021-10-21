@@ -72,14 +72,14 @@ class TestReplication(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 },
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"gcp": [(1, None)]},
+                        "namespacestore_dict": {"azure": [(1, None)]},
                     },
                 },
                 marks=[tier2, pytest.mark.polarion_id()],  # TODO
@@ -94,7 +94,7 @@ class TestReplication(MCGTest):
                 },
                 {
                     "interface": "CLI",
-                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    "backingstore_dict": {"gcp": [(1, None)]},
                 },
                 marks=[tier1, pytest.mark.polarion_id()],  # TODO
             ),
