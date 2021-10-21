@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.helpers.helpers import mcg_only_deployment
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
@@ -580,8 +581,12 @@ class Deployment(object):
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
             kms.deploy()
-        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
+        if config.ENV_DATA["mcg_only_deployment"]:
+            mcg_only_deployment()
+            return
+
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         # Figure out all the OCS modules enabled/disabled
         # CLI parameter --disable-components takes the precedence over
         # anything which comes from config file
