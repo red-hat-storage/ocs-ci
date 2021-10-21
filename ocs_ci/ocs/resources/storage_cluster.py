@@ -105,66 +105,18 @@ def ocs_install_verification(
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
 
-    # Verify OCS CSV is in Succeeded phase
-    log.info("verifying ocs csv")
-    ocs_csv = get_ocs_csv()
-    # Verify if OCS CSV has proper version.
-    csv_version = ocs_csv.data["spec"]["version"]
     ocs_version = version.get_semantic_ocs_version_from_config()
-    log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
-    assert (
-        f"{ocs_version}" in csv_version
-    ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
-    # Verify if OCS CSV has the same version in provided CI build.
-    ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
-        "ocs_registry_image"
-    )
-    if ocs_registry_image and ocs_registry_image.endswith(".ci"):
-        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1].split("-")[0]
-        log.info(
-            f"Check if OCS registry image: {ocs_registry_image} matches with "
-            f"CSV: {csv_version}"
-        )
-        ignore_csv_mismatch = config.DEPLOYMENT.get("ignore_csv_mismatch")
-        if ignore_csv_mismatch:
-            log.info(
-                "The possible mismatch will be ignored as you deployed "
-                "the different version than the default version from the CSV"
-            )
-        else:
-            assert ocs_registry_image in csv_version, (
-                f"OCS registry image version: {ocs_registry_image} mismatch "
-                f"with CSV version {csv_version}"
-            )
 
-    # Verify Storage System status
-    if ocs_version >= version.VERSION_4_9:
-        log.info("Verifying storage system status")
-        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
-        storage_system_data = storage_system.get()
-        storage_system_status = {}
-        for condition in storage_system_data["items"][0]["status"]["conditions"]:
-            storage_system_status[condition["type"]] = condition["status"]
-        log.debug(f"storage system status: {storage_system_status}")
-        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
-            f" but found {storage_system_status}"
-        )
+    # Basic Verification for cluster
+    basic_verification(ocs_registry_image)
 
-    # Verify OCS Cluster Service (ocs-storagecluster) is Ready
+    # Verify pods in running state and proper counts
+    log.info("Verifying pod states and counts")
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
     storage_cluster = StorageCluster(
         resource_name=storage_cluster_name,
         namespace=namespace,
     )
-    log.info(
-        f"Check if StorageCluster: {storage_cluster_name} is in" f"Succeeded phase"
-    )
-    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
-
-    # Verify pods in running state and proper counts
-    log.info("Verifying pod states and counts")
     pod = OCP(kind=constants.POD, namespace=namespace)
     if not config.DEPLOYMENT["external_mode"]:
         osd_count = int(
@@ -178,13 +130,10 @@ def ocs_install_verification(
             )
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
-    max_eps = (
-        constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
-    )
 
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
         min_eps = 1
-        max_eps = 1
+        # max_eps = 1
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
@@ -238,16 +187,6 @@ def ocs_install_verification(
             selector=label,
             resource_count=count,
             timeout=timeout,
-        )
-
-    if not disable_noobaa:
-        nb_ep_pods = get_pods_having_label(
-            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        )
-        assert len(nb_ep_pods) <= max_eps, (
-            f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
-            f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
         )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
@@ -411,6 +350,7 @@ def ocs_install_verification(
                     f"Snapshot container is present in {pod_obj.name} pod. "
                     f"Container {container}. Image {image}"
                 )
+        ocs_csv = get_ocs_csv()
         deployments = ocs_csv.get()["spec"]["install"]["spec"]["deployments"]
         rook_ceph_operator_deployment = [
             deployment_val
@@ -478,12 +418,127 @@ def ocs_install_verification(
             f" the actaul failure domain is {failure_domain}"
         )
 
+    if config.ENV_DATA.get("is_multus_enabled"):
+        verify_multus_network()
+
+
+def mcg_only_install_verification(ocs_registry_image=None):
+    """
+    Verification for successful MCG only deployment
+    """
+    log.info("Verifying MCG Only installation")
+    basic_verification(ocs_registry_image=None)
+
+
+def basic_verification(ocs_registry_image=None):
+    """"""
+    verify_ocs_csv(ocs_registry_image)
+    verify_storage_system()
+    verify_storage_cluster()
+    verify_noobaa_endpoint_count()
+    verify_storage_cluster_images()
+
+
+def verify_ocs_csv(ocs_registry_image=None):
+    """
+    OCS CSV verification ( succeeded state )
+    """
+    log.info("verifying ocs csv")
+    ocs_csv = get_ocs_csv()
+    # Verify if OCS CSV has proper version.
+    csv_version = ocs_csv.data["spec"]["version"]
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
+    assert (
+        f"{ocs_version}" in csv_version
+    ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
+    # Verify if OCS CSV has the same version in provided CI build.
+    ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
+        "ocs_registry_image"
+    )
+    if ocs_registry_image and ocs_registry_image.endswith(".ci"):
+        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1].split("-")[0]
+        log.info(
+            f"Check if OCS registry image: {ocs_registry_image} matches with "
+            f"CSV: {csv_version}"
+        )
+        ignore_csv_mismatch = config.DEPLOYMENT.get("ignore_csv_mismatch")
+        if ignore_csv_mismatch:
+            log.info(
+                "The possible mismatch will be ignored as you deployed "
+                "the different version than the default version from the CSV"
+            )
+        else:
+            assert ocs_registry_image in csv_version, (
+                f"OCS registry image version: {ocs_registry_image} mismatch "
+                f"with CSV version {csv_version}"
+            )
+
+
+def verify_storage_system():
+    """
+    Verify storage system status
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_9:
+        log.info("Verifying storage system status")
+        storage_system = OCP(
+            kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        storage_system_data = storage_system.get()
+        storage_system_status = {}
+        for condition in storage_system_data["items"][0]["status"]["conditions"]:
+            storage_system_status[condition["type"]] = condition["status"]
+        log.debug(f"storage system status: {storage_system_status}")
+        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
+            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+            f" but found {storage_system_status}"
+        )
+
+
+def verify_storage_cluster():
+    """"""
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    log.info(
+        f"Check if StorageCluster: {storage_cluster_name} is in" f"Succeeded phase"
+    )
+    storage_cluster.wait_for_phase(phase="Ready", timeout=600)
+
+
+def verify_noobaa_endpoint_count():
+    """"""
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    disable_noobaa = config.COMPONENTS["disable_noobaa"]
+    max_eps = (
+        constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
+    )
+    if not disable_noobaa:
+        nb_ep_pods = get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        assert len(nb_ep_pods) <= max_eps, (
+            f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+            f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
+        )
+
+
+def verify_storage_cluster_images():
+    """"""
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     if ocs_version >= version.VERSION_4_7:
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
-
-    if config.ENV_DATA.get("is_multus_enabled"):
-        verify_multus_network()
 
 
 def osd_encryption_verification():

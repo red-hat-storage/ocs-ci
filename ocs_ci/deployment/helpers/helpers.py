@@ -5,8 +5,10 @@ This module contains helper functions which is independent of platform
 import logging
 import tempfile
 
-from ocs_ci.ocs import constants
-from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.utils import enable_console_plugin
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
@@ -26,3 +28,19 @@ def mcg_only_deployment():
     )
     templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
     run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+
+
+def mcg_only_post_deployment_checks():
+    """
+    Verification of MCG only after deployment
+    """
+    # check for odf-console
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    pod = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    if ocs_version >= version.VERSION_4_9:
+        assert pod.wait_for_resource(
+            condition="Running", selector="app=odf-console", timeout=600
+        )
+
+    # Enable console plugin
+    enable_console_plugin()
