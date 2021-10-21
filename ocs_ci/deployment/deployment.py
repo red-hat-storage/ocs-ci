@@ -508,14 +508,11 @@ class Deployment(object):
                         constants.OCS_SECRET, self.namespace
                     )
                     is_ibm_sa_linked = True
-            # create storage system
-            if ocs_version >= version.VERSION_4_9 and (
-                defaults.ODF_OPERATOR_NAME in ocs_operator_name
-            ):
-                csv.wait_for_phase("Succeeded", timeout=720)
-                time.sleep(30)
-                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
             csv.wait_for_phase("Succeeded", timeout=720)
+        # create storage system
+        if ocs_version >= version.VERSION_4_9:
+            exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+
         ocp_version = version.get_semantic_ocp_version_from_config()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
