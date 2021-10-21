@@ -1025,7 +1025,7 @@ def write_random_objects(io_pod, file_dir, amount, pattern="ObjKey"):
     directory in a pod
 
     Args:
-        io_pod (OCP): The pod object in which the files should be
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod object in which the files should be
         generated and written
 
         file_dir (str): A string describing the path in which
@@ -1390,7 +1390,7 @@ def write_random_test_objects_to_bucket(
 
     Args:
         mcg_obj (MCG): An MCG class instance
-        io_pod (OCP): The pod which should handle all neededIO operations
+        io_pod (ocs_ci.ocs.ocp.OCPocs_ci.ocs.ocp.OCP): The pod which should handle all neededIO operations
         bucket_to_write (str): The bucket name to write the random files to
         file_dir (str): The path to the folder where all random files will be
         generated and copied from
