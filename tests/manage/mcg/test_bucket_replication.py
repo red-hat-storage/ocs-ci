@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 class TestReplication(MCGTest):
     """
     Test suite for MCG object replication policies
+
     """
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -144,7 +144,6 @@ class TestReplication(MCGTest):
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -220,7 +219,6 @@ class TestReplication(MCGTest):
             obj.key for obj in listed_obejcts
         }, "Some of the uploaded objects are missing"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["first_bucketclass", "second_bucketclass"],
         argvalues=[
@@ -312,7 +310,6 @@ class TestReplication(MCGTest):
             mcg_obj, first_bucket_name, second_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -390,7 +387,6 @@ class TestReplication(MCGTest):
             mcg_obj, source_bucket_name, target_bucket_name
         ), "The compared buckets do not contain the same set of objects"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
