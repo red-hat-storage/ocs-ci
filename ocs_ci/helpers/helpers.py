@@ -489,6 +489,11 @@ def default_storage_class(
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
         base_sc = OCP(kind="storageclass", resource_name=resource_name)
+    base_sc.wait_for_resource(
+        condition=resource_name,
+        column="NAME",
+        timeout=240,
+    )
     sc = OCS(**base_sc.data)
     return sc
 
