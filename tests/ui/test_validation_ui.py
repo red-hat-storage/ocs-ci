@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class TestUserInterfaceValidation(object):
 
     @tier1
     @skipif_ui_not_support("validation")
-    def test_validation_ui(self, setup_ui):
+    def test_dashboard_validation_ui(self, setup_ui):
         """
         Validate User Interface
 
@@ -23,21 +24,14 @@ class TestUserInterfaceValidation(object):
 
         """
         validation_ui_obj = ValidationUI(setup_ui)
-        validation_ui_obj.verification_ui()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
+            validation_ui_obj.odf_overview_ui()
+        else:
+            validation_ui_obj.verification_ui()
 
     @tier1
-    def test_odf_overview_ui(self, setup_ui):
-        """
-        Validate User Interface for ODF Overview Tab for ODF 4.9
-
-        Args:
-            setup_ui: login function on conftest file
-
-        """
-        validation_ui_obj = ValidationUI(setup_ui)
-        validation_ui_obj.odf_overview_ui()
-
-    @tier1
+    @skipif_ui_not_support("validation")
     def test_odf_storagesystems_ui(self, setup_ui):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9

@@ -134,20 +134,6 @@ deployment_4_9 = {
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
-    "console_plugin_option": (
-        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
-        By.CSS_SELECTOR,
-    ),
-    "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
-    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
-    "refresh-web-console": (
-        "//button[normalize-space()='Refresh web console']",
-        By.XPATH,
-    ),
-    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
-    "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
-    "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -498,7 +484,7 @@ validation_4_8 = {
     ),
 }
 
-dashboard_4_9 = {
+validation_4_9 = {
     "storage_systems": (
         "a[data-test-id='horizontal-link-Storage Systems']",
         By.CSS_SELECTOR,
@@ -539,6 +525,21 @@ dashboard_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "console_plugin_option": (
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        By.CSS_SELECTOR,
+    ),
+    "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
+    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
+    "refresh-web-console": (
+        "//button[normalize-space()='Refresh web console']",
+        By.XPATH,
+    ),
+    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
+    "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "show-default-projects": ("label[for='no-label-switch-on']", By.CSS_SELECTOR),
 }
 
 locators = {
@@ -547,8 +548,7 @@ locators = {
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
-        "dashboard": dashboard_4_9,
-        "validation": {**validation, **validation_4_8},
+        "validation": {**validation, **validation_4_8, **validation_4_9},
     },
     "4.8": {
         "login": login,

@@ -30,7 +30,6 @@ from ocs_ci.ocs.exceptions import (
     PageNotLoaded,
 )
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility import version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -286,7 +285,7 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
 
-        return:
+        Returns:
             bool: Returns True if the expected element text is found, False otherwise
 
         """
@@ -313,14 +312,14 @@ class BaseUI:
         """
         Check if an web element is present on the web console or not.
 
+
         Args:
              locator (tuple): (GUI element needs to operate on (str), type (By))
              timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
-        return:
-            bool: True if the element is found, raises NoSuchElementException and returns False otherwise
+        Returns:
+            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
 
         """
-
         try:
             wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
             wait.until(ec.presence_of_element_located(locator))
@@ -362,15 +361,11 @@ class PageNavigator(BaseUI):
         Navigate to OpenShift Data Foundation Overview Page
 
         """
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version >= version.VERSION_4_9:
-                logger.info("Navigate to ODF tab under Storage section")
-                self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-                self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-                self.page_has_loaded(retries=15, sleep_time=5)
-                time.sleep(1)
-                logger.info("Successfully navigated to ODF tab under Storage section")
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        self.page_has_loaded(retries=15, sleep_time=5)
+        logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
         """
@@ -439,11 +434,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version >= version.VERSION_4_9:
-                self.page_has_loaded(retries=10, sleep_time=5)
-                time.sleep(1)
+        self.page_has_loaded(retries=15, sleep_time=5)
 
     def navigate_to_ocs_operator_page(self):
         """
