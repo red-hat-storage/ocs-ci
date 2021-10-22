@@ -44,6 +44,28 @@ class ResultsAnalyse(PerfResult):
         self.es_connect()
 
 
+@performance
+@pytest.mark.parametrize(
+    argnames=["interface", "copies", "timeout", "total_time_limit"],
+    argvalues=[
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 3, 120, 60],
+            marks=pytest.mark.polarion_id("OCS-2043"),
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 13, 600, 360],
+            marks=pytest.mark.polarion_id("OCS-2673"),
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 3, 120, 60],
+            marks=pytest.mark.polarion_id("OCS-2044"),
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 13, 600, 360],
+            marks=pytest.mark.polarion_id("OCS-2674"),
+        ),
+    ],
+)
 @pytest.mark.polarion_id("OCS-2208")
 @performance
 class TestPodReattachTimePerformance(PASTest):
@@ -95,15 +117,15 @@ class TestPodReattachTimePerformance(PASTest):
         return full_results
 
     @pytest.fixture()
-    def base_setup(self, interface_iterate):
+    def base_setup(self, interface):
         """
         A setup phase for the test
         Args:
-            interface_iterate: A fixture to iterate over ceph interfaces
+            interface: Interface parameter
 
         """
 
-        self.interface = interface_iterate
+        self.interface = interface
 
         if self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
@@ -114,16 +136,17 @@ class TestPodReattachTimePerformance(PASTest):
         self.full_log_path += f"-{self.sc}"
 
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pod_reattach_time_performance(self, pvc_factory, teardown_factory):
+    def test_pod_reattach_time_performance(
+        self, pvc_factory, teardown_factory, copies, timeout, total_time_limit
+    ):
         """
         Test assign nodeName to a pod using RWX pvc
         Each kernel (unzipped) is 892M and 61694 files
-        The test creates samples_num pvcs and pods and calculates average reattach time and standard deviation
+        The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
+        and calculates average reattach time and standard deviation
         """
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
-        # Number of times we copy the kernel
-        copies = 3
 
         samples_num = 10
         test_start_time = PASTest.get_time()
@@ -153,7 +176,7 @@ class TestPodReattachTimePerformance(PASTest):
                     interface=self.interface,
                     access_mode=accessmode,
                     status=constants.STATUS_BOUND,
-                    size="15",
+                    size="100",
                 )
             except Exception as e:
                 logging.error(f"The PVC sample was not created, exception {str(e)}")
@@ -179,7 +202,7 @@ class TestPodReattachTimePerformance(PASTest):
             # Confirm that pod is running on the selected_nodes
             logging.info("Checking whether pods are running on the selected nodes")
             helpers.wait_for_resource_state(
-                resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=120
+                resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=timeout
             )
 
             pod_name = pod_obj1.name
@@ -212,7 +235,9 @@ class TestPodReattachTimePerformance(PASTest):
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
-            logging.info(f"The number of files written to the pod is {files_written}")
+            logging.info(
+                f"For {self.interface} - The number of files written to the pod is {files_written}"
+            )
 
             logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
@@ -238,16 +263,16 @@ class TestPodReattachTimePerformance(PASTest):
 
             pod_name = pod_obj2.name
             helpers.wait_for_resource_state(
-                resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=120
+                resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=timeout
             )
             end_time = time.time()
             total_time = end_time - start_time
-            if total_time > 60:
+            if total_time > total_time_limit:
                 logging.error(
-                    f"Pod creation time is {total_time} and greater than 60 seconds"
+                    f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
                 )
                 raise ex.PerformanceException(
-                    f"Pod creation time is {total_time} and greater than 60 seconds"
+                    f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
                 )
             logging.info(
                 f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds"
