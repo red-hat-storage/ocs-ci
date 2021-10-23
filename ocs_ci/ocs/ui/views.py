@@ -453,6 +453,12 @@ validation = {
         'a[data-test-id="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
+    "capacity_breakdown_options": (
+        'button[class="pf-c-select__toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
+    "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
 }
 
 validation_4_7 = {
