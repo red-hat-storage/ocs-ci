@@ -71,6 +71,7 @@ setup(
         "junitparser",
         "flaky==3.7.0",
         "ocp-network-split",
+        "pyparsing ==2.4.7",
     ],
     entry_points={
         "console_scripts": [
