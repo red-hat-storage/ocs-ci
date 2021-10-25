@@ -1,0 +1,27 @@
+---
+ENV_DATA:
+  platform: 'rosa'
+  deployment_type: 'managed'
+  addon_id: 'ocs-converged'
+  configs: 'aws,stage'
+  worker_instance_type: 'm5.2xlarge'
+  worker_replicas: '3'
+  cluster_expiry_in_minutes: '600'
+  skip_ocs_deployment: true
+
+# AUTH:
+#  openshiftdedicated:
+#    token: OCM TOKEN KEY PLACEHOLDER
+
+DEPLOYMENT:
+  ocs_csv_channel: "alpha"
+  force_download_ocm_cli: True
+  ocm_cli_version: '0.1.46'
+  force_download_rosa_cli: True
+  rosa_cli_version: '1.1.2'
+
+# This is useful as a W/A for Openshift Dedicated, as there is an issue 
+# to use internal image for must gather
+REPORTING:
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'
