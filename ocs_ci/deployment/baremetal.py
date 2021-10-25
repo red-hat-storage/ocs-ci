@@ -542,17 +542,17 @@ class BAREMETALUPI(Deployment):
                 str: response message
             """
             if bm_status == constants.BM_STATUS_PRESENT:
-                now = datetime.today().strftime('%Y-%m-%d')
+                now = datetime.today().strftime("%Y-%m-%d")
                 payload = {
                     "status": bm_status,
                     "cluster_name": config.ENV_DATA["cluster_name"],
-                    "creation_date": now
+                    "creation_date": now,
                 }
             else:
                 payload = {
                     "status": bm_status,
                     "cluster_name": "null",
-                    "creation_date": "null"
+                    "creation_date": "null",
                 }
             headers = {"content-type": "application/json"}
             response = requests.put(
