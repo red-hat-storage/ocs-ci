@@ -61,6 +61,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
+from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
 from ocs_ci.utility.utils import (
     ceph_health_check,
     enable_huge_pages,
@@ -206,6 +207,8 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            configure_custom_ingress_cert()
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
