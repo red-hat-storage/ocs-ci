@@ -111,7 +111,7 @@ class TestReplication(MCGTest):
     def test_unidirectional_bucket_replication(
         self,
         awscli_pod_session,
-        mcg_obj,
+        mcg_obj_session,
         bucket_factory,
         source_bucketclass,
         target_bucketclass,
@@ -133,17 +133,19 @@ class TestReplication(MCGTest):
         ).split(" ")
         # Write all downloaded objects to the new bucket
         sync_object_directory(
-            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj_session
         )
-        written_objects = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+        written_objects = mcg_obj_session.s3_list_all_objects_in_bucket(
+            source_bucket_name
+        )
 
         assert set(downloaded_files) == {
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_object_list(
-            mcg_obj, source_bucket_name, target_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -170,7 +172,7 @@ class TestReplication(MCGTest):
     def test_unidirectional_namespace_bucket_replication(
         self,
         awscli_pod_session,
-        mcg_obj,
+        mcg_obj_session,
         cld_mgr,
         bucket_factory,
         source_bucketclass,
@@ -202,7 +204,7 @@ class TestReplication(MCGTest):
         }
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj,
+            mcg_obj_session,
             awscli_pod_session,
             source_bucket_uls_name,
             test_directory_setup.origin_dir,
@@ -210,11 +212,13 @@ class TestReplication(MCGTest):
             s3_creds=namespacestore_aws_s3_creds,
         )
 
-        listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+        listed_obejcts = mcg_obj_session.s3_list_all_objects_in_bucket(
+            source_bucket_name
+        )
 
-        assert compare_bucket_object_list(
-            mcg_obj, source_bucket_name, target_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
 
         assert set(written_random_objects) == {
             obj.key for obj in listed_obejcts
@@ -239,7 +243,7 @@ class TestReplication(MCGTest):
     def test_bidirectional_bucket_replication(
         self,
         awscli_pod_session,
-        mcg_obj,
+        mcg_obj_session,
         bucket_factory,
         first_bucketclass,
         second_bucketclass,
@@ -286,18 +290,19 @@ class TestReplication(MCGTest):
             awscli_pod_session,
             AWSCLI_TEST_OBJ_DIR,
             f"s3://{first_bucket_name}",
-            mcg_obj,
+            mcg_obj_session,
         )
         first_bucket_set = set(downloaded_files)
         assert first_bucket_set == {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
+            obj.key
+            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(first_bucket_name)
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_object_list(
-            mcg_obj, first_bucket_name, second_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, first_bucket_name, second_bucket_name
+        )
         written_objects = write_random_test_objects_to_bucket(
-            mcg_obj,
+            mcg_obj_session,
             awscli_pod_session,
             second_bucket_name,
             test_directory_setup.origin_dir,
@@ -306,11 +311,12 @@ class TestReplication(MCGTest):
         second_bucket_set = set(written_objects)
         second_bucket_set.update(downloaded_files)
         assert second_bucket_set == {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
+            obj.key
+            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(second_bucket_name)
         }, "Needed uploaded objects could not be found"
-        assert compare_bucket_object_list(
-            mcg_obj, first_bucket_name, second_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, first_bucket_name, second_bucket_name
+        )
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -354,7 +360,7 @@ class TestReplication(MCGTest):
     def test_unidirectional_bucketclass_replication(
         self,
         awscli_pod_session,
-        mcg_obj,
+        mcg_obj_session,
         bucket_factory,
         source_bucketclass,
         target_bucketclass,
@@ -377,17 +383,19 @@ class TestReplication(MCGTest):
         ).split(" ")
         # Write all downloaded objects to the new bucket
         sync_object_directory(
-            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj_session
         )
-        written_objects = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+        written_objects = mcg_obj_session.s3_list_all_objects_in_bucket(
+            source_bucket_name
+        )
 
         assert set(downloaded_files) == {
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        assert compare_bucket_object_list(
-            mcg_obj, source_bucket_name, target_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -409,7 +417,7 @@ class TestReplication(MCGTest):
     def test_unidirectional_bucket_object_change_replication(
         self,
         awscli_pod_session,
-        mcg_obj,
+        mcg_obj_session,
         bucket_factory,
         source_bucketclass,
         target_bucketclass,
@@ -431,25 +439,30 @@ class TestReplication(MCGTest):
         target_dir = test_directory_setup.result_dir
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj,
+            mcg_obj_session,
             awscli_pod_session,
             source_bucket_name,
             origin_dir,
             amount=3,
         )
 
-        listed_obejcts = mcg_obj.s3_list_all_objects_in_bucket(source_bucket_name)
+        listed_obejcts = mcg_obj_session.s3_list_all_objects_in_bucket(
+            source_bucket_name
+        )
 
-        assert compare_bucket_object_list(
-            mcg_obj, source_bucket_name, target_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
 
         assert set(written_random_objects) == {
             obj.key for obj in listed_obejcts
         }, "Some of the uploaded objects are missing"
 
         sync_object_directory(
-            awscli_pod_session, f"s3://{target_bucket_name}", target_dir, mcg_obj
+            awscli_pod_session,
+            f"s3://{target_bucket_name}",
+            target_dir,
+            mcg_obj_session,
         )
         (
             original_obj_sums,
@@ -472,21 +485,24 @@ class TestReplication(MCGTest):
             ), "The uploaded and downloaded objects have different hashes"
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj,
+            mcg_obj_session,
             awscli_pod_session,
             source_bucket_name,
             origin_dir,
             amount=4,
         )
 
-        assert compare_bucket_object_list(
-            mcg_obj, source_bucket_name, target_bucket_name
-        ), "The compared buckets do not contain the same set of objects"
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
 
         awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
 
         sync_object_directory(
-            awscli_pod_session, f"s3://{target_bucket_name}", target_dir, mcg_obj
+            awscli_pod_session,
+            f"s3://{target_bucket_name}",
+            target_dir,
+            mcg_obj_session,
         )
 
         for i in range(4):

@@ -25,7 +25,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     login credentials and command to be ran
 
     Args:
-        mcg_obj: An MCG class in stance
+        mcg_obj: An MCG class instance
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
         signed_request_creds: a dictionary containing AWS S3 creds for a signed request
@@ -1373,7 +1373,9 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             if comparison_result:
                 return True
     except TimeoutExpiredError:
-        logger.error("The compared buckets do not contain the same set of objects")
+        logger.error(
+            "The compared buckets did not contain the same set of objects after ten minutes"
+        )
         return False
 
 
@@ -1390,7 +1392,7 @@ def write_random_test_objects_to_bucket(
 
     Args:
         mcg_obj (MCG): An MCG class instance
-        io_pod (ocs_ci.ocs.ocp.OCPocs_ci.ocs.ocp.OCP): The pod which should handle all neededIO operations
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod which should handle all neededIO operations
         bucket_to_write (str): The bucket name to write the random files to
         file_dir (str): The path to the folder where all random files will be
         generated and copied from
@@ -1399,19 +1401,14 @@ def write_random_test_objects_to_bucket(
         for writing objects directly to buckets outside of the MCG. Defaults to None.
 
     Returns:
-        [type]: [description]
+        list: A list containing the names of the random files that were written
     """
     full_object_path = f"s3://{bucket_to_write}"
     obj_lst = write_random_objects(io_pod, file_dir, amount)
-    if s3_creds:
-        # Write data directly to target bucket from original dir
-        sync_object_directory(
-            io_pod,
-            file_dir,
-            full_object_path,
-            signed_request_creds=s3_creds,
-        )
-    else:
-        # Write data directly to MCG bucket from original dir
-        sync_object_directory(io_pod, file_dir, full_object_path, mcg_obj)
+    sync_object_directory(
+        io_pod,
+        file_dir,
+        full_object_path,
+        signed_request_creds=s3_creds,
+    )
     return obj_lst

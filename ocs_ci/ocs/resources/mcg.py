@@ -718,7 +718,7 @@ class MCG:
             backingstores (list): The backing stores to use as part of the policy
             placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
-            replication_policy (tuple): A tuple representing the replication policy to use
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
@@ -782,7 +782,7 @@ class MCG:
             backingstores (list): The backing stores to use as part of the policy
             placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
-            replication_policy (tuple): A tuple representing the replication policy to use
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
