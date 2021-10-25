@@ -347,6 +347,7 @@ page_nav = {
         'a[data-test-id="horizontal-link-Block Pools"]',
         By.CSS_SELECTOR,
     ),
+    "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
 }
 
 add_capacity = {
@@ -483,12 +484,71 @@ validation_4_8 = {
     ),
 }
 
+validation_4_9 = {
+    "storage_systems": (
+        "a[data-test-id='horizontal-link-Storage Systems']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-storagesystem-status": (
+        "//*[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "ocs-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
+        By.CSS_SELECTOR,
+    ),
+    "overview": (
+        "a[data-test-id='horizontal-link-Overview']",
+        By.CSS_SELECTOR,
+    ),
+    "blockandfile": (
+        "a[data-test-id='horizontal-link-Block and File']",
+        By.CSS_SELECTOR,
+    ),
+    "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
+    "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
+    "ocs-storagecluster-cephblockpool-status": (
+        "//*[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "ocs-storagecluster-cephblockpool": (
+        ".co-resource-item__resource-name[data-test='ocs-storagecluster-cephblockpool']",
+        By.CSS_SELECTOR,
+    ),
+    "odf-health-icon-color": (
+        "//*[@data-test='OpenShift Data Foundation-health-item-icon']//*[@aria-labelledby='icon-title-403']",
+        By.XPATH,
+    ),
+    "odf-capacityCardLink": ("//a[@class='odf-capacityCardLink--ellipsis']", By.XPATH),
+    "odf-performanceCardLink": (
+        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
+        By.CSS_SELECTOR,
+    ),
+    "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "console_plugin_option": (
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        By.CSS_SELECTOR,
+    ),
+    "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
+    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
+    "refresh-web-console": (
+        "//button[normalize-space()='Refresh web console']",
+        By.XPATH,
+    ),
+    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
+    "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "show-default-projects": ("label[for='no-label-switch-on']", By.CSS_SELECTOR),
+}
+
 locators = {
     "4.9": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
+        "validation": {**validation, **validation_4_8, **validation_4_9},
     },
     "4.8": {
         "login": login,
