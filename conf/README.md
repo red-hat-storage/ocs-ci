@@ -111,7 +111,11 @@ anywhere else.
   deployment) is raised. The default is False.
 * `rook_log_level` - If defined, it will change rook_log_level to specified value (e.g. DEBUG),
    after the subscription to the OCS.
-
+* `use_custom_ingress_ssl_cert` - Replace the default ingress certificate by custom one. (default: `False`)
+* `ingress_ssl_cert` - Path for the custom ingress ssl certificate. (default: `data/ingress-cert.crt`)
+* `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
+* `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
+* `cert_signing_service_url` - Automatic Certification Authority signing service URL.
 
 #### REPORTING
 
