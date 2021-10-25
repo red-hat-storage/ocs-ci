@@ -204,11 +204,11 @@ class TestReplication(MCGTest):
         }
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj_session,
             awscli_pod_session,
             source_bucket_uls_name,
             test_directory_setup.origin_dir,
             amount=5,
+            mcg_obj=mcg_obj_session,
             s3_creds=namespacestore_aws_s3_creds,
         )
 
@@ -302,11 +302,11 @@ class TestReplication(MCGTest):
             mcg_obj_session, first_bucket_name, second_bucket_name
         )
         written_objects = write_random_test_objects_to_bucket(
-            mcg_obj_session,
             awscli_pod_session,
             second_bucket_name,
             test_directory_setup.origin_dir,
             amount=5,
+            mcg_obj=mcg_obj_session,
         )
         second_bucket_set = set(written_objects)
         second_bucket_set.update(downloaded_files)
@@ -439,11 +439,11 @@ class TestReplication(MCGTest):
         target_dir = test_directory_setup.result_dir
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj_session,
             awscli_pod_session,
             source_bucket_name,
             origin_dir,
             amount=3,
+            mcg_obj=mcg_obj_session,
         )
 
         listed_obejcts = mcg_obj_session.s3_list_all_objects_in_bucket(
@@ -485,11 +485,11 @@ class TestReplication(MCGTest):
             ), "The uploaded and downloaded objects have different hashes"
 
         written_random_objects = write_random_test_objects_to_bucket(
-            mcg_obj_session,
             awscli_pod_session,
             source_bucket_name,
             origin_dir,
             amount=4,
+            mcg_obj=mcg_obj_session,
         )
 
         compare_bucket_object_list(
