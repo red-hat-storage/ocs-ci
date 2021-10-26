@@ -174,7 +174,12 @@ def init_multicluster_ocsci_conf(args, nclusters):
             f"--cluster{i+1}",
             required=True,
             action="store_true",
-            help=f"cluster{i}-conf",
+            help=(
+                "Index argument for per cluster args, "
+                "this marks the start of the cluster{i} args"
+                "any args between --cluster{i} and --cluster{i+1} will be",
+                "considered as arguments for cluster{i}",
+            ),
         )
 
     # Parsing just to enforce `nclusters` number of  --cluster{i} arguments are passed
@@ -186,13 +191,15 @@ def init_multicluster_ocsci_conf(args, nclusters):
     framework.config.nclusters = nclusters
     framework.config.init_cluster_configs()
     framework.config.reset_ctx()
-    for i in range(nclusters):
-        framework.config.switch_ctx(i)
-        process_ocsci_conf(common_argv + multicluster_conf[i][1:])
-        for j in range(len(multicluster_conf[i][1:])):
-            if multicluster_conf[i][j + 1].startswith("--"):
-                multicluster_conf[i][j + 1] = f"{multicluster_conf[i][j+1]}{i + 1}"
-        framework.config.multicluster_args.append(multicluster_conf[i][1:])
+    for index in range(nclusters):
+        framework.config.switch_ctx(index)
+        process_ocsci_conf(common_argv + multicluster_conf[index][1:])
+        for arg in range(len(multicluster_conf[index][1:])):
+            if multicluster_conf[index][arg + 1].startswith("--"):
+                multicluster_conf[index][
+                    arg + 1
+                ] = f"{multicluster_conf[index][arg+1]}{index + 1}"
+        framework.config.multicluster_args.append(multicluster_conf[index][1:])
         check_config_requirements()
 
 
@@ -240,19 +247,19 @@ def main(argv=None):
         framework.config.switch_ctx(i)
         pytest_logs_dir = utils.ocsci_log_path()
         utils.create_directory_path(framework.config.RUN["log_dir"])
-        launch_name = reporting.get_rp_launch_name()
-        arguments.extend(
-            [
-                "-p",
-                "ocs_ci.framework.pytest_customization.ocscilib",
-                "-p",
-                "ocs_ci.framework.pytest_customization.marks",
-                "-p",
-                "ocs_ci.framework.pytest_customization.reports",
-                "--logger-logsdir",
-                pytest_logs_dir,
-                "--rp-launch",
-                launch_name,
-            ]
-        )
+    launch_name = reporting.get_rp_launch_name()
+    arguments.extend(
+        [
+            "-p",
+            "ocs_ci.framework.pytest_customization.ocscilib",
+            "-p",
+            "ocs_ci.framework.pytest_customization.marks",
+            "-p",
+            "ocs_ci.framework.pytest_customization.reports",
+            "--logger-logsdir",
+            pytest_logs_dir,
+            "--rp-launch",
+            launch_name,
+        ]
+    )
     return pytest.main(arguments)
