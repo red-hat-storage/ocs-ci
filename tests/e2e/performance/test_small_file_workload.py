@@ -473,7 +473,7 @@ class TestSmallFileWorkload(PASTest):
             index,
         )
         result = (
-            f"http://{self.crd_data['spec']['elasticsearch']['server']}:5601/app/discover#/"
+            f"http://{self.crd_data['spec']['elasticsearch']['host']}:5601/app/discover#/"
             f"?_a=(columns:!({columns}),filters:!(),index:'{kibana_id}',interval:auto,"
             f"query:(language:kuery,query:'uuid:{self.uuid}'),sort:!())"
             f"&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:'{stime}',to:'{etime}'))"
