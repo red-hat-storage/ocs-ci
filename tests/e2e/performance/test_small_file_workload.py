@@ -469,7 +469,7 @@ class TestSmallFileWorkload(PASTest):
         stime = self.start_time.replace("GMT", ".000Z")
         etime = self.end_time.replace("GMT", ".000Z")
         kibana_id = self.get_kibana_indexid(
-            self.crd_data["spec"]["elasticsearch"]["server"],
+            self.crd_data["spec"]["elasticsearch"]["host"],
             index,
         )
         result = (
