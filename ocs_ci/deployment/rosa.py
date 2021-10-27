@@ -7,10 +7,11 @@ on Openshfit Dedicated Platform.
 
 import os
 
+from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.deployment.cloud import CloudDeploymentBase
+from ocs_ci.ocs import constants, ocp
 
 
 class ROSAOCP(BaseOCPDeployment):
@@ -29,6 +30,17 @@ class ROSAOCP(BaseOCPDeployment):
         super(ROSAOCP, self).deploy_prereq()
 
         openshiftdedicated = config.AUTH.get("openshiftdedicated", {})
+        env_vars = {
+            "ADDON_NAME": config.ENV_DATA["addon_name"],
+            "OCM_COMPUTE_MACHINE_TYPE": config.ENV_DATA.get("worker_instance_type"),
+            "NUM_WORKER_NODES": config.ENV_DATA["worker_replicas"],
+            "CLUSTER_EXPIRY_IN_MINUTES": config.ENV_DATA["cluster_expiry_in_minutes"],
+            "CLUSTER_NAME": config.ENV_DATA["cluster_name"],
+            "OCM_TOKEN": openshiftdedicated["token"],
+        }
+        for key, value in env_vars.items():
+            if value:
+                os.environ[key] = value
 
     def deploy(self, log_level=""):
         """
@@ -80,7 +92,7 @@ class ROSA(CloudDeploymentBase):
                 (default: "DEBUG")
 
         """
-        rosa.login()
+        ocm.login()
         super(ROSA, self).deploy_ocp(log_cli_level)
 
     def check_cluster_existence(self, cluster_name_prefix):
@@ -101,3 +113,16 @@ class ROSA(CloudDeploymentBase):
             if state != "uninstalling" and name.startswith(cluster_name_prefix):
                 return True
         return False
+
+    def deploy_ocs(self):
+        """
+        Deployment of ODF Managed Service addon on ROSA.
+        """
+        ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+        try:
+            ceph_cluster.get().get("items")[0]
+            logger.warning("OCS cluster already exists")
+            return
+        except (IndexError, CommandFailed):
+            logger.info("Running OCS basic installation")
+        rosa.install_odf_addon(self.cluster_name)
