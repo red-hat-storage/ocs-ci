@@ -112,13 +112,12 @@ class OBC(object):
             self.s3_client = self.s3_resource.meta.client
 
         elif "rook" in obc_provisioner:
-            # TODO: implement network forwarding to access the internal address
-            self.s3_internal_endpoint = (
-                "http://"
-                + obc_configmap_data.get("BUCKET_HOST")
-                + ":"
-                + obc_configmap_data.get("BUCKET_PORT")
+            scheme = (
+                "https" if obc_configmap_data.get("BUCKET_PORT") == "443" else "http"
             )
+            host = obc_configmap_data.get("BUCKET_HOST")
+            port = obc_configmap_data.get("BUCKET_PORT")
+            self.s3_internal_endpoint = f"{scheme}://{host}:{port}"
 
 
 class ObjectBucket(ABC):
