@@ -253,7 +253,8 @@ All needed values are mentioned as placeholders and commented out in
 `conf/ocsci/rosa.yaml` and also mentioned below.
 
 ```yaml
-# This is the basic config for Openshift Dedicated usage
+# This is the basic config for OCM, user needs to login to OCM before ROSA can
+# be used
 ---
 AUTH:
  openshiftdedicated:
