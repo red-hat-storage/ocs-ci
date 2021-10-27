@@ -21,7 +21,7 @@ def login():
     """
     Login to ROSA client
     """
-    token = openshift_dedicated["token"]
+    token = ocm["token"]
     cmd = f"rosa login --token={token}"
     logger.info("Logging in to ROSA cli")
     run_cmd(cmd, secrets=[token])
@@ -40,7 +40,11 @@ def create_cluster(cluster_name, version):
     configs = config.ENV_DATA["configs"]
     create_account_roles(configs["ocp_version"])
     create_operator_roles(cluster_name)
-    cmd = f"rosa create cluster --cluster-name {cluster_name} --region us-east-2 --compute-nodes {configs['worker_replicas']} --compute-machine-type {configs['worker_instance_type']}  --version {configs['ocp_version']} --yes"
+    cmd = (
+        f"rosa create cluster --cluster-name {cluster_name} --region {region} "
+        f"--compute-nodes {configs['worker_replicas']} --compute-machine-type "
+        f"{configs['worker_instance_type']}  --version {configs['ocp_version']} --yes"
+    )
     exec_cmd(cmd, timeout=9000)
     create_oidc_provider(cluster_name)
     cluster_info = ocm.get_cluster_details(cluster_name)
@@ -107,3 +111,16 @@ def download_rosa_cli():
     return utils.get_rosa_cli(
         config.DEPLOYMENT["rosa_cli_version"], force_download=force_download
     )
+
+
+def install_odf_addon(cluster):
+    """
+    Install ODF Managed Service addon to cluster.
+
+    Args:
+        cluster (str): cluster name or cluster id
+
+    """
+    addon_name = config.DEPLOYMENT["addon_name"]
+    cmd = f"rosa install addon --cluster={cluster} {addon_name}"
+    run_cmd(cmd)
