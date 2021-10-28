@@ -1,4 +1,5 @@
 import logging
+import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import OPENSHIFT_DEDICATED_PLATFORM, ROSA_PLATFORM
 
@@ -26,3 +27,17 @@ def pytest_collection_modifyitems(items):
                     f" mcg is not supported on {config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+
+    if not config.DEPLOYMENT.get("disconnected"):
+        skip_marker = pytest.mark.skip(
+            reason="Cloud-based MCG tests cannot be run on disconnected clusters"
+        )
+        for item in items:
+            if any(
+                cloud_platform in item.name.upper()
+                for cloud_platform in ["AWS", "AZURE", "GCP", "IBM"]
+            ):
+                log.warning(
+                    f"{item} will be skipped since cloud tests cannot be run on disconnected clusters"
+                )
+                item.add_marker(skip_marker)
