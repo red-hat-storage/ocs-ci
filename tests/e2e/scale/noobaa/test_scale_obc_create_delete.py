@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
@@ -30,8 +29,8 @@ class TestScaleOCBCreateDelete(E2ETest):
     """
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
-    scale_obc_count = 1000
-    num_obc_batch = 100
+    scale_obc_count = 500
+    num_obc_batch = 50
 
     @pytest.mark.polarion_id("OCS-2667")
     def test_scale_obc_create_delete_time(self, tmp_path):
@@ -42,7 +41,7 @@ class TestScaleOCBCreateDelete(E2ETest):
 
         log.info(
             f"Start creating  {self.scale_obc_count} "
-            f"OBC in a batch of {self.num_obc_batch}"
+            f"OBCs in a batch of {self.num_obc_batch}"
         )
         obc_create = dict()
         obc_delete = dict()
@@ -80,16 +79,19 @@ class TestScaleOCBCreateDelete(E2ETest):
             )
             obc_create.update(obc_creation_time)
 
-        # Delete all obcs
-        obc_name_list = oc_get_all_obc_names()
-        scale_noobaa_lib.cleanup(self.namespace)
-        time.sleep(60)  # Wait 60s for obc logs to update
+        # Delete all obcs in a batch
+        obc_name_list = list(oc_get_all_obc_names())
+        new_list = [
+            obc_name_list[i : i + self.num_obc_batch]
+            for i in range(0, len(obc_name_list), self.num_obc_batch)
+        ]
 
-        # Get obc deletion time
-        obc_deletion_time = scale_noobaa_lib.measure_obc_deletion_time(
-            obc_name_list=obc_name_list
-        )
-        obc_delete.update(obc_deletion_time)
+        for i in range(len(new_list)):
+            scale_noobaa_lib.cleanup(self.namespace, obc_count=new_list[i])
+            obc_deletion_time = scale_noobaa_lib.measure_obc_deletion_time(
+                obc_name_list=new_list[i]
+            )
+            obc_delete.update(obc_deletion_time)
 
         # Store obc creation time on csv file
         log_path = f"{ocsci_log_path()}/obc-creation"

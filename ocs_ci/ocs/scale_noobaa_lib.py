@@ -104,7 +104,7 @@ def check_all_obc_reached_bound_state_in_kube_job(
     return obc_bound_list
 
 
-def cleanup(namespace):
+def cleanup(namespace, obc_count=None):
     """
     Delete all OBCs created in the cluster
 
@@ -112,7 +112,10 @@ def cleanup(namespace):
         namespace (str): Namespace of OBC's deleting
 
     """
-    obc_name_list = oc_get_all_obc_names()
+    if obc_count is not None:
+        obc_name_list = obc_count
+    else:
+        obc_name_list = oc_get_all_obc_names()
     log.info(f"Deleting {len(obc_name_list)} OBCs")
     if obc_name_list:
         for i in obc_name_list:
