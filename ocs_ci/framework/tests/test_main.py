@@ -25,6 +25,14 @@ class TestEntrypoint(object):
         assert "--cluster-path" in result
         assert "--cluster-name" in result
 
+    def test_multicluster_help(self):
+        result = subprocess.check_output(
+            ["run-ci", "multicluster", "--help"],
+            stderr=subprocess.STDOUT,
+        ).decode()
+        assert "nclusters" in result
+        assert "--cluster" in result
+
     @mock.patch("ocs_ci.framework.main.pytest.main")
     @mock.patch.object(config, "update")
     def test_no_args(self, config_update, pytest_main, testdir):
