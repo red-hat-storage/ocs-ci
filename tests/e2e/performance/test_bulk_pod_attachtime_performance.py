@@ -97,7 +97,6 @@ class TestBulkPodAttachPerformance(PASTest):
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
 
-
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
         argvalues=[
@@ -119,8 +118,6 @@ class TestBulkPodAttachPerformance(PASTest):
             ),
         ],
     )
-
-
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1620")
     def test_bulk_pod_attach_performance(self, teardown_factory, bulk_size):
