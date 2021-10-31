@@ -78,7 +78,7 @@ class TestBulkPodAttachPerformance(PASTest):
         }
 
     @pytest.fixture()
-    def base_setup(self, interface_type, storageclass_factory):
+    def base_setup(self, project_factory, interface_type, storageclass_factory):
         """
         A setup phase for the test
 
@@ -88,36 +88,39 @@ class TestBulkPodAttachPerformance(PASTest):
         """
         self.interface = interface_type
         self.sc_obj = storageclass_factory(self.interface)
-        self.namespace = defaults.ROOK_CLUSTER_NAMESPACE
+
+        proj_obj = project_factory()
+        self.namespace = proj_obj.namespace
 
         if self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{self.sc}"
+
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 100],
+                *[constants.CEPHBLOCKPOOL, 2],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 200],
+                *[constants.CEPHBLOCKPOOL, 4],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 100],
+                *[constants.CEPHFILESYSTEM, 2],
                 marks=[pytest.mark.performance],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 200],
+                *[constants.CEPHFILESYSTEM, 4],
                 marks=[pytest.mark.performance],
             ),
         ],
     )
+
+
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1620")
     def test_bulk_pod_attach_performance(self, teardown_factory, bulk_size):
@@ -210,8 +213,10 @@ class TestBulkPodAttachPerformance(PASTest):
         self.get_env_info()
 
         # Initialize the results doc file.
+        full_log_path = get_full_test_logs_path(cname=self)
+        full_log_path += f"-{self.sc}"
         full_results = self.init_full_results(
-            ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            ResultsAnalyse(self.uuid, self.crd_data, full_log_path)
         )
 
         full_results.add_key("storageclass", self.sc)
