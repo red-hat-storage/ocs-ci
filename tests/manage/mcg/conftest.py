@@ -34,7 +34,7 @@ def pytest_collection_modifyitems(items):
     if config.DEPLOYMENT.get("disconnected"):
         for item in items.copy():
             if any(
-                cloud_platform in item.name.upper()
+                cloud_platform.upper() in item.name.upper()
                 for cloud_platform in CLOUD_PLATFORMS
             ):
                 log.info(
