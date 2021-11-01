@@ -1,6 +1,10 @@
 import logging
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import OPENSHIFT_DEDICATED_PLATFORM, ROSA_PLATFORM
+from ocs_ci.ocs.constants import (
+    OPENSHIFT_DEDICATED_PLATFORM,
+    ROSA_PLATFORM,
+    CLOUD_PLATFORMS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +35,7 @@ def pytest_collection_modifyitems(items):
         for item in items.copy():
             if any(
                 cloud_platform in item.name.upper()
-                for cloud_platform in ["AWS", "AZURE", "GCP", "IBM"]
+                for cloud_platform in CLOUD_PLATFORMS
             ):
                 log.info(
                     f"{item} will be skipped since cloud tests cannot be run on disconnected clusters"
