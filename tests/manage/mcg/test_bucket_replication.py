@@ -35,8 +35,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1, pytest.mark.polarion_id("OCS-2678")],
             ),
             pytest.param(
                 {
@@ -47,8 +46,7 @@ class TestReplication(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                # TODO: add polarion id
-                marks=[tier2, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -56,8 +54,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"azure": [(1, None)]},
                 },
                 {"interface": "CLI", "backingstore_dict": {"gcp": [(1, None)]}},
-                # TODO: add polarion id
-                marks=[tier2, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -65,7 +62,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "CLI", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1, pytest.mark.polarion_id("OCS-2679")],
             ),
             pytest.param(
                 {
@@ -82,7 +79,7 @@ class TestReplication(MCGTest):
                         "namespacestore_dict": {"azure": [(1, None)]},
                     },
                 },
-                marks=[tier2, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -96,7 +93,7 @@ class TestReplication(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"gcp": [(1, None)]},
                 },
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1],
             ),
         ],
         ids=[
@@ -160,7 +157,7 @@ class TestReplication(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"azure": [(1, None)]},
                 },
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1, pytest.mark.polarion_id("OCS-2682")],
             ),
         ],
         ids=[
@@ -229,7 +226,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1, pytest.mark.polarion_id("OCS-2683")],
             ),
         ],
         ids=[
@@ -322,8 +319,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                # TODO: add polarion id
-                marks=[tier2, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id("OCS-2680")],
             ),
             pytest.param(
                 {
@@ -334,8 +330,7 @@ class TestReplication(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                # TODO: add polarion id
-                marks=[tier2, pytest.mark.polarion_id()],  # TODO
+                marks=[tier2, pytest.mark.polarion_id("OCS-2684")],
             ),
             pytest.param(
                 {
@@ -346,8 +341,7 @@ class TestReplication(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"gcp": [(1, None)]},
                 },
-                # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1],
             ),
         ],
         ids=["AWStoAZURE-BC-OC", "AZUREtoAWS-BC-CLI", "AWStoGCP-BC-Hybrid"],
@@ -399,8 +393,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"aws": [(1, None)]}},
-                # TODO: add polarion id
-                marks=[tier1, pytest.mark.polarion_id()],  # TODO
+                marks=[tier1, pytest.mark.polarion_id("OCS-2685")],
             ),
         ],
         ids=[
