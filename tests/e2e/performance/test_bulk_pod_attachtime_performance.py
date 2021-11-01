@@ -14,6 +14,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants, scale_lib
+from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -197,7 +198,8 @@ class TestBulkPodAttachPerformance(PASTest):
             no_of_pod=len(pod_data_list),
             timeout=180,
         )
-        for pod_obj in pod_running_list:
+        for pod_name in pod_running_list:
+            pod_obj = get_pod_obj(pod_name, self.namespace)
             teardown_factory(pod_obj)
 
         bulk_end_time = time.time()
