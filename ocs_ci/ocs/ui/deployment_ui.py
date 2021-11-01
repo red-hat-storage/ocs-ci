@@ -120,6 +120,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
             )
+            time.sleep(5)
             self.do_click(
                 locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
             )
@@ -128,15 +129,12 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
             )
+            time.sleep(5)
             self.do_click(
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
-
-        self.refresh_page()
         self.do_click(
-            locator=self.dep_loc["create_storage_cluster"],
-            enable_screenshot=True,
-            timeout=60,
+            locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
 
         if config.DEPLOYMENT.get("local_storage"):
