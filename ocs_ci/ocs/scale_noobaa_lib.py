@@ -204,7 +204,7 @@ def measure_obc_creation_time(obc_name_list, timeout=60):
             nb_pod_log = nb_pod_log.split("\n")
             loop_cnt += 1
             if loop_cnt >= 10:
-                log.info(f"Waited for more than 10 mins but still no data")
+                log.info("Waited for more than 10 mins but still no data")
                 raise UnexpectedBehaviour(
                     f"There is no obc creation data in noobaa-operator logs for {no_data}"
                 )
@@ -279,7 +279,7 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
             nb_pod_log = nb_pod_log.split("\n")
             loop_cnt += 1
             if loop_cnt >= 10:
-                log.info(f"Waited for more than 10 mins but still no data")
+                log.info("Waited for more than 10 mins but still no data")
                 raise UnexpectedBehaviour(
                     f"There is no obc deletion data in noobaa-operator logs for {no_data}"
                 )
