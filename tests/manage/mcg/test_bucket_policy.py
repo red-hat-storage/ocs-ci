@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     object_version_action_list,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +347,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets a policy on obc-account bucket with noobaa-account principal (cross account access)
         new_policy_generated = gen_bucket_policy(
-            user_list=user.email_id,
+            user_list=[user.email_id],
             actions_list=["GetObject", "DeleteObject"]
             if float(config.ENV_DATA["ocs_version"]) <= 4.6
             else ["PutObject"],
@@ -370,15 +371,25 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
         )
-        assert s3_get_object(
-            user, obc_obj.bucket_name, object_key
-        ), "Failed: Get Object"
+        for get_resp in TimeoutSampler(
+            60, 1, s3_get_object, user, obc_obj.bucket_name, object_key
+        ):
+            if "403" not in str(get_resp["ResponseMetadata"]["HTTPStatusCode"]):
+                logger.info("GetObj operation successful")
+                break
+            else:
+                logger.info("GetObj operation is denied access")
         logger.info(
             f"Deleting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
         )
-        assert s3_delete_object(
-            user, obc_obj.bucket_name, object_key
-        ), "Failed: Delete Object"
+        for del_resp in TimeoutSampler(
+            60, 1, s3_delete_object, user, obc_obj.bucket_name, object_key
+        ):
+            if "403" not in str(del_resp["ResponseMetadata"]["HTTPStatusCode"]):
+                logger.info("DeleteObj operation successful")
+                break
+            else:
+                logger.info("DeleteObj operation is denied access")
 
         # Verifying whether Put object action is denied
         logger.info(
