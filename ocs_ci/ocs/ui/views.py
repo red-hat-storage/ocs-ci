@@ -113,7 +113,7 @@ deployment_4_9 = {
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
-    "enable_default_porjects": ('span[id="no-label-switch-on-off"]', By.CSS_SELECTOR),
+    "enable_default_porjects": ('span[class="pf-c-switch__toggle"]', By.CSS_SELECTOR),
     "choose_openshift-storage_project": (
         "//span[text()='openshift-storage']",
         By.XPATH,
