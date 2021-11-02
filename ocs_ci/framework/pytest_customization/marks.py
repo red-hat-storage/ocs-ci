@@ -312,3 +312,15 @@ skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",
 )
+
+# Squad marks
+red_squad = pytest.mark.red_squad
+brown_squad = pytest.mark.brown_squad
+green_squad = pytest.mark.green_squad
+blue_squad = pytest.mark.blue_squad
+red_squad = pytest.mark.red_squad
+purple_squad = pytest.mark.purple_squad
+magenta_squad = pytest.mark.magenta_squad
+grey_squad = pytest.mark.grey_squad
+orange_squad = pytest.mark.orange_squad
+black_squad = pytest.mark.black_squad
