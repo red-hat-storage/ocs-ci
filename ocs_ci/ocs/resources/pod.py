@@ -15,13 +15,14 @@ import base64
 from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
+from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NotAllPodsHaveSameImagesError,
     NonUpgradedImagesFoundError,
     TimeoutExpiredError,
     UnavailableResourceException,
@@ -1459,6 +1460,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     selector_label, selector_value = selector.split("=")
     while True:
         pod_count = 0
+        pod_images = {}
         try:
             pods = get_all_pods(namespace, [selector_value], selector_label)
             pods_len = len(pods)
@@ -1468,13 +1470,27 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
                     f"Number of found pods {pods_len} is not as expected: " f"{count}"
                 )
             for pod in pods:
-                verify_images_upgraded(old_images, pod.get())
+                pod_obj = pod.get()
+                verify_images_upgraded(old_images, pod_obj)
+                current_pod_images = get_images(pod_obj)
+                for container_name, container_image in current_pod_images.items():
+                    if container_name not in pod_images:
+                        pod_images[container_name] = container_image
+                    else:
+                        if pod_images[container_name] != container_image:
+                            raise NotAllPodsHaveSameImagesError(
+                                f"Not all the pods with the selector: {selector} have the same "
+                                f"images! Image for container {container_name} has image {container_image} "
+                                f"which doesn't match with: {pod_images} differ! This means "
+                                "that upgrade hasn't finished to restart all the pods yet! "
+                                "Or it's caused by other discrepancy which needs to be investigated!"
+                            )
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
                 f"Failed when getting pods with selector {selector}." f"Error: {ex}"
             )
-        except NonUpgradedImagesFoundError as ex:
+        except (NonUpgradedImagesFoundError, NotAllPodsHaveSameImagesError) as ex:
             logger.warning(ex)
         check_timeout_reached(start_time, timeout, info_message)
         if pods_len != count:
