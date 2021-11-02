@@ -430,3 +430,7 @@ class ElasticSearchNotDeployed(Exception):
 
 class ConfigurationError(Exception):
     pass
+
+
+class BenchmarkTestFailed(Exception):
+    pass
