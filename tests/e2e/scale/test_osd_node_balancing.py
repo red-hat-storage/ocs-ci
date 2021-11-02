@@ -142,6 +142,9 @@ class ElasticData(PerfResult):
 @ipi_deployment_required
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2604")
+@pytest.mark.skip(
+    reason="Skipped due to bz https://bugzilla.redhat.com/show_bug.cgi?id=2004801"
+)
 class Test_Osd_Balance(PASTest):
     """
     There is no cleanup code in this test because the final
