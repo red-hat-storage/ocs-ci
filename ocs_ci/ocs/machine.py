@@ -922,6 +922,7 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=600):
 
     Args:
         machine_set (str): Name of the machine set
+        timeout (int): Timeout in secs, default 10mins
 
     Raises:
         ResourceWrongStatusException: In case the new spun machine fails
