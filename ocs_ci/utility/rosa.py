@@ -41,7 +41,7 @@ def create_cluster(cluster_name, version):
     create_account_roles(configs["ocp_version"])
     create_operator_roles(cluster_name)
     cmd = (
-        f"rosa create cluster --cluster-name {cluster_name} --region {region} "
+        f"rosa create cluster --cluster-name {cluster_name} --region {configs['region']} "
         f"--compute-nodes {configs['worker_replicas']} --compute-machine-type "
         f"{configs['worker_instance_type']}  --version {configs['ocp_version']} --yes"
     )

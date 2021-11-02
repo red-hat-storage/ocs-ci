@@ -5,13 +5,17 @@ on Openshfit Dedicated Platform.
 """
 
 
+import logging
 import os
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import ocp
+from ocs_ci.ocs.exceptions import CommandFailed
+
+logger = logging.getLogger(name=__file__)
 
 
 class ROSAOCP(BaseOCPDeployment):
