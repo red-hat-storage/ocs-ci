@@ -82,7 +82,7 @@ class TestScaleOCBCreateDelete(E2ETest):
         # Delete all obcs in a batch
         obc_name_list = list(oc_get_all_obc_names())
         new_list = [
-            obc_name_list[i : i + self.num_obc_batch]
+            obc_name_list[i : i + 20]
             for i in range(0, len(obc_name_list), self.num_obc_batch)
         ]
 
