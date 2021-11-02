@@ -17,6 +17,7 @@ def pytest_collection_modifyitems(items):
         "test_scale_osds_fill_75%_reboot_workers",
         "test_scale_pgsql",
         "test_scale_amq",
+        "test_osd_balance",
     ]
     if (
         config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
