@@ -154,6 +154,17 @@ def pytest_collection_modifyitems(session, items):
     deploy = config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
 
+    # Add squad markers to each test item based on filepath
+    for item in items:
+        for squad, paths in constants.SQUADS.items():
+            for _path in paths:
+                # Limit the test_path to the tests directory
+                test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
+                if _path in test_path:
+                    item.add_marker(f"{squad.lower()}_squad")
+                    item.user_properties.append(("squad", squad))
+                    break
+
     if not (teardown or deploy or skip_ocs_deployment):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
