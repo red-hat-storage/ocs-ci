@@ -133,6 +133,9 @@ class TestBulkPodAttachPerformance(PASTest):
         Returns:
 
         """
+        # Getting the test start time
+        test_start_time = PASTest.get_time()
+
         log.info(f"Start creating bulk of new {bulk_size} PVCs")
 
         pvc_objs, _ = helpers.create_multiple_pvcs(
@@ -220,6 +223,17 @@ class TestBulkPodAttachPerformance(PASTest):
 
         full_results.add_key("storageclass", self.sc)
         full_results.add_key("pod_bulk_attach_time", bulk_total_time)
+        full_results.add_key("pvc_size", self.pvc_size)
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("bulk_size", bulk_size)
+
+        # Getting the test end time
+        test_end_time = PASTest.get_time()
+
+        # Add the test time to the ES report
+        full_results.add_key(
+            "test_time", {"start": test_start_time, "end": test_end_time}
+        )
 
         # Write the test results into the ES server
         full_results.es_write()

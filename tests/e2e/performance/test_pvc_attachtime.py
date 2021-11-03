@@ -127,6 +127,8 @@ class TestPodStartTime(PASTest):
         pod_result_list = []
 
         self.msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
+        self.samples_num = samples_num
+        self.pvc_size = pvc_size
 
         if self.interface == constants.CEPHBLOCKPOOL_THICK:
             self.sc_obj = storageclass_factory(
@@ -223,6 +225,10 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
+
+        self.full_results.add_key("interface", self.interface)
+        self.full_results.add_key("samples_number", self.samples_num)
+        self.full_results.add_key("pvc_size", self.pvc_size)
 
         # Write the test results into the ES server
         self.full_results.es_write()
