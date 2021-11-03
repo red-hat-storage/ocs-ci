@@ -165,6 +165,13 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
         osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
         osd_count = get_osd_count()
+        # In the debugging issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/5031
+        # Noticed that it's taking about 1 more minute from previous check till actual
+        # OSD pods getting restarted.
+        # Hence adding sleep here for 120 seconds to be sure, OSD pods upgrade started.
+        log.info("Waiting for 2 minutes before start checking OSD pods")
+        time.sleep(120)
         verify_pods_upgraded(
             old_images,
             selector=constants.OSD_APP_LABEL,
