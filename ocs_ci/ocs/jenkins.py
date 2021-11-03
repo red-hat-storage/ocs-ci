@@ -5,8 +5,10 @@ import logging
 import re
 import time
 
+from semantic_version.base import Version
 from collections import OrderedDict
 from prettytable import PrettyTable
+
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
@@ -49,7 +51,7 @@ class Jenkins(object):
             raise ValueError("num_of_projects arg must be an integer")
         if not isinstance(num_of_builds, int):
             raise ValueError("num_of_builds arg must be an integer")
-
+        self.ocp_version = utils.get_ocp_version()
         self.num_of_builds = num_of_builds
         self.num_of_projects = num_of_projects
         self.build_completed = OrderedDict()
@@ -328,6 +330,15 @@ class Jenkins(object):
                 "slaves.NodeProvisioner.MARGIN0=0.85",
             }
         )
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
+            tmp_dict["objects"][3]["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ].append(
+                {
+                    "name": "INSTALL_PLUGINS",
+                    "value": "pipeline-utility-steps:2.9.0,script-security:1.78,workflow-step-api:2.24",
+                }
+            )
         ocs_jenkins_template_obj = OCS(**tmp_dict)
         ocs_jenkins_template_obj.create()
 
