@@ -133,7 +133,6 @@ def ocs_install_verification(
 
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
         min_eps = 1
-        # max_eps = 1
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
@@ -425,13 +424,25 @@ def ocs_install_verification(
 def mcg_only_install_verification(ocs_registry_image=None):
     """
     Verification for successful MCG only deployment
+
+    Args:
+        ocs_registry_image (str): Specific image to check if it was installed
+            properly.
+
     """
     log.info("Verifying MCG Only installation")
-    basic_verification(ocs_registry_image=None)
+    basic_verification(ocs_registry_image)
 
 
 def basic_verification(ocs_registry_image=None):
-    """"""
+    """
+    Basic verification which is needed for Full deployment and MCG only deployment
+
+    Args:
+        ocs_registry_image (str): Specific image to check if it was installed
+            properly.
+
+    """
     verify_ocs_csv(ocs_registry_image)
     verify_storage_system()
     verify_storage_cluster()
@@ -442,10 +453,15 @@ def basic_verification(ocs_registry_image=None):
 def verify_ocs_csv(ocs_registry_image=None):
     """
     OCS CSV verification ( succeeded state )
+
+    Args:
+        ocs_registry_image (str): Specific image to check if it was installed
+            properly.
+
     """
     log.info("verifying ocs csv")
-    ocs_csv = get_ocs_csv()
     # Verify if OCS CSV has proper version.
+    ocs_csv = get_ocs_csv()
     csv_version = ocs_csv.data["spec"]["version"]
     ocs_version = version.get_semantic_ocs_version_from_config()
     log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
@@ -497,26 +513,30 @@ def verify_storage_system():
 
 
 def verify_storage_cluster():
-    """"""
+    """
+    Verify storage cluster status
+    """
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
     log.info("Verifying status of storage cluster: %s", storage_cluster_name)
     storage_cluster = StorageCluster(
         resource_name=storage_cluster_name,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    log.info(
-        f"Check if StorageCluster: {storage_cluster_name} is in" f"Succeeded phase"
-    )
+    log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
     storage_cluster.wait_for_phase(phase="Ready", timeout=600)
 
 
 def verify_noobaa_endpoint_count():
-    """"""
+    """
+    Verify noobaa endpoints
+    """
     ocs_version = version.get_semantic_ocs_version_from_config()
     disable_noobaa = config.COMPONENTS["disable_noobaa"]
     max_eps = (
         constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
     )
+    if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
+        max_eps = 1
     if not disable_noobaa:
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
@@ -529,7 +549,9 @@ def verify_noobaa_endpoint_count():
 
 
 def verify_storage_cluster_images():
-    """"""
+    """
+    Verify images in storage cluster
+    """
     ocs_version = version.get_semantic_ocs_version_from_config()
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
     storage_cluster = StorageCluster(
