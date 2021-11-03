@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
@@ -359,7 +359,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # get OCP version
             ocp_version = get_ocp_version()
-            config.ENV_DATA["ocp_version"] = ocp_version
 
             # create terraform_data directory
             self.terraform_data_dir = os.path.join(
@@ -445,7 +444,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
-            if Version.coerce(config.ENV_DATA["ocp_version"]) >= Version.coerce("4.10"):
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_10:
                 install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
                     "vm_network"
                 ]
