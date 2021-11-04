@@ -440,6 +440,14 @@ class ConfigurationError(Exception):
     pass
 
 
+class DRPrimaryNotFoundException(Exception):
+    pass
+
+
+class InteractivePromptException(Exception):
+    pass
+
+
 class BenchmarkTestFailed(Exception):
     pass
 

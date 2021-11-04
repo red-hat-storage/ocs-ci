@@ -1,0 +1,9 @@
+ENV_DATA:
+  submariner_source: "upstream"
+  submariner_url: "https://get.submariner.io"
+  submariner_info_file: "broker-info.subm"
+  submariner_default_gateway_node: "compute-1"
+  # Timeout for submeriner cli prompts
+  submariner_prompt_timeout: 5
+
+

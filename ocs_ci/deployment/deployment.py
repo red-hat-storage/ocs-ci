@@ -6,6 +6,7 @@ platforms like AWS, VMWare, Baremetal etc.
 from copy import deepcopy
 import json
 import logging
+from re import I
 import tempfile
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
@@ -41,7 +43,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
-from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source, disable_default_sources
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -51,10 +53,17 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state,
+    get_pods_having_label,
 )
-from ocs_ci.ocs.resources.storage_cluster import setup_ceph_debug
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification, setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs, enable_console_plugin
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config, 
+    get_primary_cluster_config, 
+    setup_ceph_toolbox, 
+    collect_ocs_logs, 
+    enable_console_plugin
+)
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
@@ -82,7 +91,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator
+from ocs_ci.helpers.helpers import set_configmap_log_level_rook_ceph_operator, wait_for_resource_state
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 
@@ -174,22 +183,149 @@ class Deployment(object):
                 tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
             )
 
-        if not config.ENV_DATA["skip_ocs_deployment"]:
-            try:
-                self.deploy_ocs()
+        # Multicluster operations
+        if config.multicluster:
+            # disable defaultsources: required for ACM based installs in DR usecase
+            # Need to run on all the clusters
+            for i in range(config.nclusters):
+                config.switch_ctx(i)
+                disable_default_sources()
+            config.reset_ctx()
 
-                if config.REPORTING["collect_logs_on_success_run"]:
-                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
-            except Exception as e:
-                logger.error(e)
-                if config.REPORTING["gather_on_deploy_failure"]:
-                    # Let's do the collections separately to guard against one
-                    # of them failing
-                    collect_ocs_logs("deployment", ocs=False)
-                    collect_ocs_logs("deployment", ocp=False)
-                raise
+            # Configure submariner only on non-ACM clusters
+            submariner = Submariner()
+            submariner.deploy()
+
+        if not config.ENV_DATA["skip_ocs_deployment"]:
+            for i in range(config.clusters):
+                if config.multicluster:
+                    if config.acm_index == i:
+                        continue
+                    config.switch_ctx(i)
+                try:
+                    self.deploy_ocs()
+
+                    if config.REPORTING["collect_logs_on_success_run"]:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                except Exception as e:
+                    logger.error(e)
+                    if config.REPORTING["gather_on_deploy_failure"]:
+                        # Let's do the collections separately to guard against one
+                        # of them failing
+                        collect_ocs_logs("deployment", ocs=False)
+                        collect_ocs_logs("deployment", ocp=False)
+                    raise
+            config.reset_ctx()
+
+            # Run ocs_install_verification here only in case of multiclsuter.
+            # For single cluster, test_deployment will take care.
+            if config.multicluster:
+                for i in range(config.multicluster):
+                    if config.acm_index == i:
+                        continue
+                    else:
+                        config.switch_ctx(i)
+                        ocs_registry_image = config.DEPLOYMENT["ocs_registry_image"]
+                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
+                config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
+        # Multicluster: Install ODF multicluster orchestrator only on hub
+        if config.multicluster:
+            config.switch_acm_ctx()
+            odf_multicluster_orchestrator_data = templating.load_yaml(
+                constants.ODF_MULTICLUSTER_ORCHESTRATOR
+            ) 
+            odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
+                mode='w+', prefix="odf_multicluster_orchestrator", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+               odf_multicluster_orchestrator_data,
+               odf_multicluster_orchestrator.name 
+            )
+            run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
+            self.configure_mirror_peer()
+
+    def configure_mirror_peer(self):
+        # Create mirror peer 
+        mirror_peer_data = templating.load_yaml(
+            constants.MIRROR_PEER
+        )
+        mirror_peer_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix="mirror_peer", delete=False 
+        )
+        # Update all the participating clusters in mirror_peer_yaml
+        non_acm_clusters = get_non_acm_cluster_config()
+        primary = get_primary_cluster_config()
+        non_acm_clusters.remove(primary)
+        index = -1 
+        # First entry should be the primary cluster
+        # in the mirror peer
+        for cluster_entry in mirror_peer_data['spec']['items']:
+            if index == -1:
+                cluster_entry["clusterName"] = primary["ENV_DATA"]["cluster_name"]
+            else:
+                cluster_entry["clusterName"] = (
+                    non_acm_clusters[index]["ENV_DATA"]["cluster_name"]
+                )
+                index =+ 1
+        templating.dump_data_to_temp_yaml(
+            mirror_peer_data,
+            mirror_peer_yaml.name
+        )
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -f {mirror_peer_yaml.name}")
+        self.validate_mirror_peer()
+        # Patch storagecluster on all the DR participating  clusters(except ACM)
+        index = 0
+        for cluster in config.clusters:
+            if config.clusters.index(cluster) == config.acm_index:
+                continue
+            else:
+                config.switch_ctx(index)
+                patch_cmd = f"oc patch storagecluster \${constants.rbd_mirroring_storagecluster_patch}"
+
+                run_cmd(patch_cmd)
+                query_mirroring = (
+                    f"oc get CephBlockPool -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                )
+                out = run_cmd(query_mirroring)
+                if out != "true":
+                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
+                    ResourceWrongStatusException("CephBlockPool", expected='true', got=out)
+                index =+ 1
+        
+    def validate_mirror_peer(self):
+        """
+        Validate mirror peer
+
+        1. Check initial phase of 'ExchangingSecret'
+        2. Check token-exchange-agent pod in 'Running' phase
+
+        """
+        # Check mirror peer status only on HUB
+        mirror_peer = ocp.OCP(
+            kind='MirrorPeer', 
+            namespace=constants.dr_default_namespace
+        )
+        mirror_peer.wait_for_phase(phase="ExchangingSecret")
+
+        # Check for token-exchange-agent pod and its status has to be running
+        # on all participating clustres except HUB
+        index = 0
+        for cluster in config.clusters:
+            if config.clusters.index(cluster) == config.acm_index:
+                continue
+            else:
+                config.switch_ctx(index)
+                token_xchange_agent = get_pods_having_label(constants.token_exchange_agent_label)
+                pod_status = token_xchange_agent['items'][0]['status']['phase']
+                pod_name = token_xchange_agent['items'][0]['metadata']['name']
+                if pod_status != 'Running':
+                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
+                    ResourceWrongStatusException(pod_name, expected='Running', got=pod_status)
+                index =+ 1
+        config.switch_acm_ctx()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
