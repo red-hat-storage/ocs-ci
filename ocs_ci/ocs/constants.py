@@ -25,6 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
@@ -595,6 +596,40 @@ EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 )
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
+)
+#Multicluster related yamls
+ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
+)
+MIRROR_PEER = os.path.join(
+   TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml" 
+)
+VOLUME_REPLICATION_CLASS = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "volume_replication_class.yaml"
+)
+OPENSHIFT_DR_CLUSTER_OPERATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_cluster_operator.yaml" 
+)
+OPENSHIFT_DR_HUB_OPERATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_hub_operator.yaml"
+)
+DR_POLICY_ACM_HUB = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml"
+)
+ODR_S3_SECRET_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml"
+)
+
+# DR constants
+dr_default_namespace = "openshift-dr-systems"
+token_exchange_agent_label = "token-exchange-agent "
+rbd_mirroring_storagecluster_patch = (
+    "oc get StorageCluster -n openshift-storage -o=jsonpath='{.items[0].metadata.name}')  "
+    "-n openshift-storage --type json --patch  "
+    "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
+)
+rbd_mirroring_enabled_query = (
+    "-o=jsonpath='{.items[?(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
 )
 
 # constants
@@ -1472,6 +1507,12 @@ PATCH_SPECIFIC_SOURCES_CMD = (
     '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
     "}}]}}}}' --type=merge"
 )
+
+# Submariner constants
+SUBMARINER_GATEWAY_PROMPT = "Which node should be used as the gateway?"
+ENTER_KEY = "\r"
+
+# Multicluster related
 
 # OpenSSL Certificate parameters
 OPENSSL_KEY_SIZE = 2048

@@ -1,0 +1,33 @@
+apiVersion: v1
+data:
+  ramen_manager_config.yaml: |
+    apiVersion: ramendr.openshift.io/v1alpha1
+    kind: RamenConfig
+    leaderElection:
+      resourceName: dr-cluster.ramendr.openshift.io
+    ramenControllerType: "dr-cluster"
+    s3StoreProfiles:
+      - s3ProfileName: odr-s3secret-east
+        s3CompatibleEndpoint: https://s3.us-east-2.amazonaws.com:443
+        s3Region: us-east-2
+        s3SecretRef:
+          name: odr-s3secret-east
+          namespace: openshift-dr-system
+      - s3ProfileName: odr-s3secret-west
+        s3CompatibleEndpoint: https://s3.us-east-2.amazonaws.com:443
+        s3Region: us-east-2
+        s3SecretRef:
+          name: odr-s3secret-west
+          namespace: openshift-dr-system
+kind: ConfigMap
+metadata:
+  labels:
+    operators.coreos.com/odr-cluster-operator.openshift-dr-system: ""
+  name: ramen-dr-cluster-operator-config
+  namespace: openshift-dr-system
+  ownerReferences:
+  - apiVersion: operators.coreos.com/v1alpha1
+    blockOwnerDeletion: false
+    controller: false
+    kind: ClusterServiceVersion
+    name: odr-cluster-operator.v4.9.0

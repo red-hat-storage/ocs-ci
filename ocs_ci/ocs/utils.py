@@ -1203,3 +1203,34 @@ def enable_console_plugin():
             f" --type json -p {patch}"
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+def get_non_acm_cluster_config():
+    """
+    Get a list of non-acm cluster's config objects
+
+    Returns:
+        list: of cluster config objects
+
+    """
+    non_acm_list = []
+    for i in len(ocsci_config.clusters):
+        if i == ocsci_config.acm_index:
+            continue
+        else:
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+def get_primary_cluster_config():
+    """
+    Get the primary cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in range(ocsci_config.clusters):
+        if cluster.DEPLOYMENT["designated_primary_cluster"]:
+            return cluster
+
+

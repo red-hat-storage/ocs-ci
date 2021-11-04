@@ -1,0 +1,14 @@
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: MirrorPeer
+metadata:
+  name: mirrorpeer-sample
+spec:
+  items:
+    - clusterName: PLACE_HOLDER 
+      storageClusterRef:
+        name: ocs-storagecluster
+        namespace: openshift-storage
+    - clusterName: PLACE_HOLDER 
+      storageClusterRef:
+        name: ocs-storagecluster
+        namespace: openshift-storage

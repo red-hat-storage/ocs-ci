@@ -99,6 +99,13 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  # ACM Multicluster related config
+  # Is this acm cluster ?
+  designated_acm_cluster: False
+  # Primary from DR perspective
+  # required to run commands on
+  designated_primary_cluster: False
+
 
 # Section for reporting configuration
 REPORTING:
