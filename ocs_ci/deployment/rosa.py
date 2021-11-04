@@ -58,10 +58,7 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(
-            self.cluster_name,
-            self.ocp_version
-        )
+        rosa.create_cluster(self.cluster_name, self.ocp_version)
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -136,7 +133,6 @@ class ROSA(CloudDeploymentBase):
             logger.info("Running OCS basic installation")
         rosa.install_odf_addon(self.cluster_name)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
         # Check for Ceph pods
         assert pod.wait_for_resource(
             condition="Running",

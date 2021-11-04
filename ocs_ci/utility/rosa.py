@@ -7,8 +7,7 @@ Module for interactions with Openshift Dedciated Cluster.
 import json
 import logging
 import os
-import subprocess
-import sys
+import re
 import time
 
 from ocs_ci.framework import config
@@ -53,15 +52,13 @@ def create_cluster(cluster_name, version):
     create_operator_roles(cluster_name)
     create_oidc_provider(cluster_name)
     logger.info("Waiting for installation of ROSA cluster")
-    for cluster_info in utils.TimeoutSampler(10000, 30, ocm.get_cluster_details, cluster_name):
+    for cluster_info in utils.TimeoutSampler(
+        10000, 30, ocm.get_cluster_details, cluster_name
+    ):
         status = cluster_info["status"]["state"]
-        logger.info(
-            f"Current installation status: {status}"
-        )
+        logger.info(f"Current installation status: {status}")
         if status == "ready":
-            logger.info(
-                f"Cluster was installed"
-            )
+            logger.info("Cluster was installed")
             break
     cluster_info = ocm.get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
@@ -85,7 +82,6 @@ def wait_for_rosa_input(spawn, acceptable_duration=5):
         time.sleep(1)
 
 
-
 def create_account_roles(version, prefix="ManagedOpenShift"):
     """
     Create the required account-wide roles and policies, including Operator policies.
@@ -98,12 +94,12 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
     version = get_semantic_version(version, only_major_minor=True)
     cmd = (
         f"rosa create account-roles --version {version} --mode auto"
-        f" --permissions-boundary \"\" --prefix {prefix}  --yes"
+        f' --permissions-boundary "" --prefix {prefix}  --yes'
     )
     utils.run_cmd(cmd)
 
 
-def create_operator_roles(cluster, prefix="\"\""):
+def create_operator_roles(cluster, prefix='""'):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
@@ -115,7 +111,7 @@ def create_operator_roles(cluster, prefix="\"\""):
     """
     cmd = (
         f"rosa create operator-roles --cluster {cluster} --prefix {prefix}"
-        f" --mode auto --permissions-boundary \"\" --yes"
+        f' --mode auto --permissions-boundary "" --yes'
     )
     utils.run_cmd(cmd)
 
@@ -162,11 +158,10 @@ def get_addon_info(cluster, addon_name):
         str: line of the command for relevant addon
 
     """
-    cmd = f"rosa list addons -c cluster"
+    cmd = "rosa list addons -c cluster"
     output = utils.run_cmd(cmd)
-    line = [line for line in output.splitlines() if re.match(f"^{addon_name} " line)]
+    line = [line for line in output.splitlines() if re.match(f"^{addon_name} ", line)]
     return line
-
 
 
 def install_odf_addon(cluster):
@@ -189,11 +184,10 @@ def install_odf_addon(cluster):
         f" --notification-email-2 {notification_email_2} --yes"
     )
     utils.run_cmd(cmd)
-    for addon_info in utils.TimeoutSampler(10000, 30, get_addon_info, cluster, addon_name):
-        logger.info(
-            f"Current addon installation info: "
-            f"{addon_info}"
-        )
+    for addon_info in utils.TimeoutSampler(
+        10000, 30, get_addon_info, cluster, addon_name
+    ):
+        logger.info(f"Current addon installation info: " f"{addon_info}")
         if "installed" in addon_info and "not installed" not in addon_info:
             logger.info(f"Addon {addon_name} was installed")
             break
