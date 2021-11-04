@@ -294,6 +294,9 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
+MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
+MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -848,6 +851,10 @@ HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
 SUPPORTED_BROWSERS = CHROME_BROWSER
+
+# Managed service deployment constants
+OSD_DEPLOYER = "ocs-osd-deployer"
+OSE_PROMETHEUS_OPERATOR = "ose-prometheus-operator"
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
