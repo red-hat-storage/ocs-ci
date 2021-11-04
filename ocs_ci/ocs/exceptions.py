@@ -136,6 +136,10 @@ class NonUpgradedImagesFoundError(Exception):
     pass
 
 
+class NotAllPodsHaveSameImagesError(Exception):
+    pass
+
+
 class UnexpectedImage(Exception):
     pass
 
