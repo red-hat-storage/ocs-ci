@@ -11,9 +11,13 @@ import os
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.ocs import ocp
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility import ceph_health_check, openshift_dedicated as ocm, rosa
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import (
+    validate_cluster_on_pvc,
+    validate_pdb_creation,
+)
+from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
 
 logger = logging.getLogger(name=__file__)
 
@@ -25,6 +29,7 @@ class ROSAOCP(BaseOCPDeployment):
 
     def __init__(self):
         super(ROSAOCP, self).__init__()
+        self.ocp_version = config.DEPLOYMENT["ocp_version"]
 
     def deploy_prereq(self):
         """
@@ -38,7 +43,6 @@ class ROSAOCP(BaseOCPDeployment):
             "ADDON_NAME": config.ENV_DATA["addon_name"],
             "OCM_COMPUTE_MACHINE_TYPE": config.ENV_DATA.get("worker_instance_type"),
             "NUM_WORKER_NODES": config.ENV_DATA["worker_replicas"],
-            "CLUSTER_EXPIRY_IN_MINUTES": config.ENV_DATA["cluster_expiry_in_minutes"],
             "CLUSTER_NAME": config.ENV_DATA["cluster_name"],
             "OCM_TOKEN": openshiftdedicated["token"],
         }
@@ -56,6 +60,7 @@ class ROSAOCP(BaseOCPDeployment):
         """
         rosa.create_cluster(
             self.cluster_name,
+            self.ocp_version
         )
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
@@ -130,3 +135,34 @@ class ROSA(CloudDeploymentBase):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
         rosa.install_odf_addon(self.cluster_name)
+        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
+        # Check for Ceph pods
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector="app=rook-ceph-mon",
+            resource_count=3,
+            timeout=600,
+        )
+        assert pod.wait_for_resource(
+            condition="Running", selector="app=rook-ceph-mgr", timeout=600
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector="app=rook-ceph-osd",
+            resource_count=3,
+            timeout=600,
+        )
+
+        # validate ceph mon/osd volumes are backed by pvc
+        validate_cluster_on_pvc()
+
+        # validate PDB creation of MON, MDS, OSD pods
+        validate_pdb_creation()
+        # Verify health of ceph cluster
+        logger.info("Done validating rook resources, waiting for HEALTH_OK")
+        try:
+            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
