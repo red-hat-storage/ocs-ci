@@ -224,7 +224,6 @@ class TestBulkPodAttachPerformance(PASTest):
         full_results.add_key("storageclass", self.sc)
         full_results.add_key("pod_bulk_attach_time", bulk_total_time)
         full_results.add_key("pvc_size", self.pvc_size)
-        full_results.add_key("interface", self.interface)
         full_results.add_key("bulk_size", bulk_size)
 
         # Getting the test end time

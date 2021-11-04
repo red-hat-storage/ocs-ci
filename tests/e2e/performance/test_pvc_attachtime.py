@@ -226,7 +226,6 @@ class TestPodStartTime(PASTest):
             "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
 
-        self.full_results.add_key("interface", self.interface)
         self.full_results.add_key("samples_number", self.samples_num)
         self.full_results.add_key("pvc_size", self.pvc_size)
 
