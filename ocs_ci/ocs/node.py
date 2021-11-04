@@ -1804,7 +1804,7 @@ def get_node_zone_dict():
     return node_zone_dict
 
 
-def get_node_rack_zone(failure_domain, node_obj):
+def get_node_rack_or_zone(failure_domain, node_obj):
     """
     Get the worker node rack or zone name based on the failure domain value
 
@@ -1821,7 +1821,7 @@ def get_node_rack_zone(failure_domain, node_obj):
     )
 
 
-def get_node_rack_zone_dict(failure_domain):
+def get_node_rack_or_zone_dict(failure_domain):
     """
     Get worker node rack or zone dictionary based on the failure domain value
 

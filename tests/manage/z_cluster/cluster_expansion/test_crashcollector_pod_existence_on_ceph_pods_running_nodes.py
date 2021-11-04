@@ -9,8 +9,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import (
     get_nodes_where_ocs_pods_running,
-    get_node_rack_zone,
-    get_node_rack_zone_dict,
+    get_node_rack_or_zone,
+    get_node_rack_or_zone_dict,
     get_node_names,
     get_crashcollector_nodes,
     get_node_objs,
@@ -48,7 +48,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
     """
 
-    def is_node_rack_zone_exist(self, failure_domain, node_obj):
+    def is_node_rack_or_zone_exist(self, failure_domain, node_obj):
         """
         Check if the node rack/zone exist
 
@@ -60,7 +60,7 @@ class TestAddNodeCrashCollector(ManageTest):
             bool: True if the node rack/zone exist. False otherwise
 
         """
-        return get_node_rack_zone(failure_domain, node_obj) is not None
+        return get_node_rack_or_zone(failure_domain, node_obj) is not None
 
     def test_crashcollector_pod_existence_on_ceph_pods_running_nodes(
         self, add_nodes, node_drain_teardown
@@ -73,7 +73,7 @@ class TestAddNodeCrashCollector(ManageTest):
         logger.info(f"The failure domain is {failure_domain}")
 
         if failure_domain in ("zone", "rack"):
-            old_node_rack_zone_dict = get_node_rack_zone_dict(failure_domain)
+            old_node_rack_zone_dict = get_node_rack_or_zone_dict(failure_domain)
             logger.info(f"The old node rack/zone dict is {old_node_rack_zone_dict}")
 
         old_nodes = get_node_names()
@@ -90,7 +90,7 @@ class TestAddNodeCrashCollector(ManageTest):
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=10,
-            func=self.is_node_rack_zone_exist,
+            func=self.is_node_rack_or_zone_exist,
             node_obj=new_node,
             failure_domain=failure_domain,
         )
@@ -99,10 +99,10 @@ class TestAddNodeCrashCollector(ManageTest):
         ), f"Didn't find the node rack/zone after {timeout} seconds"
 
         if failure_domain in ("zone", "rack"):
-            new_node_rack_zone_dict = get_node_rack_zone_dict(failure_domain)
+            new_node_rack_zone_dict = get_node_rack_or_zone_dict(failure_domain)
             logger.info(f"The new node rack/zone dict is {new_node_rack_zone_dict}")
 
-            new_rack_zone = get_node_rack_zone(failure_domain, new_node)
+            new_rack_zone = get_node_rack_or_zone(failure_domain, new_node)
             logger.info(f"New worker node {new_node_name} in zone/rack {new_rack_zone}")
 
             for node, rack_zone in old_node_rack_zone_dict.items():
