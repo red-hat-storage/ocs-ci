@@ -11,13 +11,15 @@ import os
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import ceph_health_check, openshift_dedicated as ocm, rosa
+from ocs_ci.utility import openshift_dedicated as ocm, rosa
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
     validate_pdb_creation,
 )
 from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
+from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
 
@@ -48,7 +50,7 @@ class ROSAOCP(BaseOCPDeployment):
         }
         for key, value in env_vars.items():
             if value:
-                os.environ[key] = value
+                os.environ[key] = str(value)
 
     def deploy(self, log_level=""):
         """
@@ -162,3 +164,23 @@ class ROSA(CloudDeploymentBase):
         except CephHealthException as ex:
             err = str(ex)
             logger.warning(f"Ceph health check failed with {err}")
+
+    def destroy_ocs(self):
+        """
+        Uninstall ODF Managed Service addon via rosa cli.
+        """
+        cluster_namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Deleting PVCs
+        rbd_pvcs = [
+            p
+            for p in pvc.get_all_pvcs_in_storageclass(constants.CEPHBLOCKPOOL_SC)
+            if not (
+                p.data["metadata"]["namespace"] == cluster_namespace
+                and p.data["metadata"]["labels"]["app"] == "noobaa"
+            )
+        ]
+        pvc.delete_pvcs(rbd_pvcs)
+        cephfs_pvcs = pvc.get_all_pvcs_in_storageclass(constants.CEPHFILESYSTEM_SC)
+        pvc.delete_pvcs(cephfs_pvcs)
+        rosa.delete_odf_addon(self.cluster_name)

@@ -11,6 +11,7 @@ import re
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 from ocs_ci.utility.version import get_semantic_version
@@ -158,10 +159,10 @@ def get_addon_info(cluster, addon_name):
         str: line of the command for relevant addon
 
     """
-    cmd = "rosa list addons -c cluster"
+    cmd = f"rosa list addons -c {cluster}"
     output = utils.run_cmd(cmd)
     line = [line for line in output.splitlines() if re.match(f"^{addon_name} ", line)]
-    return line
+    return line[0]
 
 
 def install_odf_addon(cluster):
@@ -177,17 +178,47 @@ def install_odf_addon(cluster):
     notification_email_0 = config.ENV_DATA.get("notification_email_0")
     notification_email_1 = config.ENV_DATA.get("notification_email_1")
     notification_email_2 = config.ENV_DATA.get("notification_email_2")
-    cmd = (
-        f"rosa install addon --cluster={cluster} --size {size} {addon_name}"
-        f" --notification-email-0 {notification_email_0}"
-        f" --notification-email-1 {notification_email_1}"
-        f" --notification-email-2 {notification_email_2} --yes"
-    )
+    cmd = f"rosa install addon --cluster={cluster} --size {size} {addon_name}" f" --yes"
+    if notification_email_0:
+        cmd = cmd + f" --notification-email-0 {notification_email_0}"
+    if notification_email_1:
+        cmd = cmd + f" --notification-email-1 {notification_email_1}"
+    if notification_email_2:
+        cmd = cmd + f" --notification-email-2 {notification_email_2}"
+
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
         10000, 30, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
-        if "installed" in addon_info and "not installed" not in addon_info:
+        if "ready" in addon_info:
             logger.info(f"Addon {addon_name} was installed")
             break
+        if "failed" in addon_info:
+            raise ManagedServiceAddonDeploymentError(
+                f"Addon {addon_name} failed to be installed"
+            )
+
+
+def delete_odf_addon(cluster):
+    """
+    Delete ODF Managed Service addon from cluster.
+
+    Args:
+        cluster (str): cluster name or cluster id
+
+    """
+    addon_name = config.DEPLOYMENT["addon_name"]
+    cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
+    utils.run_cmd(cmd)
+    for addon_info in utils.TimeoutSampler(
+        5000, 30, get_addon_info, cluster, addon_name
+    ):
+        logger.info(f"Current addon installation info: " f"{addon_info}")
+        if "not installed" in addon_info:
+            logger.info(f"Addon {addon_name} was uninstalled")
+            break
+        if "failed" in addon_info:
+            raise ManagedServiceAddonDeploymentError(
+                f"Addon {addon_name} failed to be uninstalled"
+            )
