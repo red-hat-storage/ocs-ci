@@ -152,11 +152,6 @@ class ROSA(CloudDeploymentBase):
             timeout=600,
         )
 
-        # validate ceph mon/osd volumes are backed by pvc
-        validate_cluster_on_pvc()
-
-        # validate PDB creation of MON, MDS, OSD pods
-        validate_pdb_creation()
         # Verify health of ceph cluster
         logger.info("Done validating rook resources, waiting for HEALTH_OK")
         try:
