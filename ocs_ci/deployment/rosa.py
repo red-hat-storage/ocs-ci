@@ -14,10 +14,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.cluster import (
-    validate_cluster_on_pvc,
-    validate_pdb_creation,
-)
 from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
 from ocs_ci.ocs.resources import pvc
 

@@ -164,7 +164,7 @@ def uninstall_ocs():
             if "noobaa" not in pvc.name
         )
 
-    if platform.lower() == constants.ROSA_PLATFORM:
+    if config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM:
         log.info("Deleting OCS PVCs")
         for pvc in pvc_to_delete:
             log.info(f"Deleting PVC: {pvc.name}")
