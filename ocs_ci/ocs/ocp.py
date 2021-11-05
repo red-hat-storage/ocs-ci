@@ -1487,3 +1487,21 @@ def get_services_by_label(label, namespace):
     ocp_svc = OCP(kind=constants.SERVICE, namespace=namespace)
     svc = ocp_svc.get(selector=label).get("items")
     return svc
+
+
+def get_ocp_url():
+    """
+    Getting default URL for OCP console
+    Returns:
+        str: OCP console URL
+
+    """
+    oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    log.info("Get URL of OCP console")
+    url = oc_cmd.exec_oc_cmd(
+        "get consoles.config.openshift.io cluster -o" "jsonpath='{.status.consoleURL}'",
+        out_yaml_format=False,
+    )
+    log.info(f"OCP URL: {url}")
+
+    return str(url)

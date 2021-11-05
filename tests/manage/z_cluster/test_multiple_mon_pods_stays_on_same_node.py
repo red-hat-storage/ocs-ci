@@ -2,6 +2,7 @@ import json
 import logging
 import pytest
 import time
+from semantic_version import Version
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -30,6 +31,8 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import is_lso_cluster
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 POD_OBJ = OCP(kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE)
@@ -102,6 +105,18 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         node that doesn't currently have a mon (compute-0) and start mon-d
 
         """
+        ocs_version = config.ENV_DATA["ocs_version"]
+        # Check that we have LSO cluster and OCS version is 4.8 and below
+        # This is a workaround due to issue https://github.com/red-hat-storage/ocs-ci/issues/4937
+        if not (
+            is_lso_cluster() and Version.coerce(ocs_version) <= Version.coerce("4.8")
+        ):
+            pytest.skip(
+                "Skip the test because mons are not node assignment from Rook, if cluster is not "
+                "LSO based. And also currently, we want to run the test only with OCS 4.8 and "
+                "below. This is a workaround due to issue "
+                "https://github.com/red-hat-storage/ocs-ci/issues/4937"
+            )
         # Initialize
         rook_ceph_mon = "rook-ceph-mon"
 
@@ -192,8 +207,10 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         ), f"Mon moved to node {mon_node} such that 2 mons are running on same node"
 
         # Verify rook deletes one of the mon and move to another node
-        log.info("Waiting for 40 seconds for mon recovery")
-        time.sleep(40)
+        timeout = 60
+        log.info(f"Waiting for {timeout} seconds for mon recovery")
+        time.sleep(timeout)
+
         POD_OBJ.wait_for_resource(
             condition=STATUS_RUNNING,
             resource_count=len(mon_pods),

@@ -710,6 +710,7 @@ IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
+IBM_PLATFORM = "ibm"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
@@ -724,6 +725,7 @@ CLOUD_PLATFORMS = [
     AWS_PLATFORM,
     AZURE_PLATFORM,
     GCP_PLATFORM,
+    IBM_PLATFORM,
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
@@ -1152,7 +1154,10 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "noobaa-operator",
     "ocs-operator",
+    "odf-multicluster-orchestrator",
+    "odf-operator",
 ]
 
 # PSI-openstack constants
@@ -1442,3 +1447,17 @@ PATCH_DEFAULT_SOURCES_CMD = (
     "oc patch operatorhub.config.openshift.io/cluster -p="
     '\'{{"spec":{{"disableAllDefaultSources":{disable}}}}}\' --type=merge'
 )
+PATCH_SPECIFIC_SOURCES_CMD = (
+    "oc patch operatorhub.config.openshift.io/cluster -p="
+    '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
+    "}}]}}}}' --type=merge"
+)
+
+# OpenSSL Certificate parameters
+OPENSSL_KEY_SIZE = 2048
+OPENSSL_CERT_COUNTRY_NAME = ".."
+OPENSSL_CERT_STATE_OR_PROVINCE_NAME = "."
+OPENSSL_CERT_LOCALITY_NAME = "."
+OPENSSL_CERT_ORGANIZATION_NAME = "OCS"
+OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME = "OCS-QE"
+OPENSSL_CERT_EMAIL_ADDRESS = "ocs-qe@redhat.com"

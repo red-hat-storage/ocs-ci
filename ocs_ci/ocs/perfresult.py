@@ -5,6 +5,7 @@ Basic Module to manage performance results
 
 import logging
 import json
+import time
 
 from elasticsearch import Elasticsearch, exceptions as ESExp
 
@@ -112,15 +113,25 @@ class PerfResult:
             f"Params : index={self.new_index}, "
             f"doc_type=_doc, body={self.results}, id={self.uuid}"
         )
-        try:
-            self.es.index(
-                index=self.new_index, doc_type="_doc", body=self.results, id=self.uuid
-            )
-        except Exception as e:
-            log.warning(f"Failed writing data with : {e}")
-            self.dump_to_file()
-            return False
-        return True
+        retry = 3
+        while retry > 0:
+            try:
+                self.es.index(
+                    index=self.new_index,
+                    doc_type="_doc",
+                    body=self.results,
+                    id=self.uuid,
+                )
+            except Exception as e:
+                if retry > 0:
+                    log.warning("Failed to write data to ES, retrying in 3 sec...")
+                    retry -= 1
+                    time.sleep(3)
+                else:
+                    log.warning(f"Failed writing data with : {e}")
+                    self.dump_to_file()
+                    return False
+            return True
 
     def add_key(self, key, value):
         """

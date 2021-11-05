@@ -9,6 +9,7 @@ from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
+    NoSuchElementException,
 )
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -28,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     PageNotLoaded,
 )
+from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
@@ -35,8 +37,8 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_kubeadmin_password,
     get_ocp_version,
-    run_cmd,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +286,7 @@ class BaseUI:
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
 
-        return:
+        Returns:
             bool: Returns True if the expected element text is found, False otherwise
 
         """
@@ -305,6 +307,27 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
+            return False
+
+    def check_element_presence(self, locator, timeout=5):
+        """
+        Check if an web element is present on the web console or not.
+
+
+        Args:
+             locator (tuple): (GUI element needs to operate on (str), type (By))
+             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+        Returns:
+            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
+
+        """
+        try:
+            wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
+            wait.until(ec.presence_of_element_located(locator))
+            return True
+        except NoSuchElementException:
+            self.take_screenshot()
+            logger.error("Expected element not found on UI")
             return False
 
 
@@ -333,6 +356,17 @@ class PageNavigator(BaseUI):
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_odf_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview Page
+
+        """
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        self.page_has_loaded(retries=15, sleep_time=5)
+        logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
         """
@@ -401,6 +435,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
+        self.page_has_loaded(retries=15, sleep_time=5)
 
     def navigate_to_ocs_operator_page(self):
         """
@@ -620,19 +655,19 @@ def take_screenshot(driver):
 
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
 @retry(WebDriverException, tries=3, delay=3, backoff=2)
-def login_ui():
+def login_ui(console_url=None):
     """
     Login to OpenShift Console
+
+    Args:
+        console_url (str): ocp console url
 
     return:
         driver (Selenium WebDriver)
 
     """
-    logger.info("Get URL of OCP console")
-    console_url = run_cmd(
-        "oc get consoles.config.openshift.io cluster -o"
-        "jsonpath='{.status.consoleURL}'"
-    )
+    if not console_url:
+        console_url = get_ocp_url()
     logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()

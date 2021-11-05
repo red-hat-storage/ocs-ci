@@ -37,7 +37,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
-from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -61,6 +61,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
+from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
 from ocs_ci.utility.utils import (
     ceph_health_check,
     enable_huge_pages,
@@ -206,6 +207,8 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            configure_custom_ingress_cert()
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
@@ -508,14 +511,11 @@ class Deployment(object):
                         constants.OCS_SECRET, self.namespace
                     )
                     is_ibm_sa_linked = True
-            # create storage system
-            if ocs_version >= version.VERSION_4_9 and (
-                defaults.ODF_OPERATOR_NAME in ocs_operator_name
-            ):
-                csv.wait_for_phase("Succeeded", timeout=720)
-                time.sleep(30)
-                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
             csv.wait_for_phase("Succeeded", timeout=720)
+        # create storage system
+        if ocs_version >= version.VERSION_4_9:
+            exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+
         ocp_version = version.get_semantic_ocp_version_from_config()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             config_map = ocp.OCP(
@@ -1079,7 +1079,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # Because custom catalog source will be called: redhat-operators, we need to disable
     # default sources. This should not be an issue as OCS internal registry images
     # are now based on OCP registry image
-    disable_default_sources()
+    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -1093,7 +1093,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         run_cmd(
             "oc patch image.config.openshift.io/cluster --type merge -p '"
             '{"spec": {"registrySources": {"insecureRegistries": '
-            '["registry-proxy.engineering.redhat.com"]}}}\''
+            '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
+            "}}}'"
         )
         run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")

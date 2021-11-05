@@ -75,7 +75,7 @@ class TestMCGResourcesDisruptions(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[resource_to_delete],
             resource_count=1,
-            timeout=300,
+            timeout=90,
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 

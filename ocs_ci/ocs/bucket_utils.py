@@ -13,6 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
 
@@ -990,8 +991,11 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 def retrieve_verification_mode():
     if config.ENV_DATA["platform"].lower() == "ibm_cloud":
         verify = True
+    elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+        verify = get_root_ca_cert()
     else:
         verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+    logger.debug(f"verification: '{verify}'")
     return verify
 
 
@@ -1177,7 +1181,7 @@ def s3_get_object_acl(s3_obj, bucketname, object_key):
     return s3_obj.s3_client.get_object_acl(Bucket=bucketname, Key=object_key)
 
 
-def s3_head_object(s3_obj, bucketname, object_key):
+def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
     """
     Boto3 client based head_object operation to retrieve only metadata
 
@@ -1185,12 +1189,19 @@ def s3_head_object(s3_obj, bucketname, object_key):
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier for copied object
+        if_match (str): Return the object only if its entity tag (ETag)
+                        is the same as the one specified,
 
     Returns:
         dict : head object response
 
     """
-    return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+    if if_match:
+        return s3_obj.s3_client.head_object(
+            Bucket=bucketname, Key=object_key, IfMatch=if_match
+        )
+    else:
+        return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_list_objects_v1(

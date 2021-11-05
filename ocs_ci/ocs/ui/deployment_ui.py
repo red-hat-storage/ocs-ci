@@ -120,6 +120,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
             )
+            time.sleep(5)
             self.do_click(
                 locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
             )
@@ -128,10 +129,10 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
             )
+            time.sleep(5)
             self.do_click(
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
-
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
@@ -301,7 +302,9 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
             self.take_screenshot()
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(
+                f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
+            )
         self.take_screenshot()
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
