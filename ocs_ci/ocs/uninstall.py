@@ -242,10 +242,6 @@ def uninstall_ocs():
         except Exception as e:
             log.info(f"LSO removal failed.{e}")
 
-    log.info("deleting noobaa storage class")
-    noobaa_sc = ocp.OCP(kind=constants.STORAGECLASS)
-    noobaa_sc.delete(resource_name=constants.NOOBAA_SC)
-
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
 
