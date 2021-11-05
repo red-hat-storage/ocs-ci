@@ -5,10 +5,11 @@ ENV_DATA:
   addon_name: 'ocs-converged'
   configs: 'aws,stage'
   worker_instance_type: 'm5.2xlarge'
-  worker_replicas: '3'
+  worker_replicas: 3
+  master_replicas: 3
   # size of storage cluster, default is 1 TiB
   size: '1'
-  skip_ocp_deployment: true
+  #skip_ocp_deployment: true
   # notification_email_0: MAIL USED FOR SENDGRID
 
 # AUTH:
