@@ -208,7 +208,7 @@ class TestDiskFailures(ManageTest):
     @bugzilla("1830702")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
-    def test_recovery_from_volume_deletion(
+    def recovery_from_volume_deletion(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
         """

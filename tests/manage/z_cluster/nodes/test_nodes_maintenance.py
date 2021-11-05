@@ -159,7 +159,6 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check(tries=90)
 
     @tier4
-    @tier4b
     @skipif_bm
     @pytest.mark.parametrize(
         argnames=["node_type"],
