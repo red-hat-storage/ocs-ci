@@ -85,7 +85,7 @@ def bucket_class_factory(
                   in this particular order:
                     - rule_id (str): A rule ID / name
                     - destination_bucket (str): The name of the bucket to replicate all objects to
-                    - prefix (str): A prefix to limit replication only to objects beginning
+                    - prefix (str, optional): A prefix to limit replication only to objects beginning
                       with the chosen prefix.
 
                 - namespace_policy_dict (dict):  A dictionary compatible with the namespace store factory.

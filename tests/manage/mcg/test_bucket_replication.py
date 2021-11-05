@@ -157,7 +157,7 @@ class TestReplication(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"azure": [(1, None)]},
                 },
-                marks=[tier1, pytest.mark.polarion_id("OCS-2682")],
+                marks=[tier2, pytest.mark.polarion_id("OCS-2682")],
             ),
         ],
         ids=[
