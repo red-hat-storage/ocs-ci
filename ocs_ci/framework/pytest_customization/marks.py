@@ -307,3 +307,8 @@ skipif_upgraded_from = pytest.mark.skipif_upgraded_from
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
+
+skipif_ibm_flash = pytest.mark.skipif(
+    config.ENV_DATA.get("ibm_flash"),
+    reason="This test doesn't work correctly on IBM Flash system",
+)
