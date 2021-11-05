@@ -217,14 +217,25 @@ class VMWareNodes(NodesBase):
             list: vSphere vm objects list
 
         """
-        vms_in_pool = self.vsphere.get_all_vms_in_pool(
-            self.cluster_name, self.datacenter, self.cluster
-        )
-        node_names = [node.get().get("metadata").get("name") for node in nodes]
+        vms_all = []
         vms = []
+        logger.info(f"deployment type: {self.deployment_type}")
+        if self.deployment_type == "upi":
+            vms_all = self.vsphere.get_all_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+        elif self.deployment_type == "ipi":
+            vms_all = self.vsphere.get_all_vms_in_dc(self.datacenter)
+
+        else:
+            logger.error("Deployment type not detected")
+
+        node_names = [node.get().get("metadata").get("name") for node in nodes]
+
         for node in node_names:
-            node_vms = [vm for vm in vms_in_pool if vm.name in node]
+            node_vms = [vm for vm in vms_all if vm.name in node]
             vms.extend(node_vms)
+
         return vms
 
     def get_data_volumes(self, pvs=None):
