@@ -1208,7 +1208,7 @@ def health_checker(request, tier_marks_name):
         if mark.name in tier_marks_name:
             log.info("Checking for Ceph Health OK ")
             try:
-                status = ceph_health_check_base()
+                status = ceph_health_check(tries=60)
                 if status:
                     log.info("Ceph health check passed at setup")
                     return
