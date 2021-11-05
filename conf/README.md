@@ -206,6 +206,7 @@ higher priority).
 * `huge_pages` - True if you would like to enable HUGE PAGES.
 * `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
+* `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 
 #### UPGRADE
 
