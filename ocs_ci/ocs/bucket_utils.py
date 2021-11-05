@@ -1019,7 +1019,7 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
     )
 
 
-def write_random_objects_to_pod(io_pod, file_dir, amount, pattern="ObjKey"):
+def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey"):
     """
     Uses /dev/urandom to create and write random files in a given
     directory in a pod
@@ -1060,7 +1060,7 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
 
     """
     awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-    write_random_objects_to_pod(awscli_pod, original_dir, amount)
+    write_random_objects_in_pod(awscli_pod, original_dir, amount)
 
 
 def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=None):
@@ -1404,7 +1404,7 @@ def write_random_test_objects_to_bucket(
         list: A list containing the names of the random files that were written
     """
     full_object_path = f"s3://{bucket_to_write}"
-    obj_lst = write_random_objects_to_pod(io_pod, file_dir, amount)
+    obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount)
     sync_object_directory(
         io_pod,
         file_dir,
