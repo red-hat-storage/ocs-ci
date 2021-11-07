@@ -2200,6 +2200,7 @@ def bucket_factory_fixture(
         interface="S3",
         verify_health=True,
         bucketclass=None,
+        replication_policy=None,
         *args,
         **kwargs,
     ):
@@ -2244,6 +2245,7 @@ def bucket_factory_fixture(
                 mcg=mcg_obj,
                 rgw=rgw_obj,
                 bucketclass=bucketclass,
+                replication_policy=replication_policy,
                 *args,
                 **kwargs,
             )
