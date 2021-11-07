@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    aws_platform_required,
     ipi_deployment_required,
     ignore_leftovers,
 )
@@ -36,7 +35,6 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4
 @tier4b
-@aws_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
@@ -189,7 +187,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4
 @tier4a
-@aws_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
