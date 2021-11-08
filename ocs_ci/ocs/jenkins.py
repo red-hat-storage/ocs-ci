@@ -330,7 +330,7 @@ class Jenkins(object):
                 "slaves.NodeProvisioner.MARGIN0=0.85",
             }
         )
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.9"):
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             # Added "Pipeline Utility Steps" plugin via Jenkins Template
             # OCP team changed the default plugin list on OCP4.9
             tmp_dict["objects"][3]["spec"]["template"]["spec"]["containers"][0][
