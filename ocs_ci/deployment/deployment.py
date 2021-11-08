@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.deployment.helpers.helpers import (
+from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )

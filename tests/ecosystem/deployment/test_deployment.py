@@ -25,6 +25,7 @@ def test_deployment(pvc_factory, pod_factory):
             ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
             if config.ENV_DATA["mcg_only_deployment"]:
                 mcg_only_install_verification(ocs_registry_image=ocs_registry_image)
+                return
             else:
                 ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
