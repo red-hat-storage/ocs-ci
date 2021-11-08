@@ -51,6 +51,7 @@ class TestOcsOdfUpgrade(ManageTest):
         dep_obj.refresh_page()
         dep_obj.install_ocs_operator()
 
+        logger.info("Click on Storage System under Provided APIs on Installed Operators Page")
         logger.info(
             "Click on Storage System under Provided APIs on Installed Operators Page"
         )
