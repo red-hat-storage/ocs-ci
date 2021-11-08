@@ -574,6 +574,11 @@ validation_4_9 = {
     "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "show-default-projects": ("label[for='no-label-switch-on']", By.CSS_SELECTOR),
+    "storage-system-on-installed-operators": (
+        "a[title='storagesystems.odf.openshift.io']",
+        By.CSS_SELECTOR,
+    ),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
 }
 

@@ -24,6 +24,11 @@ class DeploymentUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        self.operator = (
+            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
+        )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -68,6 +73,18 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        if self.operator is ODF_OPERATOR:
+            time.sleep(90)
+            refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                locator=self.validation_loc["warning-alert"],
+                expected_text="Refresh web console",
+            )
+            if refresh_web_console_popup:
+                logger.info(
+                    "Refresh web console option is now available, click on it to see the changes"
+                )
+                self.do_click(self.validation_loc["refresh-web-console"])
+        self.verify_operator_succeeded(operator=self.operator)
         if self.operator_name is ODF_OPERATOR:
             time.sleep(80)
             self.refresh_popup()
@@ -364,9 +381,14 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            self.do_click(
-                self.dep_loc["enable_default_porjects"], enable_screenshot=True
-            )
+            default_projects_is_checked = self.driver.find_element_by_id(
+                "no-label-switch-on"
+            ).is_selected()
+            if default_projects_is_checked is False:
+                logger.info("Show default projects")
+                self.do_click(
+                    self.dep_loc["enable_default_porjects"], enable_screenshot=True
+                )
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
