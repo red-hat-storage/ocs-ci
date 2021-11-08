@@ -17,7 +17,6 @@ ENV_DATA:
 #    token: OCM TOKEN KEY PLACEHOLDER
 
 DEPLOYMENT:
-  ocs_csv_channel: "alpha"
   force_download_ocm_cli: False
   ocm_cli_version: '0.1.46'
   force_download_rosa_cli: False
