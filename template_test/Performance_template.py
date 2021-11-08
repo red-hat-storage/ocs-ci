@@ -120,6 +120,7 @@ class TestClassName(PASTest):
 
         # teardown operation need to be here
         log.info("Cleanup the environment")
+        # TODO: add the cleanup procedure
 
     def run(self):
         """
@@ -131,6 +132,7 @@ class TestClassName(PASTest):
 
         # collect all results into internal object parameter, if the test run
         # more then once (preferred), collect them into a list(s).
+        # TODO: Add the running of the test procedure.
 
     def get_time(self):
         """
@@ -163,6 +165,8 @@ class TestClassName(PASTest):
         return full_results
 
     # This is not mandatory, but if you want to parametrize the test, this is the way
+    # TODO: replace the argument names and values - if needed, or delete this part if
+    #       no parameters are needed.
     @pytest.mark.parametrize(
         argnames=["Arg1", "ArgN"],
         argvalues=[
