@@ -134,6 +134,7 @@ deployment_4_9 = {
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
+    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -160,7 +161,6 @@ generic_locators = {
     "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
-    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
 }
 
 ocs_operator_locators = {
