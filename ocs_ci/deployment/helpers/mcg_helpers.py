@@ -1,5 +1,5 @@
 """
-This module contains helper functions which is independent of platform
+This module contains helper functions which is needed for MCG only deployment
 """
 
 import logging
