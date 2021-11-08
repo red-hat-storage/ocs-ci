@@ -52,12 +52,12 @@ class TestPgSQLNodeReboot(E2ETest):
         ],
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_reboot_node(self, pgsql, nodes, pod_name):
+    def test_run_pgsql_reboot_node(self, pgsql, nodes, transactions, pod_name):
         """
         Test pgsql workload
         """
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=1, transactions=600)
+        pgsql.create_pgbench_benchmark(replicas=1, transactions=transactions)
 
         # Start measuring time
         start_time = datetime.now()
