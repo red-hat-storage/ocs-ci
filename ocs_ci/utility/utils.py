@@ -13,6 +13,7 @@ import subprocess
 import time
 import traceback
 import stat
+import math
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -2651,6 +2652,26 @@ def convert_device_size(unformatted_size, units_to_covert_to):
         "B": {"Ti": abso * 1e12, "Gi": abso * 1e9, "Mi": abso * 1e6, "Ki": abso * 1000},
     }
     return conversion[units_to_covert_to][units]
+
+
+def convert_bytes_into_right_measure(size_bytes):
+    """
+    Convert bytes in the appropriate measure unit
+
+    Args:
+        size_bytes (int): The size in bytes.
+
+    Returns:
+        (str): The converted size as string like "15 GiB"
+
+    """
+    if size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GiB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return "%s %s" % (s, size_name[i])
 
 
 def prepare_customized_pull_secret(images=None):

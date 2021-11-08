@@ -365,7 +365,7 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=15, sleep_time=1)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
@@ -435,7 +435,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=15, sleep_time=1)
 
     def navigate_to_ocs_operator_page(self):
         """
@@ -586,8 +586,18 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to block pools page")
-        self.navigate_to_ocs_operator_page()
-        self.do_click(locator=self.page_nav["block_pool_link"])
+        ocp_version = get_ocp_version()
+        if Version.coerce(self.ocp_version) > Version.coerce("4.8"):
+            self.navigate_odf_overview_page()
+            self.do_click(locators[ocp_version]["validation"]["storage_systems"])
+            self.do_click(
+                locators[ocp_version]["validation"]["ocs-storagecluster-storagesystem"]
+            )
+            self.do_click(locators[ocp_version]["validation"]["blockpools"])
+        else:
+            self.navigate_to_ocs_operator_page()
+            self.do_click(locator=self.page_nav["block_pool_link"])
+        self.page_has_loaded(retries=15)
 
     def verify_current_page_resource_status(self, status_to_check, timeout=30):
         """

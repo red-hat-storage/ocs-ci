@@ -1182,6 +1182,25 @@ def validate_compression(pool_name):
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
+def get_pool_id(pool_name):
+    """
+    Get pool ID from pool name
+
+    Args:
+        pool_name (str): name of the pool to get the id.
+
+    Returns:
+        pool id if found else None
+
+    """
+    ceph_df_detail_output = get_ceph_df_detail()
+    pool_list = ceph_df_detail_output.get("pools")
+    for pool in pool_list:
+        if pool.get("name") == pool_name:
+            return pool.get("id")
+    return None
+
+
 def validate_osd_utilization(osd_used=80):
     """
     Validates osd utilization matches osd_used value

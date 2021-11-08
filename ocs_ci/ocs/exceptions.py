@@ -340,6 +340,14 @@ class PoolNotReplicatedAsNeeded(Exception):
     pass
 
 
+class PoolIdNotFound(Exception):
+    pass
+
+
+class PoolUiEfficiencyParametersNotEqualToPrometheus(Exception):
+    pass
+
+
 class ImageIsNotDeletedOrNotFound(Exception):
     pass
 

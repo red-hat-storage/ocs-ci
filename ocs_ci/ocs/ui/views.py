@@ -422,6 +422,13 @@ block_pool = {
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
 }
 
+block_pool_4_9 = {
+    "storage_efficiency_text_aray": (
+        'span[class="ceph-storage-efficiency-card__item-text"',
+        By.CSS_SELECTOR,
+    )
+}
+
 storageclass = {
     "create_storageclass_button": ("Create StorageClass", By.LINK_TEXT),
     "input_storageclass_name": ('input[id="storage-class-name"]', By.CSS_SELECTOR),
@@ -567,6 +574,8 @@ locators = {
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
+        "block_pool": {**block_pool, **block_pool_4_9},
+        "storageclass": storageclass,
     },
     "4.8": {
         "login": login,

@@ -32,9 +32,9 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_installed_operators_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=15)
         sc_name = create_unique_resource_name("test", "storageclass")
         self.do_click(self.sc_loc["create_storageclass_button"])
         self.do_send_keys(self.sc_loc["input_storageclass_name"], sc_name)
@@ -60,9 +60,9 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_installed_operators_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=15)
         sc_existence = self.wait_until_expected_text_is_found(
             (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 5
         )
@@ -80,9 +80,9 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_installed_operators_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=15)
         logger.info(f"sc_name is {sc_name}")
         self.do_click((f"{sc_name}", By.LINK_TEXT))
         self.do_click(self.sc_loc["action_inside_storageclass"])

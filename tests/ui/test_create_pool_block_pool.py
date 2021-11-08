@@ -6,14 +6,17 @@ from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
+    PoolUiEfficiencyParametersNotEqualToPrometheus,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
+from semantic_version.base import Version
+from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +25,12 @@ need_to_delete = []
 
 @skipif_ui_not_support("block_pool")
 @pytest.mark.parametrize(
-    argnames=["replica", "compression"],
+    argnames=["replica", "compression", "compression_saving"],
     argvalues=[
-        pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[3, True, "1.51 GiB"], marks=pytest.mark.polarion_id("OCS-2589")),
+        pytest.param(*[3, False, None], marks=pytest.mark.polarion_id("OCS-2588")),
+        pytest.param(*[2, True, "1 GiB"], marks=pytest.mark.polarion_id("OCS-2587")),
+        pytest.param(*[2, False, None], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
 class TestPoolUserInterface(ManageTest):
@@ -36,6 +39,7 @@ class TestPoolUserInterface(ManageTest):
 
     """
 
+    ocp_version = get_ocp_version()
     pvc_size = 40
 
     @pytest.fixture()
@@ -52,11 +56,17 @@ class TestPoolUserInterface(ManageTest):
 
     @pytest.fixture()
     def pvc(self, pvc_factory):
+        status = None
+        if Version.coerce(self.ocp_version) > Version.coerce("4.8"):
+            status = constants.STATUS_PENDING
+        else:
+            status = constants.STATUS_BOUND
         self.pvc_obj = pvc_factory(
             project=self.proj_obj,
             interface=constants.CEPHBLOCKPOOL,
             storageclass=self.sc_obj,
             size=self.pvc_size,
+            status=status,
         )
 
     @pytest.fixture()
@@ -70,6 +80,8 @@ class TestPoolUserInterface(ManageTest):
         self,
         replica,
         compression,
+        setup_ui,
+        compression_saving,
         namespace,
         storage,
         pvc,
@@ -95,9 +107,9 @@ class TestPoolUserInterface(ManageTest):
         # Running IO on POD
         self.pod_obj.run_io(
             "fs",
-            size="100m",
+            size="1g",
             rate="1500m",
-            runtime=0,
+            runtime=60,
             buffer_compress_percentage=60,
             buffer_pattern="0xdeadface",
             bs="8K",
@@ -106,15 +118,28 @@ class TestPoolUserInterface(ManageTest):
         )
 
         # Getting IO results
-        get_fio_rw_iops(self.pod_obj)
+        self.pod_obj.get_fio_results()
 
-        # Checking Results for compression and replication
+        # If above 4.8 check efficiency compression parameters against prometheus
+        if Version.coerce(self.ocp_version) > Version.coerce("4.8") and compression:
+            blockpool_ui_object = BlockPoolUI(setup_ui)
+            if not blockpool_ui_object.check_ui_pool_efficiency_parameters_against_prometheus(
+                self.pool_name, compression_saving
+            ):
+                raise PoolUiEfficiencyParametersNotEqualToPrometheus(
+                    f"Pool {self.pool_name} "
+                    f"compression efficiency parameters are "
+                    f"not equal to Prometheus parameters"
+                )
+        # Check compression with ceph df detail.
         if compression:
             compression_result = validate_compression(self.pool_name)
             if compression_result is False:
                 raise PoolNotCompressedAsExpected(
                     f"Pool {self.pool_name} compression did not reach expected value"
                 )
+
+        # Check replica size with ceph df detail.
         replica_result = validate_replica_data(self.pool_name, replica)
         if replica_result is False:
             raise PoolNotReplicatedAsNeeded(
