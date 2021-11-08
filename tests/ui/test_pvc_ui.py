@@ -3,9 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import (
-    skipif_ocs_version,
-)
+from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -124,9 +122,7 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in (
-            constants.DEFAULT_STORAGECLASS_RBD,
-        ):
+        if sc_name in (constants.DEFAULT_STORAGECLASS_RBD,):
             interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
