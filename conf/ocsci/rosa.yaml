@@ -17,14 +17,14 @@ ENV_DATA:
 #    token: OCM TOKEN KEY PLACEHOLDER
 
 DEPLOYMENT:
-  force_download_ocm_cli: False
+  force_download_ocm_cli: True
   ocm_cli_version: '0.1.46'
-  force_download_rosa_cli: False
+  force_download_rosa_cli: True
   rosa_cli_version: '1.1.2'
   region: "us-east-2"
   addon_name: "ocs-converged"
-  force_download_installer: False
-  force_download_client: False
+  force_download_installer: True
+  force_download_client: True
   ocp_version: "4.9.4"
 
 # This is useful as a W/A for Openshift Dedicated, as there is an issue 
