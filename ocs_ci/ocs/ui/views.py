@@ -160,6 +160,7 @@ generic_locators = {
     "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
+    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
 }
 
 ocs_operator_locators = {

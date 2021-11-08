@@ -148,10 +148,14 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal - Attached Devices")
-        self.do_click(self.dep_loc["internal-attached_devices"], enable_screenshot=True)
-
-        logger.info("Click on All nodes")
-        self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
+        if self.operator == ODF_OPERATOR:
+            self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
+        else:
+            self.do_click(
+                self.dep_loc["internal-attached_devices"], enable_screenshot=True
+            )
+            logger.info("Click on All nodes")
+            self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
         logger.info(
@@ -163,10 +167,11 @@ class DeploymentUI(PageNavigator):
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
         )
-        logger.info("Select all nodes on 'Create Storage Class' step")
-        self.do_click(
-            locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
-        )
+        if self.operator == OCS_OPERATOR:
+            logger.info("Select all nodes on 'Create Storage Class' step")
+            self.do_click(
+                locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
+            )
         self.verify_disks_lso_attached()
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
@@ -183,12 +188,19 @@ class DeploymentUI(PageNavigator):
             logger.error("Nodes not found after 600 seconds")
             raise TimeoutExpiredError
 
-        logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
-        self.choose_expanded_mode(
-            mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
+        if self.operator == OCS_OPERATOR:
+            logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
+            )
+            self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
+            timeout_next = 30
+        else:
+            timeout_next = 600
+
+        self.do_click(
+            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
-        self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
         self.configure_encryption()
 
@@ -318,7 +330,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8"):
+        if self.ocp_version in ("4.7", "4.8", "4.9"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -327,7 +339,7 @@ class DeploymentUI(PageNavigator):
         elif self.ocp_version == "4.6":
             self.do_click(self.dep_loc["project_dropdown"], enable_screenshot=True)
             self.do_click(self.dep_loc[operator], enable_screenshot=True)
-        elif self.ocp_version == "4.9":
+        elif self.ocp_version == "4.9" and operator != "Local Storage":
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
@@ -337,6 +349,19 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
+
+    def verify_advanced_deployment(self):
+        """
+
+        :return:
+        """
+        from selenium.webdriver.common.by import By
+
+        dic1 = {
+            "click_advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
+        }
+        self.do_click(dic1["click_advanced_deployment"])
+        self.take_screenshot()
 
     def install_ocs_ui(self):
         """
