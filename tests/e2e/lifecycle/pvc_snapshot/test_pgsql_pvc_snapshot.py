@@ -42,7 +42,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
 
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
-        pgsql = pgsql_factory_fixture(replicas=3)
+        pgsql = pgsql_factory_fixture(replicas=1)
 
         # Get postgres pvc list obj
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
