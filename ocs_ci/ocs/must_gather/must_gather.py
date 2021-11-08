@@ -107,14 +107,15 @@ class MustGather(object):
         """
         if self.type_log != "CEPH":
             return
+        pattern = re.compile("exit code [1-9]+")
         for root, dirs, files in os.walk(self.root):
             for file in files:
                 try:
-                    with open(f"{root}/{file}", "r") as f:
+                    with open(os.path.join(root, file), "r") as f:
                         data_file = f.read()
-                    exit_code_error = re.findall("exit code [1-9]+", data_file.lower())
+                    exit_code_error = pattern.findall(data_file.lower())
                     if len(exit_code_error) > 0 and "gather-debug" not in file:
-                        self.files_content_issue.append(file)
+                        self.files_content_issue.append(os.path.join(root, file))
                 except Exception as e:
                     logger.info(f"There is no option to read {file}, error: {e}")
 
