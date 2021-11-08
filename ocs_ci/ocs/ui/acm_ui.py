@@ -1,12 +1,13 @@
 import logging
 
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility.utils import get_ocp_version
 
 log = logging.getLogger(__name__)
 
 
-class AcmPageNavigator(PageNavigator):
+class AcmPageNavigator(BaseUI):
     """
     ACM Page Navigator Class
 
@@ -14,6 +15,7 @@ class AcmPageNavigator(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
+        self.ocp_version = get_ocp_version()
         self.acm_page_nav = locators[self.ocp_version]["acm_page"]
 
     def navigate_welcome_page(self):
