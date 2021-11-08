@@ -372,7 +372,7 @@ class TestS3BucketPolicy(MCGTest):
             f"Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
         )
         for get_resp in TimeoutSampler(
-            60, 1, s3_get_object, user, obc_obj.bucket_name, object_key
+            30, 4, s3_get_object, user, obc_obj.bucket_name, object_key
         ):
             if "403" not in str(get_resp["ResponseMetadata"]["HTTPStatusCode"]):
                 logger.info("GetObj operation successful")
@@ -383,7 +383,7 @@ class TestS3BucketPolicy(MCGTest):
             f"Deleting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
         )
         for del_resp in TimeoutSampler(
-            60, 1, s3_delete_object, user, obc_obj.bucket_name, object_key
+            30, 4, s3_delete_object, user, obc_obj.bucket_name, object_key
         ):
             if "403" not in str(del_resp["ResponseMetadata"]["HTTPStatusCode"]):
                 logger.info("DeleteObj operation successful")
