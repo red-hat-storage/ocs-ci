@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import re
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
@@ -54,7 +53,7 @@ def create_cluster(cluster_name, version):
     create_oidc_provider(cluster_name)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        10000, 30, ocm.get_cluster_details, cluster_name
+        4000, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
@@ -69,18 +68,6 @@ def create_cluster(cluster_name, version):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
-
-
-def wait_for_rosa_input(spawn, acceptable_duration=5):
-    """
-    pass
-    """
-    sleep_count = 0
-    while spawn.isalive():
-        if sleep_count > acceptable_duration:
-            break
-        sleep_count = sleep_count + 1
-        time.sleep(1)
 
 
 def create_account_roles(version, prefix="ManagedOpenShift"):
@@ -188,7 +175,7 @@ def install_odf_addon(cluster):
 
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
-        10000, 30, get_addon_info, cluster, addon_name
+        4000, 30, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "ready" in addon_info:
@@ -212,7 +199,7 @@ def delete_odf_addon(cluster):
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
-        5000, 30, get_addon_info, cluster, addon_name
+        4000, 30, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "not installed" in addon_info:

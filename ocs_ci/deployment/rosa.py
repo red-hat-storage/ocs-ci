@@ -50,7 +50,7 @@ class ROSAOCP(BaseOCPDeployment):
 
     def deploy(self, log_level=""):
         """
-        Deployment specific to OCP cluster on a cloud platform.
+        Deployment specific to OCP cluster on a ROSA Managed Service platform.
 
         Args:
             log_cli_level (str): openshift installer's log level
