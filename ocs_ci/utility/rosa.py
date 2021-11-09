@@ -13,7 +13,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
-from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -82,10 +81,10 @@ def get_latest_rosa_version(version):
         str: Latest available z-stream version
 
     """
-    cmd = f"rosa list versions"
+    cmd = "rosa list versions"
     output = utils.run_cmd(cmd)
     for line in output.splitlines():
-        match = re.search(f"^{version}\.(\d) ", line)
+        match = re.search(f"^{version}\\.(\\d) ", line)
         if match:
             rosa_version = match.group(0).rstrip()
             break
