@@ -19,6 +19,10 @@ class TestOcsOdfUpgrade(ManageTest):
     operator = ODF_OPERATOR
 
     def test_ocs_odf_upgrade(self, setup_ui):
+        """
+        This test function upgrades OCS 4.8 to ODF 4.9 from UI and does required validations post upgrade
+
+        """
 
         original_ocs_version = config.ENV_DATA.get("ocs_version")
         upgrade_in_current_source = config.UPGRADE.get(
@@ -47,7 +51,9 @@ class TestOcsOdfUpgrade(ManageTest):
         dep_obj.refresh_page()
         dep_obj.install_ocs_operator()
 
-        logger.info("Click on Storage System under Provided APIs on Installed Operators Page")
+        logger.info(
+            "Click on Storage System under Provided APIs on Installed Operators Page"
+        )
         val_obj.do_click(self.validation_loc["storage-system-on-installed-operators"])
         logger.info("Checking presence of storagesystem on Operator details page")
         storage_systems_check = val_obj.check_element_text(
@@ -58,6 +64,7 @@ class TestOcsOdfUpgrade(ManageTest):
             "upgrade "
         )
 
+        dep_obj.refresh_page()
         logger.info("Calling functions for other UI checks")
         pagenav_obj.odf_overview_ui()
         pagenav_obj.odf_storagesystems_ui()
