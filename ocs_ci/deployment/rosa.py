@@ -12,7 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
 from ocs_ci.ocs.resources import pvc
@@ -27,7 +27,7 @@ class ROSAOCP(BaseOCPDeployment):
 
     def __init__(self):
         super(ROSAOCP, self).__init__()
-        self.ocp_version = config.DEPLOYMENT["ocp_version"]
+        self.ocp_version = get_ocp_version()
 
     def deploy_prereq(self):
         """
