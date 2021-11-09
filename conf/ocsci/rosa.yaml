@@ -9,8 +9,9 @@ ENV_DATA:
   master_replicas: 3
   # size of storage cluster, default is 1 TiB
   size: '1'
-  #skip_ocp_deployment: true
   # notification_email_0: MAIL USED FOR SENDGRID
+  # notification_email_1: MAIL USED FOR SENDGRID
+  # notification_email_2: MAIL USED FOR SENDGRID
 
 # AUTH:
 #  openshiftdedicated:
@@ -25,7 +26,6 @@ DEPLOYMENT:
   addon_name: "ocs-converged"
   force_download_installer: True
   force_download_client: True
-  ocp_version: "4.9.4"
 
 # This is useful as a W/A for Openshift Dedicated, as there is an issue 
 # to use internal image for must gather

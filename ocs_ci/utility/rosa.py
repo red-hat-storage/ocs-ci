@@ -35,10 +35,11 @@ def create_cluster(cluster_name, version):
     Create OCP cluster.
 
     Args:
-        cluster_name (str): Cluster name.
+        cluster_name (str): Cluster name
         version (str): cluster version
 
     """
+    rosa_ocp_version = get_latest_rosa_version(version)
     create_account_roles(version)
     region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
@@ -46,7 +47,7 @@ def create_cluster(cluster_name, version):
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--compute-nodes {compute_nodes} --compute-machine-type "
-        f"{compute_machine_type}  --version {version} --sts --yes"
+        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
     )
     utils.run_cmd(cmd)
     create_operator_roles(cluster_name)
@@ -70,6 +71,27 @@ def create_cluster(cluster_name, version):
         json.dump(cluster_info, f)
 
 
+def get_latest_rosa_version(version):
+    """
+    Returns latest available z-stream version available for ROSA.
+
+    Args:
+        version (str): OCP version in format `x.y`
+
+    Returns:
+        str: Latest available z-stream version
+
+    """
+    cmd = f"rosa list versions"
+    output = utils.run_cmd(cmd)
+    for line in output.splitlines():
+        match = re.search(f"^{version}\.(\d) ", line)
+        if match:
+            rosa_version = match.group(0).rstrip()
+            break
+    return rosa_version
+
+
 def create_account_roles(version, prefix="ManagedOpenShift"):
     """
     Create the required account-wide roles and policies, including Operator policies.
@@ -79,7 +101,6 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    version = get_semantic_version(version, only_major_minor=True)
     cmd = (
         f"rosa create account-roles --version {version} --mode auto"
         f' --permissions-boundary "" --prefix {prefix}  --yes'
