@@ -3,10 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.framework.testlib import (
-    skipif_ocs_version,
-    skipif_ocp_version,
-)
+from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -43,13 +40,6 @@ class TestPvcUserInterface(object):
                 "Block",
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "ReadWriteMany",
-                "4",
-                "Block",
-                marks=[skipif_ocp_version("<4.9")],
-            ),
-            pytest.param(
                 "ocs-storagecluster-cephfs",
                 "ReadWriteOnce",
                 "10",
@@ -62,24 +52,10 @@ class TestPvcUserInterface(object):
                 "Block",
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "ReadWriteOnce",
-                "12",
-                "Block",
-                marks=[skipif_ocp_version("<4.9")],
-            ),
-            pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "ReadWriteOnce",
                 "13",
                 "Filesystem",
-            ),
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd-thick",
-                "ReadWriteOnce",
-                "4",
-                "Filesystem",
-                marks=[skipif_ocp_version("<4.9")],
             ),
         ],
     )
@@ -146,10 +122,7 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in (
-            constants.DEFAULT_STORAGECLASS_RBD_THICK,
-            constants.DEFAULT_STORAGECLASS_RBD,
-        ):
+        if sc_name in (constants.DEFAULT_STORAGECLASS_RBD,):
             interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
