@@ -162,7 +162,9 @@ class DeploymentUI(PageNavigator):
             f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
         )
         self.do_send_keys(
-            locator=self.dep_loc["lv_name"], text=constants.LOCAL_BLOCK_RESOURCE
+            locator=self.dep_loc["lv_name"],
+            text=constants.LOCAL_BLOCK_RESOURCE,
+            timeout=300,
         )
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
