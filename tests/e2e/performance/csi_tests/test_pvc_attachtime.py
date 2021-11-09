@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 class ResultsAnalyse(PerfResult):
     """
     This class generates results for all tests as one unit
-    and saves them to an elastic search server on the cluster 
+    and saves them to an elastic search server on the cluster
 
     """
 
