@@ -22,6 +22,7 @@ def remove_monitoring_stack_from_ocs():
     monitoring_obj = ocp.OCP(
         namespace=constants.MONITORING_NAMESPACE,
         kind="ConfigMap",
+        resource_name="cluster-monitoring-config",
     )
     param_cmd = '[{"op": "replace", "path": "/data/config.yaml", "value": ""}]'
     monitoring_obj.patch(
