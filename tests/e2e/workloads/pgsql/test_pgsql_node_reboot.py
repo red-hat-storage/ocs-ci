@@ -40,7 +40,7 @@ class TestPgSQLNodeReboot(E2ETest):
         PGSQL test setup
         """
         # Deployment of postgres database
-        pgsql.setup_postgresql(replicas=3)
+        pgsql.setup_postgresql(replicas=1)
 
         # Initialize Sanity instance
         self.sanity_helpers = Sanity()
@@ -48,7 +48,7 @@ class TestPgSQLNodeReboot(E2ETest):
     @pytest.mark.parametrize(
         argnames=["transactions", "pod_name"],
         argvalues=[
-            pytest.param(*[3600, "osd"], marks=pytest.mark.polarion_id("OCS-801"))
+            pytest.param(*[600, "osd"], marks=pytest.mark.polarion_id("OCS-801"))
         ],
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
@@ -57,7 +57,7 @@ class TestPgSQLNodeReboot(E2ETest):
         Test pgsql workload
         """
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3, transactions=transactions, clients=3)
+        pgsql.create_pgbench_benchmark(replicas=1, transactions=transactions)
 
         # Start measuring time
         start_time = datetime.now()
