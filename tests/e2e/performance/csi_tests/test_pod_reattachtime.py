@@ -165,6 +165,7 @@ class TestPodReattachTimePerformance(PASTest):
         node_two = worker_nodes_list[1]
 
         time_measures = []
+        files_written_list = []
         for sample_index in range(1, samples_num + 1):
             # Create a PVC
             accessmode = constants.ACCESS_MODE_RWX
@@ -238,6 +239,7 @@ class TestPodReattachTimePerformance(PASTest):
             logging.info(
                 f"For {self.interface} - The number of files written to the pod is {files_written}"
             )
+            files_written_list.append(files_written)
 
             logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
@@ -291,6 +293,7 @@ class TestPodReattachTimePerformance(PASTest):
             f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
         )
 
+        files_written_average = statistics.mean(files_written_list)
         os.remove(file_path)
         os.rmdir(dir_path)
 
@@ -305,6 +308,8 @@ class TestPodReattachTimePerformance(PASTest):
         )
 
         full_results.add_key("storageclass", self.sc)
+        full_results.add_key("copies_number", copies)
+        full_results.add_key("files_number_average", files_written_average)
         full_results.add_key("pod_reattach_time", time_measures)
         full_results.add_key("pod_reattach_time_average", average)
         full_results.add_key("pod_reattach_standard_deviation", st_deviation)
