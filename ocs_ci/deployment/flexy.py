@@ -144,7 +144,7 @@ class FlexyBase(object):
             config.FLEXY["LAUNCHER_VARS"].update(
                 {
                     "iaas_name": "vsphere_config",
-                    "rhcos_ami": config.ENV_DATA["vm_template"],
+                    "rhcos_image": config.ENV_DATA["vm_template"],
                 }
             )
             if config.DEPLOYMENT.get("proxy"):
