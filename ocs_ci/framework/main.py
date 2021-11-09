@@ -105,7 +105,7 @@ def process_ocsci_conf(arguments):
     parser.add_argument(
         "--ocs-version",
         action="store",
-        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9"],
+        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "4.10"],
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
