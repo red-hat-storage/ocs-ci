@@ -240,10 +240,10 @@ class Vault(KMS):
         if (
             not config.ENV_DATA.get("VAULT_SKIP_VERIFY")
             and config.ENV_DATA.get("vault_deploy_mode") == "external"
+            and not config.ENV_DATA.get("VAULT_CA_ONLY", None)
         ):
-            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
-                self.setup_vault_client_cert()
-                os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
+            self.setup_vault_client_cert()
+            os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
 
     def setup_vault_client_cert(self):
         """
