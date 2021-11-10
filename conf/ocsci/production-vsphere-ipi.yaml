@@ -1,10 +1,10 @@
 ---
-# This config will provide the production values for vSphere platform
+# This config will provide the production values for vSphere ipi platform
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'vsphere'
-  deployment_type: 'upi'
+  deployment_type: 'ipi'
   worker_num_cpus: '16'
   master_num_cpus: '4'
   memory: '65536'
