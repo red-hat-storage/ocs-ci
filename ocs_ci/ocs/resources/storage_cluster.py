@@ -533,9 +533,9 @@ def verify_kms_ca_only():
     logging.info("Verify KMS deployment with only CA Certificate")
     secret_names = get_secret_names()
     if (
-        "ocs-kms-client-cert" not in secret_names
-        and "ocs-kms-client-key" not in secret_names
-        and "ocs-kms-ca-secret" in secret_names
+        "ocs-kms-client-cert" in secret_names
+        or "ocs-kms-client-key" in secret_names
+        or "ocs-kms-ca-secret" not in secret_names
     ):
         raise ValueError(
             f"ocs-kms-client-cert and/or ocs-kms-client-key exist on ca_only mode {secret_names}"
