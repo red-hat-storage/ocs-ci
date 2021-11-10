@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import tempfile
 from time import sleep
 
 import boto3
@@ -704,14 +705,22 @@ class MCG:
             "pool_api", "delete_namespace_resource", {"name": ns_resource_name}
         )
 
-    def oc_create_bucketclass(self, name, backingstores, placement, namespace_policy):
+    def oc_create_bucketclass(
+        self,
+        name,
+        backingstores,
+        placement_policy,
+        namespace_policy,
+        replication_policy,
+    ):
         """
         Creates a new NooBaa bucket class using a template YAML
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
@@ -722,13 +731,13 @@ class MCG:
         bc_data["metadata"]["namespace"] = self.namespace
         bc_data["spec"] = {}
 
-        if (backingstores is not None) and (placement is not None):
+        if (backingstores is not None) and (placement_policy is not None):
             bc_data["spec"]["placementPolicy"] = {"tiers": [{}]}
             tiers = bc_data["spec"]["placementPolicy"]["tiers"][0]
             tiers["backingStores"] = [
                 backingstore.name for backingstore in backingstores
             ]
-            tiers["placement"] = placement
+            tiers["placement"] = placement_policy
 
         # In cases of Single and Cache namespace policies, we use the
         # write_resource key to populate the relevant YAML field.
@@ -750,21 +759,32 @@ class MCG:
                 }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE:
-                bc_data["spec"]["placementPolicy"] = placement
+                bc_data["spec"]["placementPolicy"] = placement_policy
                 bc_data["spec"]["namespacePolicy"]["cache"] = namespace_policy["cache"]
+
+        if replication_policy:
+            bc_data["spec"].setdefault(
+                "replicationPolicy", json.dumps(replication_policy)
+            )
 
         return create_resource(**bc_data)
 
     def cli_create_bucketclass(
-        self, name, backingstores, placement=None, namespace_policy=None
+        self,
+        name,
+        backingstores,
+        placement_policy,
+        namespace_policy=None,
+        replication_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using the noobaa cli
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
@@ -772,13 +792,28 @@ class MCG:
         """
         # TODO: Implement CLI namespace bucketclass support
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
-        bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
-        placement_parameter = (
+        backingstores = f" --backingstores {','.join(backingstore_name_list)}"
+        placement_policy = f" --placement {placement_policy}"
+        placement_type = (
             f"{constants.PLACEMENT_BUCKETCLASS} "
             if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
             else ""
         )
-        self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")
+
+        with tempfile.NamedTemporaryFile(
+            delete=True, mode="wb", buffering=0
+        ) as replication_policy_file:
+            replication_policy_file.write(
+                json.dumps(replication_policy).encode("utf-8")
+            )
+            replication_policy = (
+                f" --replication-policy {replication_policy_file.name}"
+                if replication_policy
+                else ""
+            )
+            self.exec_mcg_cmd(
+                f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
+            )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
@@ -956,9 +991,9 @@ class MCG:
             or not _compare_cli_hashes()
         ):
             cmd = (
-                f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                f"oc cp {self.namespace}/{self.operator_pod.name}:"
+                f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
             )
             subprocess.run(cmd, shell=True)
             # Add an executable bit in order to allow usage of the binary

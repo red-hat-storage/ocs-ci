@@ -307,3 +307,19 @@ skipif_upgraded_from = pytest.mark.skipif_upgraded_from
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
+
+skipif_ibm_flash = pytest.mark.skipif(
+    config.ENV_DATA.get("ibm_flash"),
+    reason="This test doesn't work correctly on IBM Flash system",
+)
+
+# Squad marks
+black_squad = pytest.mark.black_squad
+blue_squad = pytest.mark.blue_squad
+brown_squad = pytest.mark.brown_squad
+green_squad = pytest.mark.green_squad
+grey_squad = pytest.mark.grey_squad
+magenta_squad = pytest.mark.magenta_squad
+orange_squad = pytest.mark.orange_squad
+purple_squad = pytest.mark.purple_squad
+red_squad = pytest.mark.red_squad

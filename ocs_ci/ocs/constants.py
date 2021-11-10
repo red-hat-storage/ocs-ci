@@ -1285,6 +1285,7 @@ RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
 
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
 
 # Cosbench constants
 COSBENCH = "cosbench"

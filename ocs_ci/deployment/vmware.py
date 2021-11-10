@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
@@ -444,6 +444,10 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_10:
+                install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
+                    "vm_network"
+                ]
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_str = yaml.safe_dump(install_config_obj)
