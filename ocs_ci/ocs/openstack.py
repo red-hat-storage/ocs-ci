@@ -227,7 +227,7 @@ class CephVMNode(object):
         return private_ip
 
     def get_volume(self, name):
-        """ Return libcloud.compute.base.StorageVolume """
+        """Return libcloud.compute.base.StorageVolume"""
         driver = self.driver
         volumes = driver.list_volumes()
         try:
