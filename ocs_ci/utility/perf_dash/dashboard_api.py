@@ -34,12 +34,12 @@ from it to compare between results.
             az_topology (int): topology ID - must be exists in the az_topology table
             test_name (int): test ID - must be exists in the tests table
             es_link (str): the elasticsearch links to the individual test separated by comma
-                e.g. http://<es_server>:<port>/<sub-test_1>, http://<es_server>:<port>/<sub-test_2>
+            e.g. http://<es_server>:<port>/<sub-test_1>, http://<es_server>:<port>/<sub-test_2>
             log_file (str): link to full test log
 
         One single test test (e.g. FIO) can be split to few sub-tests (by parametrize),
         e.g.  : [CEPHBLOCKPOOL, sequential], [CEPHFILESYSTEM, sequential],
-                [CEPHBLOCKPOOL, random], [CEPHFILESYSTEM, random]
+        [CEPHBLOCKPOOL, random], [CEPHFILESYSTEM, random]
 
         but in the dashboard all those tests (4 in the FIO example) are displayed as single test
 
