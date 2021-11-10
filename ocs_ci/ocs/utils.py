@@ -965,7 +965,13 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
+def collect_ocs_logs(
+    dir_name,
+    ocp=True,
+    ocs=True,
+    mcg=False,
+    status_failure=True,
+):
     """
     Collects OCS logs
 
@@ -998,8 +1004,18 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"{dir_name}_{ocsci_config.RUN['run_id']}",
         )
-
-    if ocs:
+    # Restricting to one time log collection for both OCS&OCP in case of status failure
+    must_gather_count = ocsci_config.REPORTING.get("must_gather_count")
+    collect_logs_on_success_run = ocsci_config.REPORTING.get(
+        "collect_logs_on_success_run"
+    )
+    skip_ocs_collection = (
+        must_gather_count.get("ocs") >= 1 and collect_logs_on_success_run
+    ) and not status_failure
+    skip_ocp_collection = (
+        must_gather_count.get("ocp") >= 1 and collect_logs_on_success_run
+    ) and not status_failure
+    if ocs and not skip_ocs_collection:
         latest_tag = ocsci_config.REPORTING.get(
             "ocs_must_gather_latest_tag",
             ocsci_config.REPORTING.get(
@@ -1023,7 +1039,10 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             raise ValueError(
                 f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
             )
-    if ocp:
+        if status_failure:
+            must_gather_count["ocs"] += 1
+
+    if ocp and not skip_ocp_collection:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
         if ocsci_config.DEPLOYMENT.get("disconnected"):
@@ -1034,6 +1053,9 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
         )
+        # Increase the counter only in case of status failure
+        if status_failure:
+            must_gather_count["ocp"] += 1
     if mcg:
         counter = 0
         while counter < 5:
