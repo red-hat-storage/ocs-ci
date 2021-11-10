@@ -1,10 +1,12 @@
 import logging
 import pytest
 
+import time
+
 from subprocess import TimeoutExpired
 
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusException
-from ocs_ci.utility.utils import ceph_health_check_base
+from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
 from ocs_ci.ocs import constants, machine, ocp, defaults
 from ocs_ci.ocs.node import (
@@ -17,6 +19,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     add_new_node_and_label_it,
 )
+from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -28,6 +31,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ipi_deployment_required,
     skipif_bm,
+    bugzilla,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -35,6 +39,7 @@ from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
     storagecluster_independent_check,
+    verify_pdb_mon,
 )
 from ocs_ci.helpers import helpers
 
@@ -433,3 +438,119 @@ class TestNodesMaintenance(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
+
+    @bugzilla("1861104")
+    @bugzilla("1946573")
+    @pytest.mark.polarion_id("OCS-2524")
+    @tier4b
+    def test_pdb_check_simultaneous_node_drains(
+        self,
+        pvc_factory,
+        pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
+        node_drain_teardown,
+    ):
+        """
+        - Check for OSD PDBs before drain
+        - Maintenance (mark as unschedulable and drain) 2 worker node with delay of 30 secs
+        - Drain will be completed on worker node A
+        - Drain will be pending on worker node B due to blocking PDBs
+        - Check mon failover in first 10 mins, then 15 and 20 mins
+        - Check the OSD PDBs
+        - Mark the node A as schedulable
+        - Let drain finish on Node B
+        - Again check mon failover in first 10 mins and then in intervals
+        - Mark the node B as schedulable
+        - Check cluster and Ceph health
+
+        """
+
+        # Validate OSD PDBs before drain operation
+        assert (
+            not validate_existence_of_blocking_pdb()
+        ), "Blocking PDBs exist, Can't perform drain"
+
+        # Get 2 worker nodes to drain
+        typed_nodes = get_nodes(num_of_nodes=2)
+        assert len(typed_nodes) == 2, "Failed to find worker nodes for the test"
+        node_A = typed_nodes[0].name
+        node_B = typed_nodes[1].name
+
+        # Drain Node A and validate blocking PDBs
+        drain_nodes([node_A])
+        assert (
+            validate_existence_of_blocking_pdb()
+        ), "Blocking PDBs not created post drain"
+
+        # Inducing delay between 2 drains
+        # Node-B drain expected to be in pending due to blocking PDBs
+        time.sleep(30)
+        try:
+            drain_nodes([node_B])
+            # After the drain check Mon failover in 10th, 15th and 20th min
+            timeout = [600, 300, 300]
+            for failover in timeout:
+                sample = TimeoutSampler(
+                    timeout=failover,
+                    sleep=10,
+                    func=helpers.check_number_of_mon_pods,
+                )
+                if not sample.wait_for_func_status(result=True):
+                    assert "Number of mon pods not equal to expected_mon_count=3"
+        except TimeoutExpired:
+            # Mark the node-A back to schedulable and let drain finish in Node-B
+            schedule_nodes([node_A])
+
+        time.sleep(40)
+
+        # Validate OSD PDBs
+        assert (
+            validate_existence_of_blocking_pdb()
+        ), "Blocking PDBs not created post second drain"
+
+        # Mark the node-B back to schedulable and recover the cluster
+        schedule_nodes([node_B])
+
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=validate_existence_of_blocking_pdb,
+        )
+        if not sample.wait_for_func_status(result=False):
+            log.error("Blocking PDBs still exist")
+
+        # After the drain check mon failover in 10th, 15th and 20th Min
+        timeout = [600, 300, 300]
+        for failover in timeout:
+            sample = TimeoutSampler(
+                timeout=failover,
+                sleep=10,
+                func=helpers.check_number_of_mon_pods,
+            )
+            if not sample.wait_for_func_status(result=True):
+                assert "Number of Mon pods not equal to expected_mon_count=3"
+
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=verify_pdb_mon,
+            disruptions_allowed=1,
+            max_unavailable_mon=1,
+        )
+        if not sample.wait_for_func_status(result=True):
+            assert "The expected mon-pdb is not equal to actual mon pdb"
+
+        # wait for storage pods
+        pod.wait_for_storage_pods()
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=50)
+
+        # Check basic cluster functionality by creating resources
+        # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
+        # run IO and delete the resources
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
+        self.sanity_helpers.delete_resources()

@@ -1,10 +1,11 @@
 import logging
+from time import sleep
 
 from selenium.webdriver.support.wait import WebDriverWait
 
+from ocs_ci.utility import version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ocp import get_ocs_parsed_version
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class MCGStoreUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.wait = WebDriverWait(self.driver, 30)
-        ocs_version = str(get_ocs_parsed_version())
+        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
         self.mcg_stores = locators[ocs_version]["mcg_stores"]
 
@@ -95,7 +96,7 @@ class BucketClassUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocs_version = str(get_ocs_parsed_version())
+        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
         self.bucketclass = locators[ocs_version]["bucketclass"]
 
@@ -133,7 +134,9 @@ class BucketClassUI(PageNavigator):
             self.do_send_keys(
                 self.generic_locators["search_resource_field"], backingstore_name
             )
+            sleep(0.3)
             self.do_click(self.generic_locators["check_first_row_checkbox"])
+            sleep(0.3)
             self.do_click(self.generic_locators["remove_search_filter"])
 
         self.do_click(self.generic_locators["submit_form"])
@@ -246,7 +249,7 @@ class ObcUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocs_version = str(get_ocs_parsed_version())
+        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.obc_loc = locators[ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):

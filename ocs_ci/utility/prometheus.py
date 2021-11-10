@@ -10,6 +10,7 @@ from datetime import datetime
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 
 logger = logging.getLogger(name=__file__)
 
@@ -341,6 +342,9 @@ class PrometheusAPI(object):
 
         TODO: find proper way how to generate/load cert files.
         """
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            self._cacert = get_root_ca_cert()
+            return
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )

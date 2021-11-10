@@ -31,6 +31,7 @@ class TestBulkCloneCreation(E2ETest):
         self.interface = interface_iterate
 
     @pytest.mark.usefixtures(namespace.__name__)
+    @pytest.mark.polarion_id("OCS-2621")
     def test_bulk_clone_performance(self, namespace, tmp_path, pod_factory):
         """
         Creates number of PVCs in a bulk using kube job

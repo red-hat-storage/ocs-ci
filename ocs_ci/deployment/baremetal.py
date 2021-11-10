@@ -2,6 +2,7 @@ import json
 import os
 import logging
 import tempfile
+from datetime import datetime
 from time import sleep
 
 import yaml
@@ -540,7 +541,19 @@ class BAREMETALUPI(Deployment):
             Returns:
                 str: response message
             """
-            payload = {"status": bm_status}
+            if bm_status == constants.BM_STATUS_PRESENT:
+                now = datetime.today().strftime("%Y-%m-%d")
+                payload = {
+                    "status": bm_status,
+                    "cluster_name": config.ENV_DATA["cluster_name"],
+                    "creation_date": now,
+                }
+            else:
+                payload = {
+                    "status": bm_status,
+                    "cluster_name": "null",
+                    "creation_date": "null",
+                }
             headers = {"content-type": "application/json"}
             response = requests.put(
                 url=self.helper_node_details["bm_status_check"],

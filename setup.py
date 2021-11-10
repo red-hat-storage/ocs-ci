@@ -45,7 +45,8 @@ setup(
         "semantic-version==2.8.5",
         "jsonschema>=3.2.0",
         "google-cloud-storage==1.29.0",
-        "elasticsearch==7.8.0",
+        "google-auth==1.35.0",
+        "elasticsearch==7.14.0",
         "numpy==1.19.5",
         "python-ipmi==0.4.2",
         "scipy==1.6.0",
@@ -70,6 +71,8 @@ setup(
         "junitparser",
         "flaky==3.7.0",
         "ocp-network-split",
+        "pyopenssl",
+        "pyparsing ==2.4.7",
     ],
     entry_points={
         "console_scripts": [
@@ -80,6 +83,7 @@ setup(
             "aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup",
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
+            "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
         ],
     },
     zip_safe=True,

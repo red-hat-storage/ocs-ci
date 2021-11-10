@@ -7,8 +7,11 @@ ENV_DATA:
   deployment_type: 'ipi'
   worker_replicas: 3
   master_replicas: 3
-  worker_num_cpus: '16'
-  master_num_cpus: '4'
+  # Total virtual CPUs (vCPUs) is cores * sockets
+  worker_num_cores: '8'
+  worker_num_sockets: '2'
+  master_num_cores: '2'
+  master_num_sockets: '2'
   master_memory: '16384'
   compute_memory: '65536'
   local_storage_allow_rotational_disks: true

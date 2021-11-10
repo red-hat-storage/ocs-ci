@@ -1,5 +1,6 @@
 import logging
 import pytest
+import os
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, scale_lib
@@ -88,6 +89,7 @@ def test_scale_pvcs_pods_pre_upgrade():
 @skipif_bm
 @skipif_external_mode
 @post_upgrade
+@ipi_deployment_required
 @pytest.mark.polarion_id("OCS-755")
 def test_scale_pvcs_pods_post_upgrade():
     """
@@ -95,7 +97,7 @@ def test_scale_pvcs_pods_post_upgrade():
     """
 
     # Get info from SCALE_DATA_FILE for validation
-    if SCALE_DATA_FILE:
+    if os.path.exists(SCALE_DATA_FILE):
         file_data = templating.load_yaml(SCALE_DATA_FILE)
         namespace = file_data.get("NAMESPACE")
         pod_scale_list = file_data.get("POD_SCALE_LIST")

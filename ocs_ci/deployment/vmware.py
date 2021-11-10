@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
@@ -55,12 +55,12 @@ from ocs_ci.utility.utils import (
     set_aws_region,
     get_terraform_ignition_provider,
     get_ocp_upgrade_history,
-    load_auth_config,
     add_chrony_to_ocp_deployment,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
 from .deployment import Deployment
+from .flexy import FlexyVSPHEREUPI
 
 logger = logging.getLogger(__name__)
 
@@ -444,6 +444,10 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_10:
+                install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
+                    "vm_network"
+                ]
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_str = yaml.safe_dump(install_config_obj)
@@ -808,7 +812,6 @@ class VSPHEREIPI(VSPHEREBASE):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREIPI.OCPDeployment, self).__init__()
-            self.ipi_details = load_auth_config()["vmware_ipi"]
 
         def deploy_prereq(self):
             """
@@ -925,6 +928,64 @@ class VSPHEREIPI(VSPHEREBASE):
             for i in range(constants.NUM_OF_VIPS)
         ]
         ipam.release_ips(hosts)
+
+
+class VSPHEREUPIFlexy(VSPHEREBASE):
+    """
+    A class to handle vSphere UPI Flexy deployment
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            self.flexy_deployment = True
+            super().__init__()
+            self.flexy_instance = FlexyVSPHEREUPI()
+
+            # create terraform_data directory (used for compatibility with rest
+            # of the ocs-ci)
+            self.terraform_data_dir = os.path.join(
+                self.cluster_path, constants.TERRAFORM_DATA_DIR
+            )
+            create_directory_path(self.terraform_data_dir)
+
+        def deploy_prereq(self):
+            """
+            Instantiate proper flexy class here
+
+            """
+            super().deploy_prereq()
+            self.flexy_instance.deploy_prereq()
+
+        def deploy(self, log_level=""):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+
+            """
+            self.flexy_instance.deploy(log_level)
+            self.test_cluster()
+
+        def destroy(self, log_level=""):
+            """
+            Destroy cluster using Flexy
+            """
+            self.flexy_instance.destroy()
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to vSphere UPI Flexy
+
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+
+        """
+        super().destroy_cluster(log_level)
 
 
 def change_vm_root_disk_size(machine_file):

@@ -4,7 +4,7 @@ from itertools import cycle
 
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.ocp import OCP
@@ -47,15 +47,26 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         self.replica_count = 5
         pvc_obj = pvc_factory(interface=interface, size=3)
         sa_obj = service_account_factory(project=pvc_obj.project)
-        pod1 = create_pod(
-            interface_type=interface,
-            pvc_name=pvc_obj.name,
-            namespace=pvc_obj.namespace,
-            sa_name=sa_obj.name,
-            dc_deployment=True,
-            replica_count=self.replica_count,
-            deploy_pod_status=constants.STATUS_RUNNING,
-        )
+        try:
+            pod1 = create_pod(
+                interface_type=interface,
+                pvc_name=pvc_obj.name,
+                namespace=pvc_obj.namespace,
+                sa_name=sa_obj.name,
+                dc_deployment=True,
+                replica_count=self.replica_count,
+                deploy_pod_status=constants.STATUS_RUNNING,
+            )
+        except TimeoutExpiredError:
+            # The test cannot be continued if all the pods are created on the same node
+            pods = pod.get_all_pods(namespace=pvc_obj.namespace)
+            pod_nodes = [pod.get_pod_node(pod_obj).name for pod_obj in pods]
+            if set(pod_nodes) == 1:
+                pytest.skip(
+                    "All pods are created on same node and reached Running state"
+                )
+            raise
+
         self.name = pod1.labels["name"]
         self.namespace = pod1.namespace
 

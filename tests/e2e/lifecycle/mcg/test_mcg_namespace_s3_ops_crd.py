@@ -155,11 +155,29 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                 },
                 marks=on_prem_platform_required,
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 600000,
+                        "namespacestore_dict": {
+                            "aws": [(1, "eu-central-1")],
+                        },
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
+                }
+            ),
         ],
         ids=[
             "AWS-OC-Single",
             "Azure-OC-Single",
             "rgw-OC-Single",
+            "AWS-OC-Cache",
         ],
     )
     def test_mcg_namespace_basic_s3_ops_crd(
@@ -180,7 +198,6 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
             bucketclass=bucketclass_dict,
         )[0]
         ns_bucket = ns_buc.name
-        namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
 
         # Put, Get, Copy, Head, Get Acl and Delete object operations
         logger.info(f"Put and Get object operation on {ns_bucket}")
@@ -208,21 +225,12 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         logger.info(f"Verifying Etag of {COPY_OBJ} from Get object operations")
         assert get_copy_res["ETag"] == get_res["ETag"], "Incorrect object key"
 
-        head_res = bucket_utils.s3_head_object(
-            s3_obj=mcg_obj, bucketname=ns_bucket, object_key=ROOT_OBJ
-        )
-        logger.info(f"Metadata from head_object operation: {head_res['Metadata']}")
-        if (
-            constants.AZURE_PLATFORM
-            in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
-        ):
-            assert (
-                head_res["Metadata"]["noobaa-namespace-blob-container"] == namespace_res
-            ), "Invalid object metadata"
-        else:
-            assert (
-                head_res["Metadata"]["noobaa-namespace-s3-bucket"] == namespace_res
-            ), "Invalid object metadata"
+        assert bucket_utils.s3_head_object(
+            s3_obj=mcg_obj,
+            bucketname=ns_bucket,
+            object_key=ROOT_OBJ,
+            if_match=get_res["ETag"],
+        ), "ETag does not match with the head object"
 
         get_acl_res = bucket_utils.s3_get_object_acl(
             s3_obj=mcg_obj, bucketname=ns_bucket, object_key=ROOT_OBJ

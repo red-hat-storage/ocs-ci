@@ -34,6 +34,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_vsphere_ipi,
+    skipif_ibm_cloud,
 )
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 
@@ -482,6 +483,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
     @pytest.mark.polarion_id("OCS-711")
     @skipif_aws_i3
+    @skipif_ibm_cloud
     def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods):
         """
         Test case to validate whether shutdown and recovery of a

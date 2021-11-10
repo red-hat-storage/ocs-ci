@@ -30,12 +30,13 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.VSPHERE_PLATFORM:
-            from .vmware import VSPHEREUPI, VSPHEREIPI
+            from .vmware import VSPHEREUPI, VSPHEREIPI, VSPHEREUPIFlexy
 
             self.cls_map.update(
                 {
                     "vsphere_upi": VSPHEREUPI,
                     "vsphere_ipi": VSPHEREIPI,
+                    "vsphere_upi_flexy": VSPHEREUPIFlexy,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
@@ -54,7 +55,7 @@ class DeploymentFactory(object):
             from ocs_ci.deployment.ibm import IBMDeployment
 
             self.cls_map["powervs_upi"] = IBMDeployment
-        elif self.deployment_platform == constants.BAREMETAL_PLATFORM:
+        elif self.deployment_platform in constants.BAREMETAL_PLATFORMS:
             from .baremetal import BAREMETALUPI, BaremetalPSIUPI
 
             self.cls_map.update(

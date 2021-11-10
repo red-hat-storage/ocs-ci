@@ -6,7 +6,7 @@ import random
 import time
 from prettytable import PrettyTable
 
-from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs.benchmark_operator import BenchmarkOperator, BMO_NAME
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils, templating
@@ -31,14 +31,13 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     storagecluster_independent_check,
 )
-from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 
 log = logging.getLogger(__name__)
 
 
-class Postgresql(RipSaw):
+class Postgresql(BenchmarkOperator):
     """
     Postgresql workload operation
     """
@@ -49,17 +48,7 @@ class Postgresql(RipSaw):
 
         """
         super().__init__(**kwargs)
-        self._apply_crd(crd=RIPSAW_CRD)
-
-    def _apply_crd(self, crd):
-        """
-        Apply the CRD
-
-        Args:
-            crd (str): yaml to apply
-
-        """
-        RipSaw.apply_crd(self, crd=crd)
+        BenchmarkOperator.deploy(self)
 
     def setup_postgresql(self, replicas, sc_name=None):
         """
@@ -166,7 +155,7 @@ class Postgresql(RipSaw):
                 replicas,
                 get_pod_name_by_pattern,
                 "pgbench-1-dbs-client",
-                RIPSAW_NAMESPACE,
+                BMO_NAME,
             ):
                 try:
                     if len(pgbench_pods) == replicas:
@@ -188,7 +177,7 @@ class Postgresql(RipSaw):
         Returns:
              List: postgres pvc objects list
         """
-        return get_all_pvc_objs(namespace=RIPSAW_NAMESPACE)
+        return get_all_pvc_objs(namespace=BMO_NAME)
 
     def get_postgres_pods(self):
         """
@@ -196,7 +185,7 @@ class Postgresql(RipSaw):
         Returns:
             List: postgres pod objects list
         """
-        return get_all_pods(namespace=RIPSAW_NAMESPACE, selector=["postgres"])
+        return get_all_pods(namespace=BMO_NAME, selector=["postgres"])
 
     def get_pgbench_pods(self):
         """
@@ -207,8 +196,8 @@ class Postgresql(RipSaw):
 
         """
         return [
-            get_pod_obj(pod, RIPSAW_NAMESPACE)
-            for pod in get_pod_name_by_pattern("pgbench", RIPSAW_NAMESPACE)
+            get_pod_obj(pod, BMO_NAME)
+            for pod in get_pod_name_by_pattern("pgbench", BMO_NAME)
         ]
 
     def delete_pgbench_pods(self, pg_obj_list):
@@ -254,7 +243,7 @@ class Postgresql(RipSaw):
             str: state of pgbench pod (running/completed)
 
         """
-        pod_obj = get_pod_obj(pgbench_pod_name, namespace=RIPSAW_NAMESPACE)
+        pod_obj = get_pod_obj(pgbench_pod_name, namespace=BMO_NAME)
         status = pod_obj.get().get("status").get("containerStatuses")[0].get("state")
 
         return (
@@ -298,7 +287,7 @@ class Postgresql(RipSaw):
                     resource=pgbench_pod_obj, state=status, timeout=timeout
                 )
             except ResourceWrongStatusException:
-                output = run_cmd(f"oc logs {pgbench_pod_obj.name}")
+                output = run_cmd(f"oc logs {pgbench_pod_obj.name} -n {BMO_NAME}")
                 error_msg = f"{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}"
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
@@ -317,7 +306,7 @@ class Postgresql(RipSaw):
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
             log.info(f"pgbench_client_pod===={pgbench_pod.name}====")
-            output = run_cmd(f"oc logs {pgbench_pod.name} -n {RIPSAW_NAMESPACE}")
+            output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             log.info("*******PGBench output log*********\n" f"{pg_output}")
             # for data in all_pgbench_pods_output:
@@ -428,9 +417,7 @@ class Postgresql(RipSaw):
             pod status
 
         """
-        app_pod_list = get_operator_pods(
-            constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE
-        )
+        app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, BMO_NAME)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
         log.info(f"respin pod {app_pod.name}")
         app_pod.delete(wait=True, force=False)
@@ -460,7 +447,7 @@ class Postgresql(RipSaw):
             "tps_excl",
         ]
         for pgbench_pod in pgbench_pods:
-            output = run_cmd(f"oc logs {pgbench_pod.name}")
+            output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             for pod_output in pg_output:
                 for pod in pod_output.values():
@@ -540,8 +527,8 @@ class Postgresql(RipSaw):
         for pod in pods_obj:
             pod.delete()
             pod.ocp.wait_for_delete(pod.name)
-        log.info("Deleting ripsaw configuration")
-        RipSaw.cleanup(self)
+        log.info("Deleting benchmark operator configuration")
+        BenchmarkOperator.cleanup(self)
 
     def attach_pgsql_pod_to_claim_pvc(
         self, pvc_objs, postgres_name, run_benchmark=True, pgbench_name=None

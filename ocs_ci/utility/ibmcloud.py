@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     UnexpectedBehaviour,
     NodeHasNoAttachedVolume,
+    TimeoutExpiredError,
 )
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
@@ -59,7 +60,6 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
     """
-    return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     last_login = config.RUN.get("ibmcloud_last_login", 0)
     timeout_from_last_login = time.time() - last_login
     # Login if the timeout from last login is greater than 9.5 minutes.
@@ -211,7 +211,7 @@ def destroy_cluster(cluster):
         cluster (str): Cluster name or ID.
 
     """
-    cmd = f"ibmcloud ks cluster rm -c {cluster} -f"
+    cmd = f"ibmcloud ks cluster rm -c {cluster} -f --force-delete-storage"
     out = run_ibmcloud_cmd(cmd)
     logger.info(f"Destroy command output: {out}")
 
@@ -402,6 +402,23 @@ class IBMCloud(object):
         logger.info(f"volume ids are : {vol_ids}")
         return vol_ids
 
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return out["volume_attachments"]
+
     def wait_for_volume_attach(self, volume):
         """
         Checks volume is attached to node or not
@@ -414,16 +431,13 @@ class IBMCloud(object):
                 instance, False otherwise
 
         """
-        cmd = f"ibmcloud is volume {volume} --output json"
-        out = run_ibmcloud_cmd(cmd)
-        out = json.loads(out)
-
-        if not out["volume_attachments"]:
-            logger.info("volume is not attached to node")
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
             return False
-        else:
-            logger.info("volume is attached to node")
-            return True
 
     def get_volume_id(self):
         """

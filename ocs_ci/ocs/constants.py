@@ -36,7 +36,6 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_JENKINS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "jenkins")
-TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
@@ -46,6 +45,7 @@ TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
 TEMPLATE_HSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "hsbench")
 TEMPLATE_BDI_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "bdi")
+TEMPLATE_OSD_SCALE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "osd_scale")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
@@ -110,6 +110,7 @@ LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 JOB = "Job"
 STORAGECLASS = "StorageClass"
+STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
@@ -133,6 +134,9 @@ VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
+STATEFULSET = "StatefulSet"
+BACKINGSTORE = "Backingstore"
+BUCKETCLASS = "Bucketclass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -207,6 +211,8 @@ RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 
+# Default pools
+DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
@@ -257,6 +263,7 @@ NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
+CRASHCOLLECTOR_APP_LABEL = "app=rook-ceph-crashcollector"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
@@ -268,6 +275,8 @@ CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
+ODF_OPERATOR_CONTROL_MANAGER_LABEL = "control-plane=controller-manager"
+ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
@@ -284,6 +293,13 @@ CEPH_ROOK_IO_PVC_LABEL = "ceph.rook.io/pvc"
 ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
+OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+
+# Noobaa Deployments and Statefulsets
+NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
+NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
+NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
+NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -384,7 +400,9 @@ JENKINS_BUILDCONFIG_YAML = os.path.join(TEMPLATE_JENKINS_DIR, "buildconfig.yaml"
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml")
 
-VDBENCH_BENCHMARK_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "VDBench.yaml")
+OSD_SCALE_BENCHMARK_YAML = os.path.join(
+    TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
+)
 
 COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
@@ -511,7 +529,13 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
+SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
+
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
+
+STORAGE_SYSTEM_ODF_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
+)
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-storage-cluster.yaml"
@@ -564,6 +588,9 @@ MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )
 MACHINESET_YAML_RHV = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-rhv.yaml")
+MACHINESET_YAML_VMWARE = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-vmware.yaml"
+)
 PODS_PER_NODE_COUNT_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "max-pods-per-node.yaml"
 )
@@ -656,7 +683,7 @@ INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
 NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
-OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CATALOG_SOURCE_NAME = "redhat-operators"
 OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
@@ -673,16 +700,6 @@ OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
 
-# VDbench benchmark related constants
-APP_NODE_LABEL = "app-node"
-VDBENCH_NODE_LABEL = "vdbench"
-VDBENCH_RESULTS_FILE = "/tmp/Results.tar.gz"
-VDBENCH_WIDTH = 4  # the width of the directory tree  that will be created
-VDBENCH_DEPTH = 4  # the depth of the directory tree  that will be created
-VDBENCH_FILE_SIZE = 1  # the file size in MB that will be created
-VDBENCH_CAP_PER_POD = 80000  # the Maximum capacity (in MB) per pod in the test
-VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to run
-
 # Platforms
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
@@ -693,8 +710,10 @@ IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
+IBM_PLATFORM = "ibm"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
+ROSA_PLATFORM = "rosa"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
     BAREMETAL_PLATFORM,
@@ -702,7 +721,16 @@ ON_PREM_PLATFORMS = [
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
 ]
-CLOUD_PLATFORMS = [AWS_PLATFORM, AZURE_PLATFORM, GCP_PLATFORM, IBMCLOUD_PLATFORM]
+CLOUD_PLATFORMS = [
+    AWS_PLATFORM,
+    AZURE_PLATFORM,
+    GCP_PLATFORM,
+    IBM_PLATFORM,
+    IBMCLOUD_PLATFORM,
+    ROSA_PLATFORM,
+    OPENSHIFT_DEDICATED_PLATFORM,
+]
+BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
@@ -809,6 +837,7 @@ LATEST_TAGS = (
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
+ODF_SUBSCRIPTION = "odf-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
@@ -1060,9 +1089,11 @@ NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
+SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
+AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -1084,6 +1115,7 @@ FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
 OPENSHIFT_MISC_BASE = "private-openshift-misc/functionality-testing"
 FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
 FLEXY_AWS_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
+FLEXY_VSPHERE_UPI_TEMPLATE = "upi-on-aws/versioned-installer"
 FLEXY_GIT_CRYPT_KEYFILE = os.path.join(DATA_DIR, "git-crypt-keyfile")
 NTP_CHRONY_CONF = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml")
 FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
@@ -1123,7 +1155,10 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "noobaa-operator",
     "ocs-operator",
+    "odf-multicluster-orchestrator",
+    "odf-operator",
 ]
 
 # PSI-openstack constants
@@ -1174,6 +1209,13 @@ SCALE_WORKER_DICT = {
     9000: {"aws": 6, "vmware": 6, "bm": 4, "azure": 6, "rhv": 6},
 }
 SCALE_MAX_PVCS_PER_NODE = 500
+SCALE_PVC_ROUND_UP_VALUE = {
+    1500: 1520,
+    3000: 3040,
+    4500: 4560,
+    6000: 6080,
+    9000: 9120,
+}
 
 # Production config instance type
 AWS_PRODUCTION_INSTANCE_TYPE = "m5.4xlarge"
@@ -1240,6 +1282,7 @@ RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
 
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
+AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
 
 # Cosbench constants
 COSBENCH = "cosbench"
@@ -1248,6 +1291,13 @@ COSBENCH_PROJECT = "cosbench-project"
 COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
 COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
 COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
+
+# Quay operator constants
+QUAY_OPERATOR = "quay-operator"
+OPENSHIFT_OPERATORS = "openshift-operators"
+QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
+QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
+QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
@@ -1327,6 +1377,16 @@ PERF_IMAGE = "quay.io/ocsci/perf:latest"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+
+ROOK_CEPH_CONFIG_VALUES_48 = """
+[global]
 bdev_flock_retry = 20
 mon_osd_full_ratio = .85
 mon_osd_backfillfull_ratio = .8
@@ -1336,6 +1396,7 @@ mon_pg_warn_max_object_skew = 0
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
+
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 20
@@ -1359,5 +1420,46 @@ DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250
 DEFAULT_PAXOS_SERVICE_TRIM_MAX = 500
 DEFAULT_OSD_OP_COMPLAINT_TIME = 30.000000
 
+# Separators
+SHA_SEPARATOR = "@sha256:"
+
 # ibmcloud related constants
 IBMCLOUD_VOLUME_NAME = "ibmvolume"
+
+# manifest.json and background.js files used for Chrome extention configuring
+# authenticated proxy, see also:
+# https://botproxy.net/docs/how-to/setting-chromedriver-proxy-auth-with-selenium-using-python/
+CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-manifest.json.j2"
+)
+CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
+    "ui", "chrome-proxy-extension-background.js.j2"
+)
+
+# storage system status
+STORAGE_SYSTEM_STATUS = {
+    "Available": "True",
+    "Progressing": "False",
+    "StorageSystemInvalid": "False",
+    "VendorCsvReady": "True",
+    "VendorSystemPresent": "True",
+}
+
+PATCH_DEFAULT_SOURCES_CMD = (
+    "oc patch operatorhub.config.openshift.io/cluster -p="
+    '\'{{"spec":{{"disableAllDefaultSources":{disable}}}}}\' --type=merge'
+)
+PATCH_SPECIFIC_SOURCES_CMD = (
+    "oc patch operatorhub.config.openshift.io/cluster -p="
+    '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
+    "}}]}}}}' --type=merge"
+)
+
+# OpenSSL Certificate parameters
+OPENSSL_KEY_SIZE = 2048
+OPENSSL_CERT_COUNTRY_NAME = ".."
+OPENSSL_CERT_STATE_OR_PROVINCE_NAME = "."
+OPENSSL_CERT_LOCALITY_NAME = "."
+OPENSSL_CERT_ORGANIZATION_NAME = "OCS"
+OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME = "OCS-QE"
+OPENSSL_CERT_EMAIL_ADDRESS = "ocs-qe@redhat.com"

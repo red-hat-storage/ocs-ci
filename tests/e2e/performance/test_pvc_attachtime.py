@@ -1,11 +1,12 @@
 import logging
 import pytest
-import time
+import statistics
 from uuid import uuid4
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers.helpers import get_full_test_logs_path, pod_start_time
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
@@ -43,13 +44,17 @@ class ResultsAnalyse(PerfResult):
 
 @performance
 @pytest.mark.parametrize(
-    argnames=["interface"],
+    argnames=["interface", "samples_num", "pvc_size"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2044")
+            *[constants.CEPHBLOCKPOOL, 5, 5], marks=pytest.mark.polarion_id("OCS-2044")
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2043")
+            *[constants.CEPHFILESYSTEM, 5, 5], marks=pytest.mark.polarion_id("OCS-2043")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
+            marks=pytest.mark.polarion_id("OCS-2630"),
         ),
     ],
 )
@@ -57,8 +62,6 @@ class TestPodStartTime(PASTest):
     """
     Measure time to start pod with PVC attached
     """
-
-    pvc_size = 5
 
     def setup(self):
         """
@@ -87,8 +90,6 @@ class TestPodStartTime(PASTest):
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
 
-        self.pvc_size = 5  # The size of the pv to create
-
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -106,38 +107,70 @@ class TestPodStartTime(PASTest):
         return full_results
 
     @pytest.fixture()
-    def pod(self, interface, pod_factory, pvc_factory):
+    def pod_obj_list(
+        self,
+        interface,
+        storageclass_factory,
+        pod_factory,
+        pvc_factory,
+        samples_num,
+        pvc_size,
+    ):
         """
-        Prepare pod for the test
+        Prepare sample pods for the test
 
         Returns:
-            pod obj: Pod instance
+            pod obj: List of pod instances
 
         """
         self.interface = interface
-        pvc_obj = pvc_factory(interface=interface, size=self.pvc_size)
-        pod_obj = pod_factory(pvc=pvc_obj)
-        return pod_obj
+        pod_result_list = []
 
-    def get_time(self):
+        self.msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
+        self.samples_num = samples_num
+        self.pvc_size = pvc_size
+
+        if self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc_obj = storageclass_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                new_rbd_pool=True,
+                rbd_thick_provision=True,
+            )
+        else:
+            self.sc_obj = storageclass_factory(self.interface)
+
+        for i in range(samples_num):
+            logging.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
+            pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
+            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            helpers.wait_for_resource_state(
+                pvc_obj, constants.STATUS_BOUND, timeout=timeout
+            )
+            pvc_obj.reload()
+
+            logging.info(
+                f"{self.msg_prefix} PVC number {i + 1} was successfully created ."
+            )
+
+            pod_obj = pod_factory(
+                interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
+            )
+
+            pod_result_list.append(pod_obj)
+
+        return pod_result_list
+
+    def test_pod_start_time(self, pod_obj_list):
         """
-        Getting the current GMT time in a specific format for the ES report
-
-        Returns:
-            str : current date and time in formatted way
-
-        """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-
-    def test_pod_start_time(self, pod):
-        """
-        Test to log pod start time
+        Test to log pod start times for all the sampled pods
         """
         # Getting the test start time
-        self.start_time = self.get_time()
+        self.test_start_time = PASTest.get_time()
 
-        # The actual test
-        start_time_dict = pod_start_time(pod)
+        # Start of the actual test
+        start_time_dict_list = []
+        for pod in pod_obj_list:
+            start_time_dict_list.append(pod_start_time(pod))
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
@@ -157,26 +190,49 @@ class TestPodStartTime(PASTest):
         self.full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
-
-        start_time = start_time_dict["web-server"]
-        logging.info(f"pod start time: {start_time} seconds")
-        if start_time > 30:
-            raise ex.PerformanceException(
-                f"pod start time is {start_time}," f"which is greater than 30 seconds"
-            )
         self.full_results.add_key("storageclass", self.sc)
-        self.full_results.add_key("attach_time", start_time)
+
+        time_measures = [t["web-server"] for t in start_time_dict_list]
+        for index, start_time in enumerate(time_measures):
+            logging.info(
+                f"{self.msg_prefix} pod number {index} start time: {start_time} seconds"
+            )
+            if start_time > 30:
+                raise ex.PerformanceException(
+                    f"{self.msg_prefix} Pod number {index} start time is {start_time},"
+                    f"which is greater than 30 seconds"
+                )
+        self.full_results.add_key("attach_time", time_measures)
+
+        average = statistics.mean(time_measures)
+        logging.info(
+            f"{self.msg_prefix} The average time for the sampled {len(time_measures)} pods is {average} seconds."
+        )
+        self.full_results.add_key("attach_time_average", average)
+
+        st_deviation = statistics.stdev(time_measures)
+        st_deviation_percent = st_deviation / average * 100.0
+        logging.info(
+            f"{self.msg_prefix} The standard deviation percent for the sampled {len(time_measures)} pods"
+            f" is {st_deviation_percent}"
+        )
+        self.full_results.add_key("attach_time_stdev_percent", st_deviation_percent)
 
         # Getting the test end time
-        self.end_time = self.get_time()
+        self.test_end_time = PASTest.get_time()
 
         # Add the test time to the ES report
         self.full_results.add_key(
-            "test_time", {"start": self.start_time, "end": self.end_time}
+            "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
+
+        self.full_results.add_key("samples_number", self.samples_num)
+        self.full_results.add_key("pvc_size", self.pvc_size)
 
         # Write the test results into the ES server
         self.full_results.es_write()
 
         # write the ES link to the test results in the test log.
-        log.info(f"The Result can be found at : {self.full_results.results_link()}")
+        log.info(
+            f"{self.msg_prefix} The Result can be found at : {self.full_results.results_link()}"
+        )

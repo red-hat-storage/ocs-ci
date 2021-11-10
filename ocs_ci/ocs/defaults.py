@@ -35,6 +35,8 @@ PROMETHEUS_ROUTE = "prometheus-k8s"
 DEVICE_SIZE = 100
 
 OCS_OPERATOR_NAME = "ocs-operator"
+ODF_OPERATOR_NAME = "odf-operator"
+NOOBAA_OPERATOR = "noobaa-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
@@ -84,5 +86,6 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
+        "VAULT_BACKEND": "kv-v2",
     }
 }

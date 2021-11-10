@@ -4,6 +4,7 @@ import re
 import time
 from prettytable import PrettyTable
 from collections import defaultdict
+from operator import itemgetter
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -29,6 +30,7 @@ from ocs_ci.ocs.resources.pv import (
     verify_new_pvs_available_in_sc,
     delete_released_pvs_in_sc,
     get_pv_size,
+    get_node_pv_objs,
 )
 
 
@@ -1173,12 +1175,17 @@ def node_replacement_verification_steps_user_side(
         log.warning("Not all the pods in running state")
         return False
 
-    new_osd_node_pods = get_node_pods(
-        new_osd_node_name, pods_to_search=pod.get_osd_pods()
-    )
-    if not new_osd_node_pods:
-        log.warning("Didn't find any osd pods running on the new node")
-        return False
+    if new_osd_node_name:
+        new_osd_node_pods = get_node_pods(
+            new_osd_node_name, pods_to_search=pod.get_osd_pods()
+        )
+        if not new_osd_node_pods:
+            log.warning("Didn't find any osd pods running on the new node")
+            return False
+    else:
+        log.info(
+            "New osd node name is not provided. Continue with the other verification steps..."
+        )
 
     log.info("Search for the old osd ids")
     new_osd_pods = pod.get_osd_pods_having_ids(old_osd_ids)
@@ -1204,7 +1211,7 @@ def node_replacement_verification_steps_user_side(
 
 
 def node_replacement_verification_steps_ceph_side(
-    old_node_name, new_node_name, new_osd_node_name
+    old_node_name, new_node_name, new_osd_node_name=None
 ):
     """
     Check the verification steps from the Ceph side, after the process
@@ -1223,7 +1230,7 @@ def node_replacement_verification_steps_ceph_side(
         log.warning("Hostname didn't change")
         return False
 
-    wait_for_nodes_status([new_node_name, new_osd_node_name])
+    wait_for_nodes_status([new_node_name])
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
     if not pod.check_pods_after_node_replacement():
@@ -1231,17 +1238,28 @@ def node_replacement_verification_steps_ceph_side(
 
     ct_pod = pod.get_ceph_tools_pod()
     ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    if new_osd_node_name not in ceph_osd_status:
-        log.warning("new osd node name not found in 'ceph osd status' output")
-        return False
+    log.info(f"Ceph osd status: {ceph_osd_status}")
+    osd_node_names = get_osd_running_nodes()
+    log.info(f"osd node names: {osd_node_names}")
+
+    if new_osd_node_name:
+        wait_for_nodes_status([new_osd_node_name])
+        log.info(f"New osd node name is: {new_osd_node_name}")
+        if new_osd_node_name not in ceph_osd_status:
+            log.warning("new osd node name not found in 'ceph osd status' output")
+            return False
+        if new_osd_node_name not in osd_node_names:
+            log.warning("the new osd hostname not found in osd node names")
+            return False
+    else:
+        log.info(
+            "New osd node name is not provided. Continue with the other verification steps..."
+        )
+
     if old_node_name in ceph_osd_status:
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    osd_node_names = get_osd_running_nodes()
-    if new_osd_node_name not in osd_node_names:
-        log.warning("the new osd hostname not found in osd node names")
-        return False
     if old_node_name in osd_node_names:
         log.warning("the old hostname found in osd node names")
         return False
@@ -1686,3 +1704,180 @@ def get_node_mon_ids(node_name):
     mon_pods = pod.get_mon_pods()
     node_mon_pods = get_node_pods(node_name, pods_to_search=mon_pods)
     return [pod.get_mon_pod_id(mon_pod) for mon_pod in node_mon_pods]
+
+
+def get_mon_running_nodes():
+    """
+    Gets the mon running node names
+
+    Returns:
+        list: MON node names
+
+    """
+    return [pod.get_pod_node(mon_pod).name for mon_pod in pod.get_mon_pods()]
+
+
+def get_nodes_where_ocs_pods_running():
+    """
+    Get the node names where rook ceph pods are running
+
+    Returns:
+        set: node names where rook ceph pods are running
+
+    """
+    pods_openshift_storage = pod.get_all_pods(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    ocs_nodes = list()
+    for pod_obj in pods_openshift_storage:
+        if (
+            "rook-ceph" in pod_obj.name
+            and "rook-ceph-operator" not in pod_obj.name
+            and "rook-ceph-tool" not in pod_obj.name
+        ):
+            try:
+                ocs_nodes.append(pod_obj.data["spec"]["nodeName"])
+            except Exception as e:
+                log.info(e)
+    return set(ocs_nodes)
+
+
+def get_node_rack(node_obj):
+    """
+    Get the worker node rack
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node rack name
+
+    """
+    return node_obj.data["metadata"]["labels"].get("topology.rook.io/rack")
+
+
+def get_node_rack_dict():
+    """
+    Get worker node rack
+
+    Returns:
+        dict: {"Node name":"Rack name"}
+
+    """
+    worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+    node_rack_dict = dict()
+    for worker_node_obj in worker_node_objs:
+        node_rack_dict[worker_node_obj.name] = get_node_rack(worker_node_obj)
+    log.info(f"node-rack dictinary {node_rack_dict}")
+    return node_rack_dict
+
+
+def get_node_zone(node_obj):
+    """
+    Get the worker node zone
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node zone name
+
+    """
+    return node_obj.data["metadata"]["labels"].get(
+        "failure-domain.beta.kubernetes.io/zone"
+    )
+
+
+def get_node_zone_dict():
+    """
+    Get worker node zone dictionary
+
+    Returns:
+        dict: {"Node name":"Zone name"}
+
+    """
+    node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+    node_zone_dict = dict()
+    for node_obj in node_objs:
+        node_zone_dict[node_obj.name] = get_node_zone(node_obj)
+    log.info(f"node-zone dictionary {node_zone_dict}")
+    return node_zone_dict
+
+
+def get_node_rack_or_zone(failure_domain, node_obj):
+    """
+    Get the worker node rack or zone name based on the failure domain value
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node rack/zone name
+
+    """
+    return (
+        get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
+    )
+
+
+def get_node_rack_or_zone_dict(failure_domain):
+    """
+    Get worker node rack or zone dictionary based on the failure domain value
+
+    Args:
+        failure_domain (str): The failure domain
+
+    Returns:
+        dict: {"Node name":"Zone/Rack name"}
+
+    """
+    return get_node_zone_dict() if failure_domain == "zone" else get_node_rack_dict()
+
+
+def get_node_names(node_type=constants.WORKER_MACHINE):
+    """
+    Get node names
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        list: The node names
+
+    """
+    log.info(f"Get {node_type} Node names")
+    node_objs = get_nodes(node_type=node_type)
+    return [node_obj.name for node_obj in node_objs]
+
+
+def get_crashcollector_nodes():
+    """
+    Get the nodes names where crashcollector pods are running
+
+    return:
+        set: node names where crashcollector pods are running
+
+    """
+    crashcollector_pod_objs = pod.get_crashcollector_pods()
+    crashcollector_ls = [
+        crashcollector_pod_obj.data["spec"]["nodeName"]
+        for crashcollector_pod_obj in crashcollector_pod_objs
+    ]
+    return set(crashcollector_ls)
+
+
+def add_new_disk_for_vsphere(sc_name):
+    """
+    Check the PVS in use per node, and add a new disk to the worker node with the minimum PVS.
+
+    Args:
+        sc_name (str): The storage class name
+
+    """
+    ocs_nodes = get_ocs_nodes()
+    num_of_pv_per_node_tuples = [
+        (len(get_node_pv_objs(sc_name, n.name)), n) for n in ocs_nodes
+    ]
+    node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
+    add_disk_to_node(node_with_min_pvs)

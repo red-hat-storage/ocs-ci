@@ -1780,7 +1780,6 @@ def update_config_from_s3(
         with NamedTemporaryFile(mode="w", prefix="config", delete=True) as auth:
             s3.meta.client.download_file(bucket_name, filename, auth.name)
             config_yaml = load_yaml(auth.name)
-        # set in config and store it for that scope
         config.update(config_yaml)
         return config_yaml
     except NoCredentialsError:

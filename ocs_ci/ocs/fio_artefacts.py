@@ -123,7 +123,7 @@ def get_job_dict():
     if arch.startswith("x86"):
         image = "quay.io/fbalak/fio-fedora:latest"
     else:
-        image = "quay.io/multiarch-origin-e2e/fio-fedora:latest"
+        image = "quay.io/multi-arch/fio-fedora:latest"
 
     log.info(f"Discovered architecture: {arch.strip()}")
     log.info(f"Using image: {image}")

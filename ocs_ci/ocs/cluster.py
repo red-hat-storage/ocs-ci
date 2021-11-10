@@ -16,9 +16,15 @@ import time
 from semantic_version import Version
 
 import ocs_ci.ocs.resources.pod as pod
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour,
+    PoolSizeWrong,
+    PoolCompressionWrong,
+    CommandFailed,
+)
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -134,6 +140,7 @@ class CephCluster(object):
     def pods(self):
         return self._ceph_pods
 
+    @retry(CommandFailed, tries=3, delay=10, backoff=1)
     def scan_cluster(self):
         """
         Get accurate info on current state of pods
@@ -526,8 +533,8 @@ class CephCluster(object):
              int : the default replica count - 0 if not found.
         """
         ceph_pod = pod.get_ceph_tools_pod()
-        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        av_mod = ceph_status.get("mgrmap").get("available_modules")
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph mgr dump")
+        av_mod = ceph_status.get("available_modules")
         for mod in av_mod:
             if mod["name"] == "localpool":
                 return mod.get("module_options").get("num_rep").get("default_value")
@@ -832,6 +839,37 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
             ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=1)
+def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
+    """
+    Validate if OCS pods have mathching PVC and Claim name
+
+    Args:
+        pvc_names (list): names of all PVCs you would like to validate with.
+        validated_pods(set): set to store already validated pods - if you pass
+            an empty set from outside of this function, it will speed up the next
+            validation when re-tries, as it will skip those already validated
+            pods added to this set by previous run of this function.
+    Raises:
+        AssertionError: when the claim name does not match one of PVC name.
+
+    """
+    if validated_pods is None:
+        validated_pods = set()
+    ns = config.ENV_DATA["cluster_namespace"]
+    mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
+    osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
+    for ceph_pod in set(mon_pods + osd_pods) - validated_pods:
+        out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
+        out_yaml = yaml.safe_load(out)
+        for vol in out_yaml["spec"]["volumes"]:
+            if vol.get("persistentVolumeClaim"):
+                claimName = vol.get("persistentVolumeClaim").get("claimName")
+                logger.info(f"{ceph_pod} backed by pvc {claimName}")
+                assert claimName in pvc_names, "Ceph Internal Volume not backed by PVC"
+        validated_pods.add(ceph_pod)
+
+
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -883,15 +921,8 @@ def validate_cluster_on_pvc():
         pvc_names,
         constants.CEPH_ROOK_IO_PVC_LABEL,
     )
-    osd_pods = get_pod_name_by_pattern("rook-ceph-osd", ns, filter="prepare")
-    for ceph_pod in mon_pods + osd_pods:
-        out = run_cmd(f"oc -n {ns} get pods {ceph_pod} -o yaml")
-        out_yaml = yaml.safe_load(out)
-        for vol in out_yaml["spec"]["volumes"]:
-            if vol.get("persistentVolumeClaim"):
-                claimName = vol.get("persistentVolumeClaim").get("claimName")
-                logger.info(f"{ceph_pod} backed by pvc {claimName}")
-                assert claimName in pvc_names, "Ceph Internal Volume not backed by PVC"
+    validated_pods = set()
+    validate_claim_name_match_pvc(pvc_names, validated_pods)
 
 
 def count_cluster_osd():
@@ -966,7 +997,69 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="json-pretty")
+
+
+def get_ceph_pool_property(pool_name, prop):
+    """
+    The fuction preform ceph osd pool get on a specific property.
+
+    Args:
+        pool_name (str): The pool name to get the property.
+        prop (str): The property to get for example size, compression_mode etc.
+    Returns:
+        (str) property value as string and incase there is no property None.
+
+    """
+    ceph_cmd = f"ceph osd pool get {pool_name} {prop}"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        ceph_pool_prop_output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+        if ceph_pool_prop_output[prop]:
+            return ceph_pool_prop_output[prop]
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command {err}")
+        return None
+
+
+def check_pool_compression_replica_ceph_level(pool_name, compression, replica):
+    """
+    Validate compression and replica values in ceph level
+
+    Args:
+         pool_name (str): The pool name to check values.
+         compression (bool): True for compression otherwise False.
+         replica (int): size of pool to verify.
+
+    Returns:
+        (bool) True if replica and compression are validated. Otherwise raise Exception.
+
+    """
+    compression_output = None
+    expected_compression_output = None
+
+    if compression:
+        expected_compression_output = "aggressive"
+        compression_output = get_ceph_pool_property(pool_name, "compression_mode")
+    else:
+        if get_ceph_pool_property(pool_name, "compression_mode") is None:
+            expected_compression_output = True
+            compression_output = True
+
+    replica_output = get_ceph_pool_property(pool_name, "size")
+    if compression_output == expected_compression_output and replica_output == replica:
+        logger.info(
+            f"Pool {pool_name} was validated in ceph level with compression {compression}"
+            f" and replica {replica}"
+        )
+        return True
+    else:
+        if compression_output != expected_compression_output:
+            raise PoolCompressionWrong(
+                f"Expected compression to be {expected_compression_output} but found {compression_output}"
+            )
+        if replica_output != replica:
+            raise PoolSizeWrong(f"Replica should be {replica} but is {replica_output}")
 
 
 def validate_replica_data(pool_name, replica):
@@ -1065,16 +1158,16 @@ def validate_compression(pool_name):
         bool: True if compression works. False if not
 
     """
+    pool_replica = get_ceph_pool_property(pool_name, "size")
     ceph_df_detail_output = get_ceph_df_detail()
     pool_list = ceph_df_detail_output.get("pools")
     for pool in pool_list:
         if pool.get("name") == pool_name:
             logger.info(f"{pool_name}")
-            byte_used = pool["stats"]["bytes_used"]
-            compress_bytes_used = pool["stats"]["compress_bytes_used"]
+            stored = pool["stats"]["stored"]
+            used_without_compression = stored * pool_replica
             compress_under_bytes = pool["stats"]["compress_under_bytes"]
-            all_byte_used = byte_used + compress_under_bytes - compress_bytes_used
-            compression_ratio = byte_used / all_byte_used
+            compression_ratio = compress_under_bytes / used_without_compression
             logger.info(f"this is the comp_ratio {compression_ratio}")
             if 0.6 < compression_ratio:
                 logger.info(
@@ -1710,6 +1803,42 @@ def check_ceph_health_after_add_capacity(
     assert ceph_cluster_obj.wait_for_rebalance(
         timeout=ceph_rebalance_timeout
     ), "Data re-balance failed to complete"
+
+
+def validate_existence_of_blocking_pdb():
+    """
+    Validate creation of PDBs for OSDs.
+    1. Versions lesser than ocs-operator.v4.6.2 have PDBs for each osds
+    2. Versions greater than or equal to ocs-operator.v4.6.2-233.ci have
+    PDBs collectively for osds like rook-ceph-osd
+
+    Returns:
+        bool: True if blocking PDBs are present, false otherwise
+
+    """
+    pdb_obj = ocp.OCP(
+        kind=constants.POD_DISRUPTION_BUDGET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    pdb_obj_get = pdb_obj.get()
+    osd_pdb = []
+    for pdb in pdb_obj_get.get("items"):
+        if not any(
+            osd in pdb["metadata"]["name"]
+            for osd in [constants.MDS_PDB, constants.MON_PDB]
+        ):
+            osd_pdb.append(pdb)
+    blocking_pdb_exist = False
+    for osd in range(len(osd_pdb)):
+        allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
+        maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
+        if allowed_disruptions & maximum_unavailable != 1:
+            logger.info("Blocking PDBs are created")
+            blocking_pdb_exist = True
+        else:
+            logger.info(
+                f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
+            )
+    return blocking_pdb_exist
 
 
 class CephClusterExternal(CephCluster):
