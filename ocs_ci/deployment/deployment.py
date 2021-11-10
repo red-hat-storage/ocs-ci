@@ -449,6 +449,9 @@ class Deployment(object):
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
 
+        if not live_deployment:
+            create_catalog_source(image)
+
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
@@ -476,8 +479,6 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-        if not live_deployment:
-            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
