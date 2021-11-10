@@ -241,8 +241,9 @@ class Vault(KMS):
             not config.ENV_DATA.get("VAULT_SKIP_VERIFY")
             and config.ENV_DATA.get("vault_deploy_mode") == "external"
         ):
-            self.setup_vault_client_cert()
-            os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                self.setup_vault_client_cert()
+                os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
 
     def setup_vault_client_cert(self):
         """
@@ -323,6 +324,9 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
             connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
             connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
+        else:
+            connection_data["data"].pop("VAULT_CLIENT_CERT")
+            connection_data["data"].pop("VAULT_CLIENT_KEY")
         connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
