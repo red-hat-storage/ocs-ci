@@ -221,13 +221,22 @@ def ocs_install_verification(
         )
 
     for label, count in resources_dict.items():
-        if label == constants.RGW_APP_LABEL:
+        if (
+            label == constants.RGW_APP_LABEL
+            or config.ENV_DATA.get("platform")
+            not in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             if (
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and disable_noobaa:
+        if (
+            "noobaa" in label
+            and disable_noobaa
+            or config.ENV_DATA.get("platform")
+            not in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             continue
         if "mds" in label and disable_cephfs:
             continue
@@ -239,7 +248,10 @@ def ocs_install_verification(
             timeout=timeout,
         )
 
-    if not disable_noobaa:
+    if (
+        not disable_noobaa
+        or config.ENV_DATA.get("platform") not in constants.MANAGED_SERVICE_PLATFORMS
+    ):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
