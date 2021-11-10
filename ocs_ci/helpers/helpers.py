@@ -3592,8 +3592,8 @@ def get_secret_names(namespace=defaults.ROOK_CLUSTER_NAMESPACE, resource_name=""
     Get secrets names
 
     Args:
-         namespace (str): The name of the project
-         resource_name (str): The resource name to fetch
+         namespace (str): The name of the project.
+         resource_name (str): The resource name to fetch.
 
     Returns:
         dict: secret names
