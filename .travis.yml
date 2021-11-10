@@ -9,7 +9,7 @@ script:
 
 matrix:
   include:
-    - python: 3.9
+    - python: 3.9.7
       env: TOXENV=black
     - python: 3.9
       env: TOXENV=flake8
