@@ -735,10 +735,12 @@ def setup_ceph_debug():
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version < version.VERSION_4_8:
-        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
-    else:
+    if ocs_version == version.VERSION_4_8:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
+    elif ocs_version >= version.VERSION_4_9:
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
+    else:
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
     ceph_debug_log_configmap_data["data"]["config"] = (
         stored_values + constants.CEPH_DEBUG_CONFIG_VALUES
     )
