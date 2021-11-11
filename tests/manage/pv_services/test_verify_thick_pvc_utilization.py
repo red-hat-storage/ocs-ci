@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     polarion_id,
-    skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import (
     default_thick_storage_class,
@@ -19,7 +18,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
-@skipif_ocs_version("<=4.9")
+@pytest.mark.skip(reason="Depricated")
 class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
     Tests to verify storage utilization of RBD thick provisioned PVC

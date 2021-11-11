@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     tier4a,
     polarion_id,
     bugzilla,
-    skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -28,7 +27,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
-@skipif_ocs_version("<=4.9")
+@pytest.mark.skip(reason="Depricated")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """
     Test to delete rbd provisioner leader pod while thick provisioning is progressing
