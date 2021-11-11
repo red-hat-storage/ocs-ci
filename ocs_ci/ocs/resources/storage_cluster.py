@@ -221,21 +221,18 @@ def ocs_install_verification(
         )
 
     for label, count in resources_dict.items():
-        if (
-            label == constants.RGW_APP_LABEL
-            or config.ENV_DATA.get("platform")
-            not in constants.MANAGED_SERVICE_PLATFORMS
-        ):
+        if label == constants.RGW_APP_LABEL:
             if (
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+                or config.ENV_DATA.get("platform")
+                in constants.MANAGED_SERVICE_PLATFORMS
                 or disable_rgw
             ):
                 continue
         if (
             "noobaa" in label
             and disable_noobaa
-            or config.ENV_DATA.get("platform")
-            not in constants.MANAGED_SERVICE_PLATFORMS
+            or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
         ):
             continue
         if "mds" in label and disable_cephfs:
