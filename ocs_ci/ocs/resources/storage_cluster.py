@@ -105,11 +105,55 @@ def ocs_install_verification(
     disable_rgw = config.COMPONENTS["disable_rgw"]
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
+    managed_service = config.ENV_DATA["platform"].lower() in {
+        constants.OPENSHIFT_DEDICATED_PLATFORM,
+        constants.ROSA_PLATFORM,
+    }
+
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
+    if not managed_service:
+        log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
+        assert (
+            f"{ocs_version}" in csv_version
+        ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
+    # Verify if OCS CSV has the same version in provided CI build.
+    ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
+        "ocs_registry_image"
+    )
+    if ocs_registry_image and ocs_registry_image.endswith(".ci"):
+        ocs_registry_image = ocs_registry_image.rsplit(":", 1)[1].split("-")[0]
+        log.info(
+            f"Check if OCS registry image: {ocs_registry_image} matches with "
+            f"CSV: {csv_version}"
+        )
+        ignore_csv_mismatch = config.DEPLOYMENT.get("ignore_csv_mismatch")
+        if ignore_csv_mismatch:
+            log.info(
+                "The possible mismatch will be ignored as you deployed "
+                "the different version than the default version from the CSV"
+            )
+        else:
+            assert ocs_registry_image in csv_version, (
+                f"OCS registry image version: {ocs_registry_image} mismatch "
+                f"with CSV version {csv_version}"
+            )
 
+    # Verify Storage System status
+    if ocs_version >= version.VERSION_4_9 and not managed_service:
+        log.info("Verifying storage system status")
+        storage_system = OCP(kind=constants.STORAGESYSTEM, namespace=namespace)
+        storage_system_data = storage_system.get()
+        storage_system_status = {}
+        for condition in storage_system_data["items"][0]["status"]["conditions"]:
+            storage_system_status[condition["type"]] = condition["status"]
+        log.debug(f"storage system status: {storage_system_status}")
+        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
+            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+            f" but found {storage_system_status}"
+        )
     # Basic Verification for cluster
     basic_verification(ocs_registry_image)
 
@@ -184,12 +228,24 @@ def ocs_install_verification(
             continue
         if "mds" in label and disable_cephfs:
             continue
+        if managed_service:
+            continue
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
             resource_count=count,
             timeout=timeout,
+        )
+
+    if not (disable_noobaa or managed_service):
+        nb_ep_pods = get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        assert len(nb_ep_pods) <= max_eps, (
+            f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
+            f"is greater than the maximum defined in the NooBaa CR ({max_eps})"
         )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
@@ -295,6 +351,9 @@ def ocs_install_verification(
         config.DEPLOYMENT.get("ui_deployment")
         or config.DEPLOYMENT["external_mode"]
         or managed_service
+        config.DEPLOYMENT.get("ui_deployment")
+        or config.DEPLOYMENT["external_mode"]
+        or managed_service
     ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
@@ -389,6 +448,10 @@ def ocs_install_verification(
                 item for item in crush_rule["steps"] if item.get("type") == "zone"
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+    if not managed_service:
+        log.info("Validate cluster on PVC")
+        validate_cluster_on_pvc()
+
     # TODO: update pvc validation for managed services
     if not managed_service:
         log.info("Validate cluster on PVC")
@@ -584,6 +647,12 @@ def verify_storage_cluster_images():
     if ocs_version >= version.VERSION_4_7:
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
+
+    if config.ENV_DATA.get("is_multus_enabled"):
+        verify_multus_network()
+
+    if managed_service:
+        verify_managed_service_resources()
 
 
 def osd_encryption_verification():
@@ -976,6 +1045,85 @@ def verify_multus_network():
     selectors = network_data["selectors"]
     assert selectors["public"] == f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
     # TODO: also check private network if it exists
+
+
+def verify_managed_service_resources():
+    """
+    Verify creation and status of resources specific to OSD and ROSA deployments:
+    1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
+    2. ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch secrets
+    exist in openshift-storage namespace
+    3. 1 prometheus pod and 3 alertmanager pods are in Running state
+    4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    5. Networkpolicy and EgressNetworkpolicy resources are present
+    """
+    # Verify CSV status
+    for managed_csv in {
+        constants.OCS_CSV_PREFIX,
+        constants.OSD_DEPLOYER,
+        constants.OSE_PROMETHEUS_OPERATOR,
+    }:
+        csvs = csv.get_csvs_start_with_prefix(
+            managed_csv, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        assert (
+            len(csvs) == 1
+        ), f"Unexpected number of CSVs with {managed_csv} prefix: {len(csvs)}"
+        csv_name = csvs[0]["metadata"]["name"]
+        csv_obj = csv.CSV(
+            resource_name=csv_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        log.info(f"Check if {csv_name} is in Succeeded phase.")
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
+
+    # Verify alerting secrets creation
+    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for secret_name in {
+        "ocs-converged-smtp",
+        "ocs-converged-deadmanssnitch",
+        "ocs-converged-pagerduty",
+    }:
+        assert secret_ocp_obj.is_exist(
+            resource_name=secret_name
+        ), f"{secret_name} does not exist in openshift-storage namespace"
+
+    # Verify alerting pods are Running
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    for alert_pod in {
+        (constants.MANAGED_PROMETHEUS_LABEL, 1),
+        (constants.MANAGED_ALERTMANAGER_LABEL, 3),
+    }:
+        pod_obj.wait_for_resource(
+            condition="Running", selector=alert_pod[0], resource_count=alert_pod[1]
+        )
+
+    # Verify managedocs components are Ready
+    log.info("Getting managedocs components data")
+    managedocs_obj = OCP(
+        kind="managedocs",
+        resource_name="managedocs",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    for component in {"alertmanager", "prometheus", "storageCluster"}:
+        assert (
+            managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
+        ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+
+    # Verify Networkpolicy and EgressNetworkpolicy creation
+    for policy in {
+        ("Networkpolicy", "ceph-ingress-rule"),
+        ("EgressNetworkpolicy", "egress-rule"),
+    }:
+        policy_obj = OCP(
+            kind=policy[0],
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        assert policy_obj.is_exist(
+            resource_name=policy[1]
+        ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
 
 
 def verify_managed_service_resources():
