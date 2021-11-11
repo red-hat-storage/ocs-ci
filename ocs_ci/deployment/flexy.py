@@ -150,9 +150,9 @@ class FlexyBase(object):
             if config.DEPLOYMENT.get("proxy"):
                 config.FLEXY["LAUNCHER_VARS"].update(
                     {
-                        "http_proxy": config.ENV_DATA["proxy_http_proxy"],
-                        "https_proxy": config.ENV_DATA.get(
-                            "proxy_https_proxy", config.ENV_DATA["proxy_http_proxy"]
+                        "http_proxy": config.DEPLOYMENT["proxy_http_proxy"],
+                        "https_proxy": config.DEPLOYMENT.get(
+                            "proxy_https_proxy", config.DEPLOYMENT["proxy_http_proxy"]
                         ),
                         "proxy_for_client_on_install": config.ENV_DATA.get(
                             "client_http_proxy", ""
@@ -169,12 +169,17 @@ class FlexyBase(object):
                 cluster_domain = f".{cluster_name}.{base_domain}"
                 config.FLEXY["LAUNCHER_VARS"].update(
                     {
-                        "http_proxy": config.ENV_DATA["disconnected_http_proxy"],
-                        "https_proxy": config.ENV_DATA.get(
-                            "proxy_https_proxy",
-                            config.ENV_DATA["disconnected_http_proxy"],
+                        "http_proxy": config.DEPLOYMENT["disconnected_http_proxy"],
+                        "https_proxy": config.DEPLOYMENT.get(
+                            "disconnected_https_proxy",
+                            config.DEPLOYMENT["disconnected_http_proxy"],
                         ),
-                        "no_proxy": f"{cluster_domain},ocs-qe-proxy-dc-eco.usersys.redhat.com",
+                        "no_proxy": ",".join(
+                            [
+                                cluster_domain,
+                                config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                            ]
+                        ),
                         "enable_proxy": "yes",
                         "proxy_for_client_on_install": config.ENV_DATA.get(
                             "client_http_proxy", ""
