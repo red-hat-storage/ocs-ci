@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
             *["thick", "thick"],
             marks=[
                 polarion_id("OCS-2502"),
-                pytest.mark.skip(reason="Depricated"),
+                pytest.mark.skip(reason="Deprecated"),
                 bugzilla("1959793"),
             ],
         ),
@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
             *["thin", "thick"],
             marks=[
                 polarion_id("OCS-2507"),
-                pytest.mark.skip(reason="Depricated"),
+                pytest.mark.skip(reason="Deprecated"),
                 bugzilla("1959793"),
             ],
         ),
@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
             *["thick", "thin"],
             marks=[
                 polarion_id("OCS-2508"),
-                pytest.mark.skip(reason="Depricated"),
+                pytest.mark.skip(reason="Deprecated"),
                 bugzilla("1959793"),
             ],
         ),

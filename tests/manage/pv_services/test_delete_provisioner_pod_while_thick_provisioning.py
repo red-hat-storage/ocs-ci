@@ -27,7 +27,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 @tier4
 @tier4a
-@pytest.mark.skip(reason="Depricated")
+@pytest.mark.skip(reason="Deprecated")
 class TestDeleteProvisionerPodWhileThickProvisioning(ManageTest):
     """
     Test to delete rbd provisioner leader pod while thick provisioning is progressing

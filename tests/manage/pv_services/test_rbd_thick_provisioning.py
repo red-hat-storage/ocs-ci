@@ -15,7 +15,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
-@pytest.mark.skip(reason="Depricated")
+@pytest.mark.skip(reason="Deprecated")
 class TestRbdThickProvisioning(ManageTest):
     """
     Tests to verify PVC creation and consumption using RBD thick provisioning enabled storage class

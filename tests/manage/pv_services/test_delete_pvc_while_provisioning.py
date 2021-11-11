@@ -59,7 +59,7 @@ class TestDeletePvcWhileProvisioning(ManageTest):
         """
         self.proj_obj = project_factory()
 
-    @pytest.mark.skip(reason="Depricated")
+    @pytest.mark.skip(reason="Deprecated")
     def test_delete_rbd_pvc_while_thick_provisioning(
         self,
         resource_to_delete,

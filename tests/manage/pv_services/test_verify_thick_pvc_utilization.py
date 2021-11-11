@@ -18,7 +18,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
-@pytest.mark.skip(reason="Depricated")
+@pytest.mark.skip(reason="Deprecated")
 class TestVerifyRbdThickPvcUtilization(ManageTest):
     """
     Tests to verify storage utilization of RBD thick provisioned PVC
