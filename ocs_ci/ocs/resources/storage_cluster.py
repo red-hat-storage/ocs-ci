@@ -113,6 +113,14 @@ def ocs_install_verification(
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
+    managed_service = config.ENV_DATA["platform"].lower() in {
+        constants.OPENSHIFT_DEDICATED_PLATFORM,
+        constants.ROSA_PLATFORM,
+    }
+
+    managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
     ocs_version = version.get_semantic_ocs_version_from_config()
     if not managed_service:
         log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
@@ -354,6 +362,9 @@ def ocs_install_verification(
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
+        config.DEPLOYMENT.get("ui_deployment")
+        or config.DEPLOYMENT["external_mode"]
+        or managed_service
         config.DEPLOYMENT.get("ui_deployment")
         or config.DEPLOYMENT["external_mode"]
         or managed_service
