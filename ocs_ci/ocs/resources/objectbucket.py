@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from abc import ABC, abstractmethod
+import tempfile
 
 import boto3
 
@@ -128,7 +129,16 @@ class ObjectBucket(ABC):
 
     mcg, name = (None,) * 2
 
-    def __init__(self, name, mcg=None, rgw=None, bucketclass=None, *args, **kwargs):
+    def __init__(
+        self,
+        name,
+        mcg=None,
+        rgw=None,
+        bucketclass=None,
+        replication_policy=None,
+        *args,
+        **kwargs,
+    ):
         """
         Constructor of an MCG bucket
 
@@ -137,6 +147,21 @@ class ObjectBucket(ABC):
         self.mcg = mcg
         self.rgw = rgw
         self.bucketclass = bucketclass
+        self.replication_policy = (
+            None
+            if replication_policy is None
+            else [
+                {
+                    "rule_id": replication_policy[0],
+                    "destination_bucket": replication_policy[1],
+                    "filter": {
+                        "prefix": replication_policy[2]
+                        if replication_policy[2] is not None
+                        else ""
+                    },
+                }
+            ]
+        )
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -286,8 +311,22 @@ class MCGCLIBucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bc = f" --bucketclass={self.bucketclass.name}" if self.bucketclass else ""
-        self.mcg.exec_mcg_cmd(f"obc create --exact {self.name}{bc}")
+        bc = f" --bucketclass {self.bucketclass.name}" if self.bucketclass else ""
+        with tempfile.NamedTemporaryFile(
+            delete=True, mode="wb", buffering=0
+        ) as replication_policy_file:
+            replication_policy_file.write(
+                json.dumps(self.replication_policy).encode("utf-8")
+            )
+            replication_policy = (
+                f" --replication-policy {replication_policy_file.name}"
+                if self.replication_policy
+                else ""
+            )
+
+            self.mcg.exec_mcg_cmd(
+                f"obc create --exact {self.name}{bc}{replication_policy}"
+            )
 
     def internal_delete(self):
         """
@@ -418,10 +457,16 @@ class MCGOCBucket(OCBucket):
         obc_data["spec"]["bucketName"] = self.name
         obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
         obc_data["metadata"]["namespace"] = self.namespace
+        if self.bucketclass or self.replication_policy:
+            obc_data.setdefault("spec", {}).setdefault("additionalConfig", {})
         if self.bucketclass:
-            obc_data.setdefault("spec", {}).setdefault(
-                "additionalConfig", {}
-            ).setdefault("bucketclass", self.bucketclass.name)
+            obc_data["spec"]["additionalConfig"].setdefault(
+                "bucketclass", self.bucketclass.name
+            )
+        if self.replication_policy:
+            obc_data["spec"]["additionalConfig"].setdefault(
+                "replicationPolicy", json.dumps(self.replication_policy)
+            )
         create_resource(**obc_data)
 
 

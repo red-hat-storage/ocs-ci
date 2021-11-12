@@ -34,10 +34,10 @@ class TestPgSQLWorkload(E2ETest):
         This is a basic pgsql workload
         """
         # Deployment postgres
-        pgsql.setup_postgresql(replicas=3)
+        pgsql.setup_postgresql(replicas=1)
 
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3, clients=3, transactions=1800)
+        pgsql.create_pgbench_benchmark(replicas=1, transactions=600)
 
         # Start measuring time
         start_time = datetime.now()

@@ -1742,7 +1742,21 @@ def get_nodes_where_ocs_pods_running():
     return set(ocs_nodes)
 
 
-def get_node_rack():
+def get_node_rack(node_obj):
+    """
+    Get the worker node rack
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node rack name
+
+    """
+    return node_obj.data["metadata"]["labels"].get("topology.rook.io/rack")
+
+
+def get_node_rack_dict():
     """
     Get worker node rack
 
@@ -1753,16 +1767,30 @@ def get_node_rack():
     worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     node_rack_dict = dict()
     for worker_node_obj in worker_node_objs:
-        node_rack_dict[worker_node_obj.name] = worker_node_obj.data["metadata"][
-            "labels"
-        ]["topology.rook.io/rack"]
+        node_rack_dict[worker_node_obj.name] = get_node_rack(worker_node_obj)
     log.info(f"node-rack dictinary {node_rack_dict}")
     return node_rack_dict
 
 
-def get_node_zone():
+def get_node_zone(node_obj):
     """
-    Get worker node zone
+    Get the worker node zone
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node zone name
+
+    """
+    return node_obj.data["metadata"]["labels"].get(
+        "failure-domain.beta.kubernetes.io/zone"
+    )
+
+
+def get_node_zone_dict():
+    """
+    Get worker node zone dictionary
 
     Returns:
         dict: {"Node name":"Zone name"}
@@ -1771,11 +1799,40 @@ def get_node_zone():
     node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     node_zone_dict = dict()
     for node_obj in node_objs:
-        node_zone_dict[node_obj.name] = node_obj.data["metadata"]["labels"][
-            "failure-domain.beta.kubernetes.io/zone"
-        ]
+        node_zone_dict[node_obj.name] = get_node_zone(node_obj)
     log.info(f"node-zone dictionary {node_zone_dict}")
     return node_zone_dict
+
+
+def get_node_rack_or_zone(failure_domain, node_obj):
+    """
+    Get the worker node rack or zone name based on the failure domain value
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The worker node rack/zone name
+
+    """
+    return (
+        get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
+    )
+
+
+def get_node_rack_or_zone_dict(failure_domain):
+    """
+    Get worker node rack or zone dictionary based on the failure domain value
+
+    Args:
+        failure_domain (str): The failure domain
+
+    Returns:
+        dict: {"Node name":"Zone/Rack name"}
+
+    """
+    return get_node_zone_dict() if failure_domain == "zone" else get_node_rack_dict()
 
 
 def get_node_names(node_type=constants.WORKER_MACHINE):

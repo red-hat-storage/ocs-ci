@@ -116,6 +116,8 @@ anywhere else.
 * `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
 * `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
+* `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
+* `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 
 #### REPORTING
 
@@ -206,6 +208,7 @@ higher priority).
 * `huge_pages` - True if you would like to enable HUGE PAGES.
 * `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
+* `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 
 #### UPGRADE
 

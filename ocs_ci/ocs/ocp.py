@@ -453,7 +453,9 @@ class OCP(object):
         # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
-        if config.DEPLOYMENT.get("proxy") and config.ENV_DATA.get("client_http_proxy"):
+        if (
+            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+        ) and config.ENV_DATA.get("client_http_proxy"):
             kubeconfig = os.getenv("KUBECONFIG")
             if not kubeconfig or not os.path.exists(kubeconfig):
                 kubeconfig = os.path.join(
@@ -770,11 +772,7 @@ class OCP(object):
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
             if self.data["items"][0]["kind"].lower() == "build" and (
-                self.data["items"][0]
-                .get("metadata")
-                .get("annotations")
-                .get("openshift.io/build-config.name")
-                == "jax-rs-build"
+                "jax-rs-build" in self.data["items"][0].get("metadata").get("name")
             ):
                 return resource_info[column_index - 1]
         except Exception:
