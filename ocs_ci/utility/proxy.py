@@ -16,7 +16,9 @@ def update_kubeconfig_with_proxy_url_for_client(kubeconfig):
         kubeconfig (str): path to kubeconfig file
 
     """
-    if config.DEPLOYMENT.get("proxy") and config.ENV_DATA.get("client_http_proxy"):
+    if (
+        config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+    ) and config.ENV_DATA.get("client_http_proxy"):
         logger.info(
             f"Updating kubeconfig '{kubeconfig}' with 'proxy-url: "
             f"{config.ENV_DATA.get('client_http_proxy')}' parameter."
