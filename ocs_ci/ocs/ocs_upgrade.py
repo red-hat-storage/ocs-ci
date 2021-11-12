@@ -6,7 +6,11 @@ from tempfile import NamedTemporaryFile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.deployment.deployment import create_catalog_source, Deployment
+from ocs_ci.deployment.deployment import (
+    create_catalog_source,
+    create_ocs_secret,
+    Deployment,
+)
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -546,6 +550,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
             upgrade_in_current_source
         ):
+            create_ocs_secret(config.ENV_DATA["cluster_namespace"])
             for attempt in range(2):
                 # We need to do it twice, because some of the SA are updated
                 # after the first load of OCS pod after upgrade. So we need to
