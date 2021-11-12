@@ -84,6 +84,7 @@ class DeploymentUI(PageNavigator):
                     "Refresh web console option is now available, click on it to see the changes"
                 )
                 self.do_click(self.validation_loc["refresh-web-console"])
+                self.page_has_loaded(retries=15, sleep_time=5)
         self.verify_operator_succeeded(operator=self.operator)
         if self.operator_name is ODF_OPERATOR:
             time.sleep(80)
