@@ -38,18 +38,18 @@ class TestPgSQLNodeReboot(E2ETest):
         PGSQL test setup
         """
         # Deployment of postgres database
-        pgsql.setup_postgresql(replicas=3)
+        pgsql.setup_postgresql(replicas=1)
 
         # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_node_drain(self, pgsql, transactions=5600, node_type="worker"):
+    def test_run_pgsql_node_drain(self, pgsql, node_type="worker"):
         """
         Test pgsql workload
         """
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3, transactions=transactions, clients=3)
+        pgsql.create_pgbench_benchmark(replicas=1, transactions=600)
 
         # Start measuring time
         start_time = datetime.now()

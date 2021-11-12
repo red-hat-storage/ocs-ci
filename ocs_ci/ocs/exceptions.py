@@ -136,6 +136,10 @@ class NonUpgradedImagesFoundError(Exception):
     pass
 
 
+class NotAllPodsHaveSameImagesError(Exception):
+    pass
+
+
 class UnexpectedImage(Exception):
     pass
 
@@ -429,4 +433,8 @@ class ElasticSearchNotDeployed(Exception):
 
 
 class ConfigurationError(Exception):
+    pass
+
+
+class BenchmarkTestFailed(Exception):
     pass

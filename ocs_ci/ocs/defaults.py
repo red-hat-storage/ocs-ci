@@ -37,6 +37,7 @@ DEVICE_SIZE = 100
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
+MCG_OPERATOR = "mcg-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 

@@ -265,12 +265,6 @@ def ocs_install_verification(
         f"{storage_cluster_name}-cephfs",
         f"{storage_cluster_name}-ceph-rbd",
     }
-    if ocs_version >= version.VERSION_4_10:
-        # TODO: Add rbd-thick storage class verification in external mode cluster upgraded
-        # to OCS 4.8 when the bug 1978542 is fixed
-        # Skip rbd-thick storage class verification in external mode upgraded cluster. This is blocked by bug 1978542
-        if not (config.DEPLOYMENT["external_mode"] and post_upgrade_verification):
-            required_storage_classes.update({f"{storage_cluster_name}-ceph-rbd-thick"})
     skip_storage_classes = set()
     if disable_cephfs:
         skip_storage_classes.update(
@@ -755,10 +749,12 @@ def setup_ceph_debug():
         constants.CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version < version.VERSION_4_8:
-        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
-    else:
+    if ocs_version == version.VERSION_4_8:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
+    elif ocs_version >= version.VERSION_4_9:
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
+    else:
+        stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
     ceph_debug_log_configmap_data["data"]["config"] = (
         stored_values + constants.CEPH_DEBUG_CONFIG_VALUES
     )
