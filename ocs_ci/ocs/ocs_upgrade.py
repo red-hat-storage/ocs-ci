@@ -18,7 +18,7 @@ from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -385,6 +385,9 @@ class OCSUpgrade(object):
             bool: True if upgrade completed, False otherwise
 
         """
+        if not check_all_csvs_are_succeeded(self.namespace):
+            log.warning("One of CSV is still not upgraded!")
+            return False
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME,
@@ -436,6 +439,7 @@ class OCSUpgrade(object):
         else:
             timeout = 200 * get_osd_count()
         csv_post_upgrade.wait_for_phase("Succeeded", timeout=timeout)
+
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
             pre_upgrade_images, post_upgrade_images
