@@ -164,9 +164,7 @@ class TestPodReattachTimePerformance(PASTest):
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        time_measures = []
-        files_written_list = []
-        data_written_list = []
+        time_measures, files_written_list, data_written_list = ([], [], [])
         for sample_index in range(1, samples_num + 1):
             # Create a PVC
             accessmode = constants.ACCESS_MODE_RWX
@@ -232,8 +230,9 @@ class TestPodReattachTimePerformance(PASTest):
 
             logging.info("Getting the amount of data written to the PVC")
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
-            data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            logging.info(f"The amount of written data is {data_written}")
+            data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
+            logging.info(f"The amount of written data is {data_written_str}")
+            data_written = int(data_written_str[:-1])
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
