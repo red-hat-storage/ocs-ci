@@ -71,6 +71,7 @@ class ResultsAnalyse(PerfResult):
 class TestPodReattachTimePerformance(PASTest):
     """
     Test to verify Pod Reattach Time Performance
+    creates samples and measures average reattach time
     """
 
     def setup(self):
