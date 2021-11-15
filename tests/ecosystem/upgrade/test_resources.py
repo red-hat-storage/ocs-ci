@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_aws_creds_are_missing,
     bugzilla,
+    red_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp, defaults
@@ -128,6 +129,7 @@ def test_pod_log_after_upgrade():
 @post_upgrade
 @bugzilla("1973179")
 @pytest.mark.polarion_id("OCS-2666")
+@red_squad
 def test_noobaa_service_mon_after_ocs_upgrade():
     """
     Verify 'noobaa-service-monitor' does not exist after OCS upgrade.
