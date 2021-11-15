@@ -352,19 +352,6 @@ class DeploymentUI(PageNavigator):
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
 
-    def verify_advanced_deployment(self):
-        """
-
-        :return:
-        """
-        from selenium.webdriver.common.by import By
-
-        dic1 = {
-            "click_advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
-        }
-        self.do_click(dic1["click_advanced_deployment"])
-        self.take_screenshot()
-
     def install_ocs_ui(self):
         """
         Install OCS/ODF via UI
