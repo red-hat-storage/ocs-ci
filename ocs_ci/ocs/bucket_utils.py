@@ -1424,3 +1424,66 @@ def write_random_test_objects_to_bucket(
         signed_request_creds=s3_creds,
     )
     return obj_lst
+
+
+def write_data_to_buckets_and_check_integrity(
+    mcg_obj, awscli_pod, bucket_factory, bucketclass_dict, number_of_buckets
+):
+    """
+    Write data on several buckets and check data integrity with md5sum
+
+    Returns:
+        dictionary: Data on buckets including downloaded_files, original_dir,
+        result_dir, awscli_pod
+
+    """
+    buckets_data_dic = dict()
+    for bucket_id in range(1, number_of_buckets + 1):
+        bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+        original_dir = f"/original{bucket_id}"
+        result_dir = f"/result{bucket_id}"
+        awscli_pod.exec_cmd_on_pod(command=f"mkdir {result_dir}")
+        # Retrieve a list of all objects on the test-objects bucket and
+        # downloads them to the pod
+        full_object_path = f"s3://{bucketname}"
+        downloaded_files = retrieve_test_objects_to_pod(awscli_pod, original_dir)
+        # Write all downloaded objects to the new bucket
+        sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
+        # Retrieve all objects from MCG bucket to result dir in Pod
+        logger.info("Downloading all objects from MCG bucket to awscli pod")
+        sync_object_directory(awscli_pod, full_object_path, result_dir, mcg_obj)
+
+        # Checksum is compared between original and result object
+        for obj in downloaded_files:
+            assert verify_s3_object_integrity(
+                original_object_path=f"{original_dir}/{obj}",
+                result_object_path=f"{result_dir}/{obj}",
+                awscli_pod=awscli_pod,
+            ), "Checksum comparison between original and result object failed"
+
+        buckets_data_dic[bucketname] = {
+            "downloaded_files": downloaded_files,
+            "original_dir": original_dir,
+            "result_dir": result_dir,
+            "awscli_pod": awscli_pod,
+        }
+    return buckets_data_dic
+
+
+def verify_s3_buckets_integrity(buckets_data_dic):
+    """
+    Get number of buckets and check the data integrity
+    Checksum is compared between original and result object
+
+    Args:
+        buckets_data_dic (dic): Data on buckets including downloaded_files,
+        original_dir, result_dir, awscli_pod
+
+    """
+    for bucket_data in buckets_data_dic.values():
+        for obj in bucket_data["downloaded_files"]:
+            assert verify_s3_object_integrity(
+                original_object_path=f"{bucket_data['original_dir']}/{obj}",
+                result_object_path=f"{bucket_data['result_dir']}/{obj}",
+                awscli_pod=bucket_data["awscli_pod"],
+            ), "Checksum comparison between original and result object failed"
