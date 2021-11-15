@@ -1487,3 +1487,59 @@ def verify_s3_buckets_integrity(buckets_data_dic):
                 result_object_path=f"{bucket_data['result_dir']}/{obj}",
                 awscli_pod=bucket_data["awscli_pod"],
             ), "Checksum comparison between original and result object failed"
+
+
+def write_object_to_cache(
+    bucket_factory,
+    mcg_obj,
+    cld_mgr,
+    awscli_pod_session,
+    test_directory_setup,
+    bucketclass_dict,
+):
+    # Create the cached namespace bucket on top of the namespace resource
+    bucket_obj = bucket_factory(bucketclass=bucketclass_dict)[0]
+    original_folder = test_directory_setup.origin_dir
+    # Upload files to NS bucket
+    writen_objs_names = write_files_to_pod_and_upload(
+        mcg_obj,
+        awscli_pod_session,
+        bucket_to_write=bucket_obj.name,
+        original_dir=original_folder,
+        amount=1,
+    )
+    wait_for_cache(mcg_obj, bucket_obj.name, writen_objs_names)
+
+
+def write_files_to_pod_and_upload(
+    mcg_obj,
+    awscli_pod,
+    bucket_to_write,
+    original_dir,
+    amount=1,
+    s3_creds=None,
+):
+    """
+    Upload files to bucket (NS or uls)
+    """
+    full_object_path = f"s3://{bucket_to_write}"
+    object_list = []
+
+    for i in range(amount):
+        file_name = f"testfile{i}.txt"
+        object_list.append(file_name)
+        awscli_pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of={original_dir}/{file_name} bs=1M count=1 status=none"
+        )
+    if s3_creds:
+        # Write data directly to target bucket from original dir
+        sync_object_directory(
+            awscli_pod,
+            original_dir,
+            full_object_path,
+            signed_request_creds=s3_creds,
+        )
+    else:
+        # Write data directly to NS bucket from original dir
+        sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
+    return object_list
