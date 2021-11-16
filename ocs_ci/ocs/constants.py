@@ -1154,6 +1154,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "mcg-operator",
     "noobaa-operator",
     "ocs-operator",
     "odf-multicluster-orchestrator",
