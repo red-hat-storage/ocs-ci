@@ -50,9 +50,9 @@ class TestOSDHeapProfile(ManageTest):
         log.info(f"Start heap profiler for osd-{osd_id}")
         pod_tool = get_ceph_tools_pod()
         out = pod_tool.exec_cmd_on_pod(
-            command=f"ceph tell osd.{osd_id} heap start_profiler"
+            command=f"ceph tell osd.{osd_id} heap start_profiler", out_yaml_format=False
         )
-        logging.info(out)
+        logging.info(f"command output:{out}")
         for string_err in strings_err:
             assert (
                 string_err not in out.lower()
