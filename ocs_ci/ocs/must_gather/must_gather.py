@@ -29,6 +29,7 @@ class MustGather(object):
         self.empty_files = list()
         self.files_not_exist = list()
         self.files_content_issue = list()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
 
     @property
     def log_type(self):
@@ -105,7 +106,7 @@ class MustGather(object):
         https://bugzilla.redhat.com/show_bug.cgi?id=2014849
 
         """
-        if self.type_log != "CEPH":
+        if self.type_log != "CEPH" and self.ocs_version >= version.VERSION_4_9:
             return
         pattern = re.compile("exit code [1-9]+")
         for root, dirs, files in os.walk(self.root):
