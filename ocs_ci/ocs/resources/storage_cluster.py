@@ -30,6 +30,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
+from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
     localstorage,
     utils,
@@ -463,6 +464,8 @@ def ocs_install_verification(
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
             kms.post_deploy_verification()
+            if config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                verify_kms_ca_only()
 
     storage_cluster_obj = get_storage_cluster()
     is_flexible_scaling = (
@@ -519,6 +522,24 @@ def osd_encryption_verification():
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
+
+
+def verify_kms_ca_only():
+    """
+    Verify KMS deployment with only CA Certificate
+    without Client Certificate and without Client Private Key
+
+    """
+    logging.info("Verify KMS deployment with only CA Certificate")
+    secret_names = get_secret_names()
+    if (
+        "ocs-kms-client-cert" in secret_names
+        or "ocs-kms-client-key" in secret_names
+        or "ocs-kms-ca-secret" not in secret_names
+    ):
+        raise ValueError(
+            f"ocs-kms-client-cert and/or ocs-kms-client-key exist on ca_only mode {secret_names}"
+        )
 
 
 def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
