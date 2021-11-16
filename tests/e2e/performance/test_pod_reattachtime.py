@@ -49,19 +49,19 @@ class ResultsAnalyse(PerfResult):
     argnames=["interface", "copies", "timeout", "total_time_limit"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 3, 120, 60],
+            *[constants.CEPHBLOCKPOOL, 3, 120, 70],
             marks=pytest.mark.polarion_id("OCS-2043"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 13, 600, 360],
+            *[constants.CEPHBLOCKPOOL, 13, 600, 420],
             marks=pytest.mark.polarion_id("OCS-2673"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 3, 120, 60],
+            *[constants.CEPHFILESYSTEM, 3, 120, 70],
             marks=pytest.mark.polarion_id("OCS-2044"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 13, 600, 360],
+            *[constants.CEPHFILESYSTEM, 13, 600, 420],
             marks=pytest.mark.polarion_id("OCS-2674"),
         ),
     ],
