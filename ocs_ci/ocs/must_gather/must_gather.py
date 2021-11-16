@@ -104,6 +104,7 @@ class MustGather(object):
         """
         Verify ceph command does not return an error
         https://bugzilla.redhat.com/show_bug.cgi?id=2014849
+        https://bugzilla.redhat.com/show_bug.cgi?id=2021427
 
         """
         if self.type_log != "CEPH" and self.ocs_version >= version.VERSION_4_9:
