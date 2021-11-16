@@ -131,8 +131,9 @@ class Vault(KMS):
         self.port = self.vault_conf["PORT"]
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.ca_cert_base64 = self.vault_conf["VAULT_CACERT_BASE64"]
-            self.client_cert_base64 = self.vault_conf["VAULT_CLIENT_CERT_BASE64"]
-            self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                self.client_cert_base64 = self.vault_conf["VAULT_CLIENT_CERT_BASE64"]
+                self.client_key_base64 = self.vault_conf["VAULT_CLIENT_KEY_BASE64"]
             self.vault_tls_server = self.vault_conf["VAULT_TLS_SERVER_NAME"]
         self.vault_root_token = self.vault_conf["VAULT_ROOT_TOKEN"]
 
@@ -239,6 +240,7 @@ class Vault(KMS):
         if (
             not config.ENV_DATA.get("VAULT_SKIP_VERIFY")
             and config.ENV_DATA.get("vault_deploy_mode") == "external"
+            and not config.ENV_DATA.get("VAULT_CA_ONLY", None)
         ):
             self.setup_vault_client_cert()
             os.environ["VAULT_CACERT"] = constants.VAULT_CLIENT_CERT_PATH
@@ -271,23 +273,26 @@ class Vault(KMS):
         ca_data["data"]["cert"] = self.ca_cert_base64
         self.create_resource(ca_data, prefix="ca")
 
-        # create client cert secret
-        client_cert_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_CERT)
-        self.client_cert_name = get_default_if_keyval_empty(
-            config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
-        )
-        client_cert_data["metadata"]["name"] = self.client_cert_name
-        client_cert_data["data"]["cert"] = self.client_cert_base64
-        self.create_resource(client_cert_data, prefix="clientcert")
+        if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+            # create client cert secret
+            client_cert_data = templating.load_yaml(
+                constants.EXTERNAL_VAULT_CLIENT_CERT
+            )
+            self.client_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            client_cert_data["metadata"]["name"] = self.client_cert_name
+            client_cert_data["data"]["cert"] = self.client_cert_base64
+            self.create_resource(client_cert_data, prefix="clientcert")
 
-        # create client key secert
-        client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-        self.client_key_name = get_default_if_keyval_empty(
-            config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-        )
-        client_key_data["metadata"]["name"] = self.client_key_name
-        client_key_data["data"]["key"] = self.client_key_base64
-        self.create_resource(client_key_data, prefix="clientkey")
+            # create client key secert
+            client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
+            self.client_key_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
+            client_key_data["metadata"]["name"] = self.client_key_name
+            client_key_data["data"]["key"] = self.client_key_base64
+            self.create_resource(client_key_data, prefix="clientkey")
 
     def create_ocs_vault_resources(self):
         """
@@ -316,8 +321,12 @@ class Vault(KMS):
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
-        connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
-        connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
+        if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+            connection_data["data"]["VAULT_CLIENT_CERT"] = self.client_cert_name
+            connection_data["data"]["VAULT_CLIENT_KEY"] = self.client_key_name
+        else:
+            connection_data["data"].pop("VAULT_CLIENT_CERT")
+            connection_data["data"].pop("VAULT_CLIENT_KEY")
         connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
