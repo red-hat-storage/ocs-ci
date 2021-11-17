@@ -179,6 +179,9 @@ class NodesBase(object):
 
         return default_config_dict
 
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
 
 class VMWareNodes(NodesBase):
     """
@@ -218,6 +221,31 @@ class VMWareNodes(NodesBase):
         for node in node_names:
             node_vms = [vm for vm in vms_in_pool if vm.name in node]
             vms.extend(node_vms)
+        return vms
+
+    def get_vms_in_dc(self, nodes, dc=None):
+        """
+        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope)
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            dc (str): The Datacenter name. If not specified, it will use the current dc.
+
+        Returns:
+            list: vSphere vm objects list in the Datacenter
+
+        """
+        vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
+        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        vms = []
+        for vm in vms_in_dc:
+            try:
+                vm_name = vm.name
+                if vm_name in node_names:
+                    vms.append(vm)
+            except Exception as e:
+                logger.info(f"Failed to get the vm name due to exception: {e}")
+
         return vms
 
     def get_data_volumes(self, pvs=None):
@@ -409,6 +437,19 @@ class VMWareNodes(NodesBase):
         ]
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
         node_cls_obj.add_node()
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VM's
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to terminate,
+            False otherwise
+
+        """
+        vms = self.get_vms_in_dc(nodes)
+        self.vsphere.destroy_vms(vms)
 
 
 class AWSNodes(NodesBase):
