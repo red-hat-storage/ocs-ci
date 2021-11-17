@@ -1,6 +1,7 @@
 """
 Helper functions file for working with object buckets
 """
+import json
 import logging
 import os
 import shlex
@@ -12,6 +13,7 @@ from botocore.handlers import disable_signing
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -88,6 +90,7 @@ def verify_s3_object_integrity(original_object_path, result_object_path, awscli_
             command=f"md5sum {original_object_path} {result_object_path}"
         )
     )
+    logger.info(f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}")
     if md5sum[0] == md5sum[2]:
         logger.info(
             f"Passed: MD5 comparison for {original_object_path} and {result_object_path}"
@@ -1023,7 +1026,7 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
     )
 
 
-def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey"):
+def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs="1M"):
     """
     Uses /dev/urandom to create and write random files in a given
     directory in a pod
@@ -1044,10 +1047,10 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey"):
     """
     obj_lst = []
     for i in range(amount):
-        object_key = pattern + "-{}".format(i)
+        object_key = pattern + "{}".format(i)
         obj_lst.append(object_key)
         io_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={file_dir}/{object_key} bs=1M count=1 status=none"
+            f"dd if=/dev/urandom of={file_dir}/{object_key} bs={bs} count=1 status=none"
         )
     return obj_lst
 
@@ -1123,7 +1126,9 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
         raise UnexpectedBehaviour
 
 
-def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
+def compare_directory(
+    awscli_pod, original_dir, result_dir, amount=2, pattern="ObjKey-"
+):
     """
     Compares object checksums on original and result directories
 
@@ -1134,13 +1139,17 @@ def compare_directory(awscli_pod, original_dir, result_dir, amount=2):
         amount (int): Number of test objects to create
 
     """
+    comparisons = []
     for i in range(amount):
-        file_name = f"ObjKey-{i}"
-        assert verify_s3_object_integrity(
-            original_object_path=f"{original_dir}/{file_name}",
-            result_object_path=f"{result_dir}/{file_name}",
-            awscli_pod=awscli_pod,
-        ), "Checksum comparision between original and result object failed"
+        file_name = f"{pattern}{i}"
+        comparisons.append(
+            verify_s3_object_integrity(
+                original_object_path=f"{original_dir}/{file_name}",
+                result_object_path=f"{result_dir}/{file_name}",
+                awscli_pod=awscli_pod,
+            ),
+        )
+    return all(comparisons)
 
 
 def s3_copy_object(s3_obj, bucketname, source, object_key):
@@ -1395,6 +1404,8 @@ def write_random_test_objects_to_bucket(
     bucket_to_write,
     file_dir,
     amount=1,
+    pattern="ObjKey-",
+    bs="1M",
     mcg_obj=None,
     s3_creds=None,
 ):
@@ -1407,6 +1418,8 @@ def write_random_test_objects_to_bucket(
         file_dir (str): The path to the folder where all random files will be
         generated and copied from
         amount (int, optional): The amount of random objects to write. Defaults to 1.
+        pattern (str, optional): The pattern of the random files' names. Defaults to ObjKey.
+        bs (str, optional): The size of the random files in bytes. Defaults to 1M.
         mcg_obj (MCG, optional): An MCG class instance
         s3_creds (dict, optional): A dictionary containing S3-compatible credentials
         for writing objects directly to buckets outside of the MCG. Defaults to None.
@@ -1414,8 +1427,10 @@ def write_random_test_objects_to_bucket(
     Returns:
         list: A list containing the names of the random files that were written
     """
+    # Verify that the needed directory exists
+    io_pod.exec_cmd_on_pod(f"mkdir -p {file_dir}")
     full_object_path = f"s3://{bucket_to_write}"
-    obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount)
+    obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount, pattern, bs)
     sync_object_directory(
         io_pod,
         file_dir,
@@ -1424,3 +1439,150 @@ def write_random_test_objects_to_bucket(
         signed_request_creds=s3_creds,
     )
     return obj_lst
+
+
+def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_name):
+    """
+    Patches replication policy to a bucket
+
+    Args:
+        bucket_name (str): The name of the bucket to patch
+        rule_id (str): The ID of the replication rule
+        destination_bucket_name (str): The name of the replication destination bucket
+    """
+    replication_policy_patch_dict = {
+        "spec": {
+            "additionalConfig": {
+                "replicationPolicy": json.dumps(
+                    [
+                        {
+                            "rule_id": rule_id,
+                            "destination_bucket": destination_bucket_name,
+                        }
+                    ]
+                )
+            }
+        }
+    }
+    OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+
+def random_object_round_trip_verification(
+    io_pod,
+    bucket_name,
+    upload_dir,
+    download_dir,
+    amount=1,
+    pattern="RandomObject-",
+    wait_for_replication=False,
+    second_bucket_name=None,
+    mcg_obj=None,
+    s3_creds=None,
+    cleanup=False,
+):
+    """
+    Writes random objects in a pod, uploads them to a bucket,
+    downloads them from the bucket and then compares them.
+
+    Args:
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod object in which the files should be
+        generated and written
+        bucket_name (str): The bucket name to perform the round trip verification on
+        upload_dir (str): A string containing the path to the directory where the files
+        will be generated and uploaded from
+        download_dir (str): A string containing the path to the directory where the objects
+        will be downloaded to
+        amount (int, optional): The amount of objects to use for the verification. Defaults to 1.
+        pattern (str, optional): A string defining the object naming pattern. Defaults to "RandomObject-".
+        wait_for_replication (bool, optional):
+            A boolean defining whether the replication should be waited for. Defaults to False.
+        second_bucket_name (str, optional):
+            The name of the second bucket in case of waiting for object replication. Defaults to None.
+        mcg_obj (MCG, optional): An MCG class instance. Defaults to None.
+        s3_creds (dict, optional): A dictionary containing S3-compatible credentials
+        for writing objects directly to buckets outside of the MCG. Defaults to None.
+        cleanup (bool, optional): A boolean defining whether the files should be cleaned up
+        after the verification
+
+    """
+    # Verify that all needed directories exist
+    io_pod.exec_cmd_on_pod(f"mkdir -p {upload_dir} {download_dir}")
+
+    write_random_test_objects_to_bucket(
+        io_pod=io_pod,
+        bucket_to_write=bucket_name,
+        file_dir=upload_dir,
+        amount=amount,
+        pattern=pattern,
+        mcg_obj=mcg_obj,
+        s3_creds=s3_creds,
+    )
+    written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
+    if wait_for_replication:
+        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name)
+        bucket_name = second_bucket_name
+    # Download the random objects that were uploaded to the bucket
+    sync_object_directory(
+        podobj=io_pod,
+        src=f"s3://{bucket_name}",
+        target=download_dir,
+        s3_obj=mcg_obj,
+        signed_request_creds=s3_creds,
+    )
+    downloaded_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {download_dir}").split(" ")
+    # Compare the checksums of the uploaded and downloaded objects
+    compare_directory(
+        awscli_pod=io_pod,
+        original_dir=upload_dir,
+        result_dir=download_dir,
+        amount=amount,
+        pattern=pattern,
+    )
+    if cleanup:
+        io_pod.exec_cmd_on_pod(f"rm -rf {upload_dir} {download_dir}")
+
+    return set(written_objects).issubset(set(downloaded_objects))
+
+
+def compare_object_checksums_between_bucket_and_local(
+    io_pod, mcg_obj, bucket_name, local_dir, amount=1, pattern="ObjKey-"
+):
+    """
+    Compares the checksums of the objects in a bucket and a local directory
+
+    Args:
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod object in which the check will take place
+        mcg_obj (MCG): An MCG class instance
+        bucket_name (str): The name of the bucket to compare the objects from
+        local_dir (str): A string containing the path to the local directory
+        amount (int, optional): The amount of objects to use for the verification. Defaults to 1.
+        pattern (str, optional): A string defining the object naming pattern. Defaults to "RandomObject-".
+
+    Returns:
+        bool: True if the checksums are the same, False otherwise
+    """
+    written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {local_dir}").split(" ")
+    # Create target directory for the objects
+    target_dir = f"{local_dir}/downloaded"
+    io_pod.exec_cmd_on_pod(f"mkdir -p {target_dir}")
+    # Download the random objects that were uploaded to the bucket
+    sync_object_directory(
+        podobj=io_pod,
+        src=f"s3://{bucket_name}",
+        target=target_dir,
+        s3_obj=mcg_obj,
+    )
+    downloaded_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {local_dir}").split(" ")
+    # Compare the checksums of the uploaded and downloaded objects
+    compare_directory(
+        awscli_pod=io_pod,
+        original_dir=local_dir,
+        result_dir=target_dir,
+        amount=amount,
+        pattern=pattern,
+    )
+    return set(written_objects).issubset(set(downloaded_objects))
