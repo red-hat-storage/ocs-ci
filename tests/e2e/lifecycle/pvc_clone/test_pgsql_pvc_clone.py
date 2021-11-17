@@ -82,6 +82,8 @@ class TestPvcCloneOfWorkloads(E2ETest):
             # Get usage of pgsql pvc
             parent_pods_obj = pgsql.get_postgres_used_file_space(postgres_pods_obj)
 
+            # Wait time to copy the data to cloned PVC
+            time.sleep(600)
             # Validate cloned pvcs file space matches with parent
             cloned_pods_list = get_pod_name_by_pattern(
                 pattern=f"postgres-cloned-{i}", namespace=BMO_NAME
@@ -121,7 +123,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
             # Run benchmark on parent PVC
             pgsql.create_pgbench_benchmark(
-                replicas=3, pgbench_name=f"pgbench-{i}", wait=False
+                replicas=1, pgbench_name=f"pgbench-{i}", wait=False
             )
 
             # Wait till pgbench client pods up

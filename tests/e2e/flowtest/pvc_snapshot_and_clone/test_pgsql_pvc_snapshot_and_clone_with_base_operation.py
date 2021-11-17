@@ -37,7 +37,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     ):
         # Deploy PGSQL workload
         log.info("Deploying pgsql workloads")
-        self.pgsql = pgsql_factory_fixture(replicas=3, clients=3, transactions=600)
+        self.pgsql = pgsql_factory_fixture(replicas=1, clients=3, transactions=600)
 
     def test_pvc_snapshot_and_clone(
         self, nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory
