@@ -368,7 +368,9 @@ def pytest_configure(config):
                 ValueError,
             ):
                 # might be using existing cluster path using GUI installation
-                log.warning("Unable to get CSV version for Reporting or rp_launch_tags issue")
+                log.warning(
+                    "Unable to get CSV version for Reporting or rp_launch_tags issue"
+                )
 
 
 def gather_version_info_for_report(config):
