@@ -1506,7 +1506,7 @@ def random_object_round_trip_verification(
         s3_creds (dict, optional): A dictionary containing S3-compatible credentials
         for writing objects directly to buckets outside of the MCG. Defaults to None.
         cleanup (bool, optional): A boolean defining whether the files should be cleaned up
-        after the verification
+        after the verification.
 
     """
     # Verify that all needed directories exist
