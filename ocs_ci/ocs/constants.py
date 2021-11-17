@@ -40,6 +40,11 @@ TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
+TEMPLATE_COUCHBASE_NEW_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase_new")
+TEMPLATE_COUCHBASE_NEW_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_NEW_DIR, "server")
+TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_DIR, "pillowfight"
+)
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
@@ -402,6 +407,30 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 
 OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
+)
+
+COUCHBASE_NEW_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-operatorgroup.yaml"
+)
+
+COUCHBASE_NEW_OPERATOR_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-subscription.yaml"
+)
+
+COUCHBASE_NEW_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_NEW_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker.yaml"
+)
+
+COUCHBASE_NEW_DATA_BUCKET = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-data-bucket.yaml"
+)
+
+COUCHBASE_NEW_PILLOWFIGHT = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR, "basic-pillowfight.yaml"
 )
 
 COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
@@ -829,6 +858,7 @@ ORDER_AFTER_UPGRADE = 80
 # Deployment constants
 OCS_CSV_PREFIX = "ocs-operator"
 LOCAL_STORAGE_CSV_PREFIX = "local-storage-operator"
+COUCHBASE_CSV_PREFIX = "couchbase-operator"
 LATEST_TAGS = (
     "latest",
     "latest-stable",

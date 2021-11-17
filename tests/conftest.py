@@ -111,13 +111,13 @@ from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
+from ocs_ci.ocs.couchbase_new import CouchBase
 
 
 log = logging.getLogger(__name__)
@@ -2727,9 +2727,9 @@ def jenkins_factory_fixture(request):
 
 
 @pytest.fixture(scope="function")
-def couchbase_factory_fixture(request):
+def couchbase_new_factory_fixture(request):
     """
-    Couchbase factory fixture
+    Couchbase factory fixture using Couchbase operator
     """
     couchbase = CouchBase()
 
@@ -2748,11 +2748,15 @@ def couchbase_factory_fixture(request):
             replicas (int): Number of couchbase workers to be deployed
             run_in_bg (bool): Run IOs in background as option
             skip_analyze (bool): Skip logs analysis as option
+
         """
-        # Setup couchbase
-        couchbase.setup_cb()
+        # Create Couchbase subscription
+        couchbase.couchbase_subscription()
+        # Create Couchbase worker secrets
+        couchbase.create_cb_secrets()
         # Create couchbase workers
-        couchbase.create_couchbase_worker(replicas=replicas, sc_name=sc_name)
+        couchbase.create_cb_cluster(replicas=3, sc_name=sc_name)
+        couchbase.create_data_buckets()
         # Run couchbase workload
         couchbase.run_workload(
             replicas=replicas,
