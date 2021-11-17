@@ -130,7 +130,7 @@ class PillowFight(object):
                     fd.write(data_from_log)
 
             elif pf_completion_info == "Error":
-                raise Exception(f"Pillowfight failed to complete")
+                raise Exception("Pillowfight failed to complete")
 
     def analyze_all(self):
         """
