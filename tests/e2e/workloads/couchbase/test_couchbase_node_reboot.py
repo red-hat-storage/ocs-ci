@@ -28,7 +28,7 @@ class TestCouchBaseNodeReboot(E2ETest):
     """
 
     @pytest.fixture()
-    def cb_setup(self, couchbase_new_factory_fixture):
+    def cb_setup(self, couchbase_new_factory_fixture, node_restart_teardown):
         """
         Creates couchbase workload
         """
