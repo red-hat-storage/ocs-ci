@@ -368,4 +368,3 @@ def check_all_obcs_status(namespace=None):
         else:
             obc_not_bound_list.append(status)
     return obc_bound_list
-
