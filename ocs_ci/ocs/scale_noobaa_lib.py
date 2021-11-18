@@ -5,12 +5,15 @@ import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
 
 
 def check_all_obc_reached_bound_state_in_kube_job(
-    kube_job_obj, namespace, no_of_obc, timeout=60, no_wait_time=10
+    kube_job_obj, namespace, no_of_obc, timeout=60, no_wait_time=20
 ):
     """
     Function to check either bulk created OBCs reached Bound state using kube_job
@@ -75,7 +78,7 @@ def check_all_obc_reached_bound_state_in_kube_job(
                 if not status or status != constants.STATUS_BOUND:
                     obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
                     # Wait 20 secs to ensure the next obc on the list has status field populated
-                    time.sleep(20)
+                    time.sleep(30)
                     job_get_output = kube_job_obj.get(namespace=namespace).get("items")
         else:
             while_iteration_count_1 += 1
@@ -310,3 +313,58 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
         obc_dict[obc_name] = total.total_seconds()
 
     return obc_dict
+
+
+def noobaa_running_node_restart(pod_name):
+    """
+    Function to restart node which has noobaa pod's running
+
+    Args:
+        pod_name (str): Name of noobaa pod
+
+    """
+
+    nb_pod_obj = pod.get_pod_obj(
+        (
+            get_pod_name_by_pattern(
+                pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+        )[0],
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    nb_node_name = pod.get_pod_node(nb_pod_obj).name
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    nb_nodes = get_node_objs(node_names=nb_node_name)
+    log.info(f"{pod_name} is running on {nb_node_name}")
+    log.info(f"Restating node: {nb_node_name}....")
+    nodes.restart_nodes_by_stop_and_start(nodes=nb_nodes, force=True)
+
+    # Validate nodes are up and running
+    wait_for_nodes_status()
+    ceph_health_check(tries=30, delay=60)
+    helpers.wait_for_resource_state(nb_pod_obj, constants.STATUS_RUNNING, timeout=180)
+
+
+def check_all_obcs_status(namespace=None):
+    """
+    Check all OBCs status in given namespace
+
+    Args:
+        namespace (str): Namespace where endpoint is running
+
+    Returns:
+        obc_bound_list: A list of all OBCs in Bound state
+
+    """
+    all_obcs_in_namespace = (
+        OCP(namespace=namespace, kind="ObjectBucketClaim").get().get("items")
+    )
+    obc_bound_list, obc_not_bound_list = ([] for i in range(2))
+    for obc in all_obcs_in_namespace:
+        status = obc.get("status").get("phase")
+        if status == constants.STATUS_BOUND:
+            obc_bound_list.append(status)
+        else:
+            obc_not_bound_list.append(status)
+    return obc_bound_list
