@@ -2,7 +2,10 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, polarion_id
-from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    ocs_install_verification,
+    mcg_only_install_verification,
+)
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
@@ -20,7 +23,11 @@ def test_deployment(pvc_factory, pod_factory):
         assert is_cluster_running(config.ENV_DATA["cluster_path"])
         if not config.ENV_DATA["skip_ocs_deployment"]:
             ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
-            ocs_install_verification(ocs_registry_image=ocs_registry_image)
+            if config.ENV_DATA["mcg_only_deployment"]:
+                mcg_only_install_verification(ocs_registry_image=ocs_registry_image)
+                return
+            else:
+                ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
