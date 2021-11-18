@@ -156,6 +156,9 @@ def pytest_collection_modifyitems(session, items):
 
     # Add squad markers to each test item based on filepath
     for item in items:
+        # check, if test already have squad marker manually assigned
+        if any(map(lambda x: "_squad" in x.name, item.iter_markers())):
+            continue
         for squad, paths in constants.SQUADS.items():
             for _path in paths:
                 # Limit the test_path to the tests directory
@@ -3750,22 +3753,6 @@ def pvc_clone_factory(request):
 def reportportal_customization(request):
     if config.REPORTING.get("rp_launch_url"):
         request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
-    elif hasattr(request.node.config, "py_test_service"):
-        rp_service = request.node.config.py_test_service
-        if not hasattr(rp_service.RP, "rp_client"):
-            request.config._metadata[
-                "RP Launch URL:"
-            ] = "Problem with RP, launch URL is not available!"
-            return
-        launch_id = rp_service.RP.rp_client.launch_id
-        project = rp_service.RP.rp_client.project
-        endpoint = rp_service.RP.rp_client.endpoint
-        launch_url = f"{endpoint}/ui/#{project}/launches/all/{launch_id}/{launch_id}"
-        config.REPORTING["rp_launch_url"] = launch_url
-        config.REPORTING["rp_launch_id"] = launch_id
-        config.REPORTING["rp_endpoint"] = endpoint
-        config.REPORTING["rp_project"] = project
-        request.config._metadata["RP Launch URL:"] = launch_url
 
 
 @pytest.fixture()

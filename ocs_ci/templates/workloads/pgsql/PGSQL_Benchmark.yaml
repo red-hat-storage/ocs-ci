@@ -17,7 +17,7 @@ spec:
       scaling_factor: 2
       samples: 5
       databases:
-        - host: postgres-0.postgres # assuming that postgres was deployed in same namespace as ripsaw i.e. my-ripsaw
+        - host: postgres-0.postgres # assuming that postgres was deployed in same namespace as benchmark-operator i.e. benchmark-operator
           user: test # Following the values from the configmap
           password: test
           db_name: testdb

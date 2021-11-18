@@ -10,7 +10,7 @@ import yaml
 from ocs_ci import framework
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
-from ocs_ci.utility import reporting, utils
+from ocs_ci.utility import utils
 
 
 def check_config_requirements():
@@ -105,7 +105,7 @@ def process_ocsci_conf(arguments):
     parser.add_argument(
         "--ocs-version",
         action="store",
-        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9"],
+        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "4.10"],
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
@@ -247,7 +247,6 @@ def main(argv=None):
         framework.config.switch_ctx(i)
         pytest_logs_dir = utils.ocsci_log_path()
         utils.create_directory_path(framework.config.RUN["log_dir"])
-    launch_name = reporting.get_rp_launch_name()
     arguments.extend(
         [
             "-p",
@@ -258,8 +257,6 @@ def main(argv=None):
             "ocs_ci.framework.pytest_customization.reports",
             "--logger-logsdir",
             pytest_logs_dir,
-            "--rp-launch",
-            launch_name,
         ]
     )
     return pytest.main(arguments)

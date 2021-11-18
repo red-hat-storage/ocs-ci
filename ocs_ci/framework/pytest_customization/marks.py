@@ -144,6 +144,13 @@ aws_platform_required = pytest.mark.skipif(
     reason="Test runs ONLY on AWS deployed cluster",
 )
 
+aws_based_platform_required = pytest.mark.skipif(
+    (
+        config.ENV_DATA["platform"].lower() != "aws"
+        and config.ENV_DATA["platform"].lower() != ROSA_PLATFORM
+    ),
+    reason="Test runs ONLY on AWS based deployed cluster",
+)
 azure_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != "azure",
     reason="Test runs ONLY on Azure deployed cluster",
@@ -312,3 +319,14 @@ skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",
 )
+
+# Squad marks
+black_squad = pytest.mark.black_squad
+blue_squad = pytest.mark.blue_squad
+brown_squad = pytest.mark.brown_squad
+green_squad = pytest.mark.green_squad
+grey_squad = pytest.mark.grey_squad
+magenta_squad = pytest.mark.magenta_squad
+orange_squad = pytest.mark.orange_squad
+purple_squad = pytest.mark.purple_squad
+red_squad = pytest.mark.red_squad

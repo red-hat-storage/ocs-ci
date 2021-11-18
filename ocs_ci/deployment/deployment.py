@@ -67,6 +67,7 @@ from ocs_ci.utility.utils import (
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
+    get_ocs_build_number,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
@@ -389,7 +390,8 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
-        logger.info("Sleeping for 15 seconds after subscribing OCS")
+        logger.info("Sleeping for 90 seconds after subscribing OCS")
+        time.sleep(90)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
 
@@ -447,6 +449,9 @@ class Deployment(object):
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
 
+        if not live_deployment:
+            create_catalog_source(image)
+
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
@@ -474,8 +479,6 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-        if not live_deployment:
-            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -484,8 +487,12 @@ class Deployment(object):
             ocs_operator_names = [
                 defaults.ODF_OPERATOR_NAME,
                 defaults.OCS_OPERATOR_NAME,
-                defaults.NOOBAA_OPERATOR,
             ]
+            build_number = version.get_semantic_version(get_ocs_build_number())
+            if build_number >= version.get_semantic_version("4.9.0-231"):
+                ocs_operator_names.append(defaults.MCG_OPERATOR)
+            else:
+                ocs_operator_names.append(defaults.NOOBAA_OPERATOR)
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
         channel = config.DEPLOYMENT.get("ocs_csv_channel")

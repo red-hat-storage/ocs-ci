@@ -134,6 +134,7 @@ deployment_4_9 = {
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
+    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -350,6 +351,22 @@ page_nav = {
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
 }
 
+acm_page_nav = {
+    "Home": ("//button[text()='Home']", By.XPATH),
+    "Welcome_page": ("Welcome", By.LINK_TEXT),
+    "Overview_page": ("Overview", By.LINK_TEXT),
+    "Infrastructure": ("//button[text()='Infrastructure']", By.XPATH),
+    "Clusters_page": ("Clusters", By.LINK_TEXT),
+    "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
+    "Automation_page": ("Automation", By.LINK_TEXT),
+    "Infrastructure_environments_page": ("Infrastructure environments", By.LINK_TEXT),
+    "Applications": ("Applications", By.LINK_TEXT),
+    "Governance": ("Governance", By.LINK_TEXT),
+    "Credentials": ("Credentials", By.LINK_TEXT),
+    "Import_cluster": ("importCluster", By.ID),
+    "Import_cluster_enter_name": ("clusterName", By.ID),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -549,6 +566,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
+        "acm_page": acm_page_nav,
     },
     "4.8": {
         "login": login,
