@@ -168,42 +168,38 @@ class MCG:
                 aws_secret_access_key=self.aws_access_key,
             )
 
-        if config.ENV_DATA["mcg_only_deployment"]:
-            logger.info(
-                "Skipping MCG platform checks for RGW pods due to running in MCG-only mode"
-            )
-        else:
-            if (
-                config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
-                or storagecluster_independent_check()
+        if (
+            config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
+            or storagecluster_independent_check()
+            or config.ENV_DATA["mcg_only_deployment"]
+        ):
+            if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
+                version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
             ):
-                if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
-                    version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
-                ):
-                    logger.info("Checking whether RGW pod is not present")
-                    pods = pod.get_pods_having_label(
-                        label=constants.RGW_APP_LABEL, namespace=self.namespace
-                    )
-                    assert (
-                        not pods
-                    ), "RGW pods should not exist in the current platform/cluster"
+                logger.info("Checking whether RGW pod is not present")
+                pods = pod.get_pods_having_label(
+                    label=constants.RGW_APP_LABEL, namespace=self.namespace
+                )
+                assert (
+                    not pods
+                ), "RGW pods should not exist in the current platform/cluster"
 
-            elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-                rgw_count = get_rgw_count(
-                    config.ENV_DATA["ocs_version"],
-                    check_if_cluster_was_upgraded(),
-                    None,
-                )
-                logger.info(
-                    f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
-                )
-                rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
-                assert rgw_pod.wait_for_resource(
-                    condition=constants.STATUS_RUNNING,
-                    selector=constants.RGW_APP_LABEL,
-                    resource_count=rgw_count,
-                    timeout=60,
-                )
+        elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+            rgw_count = get_rgw_count(
+                config.ENV_DATA["ocs_version"],
+                check_if_cluster_was_upgraded(),
+                None,
+            )
+            logger.info(
+                f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
+            )
+            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
+            assert rgw_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.RGW_APP_LABEL,
+                resource_count=rgw_count,
+                timeout=60,
+            )
 
     def retrieve_nb_token(self):
         """
