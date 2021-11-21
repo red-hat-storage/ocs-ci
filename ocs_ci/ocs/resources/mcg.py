@@ -81,7 +81,7 @@ class MCG:
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        self.retrieve_noobaa_cli_binary()
+        #  self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -171,6 +171,7 @@ class MCG:
         if (
             config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
             or storagecluster_independent_check()
+            or config.ENV_DATA["mcg_only_deployment"]
         ):
             if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
                 version.get_semantic_ocs_version_from_config() > version.VERSION_4_5

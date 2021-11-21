@@ -748,6 +748,9 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    if ocsci_config.ENV_DATA["mcg_only_deployment"]:
+        log.info("Skipping Ceph toolbox setup due to running in MCG-only mode")
+        return
     namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
     # setup toolbox for external mode
