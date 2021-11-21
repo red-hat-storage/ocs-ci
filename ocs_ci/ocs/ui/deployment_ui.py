@@ -142,7 +142,7 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal - Attached Devices")
-        if self.operator == ODF_OPERATOR:
+        if self.operator_name == ODF_OPERATOR:
             self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
         else:
             self.do_click(
@@ -163,7 +163,7 @@ class DeploymentUI(PageNavigator):
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
         )
-        if self.operator == OCS_OPERATOR:
+        if self.operator_name == OCS_OPERATOR:
             logger.info("Select all nodes on 'Create Storage Class' step")
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
@@ -184,7 +184,7 @@ class DeploymentUI(PageNavigator):
             logger.error("Nodes not found after 600 seconds")
             raise TimeoutExpiredError
 
-        if self.operator == OCS_OPERATOR:
+        if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
