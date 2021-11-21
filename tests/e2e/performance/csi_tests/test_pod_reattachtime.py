@@ -49,19 +49,19 @@ class ResultsAnalyse(PerfResult):
     argnames=["interface", "copies", "timeout", "total_time_limit"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 3, 120, 60],
+            *[constants.CEPHBLOCKPOOL, 3, 120, 70],
             marks=pytest.mark.polarion_id("OCS-2043"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, 13, 600, 360],
+            *[constants.CEPHBLOCKPOOL, 13, 600, 420],
             marks=pytest.mark.polarion_id("OCS-2673"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 3, 120, 60],
+            *[constants.CEPHFILESYSTEM, 3, 120, 70],
             marks=pytest.mark.polarion_id("OCS-2044"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 13, 600, 360],
+            *[constants.CEPHFILESYSTEM, 13, 600, 420],
             marks=pytest.mark.polarion_id("OCS-2674"),
         ),
     ],
@@ -71,6 +71,7 @@ class ResultsAnalyse(PerfResult):
 class TestPodReattachTimePerformance(PASTest):
     """
     Test to verify Pod Reattach Time Performance
+    creates samples and measures average reattach time
     """
 
     def setup(self):
@@ -164,7 +165,7 @@ class TestPodReattachTimePerformance(PASTest):
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        time_measures = []
+        time_measures, files_written_list, data_written_list = ([], [], [])
         for sample_index in range(1, samples_num + 1):
             # Create a PVC
             accessmode = constants.ACCESS_MODE_RWX
@@ -232,12 +233,17 @@ class TestPodReattachTimePerformance(PASTest):
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
             data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
             logging.info(f"The amount of written data is {data_written}")
+            data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
+            logging.info(f"The amount of written data is {data_written_str}")
+            data_written = int(data_written_str[:-1])
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
             logging.info(
                 f"For {self.interface} - The number of files written to the pod is {files_written}"
             )
+            files_written_list.append(files_written)
+            data_written_list.append(data_written)
 
             logging.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
@@ -291,6 +297,9 @@ class TestPodReattachTimePerformance(PASTest):
             f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
         )
 
+        files_written_average = statistics.mean(files_written_list)
+        data_written_average = statistics.mean(data_written_list)
+
         os.remove(file_path)
         os.rmdir(dir_path)
 
@@ -306,6 +315,9 @@ class TestPodReattachTimePerformance(PASTest):
 
         full_results.add_key("storageclass", self.sc)
         full_results.add_key("pod_reattach_time", time_measures)
+        full_results.add_key("copies_number", copies)
+        full_results.add_key("files_number_average", files_written_average)
+        full_results.add_key("data_average", data_written_average)
         full_results.add_key("pod_reattach_time_average", average)
         full_results.add_key("pod_reattach_standard_deviation", st_deviation)
 
