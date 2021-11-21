@@ -1,3 +1,5 @@
+import pytest
+
 import shlex
 from subprocess import Popen, PIPE
 from ocs_ci.framework.testlib import workloads
@@ -12,6 +14,9 @@ from ocs_ci.utility.svt import (
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.skip(
+    reason="Skipped due to issue https://github.com/openshift/svt/issues/697"
+)
 @workloads
 class TestRegistryWorkload:
     def test_registry_workload(self, iterations=5):
