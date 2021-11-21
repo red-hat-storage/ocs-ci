@@ -171,6 +171,7 @@ class MCG:
         if (
             config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
             or storagecluster_independent_check()
+            or config.ENV_DATA["mcg_only_deployment"]
         ):
             if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
                 version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
