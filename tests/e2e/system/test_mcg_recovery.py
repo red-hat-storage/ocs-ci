@@ -5,6 +5,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import tier4
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import noobaa_db_backup_and_recovery
 from ocs_ci.ocs.bucket_utils import (
     compare_directory,
     compare_object_checksums_between_bucket_and_local,
@@ -43,6 +44,7 @@ class TestMCGRecovery(E2ETest):
         test_directory_setup,
         bucket_amount,
         object_amount,
+        snapshot_factory,
     ):
         # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
         # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
@@ -179,6 +181,7 @@ class TestMCGRecovery(E2ETest):
         ), "The cached object was replaced by the new one before the TTL has expired"
 
         # E2E TODO: Implement flows relating to PVC snapshots and clones, FIO pods
+        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
 
         # Verify the integrity of all objects in all buckets post-recovery
         for count, bucket in enumerate(test_buckets):
