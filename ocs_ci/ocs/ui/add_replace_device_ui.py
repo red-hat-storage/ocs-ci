@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.ui.views import ODF_OPERATOR
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,6 @@ class AddReplaceDeviceUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        self.ocp_version = get_ocp_version()
 
     def add_capacity_ui(self):
         """
@@ -25,8 +24,12 @@ class AddReplaceDeviceUI(PageNavigator):
         """
         self.add_capacity_ui = locators[self.ocp_version]["add_capacity"]
         self.navigate_installed_operators_page()
-        self.do_click(self.add_capacity_ui["ocs_operator"])
-        self.do_click(self.add_capacity_ui["storage_cluster_tab"])
+        if self.operator_name is ODF_OPERATOR:
+            self.do_click(self.add_capacity_ui["odf_operator"])
+            self.do_click(self.add_capacity_ui["storage_system_tab"])
+        else:
+            self.do_click(self.add_capacity_ui["ocs_operator"])
+            self.do_click(self.add_capacity_ui["storage_cluster_tab"])
         self.do_click(self.add_capacity_ui["kebab_storage_cluster"])
         self.do_click(self.add_capacity_ui["add_capacity_button"])
         self.do_click(
