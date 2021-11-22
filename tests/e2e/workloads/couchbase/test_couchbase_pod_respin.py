@@ -17,11 +17,11 @@ class TestCouchBasePodRespin(E2ETest):
     """
 
     @pytest.fixture()
-    def cb_setup(self, couchbase_factory_fixture):
+    def cb_setup(self, couchbase_new_factory_fixture):
         """
         Creates couchbase workload
         """
-        self.cb = couchbase_factory_fixture(
+        self.cb = couchbase_new_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
         self.sanity_helpers = Sanity()

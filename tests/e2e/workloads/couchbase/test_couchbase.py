@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.couchbase_new import CouchBase
 
 log = logging.getLogger(__name__)
 
@@ -30,8 +30,10 @@ class TestCouchBaseWorkload(E2ETest):
         """
         Testing basic couchbase workload
         """
-        couchbase.setup_cb()
-        couchbase.create_couchbase_worker(replicas=3)
+        couchbase.couchbase_subscription()
+        couchbase.create_cb_secrets()
+        couchbase.create_cb_cluster(replicas=3)
+        couchbase.create_data_buckets()
         couchbase.run_workload(replicas=3)
         couchbase.export_pfoutput_to_googlesheet(
             sheet_name="E2E Workloads", sheet_index=2
