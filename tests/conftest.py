@@ -453,6 +453,27 @@ def pagerduty_integration(pagerduty_service):
             integration_key = integration["integration_key"]
         pagerduty.set_pagerduty_integration_secret(integration_key)
 
+    def update_pagerduty_integration_secret():
+        """
+        Make sure that pagerduty secret is updated with correct integration
+        token. Check value of config.RUN['thread_pagerduty_secret_update']:
+            * required - secret is periodically updated to correct value
+            * not required - secret is not updated
+            * finished - thread is terminated
+
+        """
+        while config.RUN["thread_pagerduty_secret_update"] != "finished":
+            if config.RUN["thread_pagerduty_secret_update"] == "required":
+                pagerduty.set_pagerduty_integration_secret(integration_key)
+            time.sleep(60)
+
+    config.RUN["thread_pagerduty_secret_update"] = "not required"
+    thread = threading.Thread(
+        target=update_pagerduty_integration_secret,
+        name="thread_pagerduty_secret_update",
+    )
+    thread.start()
+
 
 @pytest.fixture(scope="class")
 def ceph_pool_factory_class(request, replica=3, compression=None):

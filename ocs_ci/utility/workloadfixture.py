@@ -121,6 +121,9 @@ def measure_operation(
     # if there is no file with results from previous run
     # then perform operation measurement
     else:
+        if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+            logger.info("Starting PagerDuty periodical update of pagerduty secret")
+            config.RUN['thread_pagerduty_secret_update'] = "required"
         logger.info(f"File {result_file} not created yet. Starting measurement...")
         if not measure_after:
             start_time = time.time()
@@ -194,6 +197,8 @@ def measure_operation(
                 incidents_response.raise_for_status()
                 pagerduty_incidents = incidents_response.json().get("incidents")
                 results["pagerduty_incidents"] = pagerduty_incidents
+                logger.info("Stopping PagerDuty periodical update of pagerduty secret")
+                config.RUN['thread_pagerduty_secret_update'] = "required"
             logger.info(f"Results of measurement: {results}")
             with open(result_file, "w") as outfile:
                 logger.info(f"Dumping results of measurement into {result_file}")
