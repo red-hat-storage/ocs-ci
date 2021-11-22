@@ -41,7 +41,7 @@ format = "%H:%M:%S.%f"
 class TestPvcMultiSnapshotPerformance(PASTest):
     """
     Tests to measure PVC snapshots creation performance & scale
-    The test is trying to to take the maximum number of snapshot for one PVC
+    The test is trying to to take the maximal number of snapshot for one PVC
     """
 
     def setup(self):
@@ -95,7 +95,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         try:
             vs_list = self.snapshot.get(all_namespaces=True)["items"]
         except Exception as err:
-            log.error(f"Can not get the list of snapshot : {err}")
+            log.error(f"Cannot get the list of snapshots : {err}")
             vs_list = []
 
         log.info(f"Deleting all Snapshots ({len(vs_list)})")
@@ -349,7 +349,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     def run(self):
         """
         Running the test
-            foreach snapshot : write data on the pod and take snapshot
+            for each snapshot : write data on the pod and take snapshot
         """
         results = []
         for test_num in range(1, self.num_of_snaps + 1):
