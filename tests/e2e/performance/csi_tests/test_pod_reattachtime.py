@@ -231,8 +231,6 @@ class TestPodReattachTimePerformance(PASTest):
 
             logging.info("Getting the amount of data written to the PVC")
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
-            data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            logging.info(f"The amount of written data is {data_written}")
             data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
             logging.info(f"The amount of written data is {data_written_str}")
             data_written = int(data_written_str[:-1])
