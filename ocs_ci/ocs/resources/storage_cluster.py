@@ -294,7 +294,9 @@ def ocs_install_verification(
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
-        config.DEPLOYMENT.get("ui_deployment") or config.DEPLOYMENT["external_mode"]
+        config.DEPLOYMENT.get("ui_deployment")
+        or config.DEPLOYMENT["external_mode"]
+        or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
     ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
@@ -543,7 +545,10 @@ def verify_noobaa_endpoint_count():
     )
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
         max_eps = 1
-    if not disable_noobaa:
+    if (
+        not disable_noobaa
+        or config.ENV_DATA.get("platform") not in constants.MANAGED_SERVICE_PLATFORMS
+    ):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
