@@ -27,8 +27,6 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.perftests import PASTest
 
-# from ocs_ci.utility.utils import ocsci_log_path
-
 log = logging.getLogger(__name__)
 
 # error message to look in a command output
@@ -162,6 +160,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         self.log_names = {"start": [], "end": []}
         log.info("Looking for logs pod name")
+
         # Getting csi log name for snapshot start creation messages
         results = self.get_csi_pod(namespace="openshift-cluster-storage-operator")
         for line in results:
@@ -249,10 +248,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                         )
                         time.sleep(sleep_time)
                         timeout -= sleep_time
-                except Exception as ex:
-                    err_msg = f"Can not get {snap_name} status : {ex}"
-                    log.error(err_msg)
-                    raise Exception(err_msg)
+                except Exception:
+                    log.info(
+                        f"{snap_name} is not ready yet, sleep 5 sec before re-check"
+                    )
+                    time.sleep(sleep_time)
+                    timeout -= sleep_time
 
             else:
                 err_msg = f"Can not get snapshot status {res}"
