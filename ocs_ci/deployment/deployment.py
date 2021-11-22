@@ -31,6 +31,8 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
+    PodNotCreated,
+    RBDSideCarContainerException,
     ResourceWrongStatusException,
     UnavailableResourceException,
     UnsupportedFeatureError,
@@ -54,6 +56,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state,
     get_pods_having_label,
+    get_pod_count,
 )
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification, setup_ceph_debug
 from ocs_ci.ocs.uninstall import uninstall_ocs
@@ -79,10 +82,12 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     enable_huge_pages,
     exec_cmd,
+    get_cluster_name,
     get_latest_ds_olm_tag,
     get_ocs_build_number,
     is_cluster_running,
     run_cmd,
+    run_cmd_multicluster,
     set_selinux_permissions,
     set_registry_to_managed_state,
     add_stage_cert,
@@ -230,8 +235,10 @@ class Deployment(object):
                 config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
+
         # Multicluster: Install ODF multicluster orchestrator only on hub
         if config.multicluster:
+            # current CTX: ACM
             config.switch_acm_ctx()
             odf_multicluster_orchestrator_data = templating.load_yaml(
                 constants.ODF_MULTICLUSTER_ORCHESTRATOR
@@ -246,7 +253,123 @@ class Deployment(object):
             run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
             self.configure_mirror_peer()
 
+            # Create volumereplication class on all DR participating clusters(except ACM)
+            self.configure_volume_replication_class()
+
+            # Configure s3secret
+            # Same acm cluster name suffix will be used as secret name on all clusters
+            s3_acm_secret_suffix = get_cluster_name(config.ENV_DATA['cluster_path'])
+            dr_regions = self.get_participating_regions()
+            # Create s3 secret OCP resource on all the clusters
+            s3_secret_data = templating.load_yaml(
+                constants.ODR_S3_SECRET_YAML
+            )
+            secret_yaml_files = []
+            for region in dr_regions:
+                # Generate yaml file per region 
+                secret_name = (
+                    f"{constants.dr_s3_secret_name_prefix}-{s3_acm_secret_suffix}-{region}"
+                )
+                s3_secret_data["metadata"]["name"] = secret_name
+                s3_secret_yaml = tempfile.NamedTemporaryFile(
+                    mode='w+', 
+                    prefix=f"s3_secret_{s3_acm_secret_suffix}_{region}_",
+                    delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    s3_secret_data,
+                    s3_secret_yaml.name
+                )
+                secret_yaml_files.append(s3_secret_yaml.name)
+            
+            # Create s3 secret on all clusters
+            for secret_yaml in secret_yaml_files:
+                cmd = (
+                    f"oc create -f {secret_yaml}"
+                )
+                run_cmd_multicluster(cmd)
+
+            # Create ODF HUB operator only on ACM HUB
+            dr_hub_operator_data = templating.load_yaml(
+                constants.OPENSHIFT_DR_HUB_OPERATOR
+            )
+            dr_hub_operator_yaml = tempfile.NamedTemporaryFile(
+                mode='w+', prefix="dr_hub_operator_", delete=False
+            )
+            templating.dump_to_temp_yaml(
+                dr_hub_operator_data,
+                dr_hub_operator_yaml.name
+            )
+            run_cmd(f"oc create -f {dr_hub_operator_yaml.name}")
+
+            # Create DR policy on ACM hub cluster
+            dr_policy_hub_data = templating.load_yaml(
+                constants.DR_POLICY_ACM_HUB
+            )
+            # Update DR cluster name
+            for (cluster, name_entry) in zip(get_non_acm_cluster_config(), dr_policy_hub_data['spec']['drClusterSet']):
+                name_entry['name'] = cluster.ENV_DATA['cluster_name']
+            dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
+                mode='w+', prefix='dr_policy_hub_', delete=False 
+            )
+            templating.dump_to_temp_yaml(
+                dr_policy_hub_data,
+                dr_policy_hub_yaml.name
+            )
+            run_cmd(f"oc create -f {dr_policy_hub_yaml.name}")
+
+            # Create ODF cluster operator on all non-acm clusters
+            dr_cluster_operator_data = templating.load_yaml(
+                constants.OPENSHIFT_DR_CLUSTER_OPERATOR
+            )
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(config.clusters.index(cluster))
+                dr_cluster_operator_yaml = tempfile.NamedTemporaryFile(
+                    mode='w+', prefix="dr_cluster_operator_", delete=False 
+                )
+                templating.dump_to_temp_yaml(
+                    dr_cluster_operator_data,
+                    dr_cluster_operator_yaml.name
+                )
+                run_cmd(f"oc create -f {dr_cluster_operator_yaml.name}")
+            # Reset ctx 
+            config.switch_acm_ctx()
+
+
+    def get_participating_regions(self):
+        """
+        Get all the participating regions in the DR scenario
+
+        Returns:
+            list of str: List of participating regions 
+
+        """
+        # For first cut just returning east and west
+        return ["east", "west"]
+
+    def configure_volume_replication_class(self):
+        """
+        Configure volume replication class on all non-acm clusters
+        beginning ctx: ACM
+
+        """
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(config.clusters.index(cluster))
+            volume_replicatioin_data = templating.load_yaml(
+                constants.VOLUME_REPLICATION_CLASS
+            )
+            volume_replication_yaml = tempfile.NamedTemporaryFile(
+                mode='w+', prefix='rbd_volumereplication_', delete=False
+            )
+            templating.dump_to_temp_yaml(
+                volume_replicatioin_data,
+                volume_replication_yaml.name,
+            )
+            run_cmd(f"oc create -f {volume_replication_yaml.name}")
+        config.switch_acm_ctx()
+
     def configure_mirror_peer(self):
+        # Current CTX: ACM
         # Create mirror peer 
         mirror_peer_data = templating.load_yaml(
             constants.MIRROR_PEER
@@ -273,34 +396,73 @@ class Deployment(object):
             mirror_peer_data,
             mirror_peer_yaml.name
         )
+        # Current CTX: ACM
+        # Just being explicit here to make code more readable
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {mirror_peer_yaml.name}")
         self.validate_mirror_peer()
         # Patch storagecluster on all the DR participating  clusters(except ACM)
-        index = 0
-        for cluster in config.clusters:
-            if config.clusters.index(cluster) == config.acm_index:
-                continue
-            else:
-                config.switch_ctx(index)
-                patch_cmd = f"oc patch storagecluster \${constants.rbd_mirroring_storagecluster_patch}"
+        # Current CTX: ACM
+        patch_cmd = f"oc patch storagecluster \${constants.rbd_mirroring_storagecluster_patch}"
+        # run_cmd_mulctiluster will take care of changing the contexts
+        run_cmd_multicluster(patch_cmd, skip_index=config.acm_index)
 
-                run_cmd(patch_cmd)
-                query_mirroring = (
-                    f"oc get CephBlockPool -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        query_mirroring = (
+            f"oc get CephBlockPool -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        out_list = run_cmd_multicluster(query_mirroring, skip_index=config.acm_index)
+        index = 0
+        for out in out_list:
+            if out != "true":
+                logger.error(f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}")
+                raise ResourceWrongStatusException("CephBlockPool", expected='true', got=out)
+            index =+ 1
+        # Check for RBD mirroring pods
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(config.clusters.index(cluster))
+            mirror_pod = get_pod_count(label="app=rook-ceph-rbd-mirror")
+            if not mirror_pod:
+                raise PodNotCreated(
+                    f"RBD mirror pod not found on cluster: "
+                    f"{cluster.ENV_DATA['cluster_name']}"
                 )
-                out = run_cmd(query_mirroring)
-                if out != "true":
-                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
-                    ResourceWrongStatusException("CephBlockPool", expected='true', got=out)
-                index =+ 1
+            self.enable_csi_sidecar()
+
+        # Reset CTX back to ACM
+        config.switch_acm_ctx()
+
+    def enable_csi_sidecar(self):
+        """
+        Enable sidecar containers for rbd mirroring on each of the 
+        ODF cluster
+
+        """
+        patch_cmd = (
+            f"oc patch cm rook-ceph-operator-config "
+            f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f"--type json --patch {constants.rbd_sidecar_patch_cmd}"
+        )
+        run_cmd(patch_cmd)
+        # Number of containers should be 8/8 from 2 pods now which makes total 16 containers
+        rbd_pods = (
+            f"oc get pods -n {constants.OPENSHIFT_STORAGE_NAMESPACE} " 
+            f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
+        )
+        out = run_cmd(rbd_pods)
+        if constants.rbd_sidecar_count != len(out.split(' ')):
+            raise RBDSideCarContainerException("")
+
         
     def validate_mirror_peer(self):
         """
-        Validate mirror peer
+        Validate mirror peer,
+        Begins with CTX: ACM
 
         1. Check initial phase of 'ExchangingSecret'
         2. Check token-exchange-agent pod in 'Running' phase
+
+        Raises:
+            ResourceWrongStatusException: If pod is not in expected state
 
         """
         # Check mirror peer status only on HUB
@@ -311,7 +473,8 @@ class Deployment(object):
         mirror_peer.wait_for_phase(phase="ExchangingSecret")
 
         # Check for token-exchange-agent pod and its status has to be running
-        # on all participating clustres except HUB
+        # on all participating clusters except HUB
+        # We will switch config ctx to Participating clusters
         index = 0
         for cluster in config.clusters:
             if config.clusters.index(cluster) == config.acm_index:
@@ -325,6 +488,7 @@ class Deployment(object):
                     logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
                     ResourceWrongStatusException(pod_name, expected='Running', got=pod_status)
                 index =+ 1
+        # Switching back CTX to ACM
         config.switch_acm_ctx()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
