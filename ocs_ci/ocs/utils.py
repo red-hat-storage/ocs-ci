@@ -1228,6 +1228,7 @@ def enable_console_plugin():
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 
+
 def get_non_acm_cluster_config():
     """
     Get a list of non-acm cluster's config objects
@@ -1245,6 +1246,7 @@ def get_non_acm_cluster_config():
 
     return non_acm_list
 
+
 def get_primary_cluster_config():
     """
     Get the primary cluster config object in a DR scenario
@@ -1256,5 +1258,3 @@ def get_primary_cluster_config():
     for cluster in range(ocsci_config.clusters):
         if cluster.DEPLOYMENT["designated_primary_cluster"]:
             return cluster
-
-
