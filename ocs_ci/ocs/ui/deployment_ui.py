@@ -4,13 +4,12 @@ import time
 
 from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
-from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -24,12 +23,7 @@ class DeploymentUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        self.ocp_version = get_ocp_version()
         self.dep_loc = locators[self.ocp_version]["deployment"]
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        self.operator = (
-            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
-        )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -63,21 +57,21 @@ class DeploymentUI(PageNavigator):
 
         """
         self.navigate_operatorhub_page()
-        self.do_send_keys(self.dep_loc["search_operators"], text=self.operator)
-        logger.info(f"Choose {self.operator} Version")
-        if self.operator is OCS_OPERATOR:
+        self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
+        logger.info(f"Choose {self.operator_name} Version")
+        if self.operator_name is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
-        elif self.operator is ODF_OPERATOR:
+        elif self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["click_odf_operator"], enable_screenshot=True)
-        logger.info(f"Click Install {self.operator}")
+        logger.info(f"Click Install {self.operator_name}")
         self.do_click(self.dep_loc["click_install_ocs"], enable_screenshot=True)
-        if self.operator is ODF_OPERATOR:
+        if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
-        if self.operator is ODF_OPERATOR:
+        if self.operator_name is ODF_OPERATOR:
             time.sleep(60)
             self.refresh_page()
-        self.verify_operator_succeeded(operator=self.operator)
+        self.verify_operator_succeeded(operator=self.operator_name)
 
     def install_local_storage_operator(self):
         """
@@ -86,7 +80,7 @@ class DeploymentUI(PageNavigator):
         """
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
-            logger.info(f"Search {self.operator} Operator")
+            logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
             self.do_click(
@@ -105,17 +99,17 @@ class DeploymentUI(PageNavigator):
         Install StorageCluster/StorageSystem
 
         """
-        if self.operator == ODF_OPERATOR:
+        if self.operator_name == ODF_OPERATOR:
             self.navigate_installed_operators_page()
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
             self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
         else:
-            self.search_operator_installed_operators_page(operator=self.operator)
+            self.search_operator_installed_operators_page(operator=self.operator_name)
 
-        logger.info(f"Click on {self.operator} on 'Installed Operators' page")
-        if self.operator == ODF_OPERATOR:
+        logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
+        if self.operator_name == ODF_OPERATOR:
             logger.info("Click on Create StorageSystem")
             self.do_click(
                 locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
@@ -124,7 +118,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
             )
-        elif self.operator == OCS_OPERATOR:
+        elif self.operator_name == OCS_OPERATOR:
             logger.info("Click on Create StorageCluster")
             self.do_click(
                 locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
@@ -148,25 +142,32 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal - Attached Devices")
-        self.do_click(self.dep_loc["internal-attached_devices"], enable_screenshot=True)
-
-        logger.info("Click on All nodes")
-        self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
+        if self.operator_name == ODF_OPERATOR:
+            self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
+        else:
+            self.do_click(
+                self.dep_loc["internal-attached_devices"], enable_screenshot=True
+            )
+            logger.info("Click on All nodes")
+            self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
         logger.info(
             f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
         )
         self.do_send_keys(
-            locator=self.dep_loc["lv_name"], text=constants.LOCAL_BLOCK_RESOURCE
+            locator=self.dep_loc["lv_name"],
+            text=constants.LOCAL_BLOCK_RESOURCE,
+            timeout=300,
         )
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
         )
-        logger.info("Select all nodes on 'Create Storage Class' step")
-        self.do_click(
-            locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
-        )
+        if self.operator_name == OCS_OPERATOR:
+            logger.info("Select all nodes on 'Create Storage Class' step")
+            self.do_click(
+                locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
+            )
         self.verify_disks_lso_attached()
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
@@ -183,12 +184,19 @@ class DeploymentUI(PageNavigator):
             logger.error("Nodes not found after 600 seconds")
             raise TimeoutExpiredError
 
-        logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
-        self.choose_expanded_mode(
-            mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
+        if self.operator_name == OCS_OPERATOR:
+            logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
+            )
+            self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
+            timeout_next = 30
+        else:
+            timeout_next = 600
+
+        self.do_click(
+            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
-        self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
         self.configure_encryption()
 
@@ -200,7 +208,7 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal")
-        if self.operator == ODF_OPERATOR:
+        if self.operator_name == ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
             )
@@ -213,7 +221,7 @@ class DeploymentUI(PageNavigator):
         )
         self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
 
-        if self.operator == ODF_OPERATOR:
+        if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
         self.configure_osd_size()
@@ -239,11 +247,11 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Create storage cluster on 'Review and create' page")
-        if self.operator is OCS_OPERATOR:
+        if self.operator_name is OCS_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["create_on_review"], enable_screenshot=True
             )
-        elif self.operator is ODF_OPERATOR:
+        elif self.operator_name is ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["create_storage_system"], enable_screenshot=True
             )
@@ -318,7 +326,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8"):
+        if self.ocp_version in ("4.7", "4.8", "4.9"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -327,7 +335,7 @@ class DeploymentUI(PageNavigator):
         elif self.ocp_version == "4.6":
             self.do_click(self.dep_loc["project_dropdown"], enable_screenshot=True)
             self.do_click(self.dep_loc[operator], enable_screenshot=True)
-        elif self.ocp_version == "4.9":
+        elif self.ocp_version == "4.9" and operator != "Local Storage":
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
@@ -340,7 +348,7 @@ class DeploymentUI(PageNavigator):
 
     def install_ocs_ui(self):
         """
-        Install OCS/ODF via UI
+        Install OCS/ODF via UI.
 
         """
         if config.DEPLOYMENT.get("local_storage"):
