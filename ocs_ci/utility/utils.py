@@ -458,6 +458,54 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
+def run_cmd_multicluster(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+    """
+    Run command on multiple clusters. Useful in multicluster scenarios
+    This is wrapper around exec_cmd
+
+    Args:
+        cmd (str): command to be run
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(``**kwargs``)
+        timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
+
+    Raises:
+        CommandFailed: In case the command execution fails
+
+    Returns:
+        list : of CompletedProcess objects as per cluster's index in config.clusters
+            i.e. [cluster1_completedprocess, None, cluster2_completedprocess]
+            if command execution skipped on a particular cluster then corresponding entry will have null
+        
+    """
+    # Skip indexed cluster while running commands
+    # Useful to skip operations on ACM cluster
+    skip_index = kwargs.get('skip_index', None)
+    restore_ctx_index = config.cur_index
+    completed_process = [None] * len(config.clusters)
+    index = 0
+    for cluster in config.clusters:
+        if skip_index and (skip_index == config.clusters.index(cluster)):
+            continue
+        else:
+            config.switch_ctx(index)
+            try:
+                completed_process[index] = exec_cmd(
+                    cmd, secrets=secrets, timeout=timeout, ignore_error=ignore_error, **kwargs
+                )
+            except CommandFailed:
+                # In case of failure, restore the cluster context to where we started
+                config.switch_ctx(restore_ctx_index)
+                log.error(f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} ")
+                raise 
+            index =+ 1
+    config.switch_ctx(restore_ctx_index)
+    return completed_process
+
+
 def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     Run an arbitrary command locally

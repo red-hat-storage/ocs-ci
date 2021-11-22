@@ -631,6 +631,13 @@ rbd_mirroring_storagecluster_patch = (
 rbd_mirroring_enabled_query = (
     "-o=jsonpath='{.items[?(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
 )
+rbd_sidecar_patch_cmd = (
+    " '[{ 'op': 'add', 'path': '/data/CSI_ENABLE_OMAP_GENERATOR', 'value': 'true' },"
+    "'{ 'op': 'add', 'path': '/data/CSI_ENABLE_VOLUME_REPLICATION', 'value': 'true' }]'"
+)
+rbd_sidecar_count = 16
+dr_s3_secret_name_prefix = "odr-s3secret"
+dr_workload_repo_base_dir = "ocm-ramen-samples"
 
 # constants
 RBD_INTERFACE = "rbd"

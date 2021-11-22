@@ -428,6 +428,10 @@ class PodNotCreated(Exception):
     pass
 
 
+class RBDSideCarContainerException(Exception):
+    pass
+
+
 class ElasticSearchNotDeployed(Exception):
     pass
 
