@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     ManageTest,
     tier1,
-    acceptance,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import TimeoutSampler
@@ -35,7 +34,6 @@ class TestRbdThickProvisioning(ManageTest):
             rbd_thick_provision=True,
         )
 
-    @acceptance
     @tier1
     @polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
