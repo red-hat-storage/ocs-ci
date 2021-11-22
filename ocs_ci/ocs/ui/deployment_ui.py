@@ -73,6 +73,10 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        if self.operator_name is ODF_OPERATOR:
+            time.sleep(60)
+            self.refresh_page()
+        self.verify_operator_succeeded(operator=self.operator_name)
         if self.operator is ODF_OPERATOR:
             time.sleep(90)
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
