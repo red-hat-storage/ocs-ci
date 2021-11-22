@@ -1195,7 +1195,8 @@ def health_checker(request, tier_marks_name):
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                if not (teardown or skip_ocs_deployment):
+                mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
+                if not (teardown or skip_ocs_deployment or mcg_only_deployment):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
             except CephHealthException:
@@ -3754,22 +3755,6 @@ def pvc_clone_factory(request):
 def reportportal_customization(request):
     if config.REPORTING.get("rp_launch_url"):
         request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
-    elif hasattr(request.node.config, "py_test_service"):
-        rp_service = request.node.config.py_test_service
-        if not hasattr(rp_service.RP, "rp_client"):
-            request.config._metadata[
-                "RP Launch URL:"
-            ] = "Problem with RP, launch URL is not available!"
-            return
-        launch_id = rp_service.RP.rp_client.launch_id
-        project = rp_service.RP.rp_client.project
-        endpoint = rp_service.RP.rp_client.endpoint
-        launch_url = f"{endpoint}/ui/#{project}/launches/all/{launch_id}/{launch_id}"
-        config.REPORTING["rp_launch_url"] = launch_url
-        config.REPORTING["rp_launch_id"] = launch_id
-        config.REPORTING["rp_endpoint"] = endpoint
-        config.REPORTING["rp_project"] = project
-        request.config._metadata["RP Launch URL:"] = launch_url
 
 
 @pytest.fixture()

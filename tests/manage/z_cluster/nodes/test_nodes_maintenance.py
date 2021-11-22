@@ -27,7 +27,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4b,
     ManageTest,
-    aws_platform_required,
+    aws_based_platform_required,
     ignore_leftovers,
     ipi_deployment_required,
     skipif_bm,
@@ -314,7 +314,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4
     @tier4b
-    @aws_platform_required
+    @aws_based_platform_required
     @ipi_deployment_required
     @pytest.mark.parametrize(
         argnames=["interface"],

@@ -91,6 +91,9 @@ anywhere else.
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
+* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor version.
+  (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
+  [doc](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs)
 * `min_noobaa_endpoints` - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)
 * `host_network` - Enable host network in the storage cluster CR and prepare rules needed in AWS for host network during OCP deployment
 * `subscription_plan_approval` - 'Manual' or 'Automatic' subscription approval for OCS upgrade
@@ -116,6 +119,8 @@ anywhere else.
 * `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
 * `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
+* `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
+* `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 
 #### REPORTING
 
@@ -134,7 +139,6 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
-* `rp_client_log_level` - Log level for the reportportal_client logger (Default: ERROR)
 
 #### ENV_DATA
 

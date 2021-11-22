@@ -1158,6 +1158,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "mcg-operator",
     "noobaa-operator",
     "ocs-operator",
     "odf-multicluster-orchestrator",
@@ -1399,6 +1400,20 @@ mon_pg_warn_max_object_skew = 0
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
+
+ROOK_CEPH_CONFIG_VALUES_49 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]

@@ -19,7 +19,7 @@ from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 
-import hcl
+import hcl2
 import requests
 import yaml
 import git
@@ -2411,7 +2411,7 @@ def remove_keys_from_tf_variable_file(tf_file, keys):
     from ocs_ci.utility.templating import dump_data_to_json
 
     with open(tf_file, "r") as fd:
-        obj = hcl.load(fd)
+        obj = hcl2.load(fd)
     for key in keys:
         obj["variable"].pop(key)
 
