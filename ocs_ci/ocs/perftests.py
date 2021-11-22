@@ -86,13 +86,13 @@ class PASTest(BaseTest):
         while still_going_down:
             new_data = self.get_cephfs_data()
             # no deletion operation is in progress or up to 2% inflation
-            if new_data <= (now_data * 1.02):
+            if new_data >= (now_data * 1.02):
                 still_going_down = False
                 # up to 2% inflation of usage is acceptable
                 if new_data > (self.used_capacity * 1.02):
                     log.warning(
-                        f"usage capacity after the test ({new_data} GiB) "
-                        f"is more then in the begining of it ({self.used_capacity} GiB)"
+                        f"usage capacity after the test ({new_data:.2f} GiB) "
+                        f"is more then in the begining of it ({self.used_capacity:.2f} GiB)"
                     )
             else:
                 log.info(f"Last usage : {now_data}, Current usage {new_data}")
