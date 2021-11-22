@@ -597,28 +597,22 @@ EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
-#Multicluster related yamls
+# Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
 )
-MIRROR_PEER = os.path.join(
-   TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml" 
-)
+MIRROR_PEER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml")
 VOLUME_REPLICATION_CLASS = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "volume_replication_class.yaml"
 )
 OPENSHIFT_DR_CLUSTER_OPERATOR = os.path.join(
-    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_cluster_operator.yaml" 
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_cluster_operator.yaml"
 )
 OPENSHIFT_DR_HUB_OPERATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_hub_operator.yaml"
 )
-DR_POLICY_ACM_HUB = os.path.join(
-    TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml"
-)
-ODR_S3_SECRET_YAML = os.path.join(
-    TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml"
-)
+DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
+ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 
 # DR constants
 dr_default_namespace = "openshift-dr-systems"
@@ -629,7 +623,8 @@ rbd_mirroring_storagecluster_patch = (
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
 )
 rbd_mirroring_enabled_query = (
-    "-o=jsonpath='{.items[?(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
+    "-o=jsonpath='{.items[?"
+    "(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
 )
 rbd_sidecar_patch_cmd = (
     " '[{ 'op': 'add', 'path': '/data/CSI_ENABLE_OMAP_GENERATOR', 'value': 'true' },"
