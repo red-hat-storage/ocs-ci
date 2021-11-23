@@ -223,7 +223,7 @@ class VMWareNodes(NodesBase):
             vms.extend(node_vms)
         return vms
 
-    def get_vms_in_dc(self, nodes, dc=None):
+    def get_vm_nodes_in_dc(self, nodes, dc=None):
         """
         Get vSphere vm objects list in the Datacenter(and not just in the cluster scope)
 
@@ -448,7 +448,7 @@ class VMWareNodes(NodesBase):
             False otherwise
 
         """
-        vms = self.get_vms_in_dc(nodes)
+        vms = self.get_vm_nodes_in_dc(nodes)
         self.vsphere.destroy_vms(vms)
 
 

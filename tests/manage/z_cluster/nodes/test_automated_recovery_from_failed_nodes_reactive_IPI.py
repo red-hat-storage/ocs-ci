@@ -36,7 +36,6 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4
 @tier4b
-@aws_based_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
