@@ -13,18 +13,17 @@ log = logging.getLogger(__name__)
 
 @workloads
 @ignore_leftovers
-@pytest.mark.skip(reason="ocs-ci issue: 4488, cb-example pod readiness probe fail")
 class TestCouchBaseNodeDrain(E2ETest):
     """
     Deploy an CouchBase workload using operator
     """
 
     @pytest.fixture()
-    def cb_setup(self, couchbase_factory_fixture):
+    def cb_setup(self, couchbase_new_factory_fixture, node_drain_teardown):
         """
         Creates couchbase workload
         """
-        self.cb = couchbase_factory_fixture(
+        self.cb = couchbase_new_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
 

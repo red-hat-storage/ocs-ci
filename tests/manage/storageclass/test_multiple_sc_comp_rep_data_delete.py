@@ -2,7 +2,6 @@ import logging
 import pytest
 from time import sleep
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -71,7 +70,9 @@ class TestMultipleScCompRepDataDelete(ManageTest):
 
         log.info("Creating PVCs and PODs")
         for sc_obj in sc_obj_list:
-            pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj)
+            pvc_obj = pvc_factory(
+                interface=interface_type, storageclass=sc_obj, size=10
+            )
             pvc_obj_list.append(pvc_obj)
             pod_obj_list.append(pod_factory(interface=interface_type, pvc=pvc_obj))
 
@@ -81,16 +82,13 @@ class TestMultipleScCompRepDataDelete(ManageTest):
                 "fs",
                 size="1G",
                 rate="1500m",
-                runtime=0,
+                runtime=60,
                 buffer_compress_percentage=60,
                 buffer_pattern="0xdeadface",
                 bs="8K",
                 jobs=5,
                 readwrite="readwrite",
             )
-
-        for pod_obj in pod_obj_list:
-            get_fio_rw_iops(pod_obj)
 
         log.info("deleting PODs and PVCs")
         delete_pods(pod_obj_list, wait=True)

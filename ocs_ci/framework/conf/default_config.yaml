@@ -184,6 +184,8 @@ ENV_DATA:
   VAULT_BACKEND: "v1"
   # enable console plugin
   enable_console_plugin: true
+  # MCG only deployment
+  mcg_only_deployment: false
 
 # This section is related to upgrade
 UPGRADE:
@@ -236,6 +238,7 @@ PERF:
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.152"
   dev_es_port: 9200
+  dashboard_cred: "data/perfdash"
 
 # Specific component to be enabled/disabled
 # like RGW, NOOBAA, CephFS, RBD

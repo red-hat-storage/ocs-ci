@@ -40,6 +40,11 @@ TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
+TEMPLATE_COUCHBASE_NEW_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase_new")
+TEMPLATE_COUCHBASE_NEW_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_NEW_DIR, "server")
+TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_DIR, "pillowfight"
+)
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
@@ -402,6 +407,30 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 
 OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
+)
+
+COUCHBASE_NEW_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-operatorgroup.yaml"
+)
+
+COUCHBASE_NEW_OPERATOR_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-subscription.yaml"
+)
+
+COUCHBASE_NEW_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_NEW_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker.yaml"
+)
+
+COUCHBASE_NEW_DATA_BUCKET = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-data-bucket.yaml"
+)
+
+COUCHBASE_NEW_PILLOWFIGHT = os.path.join(
+    TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR, "basic-pillowfight.yaml"
 )
 
 COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
@@ -829,6 +858,7 @@ ORDER_AFTER_UPGRADE = 80
 # Deployment constants
 OCS_CSV_PREFIX = "ocs-operator"
 LOCAL_STORAGE_CSV_PREFIX = "local-storage-operator"
+COUCHBASE_CSV_PREFIX = "couchbase-operator"
 LATEST_TAGS = (
     "latest",
     "latest-stable",
@@ -1155,6 +1185,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
     "local-storage-operator",
+    "mcg-operator",
     "noobaa-operator",
     "ocs-operator",
     "odf-multicluster-orchestrator",
@@ -1396,6 +1427,20 @@ mon_pg_warn_max_object_skew = 0
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
+
+ROOK_CEPH_CONFIG_VALUES_49 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.5
+"""
+
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]

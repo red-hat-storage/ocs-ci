@@ -16,10 +16,12 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import cal_md5sum
+from ocs_ci.framework.testlib import skipif_ocs_version
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("<4.9")
 class TestReplication(MCGTest):
     """
     Test suite for MCG object replication policies

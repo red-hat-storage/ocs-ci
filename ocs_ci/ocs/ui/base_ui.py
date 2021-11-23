@@ -29,10 +29,12 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     PageNotLoaded,
 )
+from ocs_ci.ocs.ui.views import OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_kubeadmin_password,
@@ -59,12 +61,6 @@ class BaseUI:
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
-        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            self.storage_class = "thin_sc"
-        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            self.storage_class = "gp2_sc"
-        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-            self.storage_class = "managed-premium_sc"
 
     def do_click(self, locator, timeout=30, enable_screenshot=False):
         """
@@ -341,8 +337,18 @@ class PageNavigator(BaseUI):
         super().__init__(driver)
         self.ocp_version = get_ocp_version()
         self.page_nav = locators[self.ocp_version]["page"]
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        self.operator_name = (
+            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
+        )
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.generic_locators = locators[self.ocp_version]["generic"]
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            self.storage_class = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            self.storage_class = "gp2_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+            self.storage_class = "managed-premium_sc"
 
     def navigate_overview_page(self):
         """
@@ -666,8 +672,10 @@ def login_ui(console_url=None):
         driver (Selenium WebDriver)
 
     """
+    default_console = False
     if not console_url:
         console_url = get_ocp_url()
+        default_console = True
     logger.info("Get password of OCP console")
     password = get_kubeadmin_password()
     password = password.rstrip()
@@ -777,7 +785,8 @@ def login_ui(console_url=None):
         )
     )
     element.click()
-    WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
+    if default_console:
+        WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
     return driver
 
 

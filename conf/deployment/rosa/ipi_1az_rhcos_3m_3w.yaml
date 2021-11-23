@@ -2,7 +2,7 @@ DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'rosa'
-  deployment_type: 'ipi'
+  deployment_type: 'managed'
   region: 'us-east-2'
   worker_availability_zones:
     - 'us-east-2a'

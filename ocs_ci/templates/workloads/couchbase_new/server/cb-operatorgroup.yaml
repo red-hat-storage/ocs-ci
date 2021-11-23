@@ -1,0 +1,9 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  annotations:
+  name: couchbase
+  namespace: couchbase-operator-namespace
+spec:
+  targetNamespaces:
+  - couchbase-operator-namespace
