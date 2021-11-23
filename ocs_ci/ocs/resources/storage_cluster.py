@@ -388,8 +388,11 @@ def ocs_install_verification(
                 item for item in crush_rule["steps"] if item.get("type") == "zone"
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
-    log.info("Validate cluster on PVC")
-    validate_cluster_on_pvc()
+
+    # TODO: update pvc validation for managed services
+    if config.ENV_DATA.get("platform") not in constants.MANAGED_SERVICE_PLATFORMS:
+        log.info("Validate cluster on PVC")
+        validate_cluster_on_pvc()
 
     # Verify ceph health
     log.info("Verifying ceph health")
