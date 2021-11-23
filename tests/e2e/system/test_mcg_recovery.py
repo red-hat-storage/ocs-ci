@@ -5,7 +5,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import tier4
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.helpers import noobaa_db_backup_and_recovery
 from ocs_ci.ocs.bucket_utils import (
     compare_directory,
     compare_object_checksums_between_bucket_and_local,
@@ -45,6 +44,7 @@ class TestMCGRecovery(E2ETest):
         bucket_amount,
         object_amount,
         snapshot_factory,
+        noobaa_db_backup_and_recovery,
     ):
         # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
         # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
