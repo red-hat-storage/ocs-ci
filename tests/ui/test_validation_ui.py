@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
+from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, skipif_ocs_version
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
 
@@ -32,6 +32,7 @@ class TestUserInterfaceValidation(object):
 
     @tier1
     @skipif_ui_not_support("validation")
+    @skipif_ocs_version("<4.9")
     def test_odf_storagesystems_ui(self, setup_ui):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9
