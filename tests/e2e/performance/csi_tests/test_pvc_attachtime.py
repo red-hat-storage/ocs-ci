@@ -12,7 +12,6 @@ import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 
-
 log = logging.getLogger(__name__)
 
 
@@ -42,6 +41,9 @@ class ResultsAnalyse(PerfResult):
         self.es_connect()
 
 
+SKIP_REASON = "The test is unstable and so skipping it until it is fixed"
+
+
 @performance
 @pytest.mark.parametrize(
     argnames=["interface", "samples_num", "pvc_size"],
@@ -54,7 +56,10 @@ class ResultsAnalyse(PerfResult):
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
-            marks=pytest.mark.polarion_id("OCS-2630"),
+            marks=[
+                pytest.mark.skip(SKIP_REASON),
+                pytest.mark.polarion_id("OCS-2630"),
+            ],
         ),
     ],
 )

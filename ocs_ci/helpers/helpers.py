@@ -3585,3 +3585,21 @@ def check_number_of_mon_pods(expected_mon_num=3):
         return True
     logger.error(f"Number of Mons not equal to {expected_mon_num} {mon_pod_list}")
     return False
+
+
+def get_secret_names(namespace=defaults.ROOK_CLUSTER_NAMESPACE, resource_name=""):
+    """
+    Get secrets names
+
+    Args:
+         namespace (str): The name of the project.
+         resource_name (str): The resource name to fetch.
+
+    Returns:
+        dict: secret names
+
+    """
+    logger.info(f"Get secret names on project {namespace}")
+    secret_obj = ocp.OCP(kind=constants.SECRET, namespace=namespace)
+    secrets_objs = secret_obj.get(resource_name=resource_name)
+    return [secret_obj["metadata"]["name"] for secret_obj in secrets_objs["items"]]

@@ -134,6 +134,8 @@ deployment_4_9 = {
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
+    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
+    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
 }
 
 generic_locators = {
@@ -371,8 +373,16 @@ add_capacity = {
         'a[data-test-operator-row="OpenShift Container Storage"]',
         By.CSS_SELECTOR,
     ),
+    "odf_operator": (
+        'a[data-test-operator-row="OpenShift Data Foundation"]',
+        By.CSS_SELECTOR,
+    ),
     "storage_cluster_tab": (
         'a[data-test-id="horizontal-link-Storage Cluster"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_system_tab": (
+        'a[data-test-id="horizontal-link-Storage System"]',
         By.CSS_SELECTOR,
     ),
     "kebab_storage_cluster": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
@@ -566,6 +576,7 @@ locators = {
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
+        "add_capacity": add_capacity,
     },
     "4.8": {
         "login": login,
