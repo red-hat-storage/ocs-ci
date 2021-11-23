@@ -136,6 +136,7 @@ deployment_4_9 = {
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
