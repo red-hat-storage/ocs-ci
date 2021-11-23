@@ -74,9 +74,19 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
-            time.sleep(60)
-            self.refresh_page()
+            time.sleep(80)
+            self.refresh_popup()
         self.verify_operator_succeeded(operator=self.operator_name)
+        self.refresh_popup()
+
+    def refresh_popup(self):
+        """
+        Refresh PopUp
+
+        """
+        if self.check_element_text("Web console update is available"):
+            logger.info("Web console update is available and Refresh web console")
+            self.do_click(locator=self.dep_loc["refresh_popup"])
         if self.operator is ODF_OPERATOR:
             time.sleep(90)
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
