@@ -472,6 +472,16 @@ def pagerduty_integration(pagerduty_service):
         target=update_pagerduty_integration_secret,
         name="thread_pagerduty_secret_update",
     )
+
+    def finalizer():
+        """
+        Stop the thread that executed update_pagerduty_integration_secret()
+        """
+        config.RUN["thread_pagerduty_secret_update"] = "finished"
+        if thread:
+            thread.join()
+
+    request.addfinalizer(finalizer)
     thread.start()
 
 

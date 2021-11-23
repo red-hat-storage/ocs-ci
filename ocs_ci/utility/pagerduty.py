@@ -37,7 +37,7 @@ def set_pagerduty_integration_secret(integration_key):
     logger.info("New integration key was set.")
 
 
-def check_incident_list(summary, urgency, incidents):
+def check_incident_list(summary, urgency, incidents, status="triggered"):
     """
     Check list of incidents that there are incidents with requested label
     in summary and specific urgency. If some incident is missing then this check
@@ -47,6 +47,7 @@ def check_incident_list(summary, urgency, incidents):
         summary (str): String that is part of incident summary
         urgency (str): Incident urgency
         incidents (list): List of incidents to check
+        status (str): Incident status
 
     Returns:
         list: List of incidents that match search requirements
@@ -56,7 +57,11 @@ def check_incident_list(summary, urgency, incidents):
     target_incidents = [
         incident
         for incident in incidents
-        if (summary in incident.get("summary") and incident.get("urgency") == urgency)
+        if (
+            summary in incident.get("summary")
+            and incident.get("urgency") == urgency
+            and incident.get("status") == status
+        )
     ]
     if target_incidents:
         logger.info(f"Incidents with summary {summary} were found: {target_incidents}")
@@ -291,6 +296,7 @@ class PagerDutyAPI(object):
                 incident
                 for incident in incidents_response.json().get("incidents")
                 if summary in incident.get("summary")
+                and incident.get("status") != "resolved"
             ]
             logger.info(
                 f"Checking for {summary} incidents. There should be no incidents ... "
