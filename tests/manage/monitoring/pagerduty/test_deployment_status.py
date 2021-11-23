@@ -35,3 +35,30 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     api.check_incident_cleared(
         summary=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
     )
+
+
+@tier4
+@tier4a
+@skipif_not_managed_service
+@pytest.mark.polarion_id("OCS-900")
+def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
+    """
+    Test that there is appropriate incident in PagerDuty when ceph osd
+    is unavailable and that this incident is cleared when the osd
+    is back online.
+    """
+    api = pagerduty.PagerDutyAPI()
+
+    # get incidents from time when manager deployment was scaled down
+    incidents = measure_stop_ceph_osd.get("pagerduty_incidents")
+    target_label = constants.ALERT_OSDDISKNOTRESPONDING
+
+    # TODO(fbalak): check the whole string in summary and incident alerts
+    assert pagerduty.check_incident_list(
+        summary=target_label,
+        incidents=incidents,
+        urgency="high",
+    )
+    api.check_incident_cleared(
+        summary=target_label, measure_end_time=measure_stop_ceph_osd.get("stop")
+    )
