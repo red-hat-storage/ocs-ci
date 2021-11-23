@@ -107,7 +107,7 @@ class MustGather(object):
         https://bugzilla.redhat.com/show_bug.cgi?id=2021427
 
         """
-        if self.type_log != "CEPH" and self.ocs_version >= version.VERSION_4_9:
+        if self.type_log != "CEPH" or self.ocs_version < version.VERSION_4_9:
             return
         pattern = re.compile("exit code [1-9]+")
         for root, dirs, files in os.walk(self.root):
