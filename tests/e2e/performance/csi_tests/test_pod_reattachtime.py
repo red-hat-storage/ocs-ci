@@ -233,7 +233,7 @@ class TestPodReattachTimePerformance(PASTest):
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
             data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
             logging.info(f"The amount of written data is {data_written_str}")
-            data_written = int(data_written_str[:-1])
+            data_written = float(data_written_str[:-1])
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
