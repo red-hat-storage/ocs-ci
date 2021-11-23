@@ -3,7 +3,7 @@ All the flexy related classes and functionality lives here
 """
 import base64
 import binascii
-import hcl
+import json
 import logging
 import os
 import time
@@ -529,7 +529,7 @@ class FlexyBase(object):
             )
             terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
             with open(terraform_tfstate, "r") as fd:
-                ttc = hcl.load(fd)
+                ttc = json.loads(fd.read())
                 terraform_version = ttc.get(
                     "terraform_version", config.DEPLOYMENT["terraform_version"]
                 )

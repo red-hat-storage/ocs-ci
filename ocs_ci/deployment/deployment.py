@@ -13,6 +13,10 @@ from pathlib import Path
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.helpers.mcg_helpers import (
+    mcg_only_deployment,
+    mcg_only_post_deployment_checks,
+)
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
@@ -449,6 +453,9 @@ class Deployment(object):
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
 
+        if not live_deployment:
+            create_catalog_source(image)
+
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
@@ -476,8 +483,6 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-        if not live_deployment:
-            create_catalog_source(image)
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -579,8 +584,12 @@ class Deployment(object):
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
             kms.deploy()
-        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
 
+        if config.ENV_DATA["mcg_only_deployment"]:
+            mcg_only_deployment()
+            return
+
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         # Figure out all the OCS modules enabled/disabled
         # CLI parameter --disable-components takes the precedence over
         # anything which comes from config file
@@ -909,6 +918,10 @@ class Deployment(object):
             self.deploy_with_external_mode()
         else:
             self.deploy_ocs_via_operator(image)
+            if config.ENV_DATA["mcg_only_deployment"]:
+                mcg_only_post_deployment_checks()
+                return
+
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
             # Check for Ceph pods

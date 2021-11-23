@@ -1,5 +1,4 @@
 import logging
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.pytest_customization.marks import (
@@ -77,7 +76,7 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
         pool = sc_obj.get()["parameters"]["pool"]
 
         log.info("Creating PVCs and PODs")
-        pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj)
+        pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj, size=10)
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj)
 
         log.info("Running IO on pod")
@@ -85,14 +84,13 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
             "fs",
             size="1G",
             rate="1500m",
-            runtime=0,
+            runtime=60,
             buffer_compress_percentage=60,
             buffer_pattern="0xdeadface",
             bs="8K",
             jobs=5,
             readwrite="readwrite",
         )
-        get_fio_rw_iops(pod_obj)
 
         log.info(f"validating info on pool {pool}")
         validate_rep_result = validate_replica_data(pool, self.replica)

@@ -93,6 +93,10 @@ def prune_and_mirror_index_image(
         f"-p {','.join(packages)} "
         f"-t {mirrored_index_image}"
     )
+    if config.DEPLOYMENT.get("opm_index_prune_binary_image"):
+        cmd += (
+            f" --binary-image {config.DEPLOYMENT.get('opm_index_prune_binary_image')}"
+        )
     # opm tool doesn't have --authfile parameter, we have to supply auth
     # file through env variable
     os.environ["REGISTRY_AUTH_FILE"] = pull_secret_path

@@ -27,12 +27,9 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
-    ChannelNotFound,
-    ResourceWrongStatusException,
 )
-from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
-from ocs_ci.utility import reporting
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_ceph_version,
@@ -298,7 +295,6 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
-    set_rp_client_log_level()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -321,9 +317,6 @@ def pytest_configure(config):
                 f"Dump of the consolidated config file is located here: "
                 f"{config_file}"
             )
-            if config.getoption("--reportportal"):
-                set_rp_client_log_level()
-                set_report_portal_config(config)
 
             # Add OCS related versions to the html report and remove
             # extraneous metadata
@@ -360,20 +353,6 @@ def pytest_configure(config):
 
             config._metadata["Test Run Name"] = get_testrun_name()
             gather_version_info_for_report(config)
-
-            try:
-                ocs_csv = get_ocs_csv()
-                ocs_csv_version = ocs_csv.data["spec"]["version"]
-                config.addinivalue_line(
-                    "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-                )
-            except (
-                ResourceNotFoundError,
-                ChannelNotFound,
-                ResourceWrongStatusException,
-            ):
-                # might be using exisitng cluster path using GUI installation
-                log.warning("Unable to get CSV version for Reporting")
 
 
 def gather_version_info_for_report(config):
@@ -656,28 +635,6 @@ def pytest_runtest_makereport(item, call):
             log.exception("Failed to collect performance stats")
 
 
-def set_report_portal_config(config):
-    """
-    Add settings for report portal like description and tags for the launch.
-
-    Args:
-        config (pytest.config): Pytest config object
-
-    """
-    rp_attrs = reporting.get_rp_launch_attributes()
-    for key, value in rp_attrs.items():
-        if value is True:
-            config.addinivalue_line("rp_launch_tags", key.lower())
-        elif value is False:
-            pass
-        else:
-            config.addinivalue_line("rp_launch_tags", f"{key.lower()}:{value.lower()}")
-
-    description = reporting.get_rp_launch_description()
-    if description:
-        config.option.rp_launch_description = description
-
-
 def set_log_level(config):
     """
     Set the log level of this module based on the pytest.ini log_cli_level
@@ -688,13 +645,3 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
-
-
-def set_rp_client_log_level():
-    """
-    Change log level of the reportportal_client logger. Default value is ERROR to limit
-    the amount of noise in our log files from this logger.
-    """
-    rp_logger = logging.getLogger("reportportal_client")
-    level = ocsci_config.REPORTING.get("rp_client_log_level")
-    rp_logger.setLevel(logging.getLevelName(level))

@@ -5,7 +5,7 @@ import logging
 import tempfile
 import re
 from os import listdir
-from os.path import isfile, join
+from os.path import join
 from shutil import rmtree
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -71,29 +71,26 @@ class PillowFight(object):
 
         """
         ocp_local = OCP(namespace=self.namespace)
-        pf_files = listdir(constants.TEMPLATE_PILLOWFIGHT_DIR)
         self.replicas = replicas
         for i in range(self.replicas):
-            for pf_yaml in pf_files:
-                pf_fullpath = join(constants.TEMPLATE_PILLOWFIGHT_DIR, pf_yaml)
-                if not pf_fullpath.endswith(".yaml"):
-                    continue
-                if not isfile(pf_fullpath):
-                    continue
-
-                # for basic-fillowfight.yaml
-                pfight = templating.load_yaml(pf_fullpath)
-                pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
-                # num of items
-                pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
-                    str(num_items) if num_items else "20000"
-                )
-                # num of threads
-                pfight["spec"]["template"]["spec"]["containers"][0]["command"][13] = (
-                    str(num_threads) if num_threads else "20"
-                )
-                lpillowfight = OCS(**pfight)
-                lpillowfight.create()
+            # for basic-fillowfight.yaml
+            pfight = templating.load_yaml(constants.COUCHBASE_NEW_PILLOWFIGHT)
+            pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
+            # change the name
+            pfight["spec"]["template"]["spec"]["containers"][0]["command"][2] = (
+                f"couchbase://cb-example-000{i}.cb-example."
+                f"couchbase-operator-namespace.svc:8091/default?select_bucket=true"
+            )
+            # num of items
+            pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
+                str(num_items) if num_items else "20000"
+            )
+            # num of threads
+            pfight["spec"]["template"]["spec"]["containers"][0]["command"][13] = (
+                str(num_threads) if num_threads else "20"
+            )
+            lpillowfight = OCS(**pfight)
+            lpillowfight.create()
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
@@ -121,7 +118,6 @@ class PillowFight(object):
                 log.info("Pillowfight not yet completed")
 
         logging.info(self.pods_info)
-        pf_yaml = pf_files[0]  # for  basic-fillowfight.yaml
         for pod, pf_completion_info in self.pods_info.items():
             if pf_completion_info == "Completed":
                 pf_endlog = f"{pod}.log"
@@ -134,7 +130,7 @@ class PillowFight(object):
                     fd.write(data_from_log)
 
             elif pf_completion_info == "Error":
-                raise Exception(f"Pillowfight {pf_yaml} failed to complete")
+                raise Exception("Pillowfight failed to complete")
 
     def analyze_all(self):
         """
