@@ -552,6 +552,10 @@ def verify_ocs_csv(ocs_registry_image=None):
             properly.
 
     """
+    managed_service = config.ENV_DATA["platform"].lower() in {
+        constants.OPENSHIFT_DEDICATED_PLATFORM,
+        constants.ROSA_PLATFORM,
+    }
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
@@ -567,6 +571,15 @@ def verify_ocs_csv(ocs_registry_image=None):
     ocs_csv = get_ocs_csv()
     csv_version = ocs_csv.data["spec"]["version"]
     ocs_version = version.get_semantic_ocs_version_from_config()
+    if not managed_service:
+        log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
+        assert (
+            f"{ocs_version}" in csv_version
+        ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
+    log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
+    assert (
+        f"{ocs_version}" in csv_version
+    ), f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
     if not managed_service:
         log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
         assert (
@@ -608,6 +621,10 @@ def verify_storage_system():
     """
     Verify storage system status
     """
+    managed_service = config.ENV_DATA["platform"].lower() in {
+        constants.OPENSHIFT_DEDICATED_PLATFORM,
+        constants.ROSA_PLATFORM,
+    }
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
@@ -655,6 +672,10 @@ def verify_noobaa_endpoint_count():
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     disable_noobaa = config.COMPONENTS["disable_noobaa"]
+    managed_service = config.ENV_DATA["platform"].lower() in {
+        constants.OPENSHIFT_DEDICATED_PLATFORM,
+        constants.ROSA_PLATFORM,
+    }
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
