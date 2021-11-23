@@ -416,7 +416,7 @@ def pagerduty_service(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def pagerduty_integration(pagerduty_service):
+def pagerduty_integration(request, pagerduty_service):
     """
     Create a new Pagerduty integration for service from pagerduty_service
     fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
