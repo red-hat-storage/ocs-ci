@@ -84,7 +84,7 @@ class TestBulkCloneCreation(E2ETest):
                 namespace=self.namespace,
                 pvcs_per_pod=1,
                 start_io=False,
-                pod_yaml=constants.NGINX_POD_YAML
+                pod_yaml=constants.NGINX_POD_YAML,
             )
             job_pod_file = ObjectConfFile(
                 name="job_profile_pod",
@@ -148,7 +148,9 @@ class TestBulkCloneCreation(E2ETest):
             start_time = helpers.get_provision_time(
                 self.interface, clone_objs, status="start"
             )
-            end_time = helpers.get_provision_time(self.interface, clone_objs, status="end")
+            end_time = helpers.get_provision_time(
+                self.interface, clone_objs, status="end"
+            )
             total_time = (end_time - start_time).total_seconds()
             speed = round(total_files_size / total_time, 2)
             logging.info(
