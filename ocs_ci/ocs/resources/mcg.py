@@ -82,7 +82,7 @@ class MCG:
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        # self.retrieve_noobaa_cli_binary()
+        self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since

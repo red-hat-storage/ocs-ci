@@ -20,7 +20,8 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
-    storagecluster_independent_check, get_default_storage_class,
+    storagecluster_independent_check,
+    get_default_storage_class,
 )
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
