@@ -4,3 +4,6 @@ CLUSTER_INFO_PATH: {{ cluster_info_path }}
 CREDS_ROOT_PATH: {{ credentials_path }}
 EXTRA_VARS: {{ extra_vars | default("")}}
 PLATFORM: {{ platform | default('vsphere') }}
+{% if ocp_version >= "4.9" %}
+RHEL_MAJOR_OS: {{ rhel_workers_major_os_version | default('7') }}
+{% endif %}
