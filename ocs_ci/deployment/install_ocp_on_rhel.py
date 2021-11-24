@@ -7,7 +7,6 @@ import os
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import upload
-from ocs_ci.utility import version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
     create_rhelpod,
@@ -97,8 +96,7 @@ class OCPINSTALLRHEL(object):
         upload(self.pod_name, self.ops_mirror_pem, constants.PEM_PATH)
         upload(self.pod_name, self.kubeconfig, constants.POD_UPLOADPATH)
         upload(self.pod_name, self.pull_secret_path, constants.POD_UPLOADPATH)
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        if config.ENV_DATA["folder_structure"] and ocp_version < version.VERSION_4_9:
+        if config.ENV_DATA["folder_structure"]:
             inventory_yaml_haproxy = self.create_inventory_for_haproxy()
             upload(self.pod_name, inventory_yaml_haproxy, constants.POD_UPLOADPATH)
             cmd = (

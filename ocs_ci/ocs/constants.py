@@ -807,7 +807,13 @@ NUM_OF_VIPS = 2
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
 
 # packages
-RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
+RHEL_POD_PACKAGES = [
+    "openssh-clients",
+    "openshift-ansible",
+    "openshift-clients",
+    "jq",
+    "yum-utils",
+]
 
 # common locations
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
@@ -1239,7 +1245,8 @@ CONTROL_PLANE = "module.ipam_control_plane"
 COMPUTE_MODULE_VM = "module.compute_vm"
 
 # proxy location
-HAPROXY_LOCATION = "/etc/haproxy/haproxy.conf"
+HAPROXY_LOCATION = "/etc/haproxy/haproxy.cfg"
+HAPROXY_SERVICE = "/etc/systemd/system/haproxy.service"
 
 # chrony conf
 CHRONY_CONF = "/etc/chrony.conf"
