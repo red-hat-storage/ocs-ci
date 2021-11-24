@@ -29,6 +29,7 @@ class LoadBalancer(object):
             private_key (str): Private key  to connect to load balancer
 
         """
+        self.haproxy_conf_file = "/etc/haproxy/haproxy.conf"
         self.host = host or self._get_host()
         self.user = user or constants.VSPHERE_NODE_USER
         self.private_key = private_key or os.path.expanduser(
@@ -112,3 +113,35 @@ class LoadBalancer(object):
                     f"{node} {node}:80 check\\n&/' {constants.HAPROXY_LOCATION}"
                 )
                 self.lb.exec_cmd(cmd)
+
+    def rename_haproxy(self):
+        """
+        Rename haproxy configuration file from haproxy.conf to haproxy.cfg
+        """
+        cmd = f"sudo cp {self.haproxy_conf_file} {constants.HAPROXY_LOCATION}"
+        self.lb.exec_cmd(cmd)
+
+    def modify_haproxy_service(self):
+        """
+        Modify haproxy service
+        """
+        cmd = (
+            f"sudo sed -i 's/haproxy\\.conf/haproxy.cfg/g' {constants.HAPROXY_SERVICE}"
+        )
+        self.lb.exec_cmd(cmd)
+
+    def reload_daemon(self):
+        """
+        Reload daemon-reload
+        """
+        cmd = "sudo systemctl daemon-reload"
+        self.lb.exec_cmd(cmd)
+
+    def rename_haproxy_conf_and_reload(self):
+        """
+        Rename haproxy config and restart haproxy service
+        """
+        self.rename_haproxy()
+        self.modify_haproxy_service()
+        self.reload_daemon()
+        self.restart_haproxy()
