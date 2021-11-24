@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
+    NoobaaHealthException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -81,7 +82,7 @@ class MCG:
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        self.retrieve_noobaa_cli_binary()
+        # self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -1040,3 +1041,8 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    def wait_for_mcg_health(self, tries=60, delay=5):
+        return retry(
+            NoobaaHealthException, tries=tries, delay=delay, backoff=1
+        )(self.status)()

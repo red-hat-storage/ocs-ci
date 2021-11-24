@@ -240,6 +240,11 @@ skipif_disconnected_cluster = pytest.mark.skipif(
     reason="Test will not run on disconnected clusters",
 )
 
+skipif_mcg_only_mode = pytest.mark.skipif(
+    config.ENV_DATA.get("mcg_only_deployment") is True,
+    reason="Test will not run on MCG-ONLY Mode cluster",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",

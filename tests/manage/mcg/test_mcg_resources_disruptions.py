@@ -11,12 +11,11 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier4,
     tier4a,
-    tier3,
     skipif_openshift_dedicated,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs import cluster, constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
@@ -24,15 +23,9 @@ from ocs_ci.ocs.resources.ocs import OCS
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="class")
-def setup(request):
-    request.cls.cl_obj = cluster.CephCluster()
-
-
 @tier4
 @tier4a
 @ignore_leftovers()
-@pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
     """
     Test MCG resources disruptions
@@ -58,7 +51,7 @@ class TestMCGResourcesDisruptions(MCGTest):
             pytest.param(*["noobaa_db"], marks=pytest.mark.polarion_id("OCS-2233")),
         ],
     )
-    def test_delete_noobaa_resources(self, resource_to_delete):
+    def test_delete_noobaa_resources(self, mcg_obj_session, resource_to_delete):
         """
         Test Noobaa resources delete and check Noobaa health
 
@@ -77,7 +70,7 @@ class TestMCGResourcesDisruptions(MCGTest):
             resource_count=1,
             timeout=90,
         )
-        self.cl_obj.wait_for_noobaa_health_ok()
+        mcg_obj_session.wait_for_mcg_health()
 
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
@@ -88,7 +81,7 @@ class TestMCGResourcesDisruptions(MCGTest):
             pytest.param(*[0], marks=pytest.mark.polarion_id("OCS-2263")),
         ],
     )
-    def test_scale_down_rgw(self, scale_down_to):
+    def test_scale_down_rgw(self, mcg_obj_session, scale_down_to):
         """
         Scale down RGW deployment and do sanity validations
 
@@ -108,11 +101,11 @@ class TestMCGResourcesDisruptions(MCGTest):
             f"scale --replicas={str(scale_down_to)} deployment/{rgw_deployment.name}"
         )
         if scale_down_to > 0:
-            self.cl_obj.wait_for_noobaa_health_ok()
+            mcg_obj_session.wait_for_mcg_health()
         rgw_deployment.ocp.exec_oc_cmd(
             f"scale --replicas={str(current_replicas)} deployment/{rgw_deployment.name}"
         )
-        self.cl_obj.wait_for_noobaa_health_ok()
+        mcg_obj_session.wait_for_mcg_health()
 
     @pytest.mark.parametrize(
         argnames=["pod_to_drain"],
@@ -128,7 +121,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         ],
     )
     def test_drain_mcg_pod_node(
-        self, node_drain_teardown, reduce_and_resume_cluster_load, pod_to_drain
+        self, mcg_obj_session, node_drain_teardown, reduce_and_resume_cluster_load, pod_to_drain
     ):
         """
         Test drianage of nodes which contain NB resources
@@ -159,7 +152,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         # Verify that the new pod has reached a 'RUNNNING' status again and recovered successfully
         wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
         # Check the NB status to verify the system is healthy
-        self.cl_obj.wait_for_noobaa_health_ok()
+        mcg_obj_session.wait_for_mcg_health()
 
     @pytest.fixture()
     def teardown(self, request):
@@ -222,12 +215,11 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         request.addfinalizer(finalizer)
 
-    @tier3
     @pytest.mark.polarion_id("OCS-2513")
     @marks.bugzilla("1903573")
     @skipif_openshift_dedicated
     @skipif_ocs_version("<4.7")
-    def test_db_scc(self, teardown):
+    def test_db_scc(self, mcg_obj_session, teardown):
         """
         Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
 
@@ -287,4 +279,4 @@ class TestMCGResourcesDisruptions(MCGTest):
             == constants.ANYUID
         ), "Invalid scc"
         # Check the NB status to verify the system is healthy
-        self.cl_obj.wait_for_noobaa_health_ok()
+        mcg_obj_session.wait_for_mcg_health()

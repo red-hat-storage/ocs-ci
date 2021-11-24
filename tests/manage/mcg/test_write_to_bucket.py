@@ -6,7 +6,7 @@ from flaky import flaky
 
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
-    skip_inconsistent,
+    skip_inconsistent, skipif_mcg_only_mode,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -336,6 +336,7 @@ class TestBucketIO(MCGTest):
         return pods
 
     @vsphere_platform_required
+    @skipif_mcg_only_mode
     @tier2
     @pytest.mark.polarion_id("OCS-2040")
     def test_write_to_bucket_rbd_cephfs(
