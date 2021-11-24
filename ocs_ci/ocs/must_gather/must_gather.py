@@ -119,7 +119,7 @@ class MustGather(object):
                     if len(exit_code_error) > 0 and "gather-debug" not in file:
                         self.files_content_issue.append(os.path.join(root, file))
                 except Exception as e:
-                    logger.info(f"There is no option to read {file}, error: {e}")
+                    logger.error(f"There is no option to read {file}, error: {e}")
 
     def compare_running_pods(self):
         """
