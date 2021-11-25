@@ -24,9 +24,9 @@ DEPLOYMENT:
   force_download_installer: True
   force_download_client: True
 
-# This is useful as a W/A for Openshift Dedicated, as there is an issue 
-# to use internal image for must gather
 REPORTING:
+  # This is useful as a W/A for Openshift Dedicated, as there is an issue 
+  # to use internal image for must gather
   ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
   ocs_must_gather_latest_tag: 'latest'
   # notification_email_0: MAIL USED FOR SENDGRID
