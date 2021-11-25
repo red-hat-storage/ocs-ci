@@ -8,6 +8,7 @@ from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
+from ocs_ci.utility import rosa
 from ocs_ci.utility.localstorage import check_local_volume_local_volume_set
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -163,6 +164,13 @@ def uninstall_ocs():
             if "noobaa" not in pvc.name
         )
 
+    if config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM:
+        log.info("Deleting OCS PVCs")
+        for pvc in pvc_to_delete:
+            log.info(f"Deleting PVC: {pvc.name}")
+            pvc.delete()
+        rosa.delete_odf_addon(config.ENV_DATA["cluster_name"])
+        return None
     log.info("Removing monitoring stack from OpenShift Container Storage")
     remove_monitoring_stack_from_ocs()
 
