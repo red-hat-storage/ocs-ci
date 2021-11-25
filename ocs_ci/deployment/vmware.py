@@ -107,6 +107,7 @@ class VSPHEREBASE(Deployment):
             vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
+        config.ENV_DATA["ocp_version"] = self.ocp_version
 
         self.wait_time = 90
 
@@ -546,6 +547,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 # remove bootstrap IP in load balancer and
                 # restart haproxy
                 lb = LoadBalancer()
+                lb.rename_haproxy_conf_and_reload()
                 lb.remove_boostrap_in_proxy()
                 lb.restart_haproxy()
 
