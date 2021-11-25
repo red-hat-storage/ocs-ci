@@ -105,11 +105,9 @@ def ocs_install_verification(
     disable_rgw = config.COMPONENTS["disable_rgw"]
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
-    managed_service = config.ENV_DATA["platform"].lower() in {
-        constants.OPENSHIFT_DEDICATED_PLATFORM,
-        constants.ROSA_PLATFORM,
-    }
-
+    managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
     ocs_version = version.get_semantic_ocs_version_from_config()
 
     # Basic Verification for cluster
@@ -178,14 +176,16 @@ def ocs_install_verification(
         if label == constants.RGW_APP_LABEL:
             if (
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+                or managed_service
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and disable_noobaa:
+        if (
+            "noobaa" in label
+            and (disable_noobaa or managed_service)
+        ):
             continue
         if "mds" in label and disable_cephfs:
-            continue
-        if managed_service:
             continue
 
         assert pod.wait_for_resource(
@@ -389,6 +389,7 @@ def ocs_install_verification(
                 item for item in crush_rule["steps"] if item.get("type") == "zone"
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+    # TODO: update pvc validation for managed services
     if not managed_service:
         log.info("Validate cluster on PVC")
         validate_cluster_on_pvc()
