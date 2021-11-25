@@ -17,7 +17,6 @@ from ocs_ci.ocs import constants
 
 
 GATHER_COMMANDS_CEPH = [
-    "ceph-volume_raw_list",
     "ceph_auth_list",
     "ceph_balancer_status",
     "ceph_config-key_ls",
