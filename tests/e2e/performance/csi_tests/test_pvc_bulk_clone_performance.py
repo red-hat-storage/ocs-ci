@@ -6,7 +6,8 @@ import logging
 import pytest
 
 from ocs_ci.utility import utils
-from ocs_ci.framework.testlib import performance, E2ETest
+from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc, pod
@@ -16,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @performance
-class TestBulkCloneCreation(E2ETest):
+class TestBulkCloneCreation(PASTest):
     """
     Base class for bulk creation of PVC clones
     """
