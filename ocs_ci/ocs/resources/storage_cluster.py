@@ -180,10 +180,7 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if (
-            "noobaa" in label
-            and (disable_noobaa or managed_service)
-        ):
+        if "noobaa" in label and (disable_noobaa or managed_service):
             continue
         if "mds" in label and disable_cephfs:
             continue
