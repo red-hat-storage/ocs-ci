@@ -43,6 +43,8 @@ class TestMCGRecovery(E2ETest):
         test_directory_setup,
         bucket_amount,
         object_amount,
+        snapshot_factory,
+        noobaa_db_backup_and_recovery,
     ):
         # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
         # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
@@ -179,6 +181,7 @@ class TestMCGRecovery(E2ETest):
         ), "The cached object was replaced by the new one before the TTL has expired"
 
         # E2E TODO: Implement flows relating to PVC snapshots and clones, FIO pods
+        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
 
         # Verify the integrity of all objects in all buckets post-recovery
         for count, bucket in enumerate(test_buckets):
