@@ -127,7 +127,7 @@ class TestBulkCloneCreation(E2ETest):
                 kube_job_obj=job_clone_file,
                 namespace=self.namespace,
                 no_of_pvc=pvc_count,
-                timeout=90,
+                timeout=180,
             )
 
             logging.info(f"Number of clones in Bound state {len(clone_bound_list)}")
