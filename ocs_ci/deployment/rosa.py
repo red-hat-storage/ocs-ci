@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
