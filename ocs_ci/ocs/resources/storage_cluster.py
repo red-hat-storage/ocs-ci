@@ -173,10 +173,16 @@ def ocs_install_verification(
         if label == constants.RGW_APP_LABEL:
             if (
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+                or config.ENV_DATA.get("platform")
+                in constants.MANAGED_SERVICE_PLATFORMS
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and disable_noobaa:
+        if (
+            "noobaa" in label
+            and disable_noobaa
+            or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             continue
         if "mds" in label and disable_cephfs:
             continue
@@ -288,7 +294,9 @@ def ocs_install_verification(
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
     if not (
-        config.DEPLOYMENT.get("ui_deployment") or config.DEPLOYMENT["external_mode"]
+        config.DEPLOYMENT.get("ui_deployment")
+        or config.DEPLOYMENT["external_mode"]
+        or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
     ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
@@ -380,8 +388,11 @@ def ocs_install_verification(
                 item for item in crush_rule["steps"] if item.get("type") == "zone"
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
-    log.info("Validate cluster on PVC")
-    validate_cluster_on_pvc()
+
+    # TODO: update pvc validation for managed services
+    if config.ENV_DATA.get("platform") not in constants.MANAGED_SERVICE_PLATFORMS:
+        log.info("Validate cluster on PVC")
+        validate_cluster_on_pvc()
 
     # Verify ceph health
     log.info("Verifying ceph health")
@@ -537,7 +548,10 @@ def verify_noobaa_endpoint_count():
     )
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
         max_eps = 1
-    if not disable_noobaa:
+    if (
+        not disable_noobaa
+        or config.ENV_DATA.get("platform") not in constants.MANAGED_SERVICE_PLATFORMS
+    ):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,

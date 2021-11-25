@@ -679,6 +679,53 @@ def get_ocm_cli(
     return ocm_binary_path
 
 
+def get_rosa_cli(
+    version=None,
+    bin_dir=None,
+    force_download=False,
+):
+    """
+    Download the ROSA binary, if not already present.
+    Update env. PATH and get path of the ROSA binary.
+
+    Args:
+        version (str): Version of the ROSA to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force ROSA download even if already present
+
+    Returns:
+        str: Path to the rosa binary
+
+    """
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    rosa_filename = "rosa"
+    rosa_binary_path = os.path.join(bin_dir, rosa_filename)
+    if os.path.isfile(rosa_binary_path) and force_download:
+        delete_file(rosa_binary_path)
+    if os.path.isfile(rosa_binary_path):
+        log.debug(f"rosa exists ({rosa_binary_path}), skipping download.")
+    else:
+        log.info(f"Downloading rosa cli ({version}).")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
+        download_file(url, rosa_filename)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    current_file_permissions = os.stat(rosa_binary_path)
+    os.chmod(
+        rosa_binary_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    rosa_version = run_cmd(f"{rosa_binary_path} version")
+    log.info(f"rosa version: {rosa_version}")
+
+    return rosa_binary_path
+
+
 def get_openshift_client(
     version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
