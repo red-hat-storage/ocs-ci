@@ -239,6 +239,12 @@ def ocs_install_verification(
             or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
         ):
         if "noobaa" in label and (disable_noobaa or managed_service):
+        if (
+            "noobaa" in label
+            and disable_noobaa
+            or config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS
+        ):
+        if "noobaa" in label and (disable_noobaa or managed_service):
             continue
         if "mds" in label and disable_cephfs:
             continue
