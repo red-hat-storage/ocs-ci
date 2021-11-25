@@ -182,9 +182,9 @@ def install_odf_addon(cluster):
     """
     addon_name = config.DEPLOYMENT["addon_name"]
     size = config.ENV_DATA["size"]
-    notification_email_0 = config.ENV_DATA.get("notification_email_0")
-    notification_email_1 = config.ENV_DATA.get("notification_email_1")
-    notification_email_2 = config.ENV_DATA.get("notification_email_2")
+    notification_email_0 = config.REPORTING.get("notification_email_0")
+    notification_email_1 = config.REPORTING.get("notification_email_1")
+    notification_email_2 = config.REPORTING.get("notification_email_2")
     cmd = f"rosa install addon --cluster={cluster} --size {size} {addon_name}" f" --yes"
     if notification_email_0:
         cmd = cmd + f" --notification-email-0 {notification_email_0}"

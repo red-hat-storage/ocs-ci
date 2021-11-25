@@ -149,12 +149,7 @@ class ROSA(CloudDeploymentBase):
         )
 
         # Verify health of ceph cluster
-        logger.info("Done validating rook resources, waiting for HEALTH_OK")
-        try:
-            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
-        except CephHealthException as ex:
-            err = str(ex)
-            logger.warning(f"Ceph health check failed with {err}")
+        ceph_health_check(namespace=self.namespace, tries=30, delay=10)
 
     def destroy_ocs(self):
         """

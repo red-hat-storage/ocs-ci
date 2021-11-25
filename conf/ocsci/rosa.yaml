@@ -9,9 +9,6 @@ ENV_DATA:
   master_replicas: 3
   # size of storage cluster, default is 1 TiB
   size: '1'
-  # notification_email_0: MAIL USED FOR SENDGRID
-  # notification_email_1: MAIL USED FOR SENDGRID
-  # notification_email_2: MAIL USED FOR SENDGRID
 
 # AUTH:
 #  openshiftdedicated:
@@ -32,3 +29,6 @@ DEPLOYMENT:
 REPORTING:
   ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
   ocs_must_gather_latest_tag: 'latest'
+  # notification_email_0: MAIL USED FOR SENDGRID
+  # notification_email_1: MAIL USED FOR SENDGRID
+  # notification_email_2: MAIL USED FOR SENDGRID
