@@ -296,6 +296,9 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
+MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
+MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -836,6 +839,10 @@ HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
 SUPPORTED_BROWSERS = CHROME_BROWSER
 
+# Managed service deployment constants
+OSD_DEPLOYER = "ocs-osd-deployer"
+OSE_PROMETHEUS_OPERATOR = "ose-prometheus-operator"
+
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
 INVENTORY_FILE = "inventory.yaml"
@@ -883,6 +890,9 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
+MANAGED_SMTP_SECRET = "ocs-converged-smtp"
+MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
