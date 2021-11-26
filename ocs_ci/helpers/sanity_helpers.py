@@ -40,9 +40,12 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status(timeout=300)
 
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=tries)
-        if cluster_check:
-            self.ceph_cluster.cluster_health_check(timeout=60)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            ceph_health_check(
+                namespace=config.ENV_DATA["cluster_namespace"], tries=tries
+            )
+            if cluster_check:
+                self.ceph_cluster.cluster_health_check(timeout=60)
 
     def create_resources(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True

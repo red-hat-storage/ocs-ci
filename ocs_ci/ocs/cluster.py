@@ -61,8 +61,9 @@ class CephCluster(object):
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
+        if config.ENV_DATA["mcg_only_deployment"]:
+            return
         # cluster_name is name of cluster in rook of type CephCluster
-
         self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         self.CEPHCLUSTER = ocp.OCP(
             kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]

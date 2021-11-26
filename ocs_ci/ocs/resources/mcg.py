@@ -183,7 +183,10 @@ class MCG:
                     not pods
                 ), "RGW pods should not exist in the current platform/cluster"
 
-        elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+        elif (
+            config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+            and not config.ENV_DATA["mcg_only_deployment"]
+        ):
             rgw_count = get_rgw_count(
                 config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
             )
