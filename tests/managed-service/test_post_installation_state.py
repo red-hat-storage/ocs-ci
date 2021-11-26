@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -18,6 +19,7 @@ class TestPostInstallationState(ManageTest):
     """
 
     @tier1
+    @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
     def test_deployer_logs_not_empty(self):
         """
@@ -37,6 +39,7 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
+    @pytest.mark.polarion_id("OCS-2695")
     @managed_service_required
     def test_connection_time_out(self):
         """
