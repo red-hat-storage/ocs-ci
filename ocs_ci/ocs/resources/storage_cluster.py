@@ -558,6 +558,9 @@ def verify_ocs_csv(ocs_registry_image=None):
             properly.
 
     """
+    managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
     managed_service = config.ENV_DATA["platform"].lower() in {
         constants.OPENSHIFT_DEDICATED_PLATFORM,
         constants.ROSA_PLATFORM,
@@ -627,6 +630,9 @@ def verify_storage_system():
     """
     Verify storage system status
     """
+    managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
     managed_service = config.ENV_DATA["platform"].lower() in {
         constants.OPENSHIFT_DEDICATED_PLATFORM,
         constants.ROSA_PLATFORM,
@@ -678,6 +684,9 @@ def verify_noobaa_endpoint_count():
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     disable_noobaa = config.COMPONENTS["disable_noobaa"]
+    managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
     managed_service = config.ENV_DATA["platform"].lower() in {
         constants.OPENSHIFT_DEDICATED_PLATFORM,
         constants.ROSA_PLATFORM,
