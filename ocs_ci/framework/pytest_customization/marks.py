@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
+    MANAGED_SERVICE_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -200,10 +201,7 @@ ipi_deployment_required = pytest.mark.skipif(
 )
 
 managed_service_required = pytest.mark.skipif(
-    (
-        config.ENV_DATA["platform"].lower() != OPENSHIFT_DEDICATED_PLATFORM
-        and config.ENV_DATA["platform"].lower() != ROSA_PLATFORM
-    ),
+    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS),
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
