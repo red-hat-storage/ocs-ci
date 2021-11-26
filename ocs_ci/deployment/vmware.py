@@ -714,13 +714,15 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
-        if os.path.exists(f"{constants.VSPHERE_MAIN}.backup") and os.path.exists(
-            f"{constants.VSPHERE_MAIN}.json"
-        ):
-            os.rename(
-                f"{constants.VSPHERE_MAIN}.json",
-                f"{constants.VSPHERE_MAIN}.json.backup",
-            )
+        rename_files = [constants.VSPHERE_MAIN, constants.VM_MAIN]
+        for each_file in rename_files:
+            if os.path.exists(f"{each_file}.backup") and os.path.exists(
+                f"{each_file}.json"
+            ):
+                os.rename(
+                    f"{each_file}.json",
+                    f"{each_file}.json.backup",
+                )
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
