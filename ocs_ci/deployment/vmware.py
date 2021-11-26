@@ -724,14 +724,6 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{each_file}.json.backup",
                 )
 
-        if os.path.exists(f"{constants.VSPHERE_MAIN}.backup") and os.path.exists(
-            f"{constants.VSPHERE_MAIN}.json"
-        ):
-            os.rename(
-                f"{constants.VSPHERE_MAIN}.json",
-                f"{constants.VSPHERE_MAIN}.json.backup",
-            )
-
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
