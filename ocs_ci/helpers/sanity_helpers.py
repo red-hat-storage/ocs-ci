@@ -144,7 +144,7 @@ class Sanity:
         Creates bucket then writes, reads and deletes objects
 
         """
-        bucket_name = bucket_factory(amount=1, interface="OC")[0].name
+        bucket_name = bucket_factory(amount=1, interface="OC", timeout=300)[0].name
         self.obj_data = "A string data"
 
         for i in range(0, 30):

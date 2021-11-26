@@ -225,7 +225,7 @@ class ObjectBucket(ABC):
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
             assert False, f"{self.name} was not deleted within {timeout} seconds."
 
-    def verify_health(self, timeout=60, interval=5):
+    def verify_health(self, timeout=60, interval=5, **kwargs):
         """
         Health verification function that tries to verify
         the a bucket's health by using its appropriate internal_verify_health
@@ -506,7 +506,7 @@ class MCGNamespaceBucket(ObjectBucket):
             "create_bucket",
             {
                 "name": self.name,
-                "namespace": {
+                "namespace_bucket_config": {
                     "write_resource": self.write_ns_resource,
                     "read_resources": self.read_ns_resources,
                 },
