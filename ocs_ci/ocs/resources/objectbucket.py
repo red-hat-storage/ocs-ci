@@ -506,7 +506,7 @@ class MCGNamespaceBucket(ObjectBucket):
             "create_bucket",
             {
                 "name": self.name,
-                "namespace_bucket_config": {
+                "namespace": {
                     "write_resource": self.write_ns_resource,
                     "read_resources": self.read_ns_resources,
                 },
