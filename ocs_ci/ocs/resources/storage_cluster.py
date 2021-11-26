@@ -1007,9 +1007,9 @@ def verify_managed_service_resources():
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for secret_name in {
-        "ocs-converged-smtp",
-        "ocs-converged-deadmanssnitch",
-        "ocs-converged-pagerduty",
+        constants.MANAGED_SMTP_SECRET,
+        constants.MANAGED_PAGERDUTY_SECRET,
+        constants.MANAGED_DEADMANSSNITCH_SECRET,
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name

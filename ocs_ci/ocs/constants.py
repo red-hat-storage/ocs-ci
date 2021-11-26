@@ -943,6 +943,9 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
+MANAGED_SMTP_SECRET = "ocs-converged-smtp"
+MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
