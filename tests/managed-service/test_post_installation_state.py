@@ -46,8 +46,6 @@ class TestPostInstallationState(ManageTest):
         Test that connection from mon pod to external domain is blocked and gets timeout
         """
         mon_pod = pod.get_mon_pods()[0]
-        try:
+        with pytest.raises(CommandFailed) as cmdfailed:
             mon_pod.exec_cmd_on_pod("curl google.com")
-            assert False, "Curl command should have failed due to timeout"
-        except CommandFailed as cmdfailed:
-            assert "Connection timed out" in str(cmdfailed)
+        assert "Connection timed out" in str(cmdfailed)
