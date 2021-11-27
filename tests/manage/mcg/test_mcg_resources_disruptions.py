@@ -81,6 +81,7 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
+    @marks.skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["scale_down_to"],
         argvalues=[
