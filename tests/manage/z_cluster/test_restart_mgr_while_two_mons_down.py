@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     bugzilla,
+    polarion_id,
 )
 
 log = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @bugzilla("1990031")
+@polarion_id("OCS-2696")
 class TestRestartMgrWhileTwoMonsDown(ManageTest):
     """
     Restart mgr pod while two mon pods are down
