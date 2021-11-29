@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_mgr_pods,
@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.pod import get_deployments_having_label
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -69,8 +70,12 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
         self.oc = ocp.OCP(
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        mon_deployments = self.oc.get(selector=constants.MON_APP_LABEL)["items"]
-        mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
+        mons = [
+            mon["metadata"]["name"]
+            for mon in get_deployments_having_label(
+                constants.MON_APP_LABEL, defaults.ROOK_CLUSTER_NAMESPACE
+            )
+        ]
         self.mons_scale = mons[0:2]
 
         for index in range(1, 11):
@@ -80,7 +85,7 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
 
             log.info(f"Restarting mgr pod, index={index}")
             mgr_pod = get_mgr_pods()
-            mgr_pod[0].delete()
+            mgr_pod[0].delete(wait=True)
 
             time.sleep(5)
 
