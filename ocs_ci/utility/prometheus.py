@@ -392,6 +392,9 @@ class PrometheusAPI(object):
             logger.warning(f"There was an error in response: {response.text}")
             logger.warning("Refreshing connection")
             self.refresh_connection()
+            if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+                logger.warning("Generating new certificate")
+                self.generate_cert()
             logger.warning("Connection refreshed - trying the query again")
             response = requests.get(
                 self._endpoint + pattern,
