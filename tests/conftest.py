@@ -177,9 +177,6 @@ def pytest_collection_modifyitems(session, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
-            skipif_not_managed_service_marker = item.get_closest_marker(
-                "skipif_not_managed_service"
-            )
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
@@ -221,16 +218,6 @@ def pytest_collection_modifyitems(session, items):
                     log.warning(
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
-            if skipif_not_managed_service_marker:
-                if (
-                    config.ENV_DATA["platform"].lower()
-                    != constants.OPENSHIFT_DEDICATED_PLATFORM
-                ):
-                    log.info(
-                        f"Test: {item} will be skipped because the installed OCS cluster is"
-                        f" not Managed Service"
-                    )
-                    items.remove(item)
             if skipif_ui_not_support_marker:
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
@@ -386,7 +373,7 @@ def pagerduty_service(request):
         str: PagerDuty service json
 
     """
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         pagerduty_api = pagerduty.PagerDutyAPI()
         payload = pagerduty_api.get_service_dict()
         service_response = pagerduty_api.create("services", payload=payload)
@@ -409,7 +396,7 @@ def pagerduty_service(request):
     else:
         log.info(
             "PagerDuty service is not created because "
-            f"{constants.OPENSHIFT_DEDICATED_PLATFORM} "
+            f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
             "is not used"
         )
         return None
@@ -424,7 +411,7 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         service_id = pagerduty_service["id"]
         pagerduty_api = pagerduty.PagerDutyAPI()
 

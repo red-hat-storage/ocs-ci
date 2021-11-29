@@ -323,9 +323,6 @@ skipif_upgraded_from = pytest.mark.skipif_upgraded_from
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
 
-# Marker for skipping tests if the cluster is not using Managed Service
-skipif_not_managed_service = pytest.mark.skipif_not_managed_service
-
 skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",

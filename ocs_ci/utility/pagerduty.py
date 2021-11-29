@@ -6,6 +6,7 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(name=__file__)
@@ -23,13 +24,15 @@ def set_pagerduty_integration_secret(integration_key):
     logger.info("Setting up PagerSuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
     cmd = (
-        f"oc create secret generic {constants.PAGERDUTY_SECRET} "
+        f"oc create secret generic {constants.MANAGED_PAGERDUTY_SECRET} "
         f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
         f"--kubeconfig {kubeconfig} --dry-run -o yaml"
     )
-    secret_data = exec_cmd(cmd, secrets=[integration_key]).stdout
+    secret_data = exec_cmd(
+        cmd, secrets=[integration_key, constants.MANAGED_PAGERDUTY_SECRET]
+    ).stdout
     with tempfile.NamedTemporaryFile(
-        prefix=f"{constants.PAGERDUTY_SECRET}_"
+        prefix=f"{constants.MANAGED_PAGERDUTY_SECRET}_"
     ) as secret_file:
         secret_file.write(secret_data)
         secret_file.flush()
@@ -332,5 +335,7 @@ class PagerDutyAPI(object):
             summary=summary, timeout=time_wait
         )
         logger.info(f"Cleared incidents: {cleared_incidents}")
-        assert len(cleared_incidents) == 0, f"{summary} incidents were not cleared"
-        logger.info(f"{summary} incidents were cleared")
+        if len(cleared_incidents) != 0:
+            raise UnexpectedBehaviour(f"{summary} incidents were not cleared")
+        else:
+            logger.info(f"{summary} incidents were cleared")

@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import bugzilla, skipif_not_managed_service, tier4, tier4a
+from ocs_ci.framework.testlib import bugzilla, managed_service_required, tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
 
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4a
-@skipif_not_managed_service
+@managed_service_required
 @bugzilla("1998056")
 @pytest.mark.polarion_id("OCS-1052")
 def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
@@ -39,7 +39,7 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 
 @tier4
 @tier4a
-@skipif_not_managed_service
+@managed_service_required
 @pytest.mark.polarion_id("OCS-900")
 def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """

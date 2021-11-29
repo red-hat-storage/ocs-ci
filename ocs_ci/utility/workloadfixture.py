@@ -121,10 +121,7 @@ def measure_operation(
     # if there is no file with results from previous run
     # then perform operation measurement
     else:
-        if (
-            config.ENV_DATA["platform"].lower()
-            == constants.OPENSHIFT_DEDICATED_PLATFORM
-        ):
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             logger.info("Starting PagerDuty periodical update of pagerduty secret")
             config.RUN["thread_pagerduty_secret_update"] = "required"
         logger.info(f"File {result_file} not created yet. Starting measurement...")
@@ -181,7 +178,7 @@ def measure_operation(
             }
             if (
                 config.ENV_DATA["platform"].lower()
-                == constants.OPENSHIFT_DEDICATED_PLATFORM
+                in constants.MANAGED_SERVICE_PLATFORMS
             ):
                 # During testing of ODF Managed Service are also collected alerts
                 # in PagerDuty, Sendgrid and Dead Man's Snith systems
