@@ -82,20 +82,22 @@ class CloudManager(ABC):
                             f"{cloud_name.lower()}_client",
                             cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
                         )
-
-        try:
-            rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
-            cred_dict["RGW"] = {
-                "SECRET_PREFIX": "RGW",
-                "DATA_PREFIX": "AWS",
-                "ENDPOINT": endpoint,
-                "RGW_ACCESS_KEY_ID": access_key,
-                "RGW_SECRET_ACCESS_KEY": secret_key,
-            }
-            setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
-        except CommandFailed:
-            setattr(self, "rgw_client", None)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            try:
+                rgw_conn = RGW()
+                endpoint, access_key, secret_key = rgw_conn.get_credentials()
+                cred_dict["RGW"] = {
+                    "SECRET_PREFIX": "RGW",
+                    "DATA_PREFIX": "AWS",
+                    "ENDPOINT": endpoint,
+                    "RGW_ACCESS_KEY_ID": access_key,
+                    "RGW_SECRET_ACCESS_KEY": secret_key,
+                }
+                setattr(
+                    self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"])
+                )
+            except CommandFailed:
+                setattr(self, "rgw_client", None)
 
 
 class CloudClient(ABC):

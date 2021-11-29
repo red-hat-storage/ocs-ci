@@ -6,7 +6,8 @@ from flaky import flaky
 
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
-    skip_inconsistent, skipif_mcg_only_mode,
+    skip_inconsistent,
+    skipif_mcg_only_mode,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,

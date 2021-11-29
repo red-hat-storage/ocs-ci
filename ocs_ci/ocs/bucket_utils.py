@@ -16,6 +16,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -573,6 +574,18 @@ def check_pv_backingstore_status(
     )
     res = run_cmd(cmd=cmd)
     return True if res in desired_status else False
+
+
+def get_noobaa_db_storageclass():
+    """
+    Returns the Storage Class used by noobaa-db-pg-0
+
+    Returns:
+        str: noobaa-db-pg-0 storage class
+    """
+    pvc_obj = OCP(kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    db_pvc_obj = pvc_obj.get(resource_name=constants.NB_DB_PVC_47_AND_ABOVE)
+    return db_pvc_obj["spec"]["storageClassName"]
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):

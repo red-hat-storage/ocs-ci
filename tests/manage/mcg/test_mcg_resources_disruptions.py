@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 import pytest
 
 from ocs_ci.framework.pytest_customization import marks
+from ocs_ci.framework.pytest_customization.marks import skipif_mcg_only_mode
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftovers,
@@ -73,6 +74,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         mcg_obj_session.wait_for_mcg_health()
 
     @skipif_ocs_version("<4.5")
+    @skipif_mcg_only_mode
     @on_prem_platform_required
     @pytest.mark.parametrize(
         argnames=["scale_down_to"],
@@ -121,7 +123,11 @@ class TestMCGResourcesDisruptions(MCGTest):
         ],
     )
     def test_drain_mcg_pod_node(
-        self, mcg_obj_session, node_drain_teardown, reduce_and_resume_cluster_load, pod_to_drain
+        self,
+        mcg_obj_session,
+        node_drain_teardown,
+        reduce_and_resume_cluster_load,
+        pod_to_drain,
     ):
         """
         Test drianage of nodes which contain NB resources

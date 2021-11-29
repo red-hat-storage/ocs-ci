@@ -1043,6 +1043,6 @@ class MCG:
         )
 
     def wait_for_mcg_health(self, tries=60, delay=5):
-        return retry(
-            NoobaaHealthException, tries=tries, delay=delay, backoff=1
-        )(self.status)()
+        return retry(NoobaaHealthException, tries=tries, delay=delay, backoff=1)(
+            self.status
+        )()

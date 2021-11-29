@@ -1189,14 +1189,16 @@ def health_checker(request, tier_marks_name):
     if dev_mode:
         log.info("Skipping health checks for development mode")
         return
+    if config.ENV_DATA["mcg_only_deployment"]:
+        log.info("Skipping ceph health checks for mcg only mode")
+        return
 
     def finalizer():
         if not skipped:
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
-                if not (teardown or skip_ocs_deployment or mcg_only_deployment):
+                if not (teardown or skip_ocs_deployment):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
             except CephHealthException:

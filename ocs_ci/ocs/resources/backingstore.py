@@ -14,6 +14,7 @@ from ocs_ci.ocs.bucket_utils import (
     cli_create_pv_backingstore,
     cli_create_ibmcos_backingstore,
     cli_create_aws_backingstore,
+    get_noobaa_db_storageclass,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -21,7 +22,6 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     storagecluster_independent_check,
-    get_default_storage_class,
 )
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -253,7 +253,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
                         )
                     if config.ENV_DATA["mcg_only_deployment"]:
-                        storagecluster = get_default_storage_class()[0]
+                        storagecluster = get_noobaa_db_storageclass()
                     backingstore_name = create_unique_resource_name(
                         resource_description="backingstore", resource_type=cloud.lower()
                     )

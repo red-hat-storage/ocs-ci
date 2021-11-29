@@ -265,6 +265,10 @@ ACCESS_MODE_RWX = "ReadWriteMany"
 NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
 NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
 
+# Noobaa DB PVC
+NB_DB_PVC_47_AND_ABOVE = "db-noobaa-db-pg-0"
+
+
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
