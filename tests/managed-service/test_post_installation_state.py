@@ -62,7 +62,7 @@ class TestPostInstallationState(ManageTest):
             constants.MANAGED_CONTROLLER_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
         )[0]
         deployer_pod_obj = pod.Pod(**deployer_pod)
-        logging.info(f"respin deployer pod")
+        logging.info("respin deployer pod")
         deployer_pod_obj.delete(wait=True, force=False)
         # Respinned pod will have a new name
         new_deployer_pod = pod.get_pods_having_label(
