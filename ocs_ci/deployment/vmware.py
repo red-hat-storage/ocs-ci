@@ -107,6 +107,7 @@ class VSPHEREBASE(Deployment):
             vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
+        config.ENV_DATA["ocp_version"] = self.ocp_version
 
         self.wait_time = 90
 
@@ -546,6 +547,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 # remove bootstrap IP in load balancer and
                 # restart haproxy
                 lb = LoadBalancer()
+                lb.rename_haproxy_conf_and_reload()
                 lb.remove_boostrap_in_proxy()
                 lb.restart_haproxy()
 
@@ -712,13 +714,15 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
-        if os.path.exists(f"{constants.VSPHERE_MAIN}.backup") and os.path.exists(
-            f"{constants.VSPHERE_MAIN}.json"
-        ):
-            os.rename(
-                f"{constants.VSPHERE_MAIN}.json",
-                f"{constants.VSPHERE_MAIN}.json.backup",
-            )
+        rename_files = [constants.VSPHERE_MAIN, constants.VM_MAIN]
+        for each_file in rename_files:
+            if os.path.exists(f"{each_file}.backup") and os.path.exists(
+                f"{each_file}.json"
+            ):
+                os.rename(
+                    f"{each_file}.json",
+                    f"{each_file}.json.backup",
+                )
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))

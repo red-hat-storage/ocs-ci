@@ -264,8 +264,7 @@ class CephCluster(object):
 
         # Check Noobaa health
         if (
-            config.ENV_DATA["platform"].lower()
-            != constants.OPENSHIFT_DEDICATED_PLATFORM
+            config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
             and not config.COMPONENTS["disable_noobaa"]
         ):
             self.wait_for_noobaa_health_ok()

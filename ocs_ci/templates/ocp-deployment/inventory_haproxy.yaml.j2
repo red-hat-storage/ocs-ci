@@ -26,6 +26,7 @@ ocp_platform={{ platform }}
 {{ node }} ansible_user=core
 {% endfor %}
 
+[rhel-workers]
 {% for node in rhel_worker_nodes %}
 {{ node }} ansible_user=test
 {% endfor %}

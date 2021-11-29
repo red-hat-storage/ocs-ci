@@ -432,6 +432,10 @@ class ElasticSearchNotDeployed(Exception):
     pass
 
 
+class ManagedServiceAddonDeploymentError(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 

@@ -22,6 +22,8 @@ from ocs_ci.ocs.constants import (
     IBM_POWER_PLATFORM,
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
+    OPENSHIFT_DEDICATED_PLATFORM,
+    MANAGED_SERVICE_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -198,6 +200,12 @@ ipi_deployment_required = pytest.mark.skipif(
     reason="Test runs ONLY on IPI deployed cluster",
 )
 
+managed_service_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS),
+    reason="Test runs ONLY on OSD or ROSA cluster",
+)
+
+
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
     and config.DEPLOYMENT.get("local_storage") is True,
@@ -217,7 +225,7 @@ skipif_bmpsi = pytest.mark.skipif(
 )
 
 skipif_openshift_dedicated = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() == "openshiftdedicated",
+    config.ENV_DATA["platform"].lower() == OPENSHIFT_DEDICATED_PLATFORM,
     reason="Test will not run on Openshift dedicated cluster",
 )
 
