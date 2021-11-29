@@ -1028,17 +1028,7 @@ def verify_managed_service_resources():
             condition="Running", selector=alert_pod[0], resource_count=alert_pod[1]
         )
 
-    # Verify managedocs components are Ready
-    log.info("Getting managedocs components data")
-    managedocs_obj = OCP(
-        kind="managedocs",
-        resource_name="managedocs",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-    for component in {"alertmanager", "prometheus", "storageCluster"}:
-        assert (
-            managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
-        ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+    verify_managedocs_components()
 
     # Verify Networkpolicy and EgressNetworkpolicy creation
     for policy in {
@@ -1052,3 +1042,19 @@ def verify_managed_service_resources():
         assert policy_obj.is_exist(
             resource_name=policy[1]
         ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+
+
+def verify_managedocs_components():
+    """
+    Verify that managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    """
+    log.info("Getting managedocs components data")
+    managedocs_obj = OCP(
+        kind="managedocs",
+        resource_name="managedocs",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    for component in {"alertmanager", "prometheus", "storageCluster"}:
+        assert (
+            managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
+        ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
