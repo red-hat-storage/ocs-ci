@@ -183,10 +183,13 @@ class ValidationUI(PageNavigator):
             self.navigate_installed_operators_page()
             logger.info("Click on project dropdown")
             self.do_click(self.validation_loc["project-dropdown"])
-            default_projects_is_checked = self.driver.find_element_by_id(
-                "no-label-switch-on"
-            ).is_selected()
-            if default_projects_is_checked is False:
+            default_projects_is_checked = self.driver.find_element_by_xpath(
+                "//input[@type='checkbox']"
+            )
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
                 logger.info("Show default projects")
                 self.do_click(self.validation_loc["show-default-projects"])
             logger.info("Search for 'openshift-storage' project")
@@ -295,14 +298,6 @@ class ValidationUI(PageNavigator):
         logger.info("Click on 'Storage Systems' tab")
         self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
-        logger.info("Verifying the status of ocs-storagecluster-storagesystem")
-        storagesystem_status = self.get_element_text(
-            self.validation_loc["ocs-storagecluster-storagesystem-status"]
-        )
-        assert "Ready" == storagesystem_status, (
-            f"storage system status error on UI | expected status:Ready \n "
-            f"actual status:{storagesystem_status}"
-        )
         logger.info(
             "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
         )
