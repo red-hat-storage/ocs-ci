@@ -388,6 +388,17 @@ class PrometheusAPI(object):
             verify=self._cacert,
             params=payload,
         )
+        if "Application is not available" in response.text:
+            logger.warning(f"There was an error in response: {response.text}")
+            logger.warning("Refreshing connection")
+            self.refresh_connection()
+            logger.warning("Connection refreshed - trying the query again")
+            response = requests.get(
+                self._endpoint + pattern,
+                headers=headers,
+                verify=self._cacert,
+                params=payload,
+            )
         return response
 
     def query(
