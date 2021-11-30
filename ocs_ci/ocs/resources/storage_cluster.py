@@ -13,6 +13,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv
@@ -994,9 +995,10 @@ def verify_managed_service_resources():
         csvs = csv.get_csvs_start_with_prefix(
             managed_csv, constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert (
-            len(csvs) == 1
-        ), f"Unexpected number of CSVs with {managed_csv} prefix: {len(csvs)}"
+        if len(csvs) != 1:
+            raise ValueError(
+                f"Unexpected number of CSVs with {managed_csv} prefix: {len(csvs)}"
+            )
         csv_name = csvs[0]["metadata"]["name"]
         csv_obj = csv.CSV(
             resource_name=csv_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -1011,9 +1013,10 @@ def verify_managed_service_resources():
         constants.MANAGED_PAGERDUTY_SECRET,
         constants.MANAGED_DEADMANSSNITCH_SECRET,
     }:
-        assert secret_ocp_obj.is_exist(
-            resource_name=secret_name
-        ), f"{secret_name} does not exist in openshift-storage namespace"
+        if not secret_ocp_obj.is_exist(resource_name=secret_name):
+            raise ResourceNotFoundError(
+                f"{secret_name} does not exist in openshift-storage namespace"
+            )
 
     # Verify alerting pods are Running
     pod_obj = OCP(
@@ -1039,14 +1042,18 @@ def verify_managed_service_resources():
             kind=policy[0],
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-        assert policy_obj.is_exist(
-            resource_name=policy[1]
-        ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+        if not policy_obj.is_exist(resource_name=policy[1]):
+            raise ResourceNotFoundError(
+                f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+            )
 
 
 def verify_managedocs_components():
     """
     Verify that managedocs components alertmanager, prometheus, storageCluster are in Ready state
+
+    Raises:
+        ResourceWrongStatusException: state of managedocs component is not Ready
     """
     log.info("Getting managedocs components data")
     managedocs_obj = OCP(
@@ -1055,6 +1062,7 @@ def verify_managedocs_components():
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
     for component in {"alertmanager", "prometheus", "storageCluster"}:
-        assert (
-            managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
-        ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+        if managedocs_obj.get()["status"]["components"][component]["state"] != "Ready":
+            raise ResourceWrongStatusException(
+                f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+            )
