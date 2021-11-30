@@ -143,8 +143,23 @@ class DeploymentUI(PageNavigator):
 
         if config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
+        elif config.ENV_DATA.get("mcg_only_deployment", False):
+            self.install_mcg_only_cluster()
         else:
             self.install_internal_cluster()
+
+    def install_mcg_only_cluster(self):
+        """
+        Install MCG ONLY cluster via UI
+
+        """
+        logger.info("Install MCG ONLY cluster via UI")
+        self.do_click(self.dep_loc["advanced_deployment"])
+        self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
+        self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        self.create_storage_cluster()
 
     def install_lso_cluster(self):
         """
