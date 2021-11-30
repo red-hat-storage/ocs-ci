@@ -37,9 +37,6 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_JENKINS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "jenkins")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
-TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
-TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
-TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_COUCHBASE_NEW_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase_new")
 TEMPLATE_COUCHBASE_NEW_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_NEW_DIR, "server")
 TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR = os.path.join(
@@ -299,6 +296,9 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
+MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
+MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -431,56 +431,6 @@ COUCHBASE_NEW_DATA_BUCKET = os.path.join(
 
 COUCHBASE_NEW_PILLOWFIGHT = os.path.join(
     TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR, "basic-pillowfight.yaml"
-)
-
-COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
-)
-
-COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRole.yaml"
-)
-
-COUCHBASE_ADMISSION_CLUSTER_ROLE_BINDING_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRoleBinding.yaml"
-)
-
-COUCHBASE_ADMISSION_SECRET_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionSecret.yaml"
-)
-
-COUCHBASE_ADMISSION_DEPLOYMENT_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionDeployment.yaml"
-)
-
-COUCHBASE_ADMISSION_SERVICE_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionService.yaml"
-)
-
-COUCHBASE_MUTATING_WEBHOOK_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "MutatingWebhookConfiguration.yaml"
-)
-
-COUCHBASE_VALIDATING_WEBHOOK_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "ValidatingWebhookConfiguration.yaml"
-)
-
-COUCHBASE_CRD_YAML = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "couchbaseCrd.yaml")
-
-COUCHBASE_OPERATOR_ROLE = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-role.yaml"
-)
-
-COUCHBASE_OPERATOR_DEPLOY = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-deployment.yaml"
-)
-
-COUCHBASE_WORKER_SECRET = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
-)
-
-COUCHBASE_WORKER_EXAMPLE = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
 COUCHBASE_OPERATOR = "couchbase-operator-namespace"
@@ -759,6 +709,10 @@ CLOUD_PLATFORMS = [
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
 ]
+MANAGED_SERVICE_PLATFORMS = [
+    OPENSHIFT_DEDICATED_PLATFORM,
+    ROSA_PLATFORM,
+]
 BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 
 # AWS i3 worker instance for LSO
@@ -885,6 +839,10 @@ HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
 SUPPORTED_BROWSERS = CHROME_BROWSER
 
+# Managed service deployment constants
+OSD_DEPLOYER = "ocs-osd-deployer"
+OSE_PROMETHEUS_OPERATOR = "ose-prometheus-operator"
+
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
 INVENTORY_FILE = "inventory.yaml"
@@ -932,6 +890,9 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
+MANAGED_SMTP_SECRET = "ocs-converged-smtp"
+MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {

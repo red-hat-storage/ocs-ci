@@ -136,6 +136,9 @@ deployment_4_9 = {
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
+    "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
 }
 
 generic_locators = {
@@ -565,7 +568,7 @@ validation_4_9 = {
     "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
-    "show-default-projects": ("label[for='no-label-switch-on']", By.CSS_SELECTOR),
+    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
 }
 
 locators = {

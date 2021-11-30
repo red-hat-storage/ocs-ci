@@ -1,0 +1,34 @@
+---
+ENV_DATA:
+  platform: 'rosa'
+  deployment_type: 'managed'
+  addon_name: 'ocs-converged'
+  configs: 'aws,stage'
+  worker_instance_type: 'm5.2xlarge'
+  worker_replicas: 3
+  master_replicas: 3
+  # size of storage cluster, default is 1 TiB
+  size: '1'
+
+# AUTH:
+#  openshiftdedicated:
+#    token: OCM TOKEN KEY PLACEHOLDER
+
+DEPLOYMENT:
+  force_download_ocm_cli: True
+  ocm_cli_version: '0.1.46'
+  force_download_rosa_cli: True
+  rosa_cli_version: '1.1.2'
+  region: "us-east-2"
+  addon_name: "ocs-converged"
+  force_download_installer: True
+  force_download_client: True
+
+REPORTING:
+  # This is useful as a W/A for Openshift Dedicated, as there is an issue 
+  # to use internal image for must gather
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'
+  # notification_email_0: MAIL USED FOR SENDGRID
+  # notification_email_1: MAIL USED FOR SENDGRID
+  # notification_email_2: MAIL USED FOR SENDGRID
