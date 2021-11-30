@@ -61,6 +61,10 @@ class ROSAOCP(BaseOCPDeployment):
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
+        password_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+        )
+        ocm.get_kubeadmin_password(self.cluster_name, password_path)
         self.test_cluster()
 
     def destroy(self, log_level="DEBUG"):
