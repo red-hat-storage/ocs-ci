@@ -10,7 +10,7 @@ import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, polarion_id, bugzilla
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.perftests import PASTest
 
 log = logging.getLogger(__name__)
@@ -37,6 +37,14 @@ class TestPVCCreationPerformance(PASTest):
         self.interface = interface_type
         self.sc_obj = storageclass_factory(self.interface)
 
+    @pytest.fixture()
+    def namespace(self, project_factory):
+        """
+        Create a new project
+        """
+        proj_obj = project_factory()
+        self.namespace = proj_obj.namespace
+
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
         argvalues=[
@@ -59,6 +67,7 @@ class TestPVCCreationPerformance(PASTest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
+    @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1620")
     def test_bulk_pvc_creation_deletion_measurement_performance(
         self, teardown_factory, bulk_size
@@ -79,7 +88,7 @@ class TestPVCCreationPerformance(PASTest):
 
         pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=self.namespace,
             number_of_pvc=bulk_size,
             size=self.pvc_size,
             burst=True,
@@ -94,7 +103,6 @@ class TestPVCCreationPerformance(PASTest):
                 executor.submit(
                     helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
                 )
-
                 executor.submit(pvc_obj.reload)
 
         start_time = helpers.get_provision_time(
@@ -115,7 +123,9 @@ class TestPVCCreationPerformance(PASTest):
             pv_names_list.append(pvc_obj.backed_pv)
 
         logging.info(f"Starting to delete bulk of {bulk_size} PVCs")
-        helpers.delete_bulk_pvcs(yaml_creation_dir, pv_names_list)
+        helpers.delete_bulk_pvcs(
+            yaml_creation_dir, pv_names_list, namespace=self.namespace
+        )
         logging.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
 
         log_deletion_times = helpers.measure_pv_deletion_time_bulk(
@@ -155,6 +165,7 @@ class TestPVCCreationPerformance(PASTest):
         self.sc_obj = storageclass_factory(self.interface)
 
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
+    @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1270")
     @bugzilla("1741612")
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
@@ -174,7 +185,7 @@ class TestPVCCreationPerformance(PASTest):
         log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
         pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=self.namespace,
             number_of_pvc=initial_number_of_pvcs,
             size=self.pvc_size,
             burst=True,
@@ -195,7 +206,7 @@ class TestPVCCreationPerformance(PASTest):
         log.info("Re-creating the 90 PVCs")
         pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=self.namespace,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
             burst=True,
@@ -208,6 +219,15 @@ class TestPVCCreationPerformance(PASTest):
         total_time = total.total_seconds()
         logging.info(f"Deletion time of {number_of_pvcs} is {total_time} seconds.")
 
+        for pvc_obj in pvc_objs:
+            teardown_factory(pvc_obj)
+        with ThreadPoolExecutor() as executor:
+            for pvc_obj in pvc_objs:
+                executor.submit(
+                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
+                )
+
+                executor.submit(pvc_obj.reload)
         if total_time > 50:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
