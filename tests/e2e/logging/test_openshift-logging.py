@@ -105,7 +105,7 @@ class Testopenshiftloggingonocs(E2ETest):
             )
             logger.info(project_out)
 
-            if project_out["hits"]["max_score"]:
+            if project_out["_shards"]["successful"]:
                 logger.info("The Project exists on the EFK stack")
             else:
                 raise ModuleNotFoundError
