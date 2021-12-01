@@ -8,6 +8,7 @@ import pytest
 
 import random
 
+from ocs_ci.utility import version
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
@@ -15,7 +16,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@pytest.mark.usefixtures(setup_fixture.__name__)
+@pytest.mark.usefixtures()
 @ignore_leftovers
 class Testopenshiftloggingonocs(E2ETest):
     """
@@ -80,7 +80,7 @@ class Testopenshiftloggingonocs(E2ETest):
         """
 
         elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
-        if get_ocp_version() <= "4.4":
+        if version.get_semantic_ocp_version_from_config() <= version.VERSION_4_7:
 
             project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
                 command="indices", out_yaml_format=False
@@ -138,7 +138,7 @@ class Testopenshiftloggingonocs(E2ETest):
 
         elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
         cmd = f"es_util --query=project.{project}.*/_count"
-        if get_ocp_version() >= "4.5":
+        if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_5:
             cmd = (
                 'es_util --query=*/_count?pretty -d \'{"query": {"match":'
                 f'{{"kubernetes.namespace_name": "{project}"}}}}}}\''

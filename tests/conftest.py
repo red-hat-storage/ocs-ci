@@ -90,7 +90,6 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
     get_ocs_build_number,
-    get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -2646,9 +2645,9 @@ def install_logging(request):
 
     log.info("Configuring Openshift-logging")
 
-    # Checks OCP version
-    ocp_version = get_running_ocp_version()
-    logging_channel = "stable" if ocp_version >= "4.7" else ocp_version
+    # Gets OCP version to align logging version to OCP version
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
