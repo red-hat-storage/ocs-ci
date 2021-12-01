@@ -8,10 +8,10 @@ under section PYTEST_DONT_REWRITE
 """
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
-import collections
 import os
 import yaml
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -109,8 +109,8 @@ def merge_dict(orig: dict, new: dict) -> dict:
 
     """
     for k, v in new.items():
-        if isinstance(orig, collections.Mapping):
-            if isinstance(v, collections.Mapping):
+        if isinstance(orig, Mapping):
+            if isinstance(v, Mapping):
                 r = merge_dict(orig.get(k, dict()), v)
                 orig[k] = r
             else:
