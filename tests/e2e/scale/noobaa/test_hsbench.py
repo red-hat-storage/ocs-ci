@@ -81,7 +81,7 @@ class TestHsBench(E2ETest):
     @pytest.mark.polarion_id("OCS-2698")
     def test_s3_benchmark_object_bucket(self, s3bench, mcg_obj, bucket_factory):
         """
-        Test case to test one million objects in a single bucket:
+        Tests large number of objects on a single bucket:
         * Create an OBC
         * Run hs S3 benchmark to create 700k objects on the object bucket
         * Post writing objects verify OBC creation
