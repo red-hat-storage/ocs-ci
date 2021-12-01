@@ -77,7 +77,7 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
 
     """
     if (
-        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
         and node_type == constants.WORKER_MACHINE
     ):
         typed_nodes = [
