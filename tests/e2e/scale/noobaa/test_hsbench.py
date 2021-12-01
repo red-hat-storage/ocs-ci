@@ -3,7 +3,11 @@ import pytest
 from ocs_ci.ocs import hsbench
 from ocs_ci.utility import utils
 from ocs_ci.framework.testlib import E2ETest, scale
-from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required, bugzilla, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    vsphere_platform_required,
+    bugzilla,
+    skipif_ocs_version,
+)
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +23,20 @@ def hsbenchs3(request):
 
     request.addfinalizer(teardown)
     return hsbenchs3
+
+
+@pytest.fixture(scope="function")
+def s3bench(request):
+
+    s3bench = hsbench.HsBench()
+    s3bench.create_resource_hsbench()
+    s3bench.install_hsbench()
+
+    def teardown():
+        s3bench.cleanup()
+
+    request.addfinalizer(teardown)
+    return s3bench
 
 
 @scale
@@ -61,7 +79,7 @@ class TestHsBench(E2ETest):
     @bugzilla("1998680")
     @skipif_ocs_version("<4.9")
     @pytest.mark.polarion_id("OCS-2698")
-    def test_obc_objs(self, s3bench, mcg_obj, bucket_factory):
+    def test_s3_benchmark_object_bucket(self, s3bench, mcg_obj, bucket_factory):
         """
         Test case to test one million objects in a single bucket:
         * Create an OBC
