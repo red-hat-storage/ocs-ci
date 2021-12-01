@@ -87,6 +87,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
+    get_ocs_build_number,
     get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
@@ -1223,7 +1224,7 @@ def health_checker(request, tier_marks_name):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request, log_cli_level):
+def cluster(request, log_cli_level, record_testsuite_property):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
     Specific platform deployment classes will handle the fine details
@@ -1274,6 +1275,7 @@ def cluster(request, log_cli_level):
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
+    record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
 @pytest.fixture(scope="class")
