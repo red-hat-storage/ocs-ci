@@ -10,6 +10,8 @@ port 9200, this test can not be running in your host.
 """
 
 # Builtin modules
+import json
+
 import logging
 
 # 3ed party modules
@@ -52,8 +54,8 @@ class SmallFileResultsAnalyse(PerfResult):
         "IOPS": {"name": "iops", "op": np.sum},
         "MiBps": {"name": "mbps", "op": np.sum},
         "elapsed": {"name": "elapsed-time", "op": np.average},
-        "files": {"name": "Files-per-thread", "op": np.sum},
-        "files-per-sec": {"name": "Files-per-sec", "op": np.sum},
+        "files": {"name": "files_per_thread", "op": np.sum},
+        "filesPerSec": {"name": "Files-Sec", "op": np.sum},
         "records": {"name": "Rec-per-thread", "op": np.sum},
     }
 
@@ -113,7 +115,7 @@ class SmallFileResultsAnalyse(PerfResult):
         inside this object
 
         """
-        query = {"query": {"match": {"uuid": self.uuid}}}
+        query = {"query": {"match": {"uuid": f'"{self.uuid}"'}}}
         log.info("Reading all data from ES server")
         try:
             # Initialize the scroll
@@ -212,7 +214,6 @@ class SmallFileResultsAnalyse(PerfResult):
                 )
 
         # This is the place to check in host (treads) deviation.
-
         return results
 
     def combine_results(self, results, clear):
@@ -232,7 +233,7 @@ class SmallFileResultsAnalyse(PerfResult):
         """
 
         res = {}
-        log.debug(f"The results to combine {results}")
+        log.debug(f"The results to combine {json.dumps(results, indent=2)}")
         for rec in results.keys():
             record = results[rec]
             for key in self.managed_keys.keys():
@@ -249,6 +250,7 @@ class SmallFileResultsAnalyse(PerfResult):
             res.update(self.aggregate_threads_results(res))
         else:
             res = self.aggregate_threads_results(res)
+        log.debug(f"The combines results are : {json.dumps(res, indent=2)}")
         return res
 
     def aggregate_host_results(self):
@@ -282,14 +284,22 @@ class SmallFileResultsAnalyse(PerfResult):
 
         test_pass = True
         for op in self.results["operations"]:
-            log.debug(f'Aggregating {op} - {self.results["full-res"][op]}')
+            log.debug(
+                f'Aggregating {op} - {json.dumps(self.results["full-res"][op], indent=3)}'
+            )
             results = self.combine_results(self.results["full-res"][op], False)
-
             log.info(f"Check IOPS {op} samples deviation")
 
             for key in self.managed_keys.keys():
                 if self.managed_keys[key]["name"] in results.keys():
-                    results[key] = np.average(results[self.managed_keys[key]["name"]])
+
+                    results[key] = self.managed_keys[key]["op"](
+                        results[self.managed_keys[key]["name"]]
+                    )
+                    if isinstance(results[self.managed_keys[key]["name"]], list):
+                        results[key] = np.average(
+                            results[self.managed_keys[key]["name"]]
+                        )
                     results[key] = float("{:.2f}".format(results[key]))
                     if key == "IOPS":
                         st_deviation = np.std(results[self.managed_keys[key]["name"]])
@@ -302,7 +312,6 @@ class SmallFileResultsAnalyse(PerfResult):
                             )
                             # TODO: unmarked next line after implementing data cleansing
                             # test_pass = False
-                    del results[self.managed_keys[key]["name"]]
                 self.results["full-res"][op] = results
 
         return test_pass
@@ -346,6 +355,8 @@ class SmallFileResultsAnalyse(PerfResult):
                     self.results["full-res"][op][sample][host] = self.thread_read(
                         host, op, sample
                     )
+
+        log.debug(f"The Initial DB is : {self.results['full-res']}")
 
 
 @performance
@@ -468,12 +479,21 @@ class TestSmallFileWorkload(PASTest):
 
         stime = self.start_time.replace("GMT", ".000Z")
         etime = self.end_time.replace("GMT", ".000Z")
-        kibana_id = self.get_kibana_indexid(
-            self.crd_data["spec"]["elasticsearch"]["host"],
-            index,
-        )
+        log.info(json.dumps(self.crd_data.get("spec").get("elasticsearch"), indent=2))
+        host = self.crd_data.get("spec").get("elasticsearch").get("url")
+        try:
+            host = host.split(":")[1].replace("//", "")
+        except Exception:
+            log.error("No ES configuretion")
+            return ""
+        kibana_id = self.get_kibana_indexid(host, index)
+
+        app = "app/kibana#/discover"
+        if self.dev_mode:
+            app = "app/discover#/"
+
         result = (
-            f"http://{self.crd_data['spec']['elasticsearch']['host']}:5601/app/discover#/"
+            f"http://{host}:5601/{app}"
             f"?_a=(columns:!({columns}),filters:!(),index:'{kibana_id}',interval:auto,"
             f"query:(language:kuery,query:'uuid:{self.uuid}'),sort:!())"
             f"&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:'{stime}',to:'{etime}'))"
@@ -570,7 +590,6 @@ class TestSmallFileWorkload(PASTest):
         self.full_client_list = get_pod_name_by_pattern(
             self.client_pod_name, benchmark_operator.BMO_NAME
         )
-        log.info(f"The full clients list is : {self.full_client_list}")
 
         # Collecting logs from each pod
         for clpod in self.full_client_list:
@@ -626,7 +645,7 @@ class TestSmallFileWorkload(PASTest):
             test_status = full_results.aggregate_samples_results()
 
             # Generate link for the all data in the kibana
-            columens = "optype,files,elapsed,sample,tid"
+            columens = "optype,files,filesPerSec,elapsed,sample,tid"
             klink = self.generate_kibana_link("ripsaw-smallfile-results", columens)
 
             # Generate link for the all response-time data in the kibana
