@@ -89,7 +89,7 @@ class TestHsBench(E2ETest):
         # Create an Object bucket
         object_bucket = bucket_factory(amount=1, interface="OC")[0]
 
-        # Write 1M objects to the object bucket
+        # Write 700k objects to the object bucket
         s3bench.run_benchmark(
             num_obj=700000,
             timeout=12000,
