@@ -32,6 +32,8 @@ spec:
       storagesize: 100Gi
       job_timeout: 18000
       response-times: true
+      stonewall: false
+      finish: true
       # Un comments the next line when the drop-cache-kernel will support multi-arch
       #drop_cache_kernel: true
       #drop_cache_rook_ceph: true
