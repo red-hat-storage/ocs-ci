@@ -95,7 +95,7 @@ def measure_stop_ceph_mon(measurement_dir):
     logger.info(f"Monitors left to run: {mons[:split_index]}")
 
     # run_time of operation
-    run_time = 60 * 14
+    run_time = 60 * 19
 
     def stop_mon():
         """
@@ -183,7 +183,7 @@ def measure_stop_ceph_osd(measurement_dir):
             str: Names of downscaled deployments
         """
         # run_time of operation
-        run_time = 60 * 11
+        run_time = 60 * 16
         nonlocal oc
         nonlocal osd_to_stop
         logger.info(f"Downscaling deployment {osd_to_stop} to 0")
