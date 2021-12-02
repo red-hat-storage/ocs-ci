@@ -88,8 +88,11 @@ def get_rp_launch_description():
     description = ""
     display_name = config.REPORTING.get("display_name")
     if display_name:
-        description += f"Job name: {display_name}"
+        description += f"Job name: {display_name}\n"
     jenkins_job_url = config.RUN.get("jenkins_build_url")
     if jenkins_job_url:
-        description += f" Jenkins job: {jenkins_job_url}"
+        description += f"Jenkins job: {jenkins_job_url}\n"
+    logs_url = config.RUN.get("logs_url")
+    if logs_url:
+        description += f"Logs URL: {logs_url}\n"
     return description
