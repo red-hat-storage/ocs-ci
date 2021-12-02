@@ -3819,7 +3819,7 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     logger.info("Inject the new monmap back to the monitor")
     args_from_mon_containers.pop()
     args_from_mon_containers.append(f"--inject-monmap={backup_of_monmap_path}")
-    inject_monmap = f" ".join(args_from_mon_containers).translate(
+    inject_monmap = " ".join(args_from_mon_containers).translate(
         "()".maketrans("", "", "()")
     )
     command = f"ceph-mon {inject_monmap}"
