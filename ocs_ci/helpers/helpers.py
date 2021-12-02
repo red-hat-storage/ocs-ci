@@ -47,6 +47,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 
+
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
@@ -3654,3 +3655,225 @@ def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(timeou
         func=check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def mon_quorom_lost():
+    """
+    Take mon quorum out by deleting /var/lib/ceph/mon directory
+    so that it will start crashing and the quorum is lost
+
+    Returns:
+        mon_pod_obj_list (list): List of mon objects
+        mon_pod_running[0] (obj): A mon object which is running
+        ceph_mon_daemon_id (list): List of crashed ceph mon id
+
+    """
+
+    # Get mon pods
+    mon_pod_obj_list = pod.get_mon_pods()
+
+    # rsh into 2 of the mon pod and delete /var/lib/ceph/mon directory
+    mon_pod_obj = random.sample(mon_pod_obj_list, 2)
+    mon_pod_running = list(set(mon_pod_obj_list) - set(mon_pod_obj))
+    for pod_obj in mon_pod_obj:
+        command = "rm -rf /var/lib/ceph/mon"
+        try:
+            pod_obj.exec_cmd_on_pod(command=command)
+        except CommandFailed as ef:
+            if "Device or resource busy" not in str(ef):
+                raise ef
+
+    # Get the crashed mon id
+    ceph_mon_daemon_id = [
+        pod_obj.get().get("metadata").get("labels").get("ceph_daemon_id")
+        for pod_obj in mon_pod_obj
+    ]
+
+    # Wait for sometime after the mon crashes
+    time.sleep(300)
+
+    # Check the operator log mon quorum lost
+    operator_logs = get_logs_rook_ceph_operator()
+    pattern = (
+        "op-mon: failed to check mon health. "
+        "failed to get mon quorum status: mon "
+        "quorum status failed: exit status 1"
+    )
+    logger.info(f"Check the operator log for the pattern : {pattern}")
+    if not re.search(pattern=pattern, string=operator_logs):
+        logger.error(
+            f"Pattern {pattern} couldn't find in operator logs. "
+            "Mon quorum may not have been lost after deleting "
+            "var/lib/ceph/mon. Please check"
+        )
+        raise UnexpectedBehaviour(
+            f"Pattern {pattern} not found in operator logs. "
+            "Maybe mon quorum not failed or  mon crash failed Please check"
+        )
+    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+
+    return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
+
+
+def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
+    """
+    Recover mon quorum back by following
+    procedure mentioned in https://access.redhat.com/solutions/5898541
+
+    """
+    # Scale down rook-ceph-operator
+    logger.info("Scale down rook-ceph-operator")
+    if not modify_deployment_replica_count(
+        deployment_name="rook-ceph-operator", replica_count=0
+    ):
+        raise CommandFailed("Failed to scale down rook-ceph-operator to 0")
+    logger.info("Successfully scaled down rook-ceph-operator to 0")
+
+    # Take a backup of the current mon deployment which running
+    dep_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    mon_deployment_name = (
+        mon_pod_running.get().get("metadata").get("labels").get("pvc_name")
+    )
+    running_mon_pod_yaml = dep_obj.get(resource_name=mon_deployment_name)
+
+    # Patch the mon Deployment to run a sleep
+    # instead of the ceph-mon command
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to run a sleep instead of the ceph-mon command"
+    )
+    params = (
+        '{"spec": {"template": {"spec": '
+        '{"containers": [{"name": "mon", "command": ["sleep", "infinity"], "args": []}]}}}}'
+    )
+    dep_obj.patch(
+        resource_name=mon_deployment_name, params=params, format_type="strategic"
+    )
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set to sleep instead of the ceph-mon command"
+    )
+
+    # Set 'initialDelaySeconds: 2000' so that pod doesn't restart
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to set 'initialDelaySeconds: 2000'"
+    )
+    params = (
+        '[{"op": "replace", '
+        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":2000}]'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 2000'"
+    )
+
+    # rsh to mon pod and run commands to remove lost mons
+    # set a few simple variables
+    time.sleep(60)
+    mon_pod_obj = pod.get_mon_pods()
+    mon_pod_running = [
+        pod_obj
+        for pod_obj in mon_pod_obj
+        if pod_obj.get().get("metadata").get("labels").get("pvc_name")
+        == mon_deployment_name
+    ]
+    mon_pod_running = mon_pod_running[0]
+    # cluster_namespace = 'rook-ceph'
+    # good_mon_id = mon_pod_running.get().get('metadata').get('labels').get('mon')
+    monmap_path = "/tmp/monmap"
+    args_from_mon_containers = (
+        running_mon_pod_yaml.get("spec")
+        .get("template")
+        .get("spec")
+        .get("containers")[0]
+        .get("args")
+    )
+
+    # Extract the monmap to a file
+    logger.info("Extract the monmap to a file")
+    args_from_mon_containers.append(f"--extract-monmap={monmap_path}")
+    extract_monmap = " ".join(args_from_mon_containers).translate(
+        "()".maketrans("", "", "()")
+    )
+    command = f"ceph-mon {extract_monmap}"
+    mon_pod_running.exec_cmd_on_pod(command=command)
+
+    # Review the contents of monmap
+    command = f"monmaptool --print {monmap_path}"
+    mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+    # Take a backup of current monmap
+    backup_of_monmap_path = "/tmp/monmap.current"
+    logger.info(f"Take a backup of current monmap in location {backup_of_monmap_path}")
+    command = f"cp {monmap_path} {backup_of_monmap_path}"
+    mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+    # Remove the crashed mon from the monmap
+    logger.info("Remove the crashed mon from the monmap")
+    for mon_id in ceph_mon_daemon_id:
+        command = f"monmaptool {backup_of_monmap_path} --rm {mon_id}"
+        mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+    logger.info("Successfully removed the crashed mon from the monmap")
+
+    # Inject the monmap back to the monitor
+    logger.info("Inject the new monmap back to the monitor")
+    args_from_mon_containers.pop()
+    args_from_mon_containers.append(f"--inject-monmap={backup_of_monmap_path}")
+    inject_monmap = f" ".join(args_from_mon_containers).translate(
+        "()".maketrans("", "", "()")
+    )
+    command = f"ceph-mon {inject_monmap}"
+    mon_pod_running.exec_cmd_on_pod(command=command)
+    args_from_mon_containers.pop()
+
+    # Patch the mon deployment to run "mon" command again
+    logger.info(f"Edit mon {mon_deployment_name} deployment to run mon command again")
+    params = (
+        f'{{"spec": {{"template": {{"spec": {{"containers": '
+        f'[{{"name": "mon", "command": ["ceph-mon"], "args": {json.dumps(args_from_mon_containers)}}}]}}}}}}}}'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params)
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set to run mon command again"
+    )
+
+    # Set 'initialDelaySeconds: 10' back
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to set again 'initialDelaySeconds: 10'"
+    )
+    params = (
+        '[{"op": "replace", '
+        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":10}]'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 10'"
+    )
+
+    # Scale up the rook-ceph-operator deployment
+    logger.info("Scale up rook-ceph-operator")
+    if not modify_deployment_replica_count(
+        deployment_name="rook-ceph-operator", replica_count=1
+    ):
+        raise CommandFailed("Failed to scale up rook-ceph-operator to 1")
+    logger.info("Successfully scaled up rook-ceph-operator to 1")
+    logger.info("Validate rook-ceph-operator pod is running")
+    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.OPERATOR_LABEL,
+        resource_count=1,
+        timeout=600,
+        sleep=5,
+    )
+
+    # Verify all mons are up and running
+    logger.info("Validate all mons are up and running")
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.MON_APP_LABEL,
+        resource_count=len(mon_pod_obj_list),
+        timeout=1200,
+        sleep=5,
+    )
+    logger.info("All mons are up and running")
