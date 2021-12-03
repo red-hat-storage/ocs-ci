@@ -1,0 +1,11 @@
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  fio_storageutilization_min_mbps: 10.0
+  master_memory: '16384'
+  compute_memory: '24576'
+  worker_num_cpus: '8'
