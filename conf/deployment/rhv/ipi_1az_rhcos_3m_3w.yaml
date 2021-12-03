@@ -12,7 +12,7 @@ ENV_DATA:
   master_num_cores: '2'
   master_num_sockets: '2'
   master_memory: '16384'
-  compute_memory: '65536'
+  compute_memory: '43008'
   # Following values needs to be set in separate config and passed to ocs-ci in
   # order to connect to RHVM and/or deploy OCP/OCS cluster on RHV
   # default_cluster_name: PLACEHOLDER
