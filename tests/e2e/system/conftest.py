@@ -2,6 +2,15 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.bucket_utils import (
+    compare_object_checksums_between_bucket_and_local,
+    compare_directory,
+    patch_replication_policy_to_bucket,
+    random_object_round_trip_verification,
+    sync_object_directory,
+    wait_for_cache,
+    write_random_test_objects_to_bucket,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
@@ -189,3 +198,223 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def setup_mcg_system(
+    request,
+    awscli_pod_session,
+    mcg_obj_session,
+    bucket_factory,
+    cld_mgr,
+    test_directory_setup,
+):
+    # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
+    # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
+
+    def mcg_system_setup(bucket_amount=5, object_amount=10):
+        # Create standard MCG buckets
+        test_buckets = bucket_factory(
+            amount=bucket_amount,
+            interface="CLI",
+        )
+
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+
+        test_buckets_pattern = "RandomObject-"
+        first_bidirectional_pattern = "FirstBidi-"
+        second_bidirectional_pattern = "SecondBidi-"
+        cache_pattern = "Cache-"
+
+        # Perform a round-trip object verification -
+        # 1. Generate random objects in uploaded_objects_dir
+        # 2. Upload the objects to the bucket
+        # 3. Download the objects from the bucket
+        # 4. Compare the object checksums in downloaded_obejcts_dir
+        # with the ones in uploaded_objects_dir
+        for count, bucket in enumerate(test_buckets):
+            assert random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=bucket.name,
+                upload_dir=uploaded_objects_dir + f"Bucket{count}",
+                download_dir=downloaded_obejcts_dir + f"Bucket{count}",
+                amount=object_amount,
+                pattern=test_buckets_pattern,
+                mcg_obj=mcg_obj_session,
+            ), "Some or all written objects were not found in the list of downloaded objects"
+
+        # E2E TODO: Create RGW kafka notification & see the objects are notified to kafka
+
+        # Create two MCG buckets with a bidirectional replication policy
+        bucketclass = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
+        first_bidi_bucket_name = bucket_factory(bucketclass=bucketclass)[0].name
+        replication_policy = ("basic-replication-rule", first_bidi_bucket_name, None)
+        second_bidi_bucket_name = bucket_factory(
+            1, bucketclass=bucketclass, replication_policy=replication_policy
+        )[0].name
+        patch_replication_policy_to_bucket(
+            first_bidi_bucket_name, "basic-replication-rule-2", second_bidi_bucket_name
+        )
+
+        bidi_uploaded_objs_dir_1 = uploaded_objects_dir + "/bidi_1"
+        bidi_uploaded_objs_dir_2 = uploaded_objects_dir + "/bidi_2"
+        bidi_downloaded_objs_dir_1 = downloaded_obejcts_dir + "/bidi_1"
+        bidi_downloaded_objs_dir_2 = downloaded_obejcts_dir + "/bidi_2"
+
+        # Verify replication is working as expected by performing a two-way round-trip object verification
+        random_object_round_trip_verification(
+            io_pod=awscli_pod_session,
+            bucket_name=first_bidi_bucket_name,
+            upload_dir=bidi_uploaded_objs_dir_1,
+            download_dir=bidi_downloaded_objs_dir_1,
+            amount=object_amount,
+            pattern=first_bidirectional_pattern,
+            wait_for_replication=True,
+            second_bucket_name=second_bidi_bucket_name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        random_object_round_trip_verification(
+            io_pod=awscli_pod_session,
+            bucket_name=second_bidi_bucket_name,
+            upload_dir=bidi_uploaded_objs_dir_2,
+            download_dir=bidi_downloaded_objs_dir_2,
+            amount=object_amount,
+            pattern=second_bidirectional_pattern,
+            wait_for_replication=True,
+            second_bucket_name=first_bidi_bucket_name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        # Create a cache bucket
+        cache_bucketclass = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Cache",
+                "ttl": 3600000,
+                "namespacestore_dict": {
+                    "aws": [(1, "eu-central-1")],
+                },
+            },
+            "placement_policy": {
+                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
+            },
+        }
+        cache_bucket = bucket_factory(bucketclass=cache_bucketclass)[0]
+
+        cache_uploaded_objs_dir = uploaded_objects_dir + "/cache"
+        cache_uploaded_objs_dir_2 = uploaded_objects_dir + "/cache_2"
+        cache_downloaded_objs_dir = downloaded_obejcts_dir + "/cache"
+        underlying_bucket_name = cache_bucket.bucketclass.namespacestores[0].uls_name
+
+        # Upload a random object to the bucket
+        objs_written_to_cache_bucket = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            cache_bucket.name,
+            cache_uploaded_objs_dir,
+            pattern=cache_pattern,
+            mcg_obj=mcg_obj_session,
+        )
+        wait_for_cache(mcg_obj_session, cache_bucket.name, objs_written_to_cache_bucket)
+        # Write a random, larger object directly to the underlying storage of the bucket
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            underlying_bucket_name,
+            cache_uploaded_objs_dir_2,
+            pattern=cache_pattern,
+            s3_creds=cld_mgr.aws_client.nss_creds,
+        )
+        # Download the object from the cache bucket
+        sync_object_directory(
+            awscli_pod_session,
+            f"s3://{cache_bucket.name}",
+            cache_downloaded_objs_dir,
+            mcg_obj_session,
+        )
+        # Make sure the cached object was returned, and not the one that was written to the underlying storage
+        assert compare_directory(
+            awscli_pod_session,
+            cache_uploaded_objs_dir,
+            cache_downloaded_objs_dir,
+            amount=1,
+            pattern=cache_pattern,
+        ), "The uploaded and downloaded cached objects have different checksums"
+        assert (
+            compare_directory(
+                awscli_pod_session,
+                cache_uploaded_objs_dir_2,
+                cache_downloaded_objs_dir,
+                amount=1,
+                pattern=cache_pattern,
+            )
+            is False
+        ), "The cached object was replaced by the new one before the TTL has expired"
+        return {
+            "test_buckets": test_buckets,
+            "test_buckets_upload_dir": uploaded_objects_dir,
+            "object_amount": object_amount,
+            "test_buckets_pattern": test_buckets_pattern,
+            "first_bidi_bucket_name": first_bidi_bucket_name,
+            "bidi_downloaded_objs_dir_2": bidi_downloaded_objs_dir_2,
+            "first_bidirectional_pattern": first_bidirectional_pattern,
+            "second_bidi_bucket_name": second_bidi_bucket_name,
+            "second_bidirectional_pattern": second_bidirectional_pattern,
+            "cache_bucket_name": cache_bucket.name,
+            "cache_pattern": cache_pattern,
+            "cache_downloaded_objs_dir": cache_downloaded_objs_dir,
+        }
+
+    return mcg_system_setup
+
+
+@pytest.fixture()
+def verify_mcg_system_recovery(
+    request,
+    awscli_pod_session,
+    mcg_obj_session,
+):
+    def mcg_system_recovery_check(mcg_sys_setup_dict):
+        # Giving the dict an alias for readability
+        a = mcg_sys_setup_dict
+
+        # Verify the integrity of all objects in all buckets post-recovery
+        for count, bucket in enumerate(a["test_buckets"]):
+            compare_object_checksums_between_bucket_and_local(
+                awscli_pod_session,
+                mcg_obj_session,
+                bucket.name,
+                a["test_buckets_upload_dir"] + f"Bucket{count}",
+                amount=a["object_amount"],
+                pattern=a["test_buckets_pattern"],
+            )
+
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["first_bidi_bucket_name"],
+            a["bidi_downloaded_objs_dir_2"],
+            amount=a["object_amount"],
+            pattern=a["first_bidirectional_pattern"],
+        )
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["second_bidi_bucket_name"],
+            a["bidi_downloaded_objs_dir_2"],
+            amount=a["object_amount"],
+            pattern=a["second_bidirectional_pattern"],
+        )
+
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["cache_bucket_name"],
+            a["cache_downloaded_objs_dir"],
+            pattern=a["cache_pattern"],
+        )
+
+    return mcg_system_recovery_check

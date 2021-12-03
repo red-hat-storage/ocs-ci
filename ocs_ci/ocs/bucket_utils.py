@@ -1560,7 +1560,7 @@ def compare_object_checksums_between_bucket_and_local(
         bucket_name (str): The name of the bucket to compare the objects from
         local_dir (str): A string containing the path to the local directory
         amount (int, optional): The amount of objects to use for the verification. Defaults to 1.
-        pattern (str, optional): A string defining the object naming pattern. Defaults to "RandomObject-".
+        pattern (str, optional): A string defining the object naming pattern. Defaults to "ObjKey-".
 
     Returns:
         bool: True if the checksums are the same, False otherwise
