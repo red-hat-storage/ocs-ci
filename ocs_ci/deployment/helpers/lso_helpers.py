@@ -202,6 +202,10 @@ def setup_local_storage(storageclass):
         )
         lvs_data["spec"]["storageClassName"] = storageclass
 
+        # set volumeMode to Filesystem for MCG only deployment
+        if config.ENV_DATA["mcg_only_deployment"]:
+            lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
         lvs_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="local_volume_set", delete=False
         )
