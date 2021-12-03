@@ -112,7 +112,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         os.environ["PVCNAME"] = self.pvc_obj.name
         os.environ["INTERFACE"] = self.interface
 
-        main_script = "tests/e2e/performance/test_multi_snapshots.py"
+        main_script = "tests/e2e/performance/csi_tests/test_multi_snapshots.py"
         result = subprocess.run([main_script], stdout=subprocess.PIPE)
         log.info(f"Results from main script : {result.stdout.decode('utf-8')}")
 
