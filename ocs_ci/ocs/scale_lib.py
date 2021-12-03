@@ -1327,6 +1327,7 @@ def attach_multiple_pvc_to_pod_dict(
     node_selector=None,
     io_runtime=None,
     io_size=None,
+    pod_yaml=constants.PERF_POD_YAML,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1343,6 +1344,7 @@ def attach_multiple_pvc_to_pod_dict(
             Example, {'nodetype': 'app-pod'}
         io_runtime (seconds): Runtime in Seconds to continue IO
         io_size (str value with M|K|G): io_size with respective unit
+        pod_yaml (dict): Pod yaml file dict
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1353,7 +1355,7 @@ def attach_multiple_pvc_to_pod_dict(
     for pvc_name in pvc_list:
         temp_list.append(pvc_name)
         if len(temp_list) == pvcs_per_pod:
-            pod_dict = constants.PERF_POD_YAML
+            pod_dict = pod_yaml
             pod_data = templating.load_yaml(pod_dict)
             pod_name = helpers.create_unique_resource_name("scale", "pod")
 
@@ -1451,9 +1453,10 @@ def attach_multiple_pvc_to_pod_dict(
                         "timeoutSeconds": 10,
                     }
                     pod_data["spec"]["containers"][0]["livenessProbe"] = liveness
-                    del pod_data["spec"]["containers"][0]["command"]
-                    del pod_data["spec"]["containers"][0]["stdin"]
-                    del pod_data["spec"]["containers"][0]["tty"]
+                    if pod_yaml == constants.PERF_POD_YAML:
+                        del pod_data["spec"]["containers"][0]["command"]
+                        del pod_data["spec"]["containers"][0]["stdin"]
+                        del pod_data["spec"]["containers"][0]["tty"]
                     flag = 0
 
                 if node_selector:
