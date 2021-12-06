@@ -791,6 +791,21 @@ class CephCluster(object):
             logger.error(err_msg)
             raise exceptions.CephHealthException(err_msg)
 
+    def delete_filesystem(self, fs_name):
+        """
+        Delete a ceph filesystem - not the default one - from the cluster
+
+        Args:
+            fs_name (str): the name of the filesystem to delete
+        """
+        # Make sure the the default filesystem is not deleted.
+        if fs_name == "ocs-storagecluster-cephfilesystem":
+            pass
+
+        # Delete the filesystem
+        self.CEPHFS.delete(resource_name=fs_name)
+        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+
 
 class CephHealthMonitor(threading.Thread):
     """
