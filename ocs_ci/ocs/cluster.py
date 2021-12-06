@@ -765,6 +765,32 @@ class CephCluster(object):
         except Exception as ex:
             logger.error(f"Failed to change the ratio : {ex}")
 
+    def get_cephfilesystem_status(self, fsname=None):
+        res = self.CEPHFS.get(resource_name=fsname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_filesystem(self, fs_name):
+        """
+        Creating new filesystem to use in the tests insted of the default one.
+        the new filesystem is identical (parameters wise) to the default filesystem
+
+        Args:
+            fs_name (str):  The name of the filesystem to create
+
+        """
+        # Creating the new filesystem using the default parameters
+        self.cephfs.data["metadata"]["name"] = fs_name
+        self.cephfs.apply(**self.cephfs.data)
+
+        # Verify that the filesystem was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_cephfilesystem_status, fsname=fs_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new filesystem"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
 
 class CephHealthMonitor(threading.Thread):
     """
