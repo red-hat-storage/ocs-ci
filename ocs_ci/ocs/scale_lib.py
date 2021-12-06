@@ -979,7 +979,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, 900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -1542,7 +1542,7 @@ def scale_ocs_node(node_count=3):
         for ms in ms_name:
             process = threading.Thread(
                 target=machine_utils.wait_for_new_node_to_be_ready,
-                kwargs={"machine_set": ms.name},
+                kwargs={"machine_set": ms.name, "timeout": 900},
             )
             process.start()
             threads.append(process)
