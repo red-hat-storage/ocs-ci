@@ -9,6 +9,7 @@ from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
     pre_upgrade,
     post_upgrade,
     skipif_bm,
@@ -32,6 +33,7 @@ SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 @skipif_bm
 @pre_upgrade
 @ipi_deployment_required
+@bugzilla("1862854")
 @pytest.mark.polarion_id("OCS-755")
 def test_scale_pvcs_pods_pre_upgrade():
     """
@@ -90,6 +92,7 @@ def test_scale_pvcs_pods_pre_upgrade():
 @skipif_external_mode
 @post_upgrade
 @ipi_deployment_required
+@bugzilla("1862854")
 @pytest.mark.polarion_id("OCS-755")
 def test_scale_pvcs_pods_post_upgrade():
     """
