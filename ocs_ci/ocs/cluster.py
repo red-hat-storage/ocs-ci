@@ -730,6 +730,41 @@ class CephCluster(object):
         time_taken = time.time() - start_time
         return time_taken / 60
 
+    def set_pgs(self, poolname, pgs):
+        """
+        Setting up the PG / PGP / PG_MIN number of a pool
+        if the pg_num_min is not setting to the pg_num number, the autoscale will
+        set automaticlly the pg_num to 32 (incase you try to set pg_num > 32)
+
+        Args:
+            poolname (str): the pool name that need to be modify
+            pgs (int): new number of PG's
+
+        """
+        for key in ["pg_num", "pgp_num", "pg_num_min"]:
+            cmd = f"ceph osd pool set {poolname} {key} {pgs}"
+            try:
+                logger.debug(f"Try to set {key} to {pgs}")
+                _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+            except Exception as ex:
+                logger.error(f"Failed to setup {key} : {ex}")
+
+    def set_target_ratio(self, poolname, ratio):
+        """
+        Setting the target_size_ratio of a ceph pool
+
+        Args:
+            poolname (str): the pool name
+            ratio (float): the new ratio to set
+
+        """
+        cmd = f"ceph osd pool set {poolname} target_size_ratio {ratio}"
+        try:
+            logger.debug(f"Try to set target_size_ratio on {poolname} to : {ratio}")
+            _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+        except Exception as ex:
+            logger.error(f"Failed to change the ratio : {ex}")
+
 
 class CephHealthMonitor(threading.Thread):
     """
