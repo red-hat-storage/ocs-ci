@@ -500,6 +500,28 @@ class TestSmallFileWorkload(PASTest):
         )
         return result
 
+    def collect_benchmark_logs(self):
+        """
+        Collecting the test log from all benchmark pods
+        """
+
+        # Getting full list of benchmark clients
+        self.full_client_list = get_pod_name_by_pattern(
+            self.client_pod_name, benchmark_operator.BMO_NAME
+        )
+
+        # Collecting logs from each pod
+        for clpod in self.full_client_list:
+            test_logs = self.pod_obj.exec_oc_cmd(f"logs {clpod}", out_yaml_format=False)
+            log_file_name = f"{self.full_log_path}/{clpod}-pod.log"
+            try:
+                with open(log_file_name, "w") as f:
+                    f.write(test_logs)
+                log.info(f"The Test log can be found at : {log_file_name}")
+            except Exception:
+                log.warning(f"Cannot write the log to the file {log_file_name}")
+        log.info("Logs from all client pods got successfully")
+
     def run(self):
         log.info("Running SmallFile bench")
         self.deploy_and_wait_for_wl_to_start(timeout=240, sleep=10)
@@ -507,6 +529,7 @@ class TestSmallFileWorkload(PASTest):
         # Getting the UUID from inside the benchmark pod
         self.uuid = self.operator.get_uuid(self.client_pod)
         self.wait_for_wl_to_finish(sleep=30)
+        self.collect_benchmark_logs()
         try:
             if "RUN STATUS DONE" in self.test_logs:
                 log.info("SmallFiles has completed successfully")
@@ -585,23 +608,6 @@ class TestSmallFileWorkload(PASTest):
         if not self.run():
             log.error("The benchmark failed to run !")
             return
-
-        # Getting full list of benchmark clients
-        self.full_client_list = get_pod_name_by_pattern(
-            self.client_pod_name, benchmark_operator.BMO_NAME
-        )
-
-        # Collecting logs from each pod
-        for clpod in self.full_client_list:
-            test_logs = self.pod_obj.exec_oc_cmd(f"logs {clpod}", out_yaml_format=False)
-            log_file_name = f"{self.full_log_path}/{clpod}-pod.log"
-            try:
-                with open(log_file_name, "w") as f:
-                    f.write(test_logs)
-                log.info(f"The Test log can be found at : {log_file_name}")
-            except Exception:
-                log.warning(f"Cannot write the log to the file {log_file_name}")
-        log.info("Logs from all client pods got successfully")
 
         # Setting back the original elastic-search information
         if self.backup_es:
