@@ -2,15 +2,13 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_mgr_pods,
-    check_pods_in_running_state,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import get_deployments_having_label
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -31,6 +29,14 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
 
     """
 
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         """
@@ -45,7 +51,9 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_restart_mgr_while_two_mons_down(self):
+    def test_restart_mgr_while_two_mons_down(
+        self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
         """
         Test Procedure:
         1.Scaling down two mons:
@@ -96,16 +104,22 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
             time.sleep(10)
 
             log.info(f"Waiting for mgr pod move to Running state, index={index}")
-            mgr_pod_name = get_pod_name_by_pattern("rook-ceph-mgr")
-            sample = TimeoutSampler(
-                timeout=100,
-                sleep=5,
-                func=check_pods_in_running_state,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                pod_names=mgr_pod_name,
-                raise_pod_not_found_error=False,
+            mgr_pod_obj = ocp.OCP(
+                kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
             )
-            if not sample.wait_for_func_status(True):
-                raise Exception(
-                    f"{mgr_pod} mgr pod did'nt move to Running state after 100 seconds, index={index}"
-                )
+            assert mgr_pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.MGR_APP_LABEL,
+                resource_count=1,
+                timeout=100,
+            ), f"Mgr pod did'nt move to Running state after 100 seconds, index={index}"
+
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
+        log.info("Creating Resources using sanity helpers")
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
+        logging.info("Deleting Resources using sanity helpers")
+        self.sanity_helpers.delete_resources()
