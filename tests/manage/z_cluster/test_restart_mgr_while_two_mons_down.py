@@ -85,8 +85,8 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
             )
         ]
         self.mons_scale = mons[0:2]
-
-        for index in range(1, 11):
+        tries = 11
+        for index in range(1, tries):
             log.info(f"Scaling down two mons {self.mons_scale}, index={index}")
             for mon_scale in self.mons_scale:
                 self.oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mon_scale}")
@@ -114,9 +114,6 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
                 timeout=100,
             ), f"Mgr pod did'nt move to Running state after 100 seconds, index={index}"
 
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
         log.info("Creating Resources using sanity helpers")
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
