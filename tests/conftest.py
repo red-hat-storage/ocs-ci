@@ -954,13 +954,23 @@ def teardown_factory_fixture(request):
         """
         for instance in instances[::-1]:
             if not instance.is_deleted:
-                reclaim_policy = (
-                    instance.reclaim_policy if instance.kind == constants.PVC else None
-                )
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-                if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-                    helpers.validate_pv_delete(instance.backed_pv)
+                try:
+                    if (instance.kind == constants.PVC) and (instance.reclaim_policy):
+                        pass
+                    reclaim_policy = (
+                        instance.reclaim_policy
+                        if instance.kind == constants.PVC
+                        else None
+                    )
+                    instance.delete()
+                    instance.ocp.wait_for_delete(instance.name)
+                    if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
+                except CommandFailed as ex:
+                    log.warning(
+                        f"Resource is already in deleted state, skipping this step"
+                        f"Error: {ex}"
+                    )
 
     request.addfinalizer(finalizer)
     return factory
