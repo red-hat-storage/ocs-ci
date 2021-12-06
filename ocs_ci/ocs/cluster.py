@@ -1857,6 +1857,10 @@ class CephClusterExternal(CephCluster):
         self._cluster_name = self.cluster_resource.get("metadata").get("name")
         self._namespace = self.cluster_resource.get("metadata").get("namespace")
         self.cluster = ocs.OCS(**self.cluster_resource)
+        # Decrease chance that we will hit issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/5186
+        logger.info("Sleep for 60 seconds before verifying MCG")
+        time.sleep(60)
         self.wait_for_nooba_cr()
 
     @property
