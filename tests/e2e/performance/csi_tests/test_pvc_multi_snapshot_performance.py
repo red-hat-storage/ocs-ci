@@ -16,7 +16,7 @@ from ocs_ci.framework.testlib import (
 
 log = logging.getLogger(__name__)
 
-SKIP_REASON = "Test is re-written to fix teardown issues, Hence skipping this test"
+SKIP_REASON = "Skipping multiple snapshot test until github issue 5197 is addressed"
 
 
 @performance

@@ -20,7 +20,7 @@ from ocs_ci.helpers import performance_lib
 
 log = logging.getLogger(__name__)
 
-SKIP_REASON = "Test is re-written to fix teardown issues, Hence skipping this test"
+SKIP_REASON = "Skipping multiple clone test until github issue 5198 is addressed"
 
 
 @performance
