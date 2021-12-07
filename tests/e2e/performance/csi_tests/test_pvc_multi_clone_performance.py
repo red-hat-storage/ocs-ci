@@ -20,6 +20,8 @@ from ocs_ci.helpers import performance_lib
 
 log = logging.getLogger(__name__)
 
+SKIP_REASON = "Test is re-written to fix teardown issues, Hence skipping this test"
+
 
 @performance
 @skipif_ocp_version("<4.6")
@@ -31,6 +33,7 @@ class TestPvcMultiClonePerformance(E2ETest):
     """
 
     @pytest.mark.polarion_id("OCS-2622")
+    @pytest.mark.skip(SKIP_REASON)
     def test_pvc_multiple_clone_performance(
         self,
         interface_iterate,

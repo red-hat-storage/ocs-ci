@@ -16,6 +16,8 @@ from ocs_ci.framework.testlib import (
 
 log = logging.getLogger(__name__)
 
+SKIP_REASON = "Test is re-written to fix teardown issues, Hence skipping this test"
+
 
 @performance
 @skipif_ocp_version("<4.6")
@@ -26,6 +28,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
     The test is trying to to take the maximum number of snapshot for one PVC
     """
 
+    @pytest.mark.skip(SKIP_REASON)
     @pytest.mark.polarion_id("OCS-2623")
     def test_pvc_multiple_snapshot_performance(
         self,

@@ -22,6 +22,8 @@ from ocs_ci.ocs import benchmark_operator
 
 log = logging.getLogger(__name__)
 
+SKIP_REASON = "Skipping FIO compressed test until github issue 5099 is addressed"
+
 
 class FIOResultsAnalyse(PerfResult):
     """
@@ -483,6 +485,7 @@ class TestFIOBenchmark(PASTest):
             log.info(f"The Result can be found at : {full_results.results_link()}")
 
     @skipif_ocs_version("<4.6")
+    @pytest.mark.skip(SKIP_REASON)
     @pytest.mark.parametrize(
         argnames=["io_pattern", "bs", "cmp_ratio"],
         argvalues=[
