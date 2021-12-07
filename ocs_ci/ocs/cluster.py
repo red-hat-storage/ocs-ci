@@ -70,6 +70,10 @@ class CephCluster(object):
         self.CEPHFS = ocp.OCP(
             kind="CephFilesystem", namespace=config.ENV_DATA["cluster_namespace"]
         )
+        self.RBD = ocp.OCP(
+            kind="CephBlockPool", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+
         self.DEP = ocp.OCP(
             kind="Deployment", namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -82,6 +86,13 @@ class CephCluster(object):
             logging.warning("No CephFS found")
             self.cephfs_config = None
 
+        try:
+            self.rbd_config = self.RBD.get().get("items")[0]
+        except IndexError as e:
+            logging.warning(e)
+            logging.warning("No RBD found")
+            self.rbd_config = None
+
         self._cluster_name = self.cluster_resource_config.get("metadata").get("name")
         self._namespace = self.cluster_resource_config.get("metadata").get("namespace")
 
@@ -93,6 +104,11 @@ class CephCluster(object):
             self.cephfs = ocs.OCS(**self.cephfs_config)
         else:
             self.cephfs = None
+
+        if self.rbd_config:
+            self.block = ocs.OCS(**self.rbd_config)
+        else:
+            self.block = None
 
         self.mon_selector = constant.MON_APP_LABEL
         self.mds_selector = constant.MDS_APP_LABEL
@@ -766,6 +782,15 @@ class CephCluster(object):
             logger.error(f"Failed to change the ratio : {ex}")
 
     def get_cephfilesystem_status(self, fsname=None):
+        """
+        Getting the ceph filesystem status
+
+        Args:
+            fsname (str): The filesystem name
+
+        Returnes:
+            bool : true if the filesystem status is `Ready`, false otherwise
+        """
         res = self.CEPHFS.get(resource_name=fsname)
         return res.get("status").get("phase") == constants.STATUS_READY
 
@@ -805,6 +830,57 @@ class CephCluster(object):
         # Delete the filesystem
         self.CEPHFS.delete(resource_name=fs_name)
         self.CEPHFS.wait_for_delete(resource_name=fs_name)
+
+    def get_blockpool_status(self, poolname=None):
+        """
+        Getting the RBD pool status
+
+        Args:
+            fsname (str): The RBD pool name
+
+        Returnes:
+            bool : true if the RBD pool status is `Ready`, false otherwise
+        """
+
+        res = self.RBD.get(resource_name=poolname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_blockpool(self, pool_name):
+        """
+        Creating new RBD pool to use in the tests insted of the default one.
+        the new RBD pool is identical (parameters wise) to the default RBD pool
+
+        Args:
+            pool_name (str):  The name of the RBD pool to create
+
+        """
+        # Creating the new RBD pool using the default parameters
+        self.block.data["metadata"]["name"] = pool_name
+        self.block.apply(**self.block.data)
+
+        # Verify that the RBD pool was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_blockpool_status, poolname=pool_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new Block Pool"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
+    def delete_blockpool(self, pool_name):
+        """
+        Delete a ceph RBD pool - not the default one - from the cluster
+
+        Args:
+            pool_name (str): the name of the RBD pool to delete
+        """
+        # Make sure the the default RBD pool is not deleted.
+        if pool_name == "ocs-storagecluster-cephblockpool":
+            pass
+
+        # Delete the RBD pool
+        self.RBD.delete(resource_name=pool_name)
+        self.RBD.wait_for_delete(resource_name=pool_name)
 
 
 class CephHealthMonitor(threading.Thread):
