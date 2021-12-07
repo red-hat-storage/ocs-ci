@@ -1,0 +1,6 @@
+---
+# This config file is for the upgrade purpose to the latest available DS build.
+UPGRADE:
+  skip_upgrade: true
+  # In the case you don't want to upgrade to the latest one buid, but just to
+  # the one build up see configuration file called upgrade_to_next_build.yaml

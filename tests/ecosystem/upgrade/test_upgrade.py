@@ -61,13 +61,33 @@ def test_osd_reboot(teardown):
     run_ocs_upgrade(operation=osd_node_reboot)
 
 
+
 @purple_squad
+
+import json
+import time
+
+@pytest.fixture(scope="session")
+def pause_file(tmpdir_factory):
+    pause_file = tmpdir_factory.mktemp("pause").join("pause.json")
+    pause_dict = {"pause": "true"}
+    pause_file.write(json.dumps(pause_dict))
+    log.warning(str(pause_file))
+    return str(pause_file)
+
+
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
-def test_upgrade():
+def test_upgrade(pause_file):
     """
     Tests upgrade procedure of OCS cluster
 
     """
 
-    run_ocs_upgrade()
+    result = {"pause": "true"}
+    log.info("Upgrade pause started")
+    while result["pause"] == "true":
+        with open(pause_file) as open_file:
+            result = json.load(open_file)
+        time.sleep(3)
+    log.info("Upgrade pause ended")
