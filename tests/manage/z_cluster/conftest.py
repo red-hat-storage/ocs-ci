@@ -3,6 +3,8 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 
@@ -98,3 +100,38 @@ def workload_storageutilization_cephfs(
         threading_lock=threading_lock,
     )
     return measured_op
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to skip certain tests when running on
+    openshift dedicated platform
+    Args:
+        items: list of collected tests
+    """
+    # Skip the below test till node implementaion completed for ODF-MS platform
+    skip_till_node_implement = [
+        "test_nodereplacement_proactive",
+        "test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node",
+        "test_pv_after_reboot_node",
+        "test_add_capacity_node_restart",
+        "test_nodes_restart",
+        "test_rolling_nodes_restart",
+        "test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node",
+        "test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node",
+        "test_toleration",
+        "test_node_maintenance_restart_activate",
+        "test_simultaneous_drain_of_two_ocs_nodes",
+        "test_all_worker_nodes_short_network_failure",
+        "test_check_pod_status_after_two_nodes_shutdown_recovery",
+    ]
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            for testname in skip_till_node_implement:
+                if testname in str(item.fspath):
+                    logger.info(
+                        f"Test {item} is removed from the collected items"
+                        f" till node implentation is in place"
+                    )
+                    items.remove(item)
+                    break

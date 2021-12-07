@@ -368,6 +368,10 @@ skipif_bmpsi = pytest.mark.skipif(
     and config.DEPLOYMENT.get("local_storage") is True,
     reason="Test will not run on Baremetal PSI",
 )
+skipif_managed_service = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
+    reason="Test will not run on Managed service cluster",
+)
 
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,

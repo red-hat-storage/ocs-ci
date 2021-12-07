@@ -1133,3 +1133,25 @@ def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
     teardown()
 
     return measured_op
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to skip certain tests when running on
+    ODF-MS platform
+    Args:
+        items: list of collected tests
+    """
+    skip_list = [
+        "test_noobaa_bucket_quota",
+        "test_noobaa_ns_bucket",
+    ]
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            for testname in skip_list:
+                if testname in str(item):
+                    logger.info(
+                        f"Test {item} is removed from the collected items"
+                        f" till node implementation is in place"
+                    )
+                    items.remove(item)
+                    break

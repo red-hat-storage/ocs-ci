@@ -12,6 +12,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_10
 
+
 logger = logging.getLogger(__name__)
 
 

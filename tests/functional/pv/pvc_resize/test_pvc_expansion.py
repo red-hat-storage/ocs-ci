@@ -199,6 +199,7 @@ class TestPvcExpand(ManageTest):
         Verify PVC expand of already expanded PVC
 
         """
+
         if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             pvc_size_expanded_1 = 19
             pvc_size_expanded_2 = 20
