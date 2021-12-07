@@ -16,7 +16,7 @@ from ocs_ci.framework.testlib import (
 
 log = logging.getLogger(__name__)
 
-SKIP_REASON = "Skipping multiple snapshot test until github issue 5197 is addressed"
+SKIP_REASON = "Skipping multiple snapshot tests until github issue 5197 is addressed"
 
 
 @performance

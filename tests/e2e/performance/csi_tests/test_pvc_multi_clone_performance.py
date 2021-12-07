@@ -20,7 +20,7 @@ from ocs_ci.helpers import performance_lib
 
 log = logging.getLogger(__name__)
 
-SKIP_REASON = "Skipping multiple clone test until github issue 5198 is addressed"
+SKIP_REASON = "Skipping multiple clone tests until github issue 5198 is addressed"
 
 
 @performance
