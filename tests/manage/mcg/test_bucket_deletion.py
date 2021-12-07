@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_openshift_dedicated,
+    bugzilla,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -303,3 +304,40 @@ class TestBucketDeletion(MCGTest):
             if mcg_obj.s3_verify_bucket_exists(bucketname):
                 rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
                 mcg_obj.s3_resource.Bucket(bucketname).delete()
+
+    @pytest.fixture()
+    def default_bucket_teardown(self, request, mcg_obj):
+        """
+        Recreates first.bucket
+
+        """
+
+        def finalizer():
+            if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+                mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+
+        request.addfinalizer(finalizer)
+
+    @tier3
+    @skipif_openshift_dedicated
+    @bugzilla("1980299")
+    @pytest.mark.polarion_id("OCS-1321")
+    def test_delete_all_buckets(self, mcg_obj, bucket_factory, default_bucket_teardown):
+        """
+        Test with deletion of all buckets including the default first.bucket.
+        """
+        logger.info("Listing all buckets in the cluster")
+        buckets = mcg_obj.s3_client.list_buckets()
+
+        logger.info("Deleting all buckets and its objects")
+        for bucket in buckets["Buckets"]:
+            logger.info(f"Deleting {bucket} and its objects")
+            s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
+            s3_bucket.objects.all().delete()
+            s3_bucket.delete()
+
+        logger.info("Verifying no bucket exists")
+        assert not mcg_obj.s3_get_all_bucket_names(), "Failed: Buckets exists"
+
+        logger.info("Creating new OBCs")
+        bucket_factory(amount=3, interface="OC")
