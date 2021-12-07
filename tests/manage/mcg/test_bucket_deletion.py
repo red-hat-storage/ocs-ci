@@ -321,7 +321,7 @@ class TestBucketDeletion(MCGTest):
     @tier3
     @skipif_openshift_dedicated
     @bugzilla("1980299")
-    @pytest.mark.polarion_id("OCS-1321")
+    @pytest.mark.polarion_id("OCS-2704")
     def test_delete_all_buckets(self, mcg_obj, bucket_factory, default_bucket_teardown):
         """
         Test with deletion of all buckets including the default first.bucket.
