@@ -139,7 +139,7 @@ class Sanity:
 
         logger.info("All PVCs are deleted as expected")
 
-    def obc_put_obj_create_delete(self, mcg_obj, bucket_factory):
+    def obc_put_obj_create_delete(self, mcg_obj, bucket_factory, timeout=300):
         """
         Creates bucket then writes, reads and deletes objects
 
@@ -147,7 +147,7 @@ class Sanity:
         bucket_name = bucket_factory(
             amount=1,
             interface="OC",
-            timeout=900 if config.DEPLOYMENT.get("external_mode") else 300,
+            timeout=timeout,
         )[0].name
         self.obj_data = "A string data"
 
