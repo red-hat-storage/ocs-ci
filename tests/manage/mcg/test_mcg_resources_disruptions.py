@@ -75,7 +75,8 @@ class TestMCGResourcesDisruptions(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[resource_to_delete],
             resource_count=1,
-            timeout=90,
+            timeout=800 if config.DEPLOYMENT.get("external_mode") else 90,
+            sleep=60,
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
