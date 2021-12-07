@@ -2,10 +2,11 @@
 All ACM related deployment classes and functions should go here.
 
 """
+import os
 import logging
-import subprocess
-import shlex
-import pexpect
+import tempfile
+import shutil
+import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -15,7 +16,8 @@ from ocs_ci.ocs.exceptions import (
     DRPrimaryNotFoundException,
     InteractivePromptException,
 )
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
+from ocs_ci.ocs.node import get_typed_worker_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -28,12 +30,9 @@ def run_subctl_cmd(cmd=None):
     Args:
         cmd: subctl command to be executed
 
-    Returns:
-
     """
     cmd = " ".join("subctl", cmd)
-    out = run_cmd(cmd)
-    logger.info(out)
+    run_cmd(cmd)
 
 
 def run_subctl_cmd_interactive(cmd, prompt, answer):
@@ -50,13 +49,9 @@ def run_subctl_cmd_interactive(cmd, prompt, answer):
 
     """
     cmd = " ".join("subctl", cmd)
-
-    child = pexpect.spawn(cmd)
-    if child.expect(prompt, timeout=config.ENV_DATA["submariner_prompt_timeout"]):
-        raise InteractivePromptException("Unexpected Prompt")
-
-    if not child.sendline("".join(answer, constants.ENTER_KEY)):
-        raise InteractivePromptException("Failed to provide answer to the prompt")
+    run_cmd_interactive(
+        cmd, [prompt], [answer], timeout=config.ENV_DATA["submariner_prompt_timeout"]
+    )
 
 
 class Submariner(object):
@@ -88,29 +83,37 @@ class Submariner(object):
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
-        pass
+        raise NotImplementedError("Deploy downstream functionality not implemented")
 
     def download_binary(self):
         if self.source == "upstream":
             # This script puts the platform specific binary in ~/.local/bin
             # we need to move the subctl binary to ocs-ci/bin dir
-            download_cmd = "curl -Ls https://get.submariner.io | bash"
             try:
-                run_cmd(download_cmd)
+                resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL)
+            except requests.ConnectionError:
+                logger.exception(
+                    "Failed to download the downloader script from submariner site"
+                )
+                raise
+            tempf = tempfile.NamedTemporaryFile(
+                dir=".", mode="wb", prefix="submariner_downloader_", delete=False
+            )
+            tempf.write(resp.content)
+
+            # Actual submariner binary download
+            cmd = f"bash {tempf.name}"
+            try:
+                run_cmd(cmd)
             except CommandFailed:
                 logger.exception("Failed to download submariner binary")
                 raise
 
             # Copy submariner from ~/.local/bin to ocs-ci/bin
             # ~/.local/bin is the default path selected by submariner script
-            # TODO: create symlink
-            cp_cmd = f"cp ~/.local/bin/subctl {config.RUN['bin_dir']}"
-            ret = subprocess.run(shlex.split(cp_cmd))
-            try:
-                ret.check_returncode()
-            except subprocess.CalledProcessError:
-                logger.exception("Couldn't find subctl binary")
-                raise
+            shutil.copyfile(
+                os.path.expanduser("~/.local/bin/subctl"), config.RUN["bin_dir"]
+            )
 
     def submariner_configure_upstream(self):
         """
@@ -140,7 +143,7 @@ class Submariner(object):
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
             cluster_index = config.clusters.index(cluster)
-            if not cluster_index == config.acm_index:
+            if cluster_index != config.acm_index:
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
                     f"{config.ENV_DATA['submariner_info_file']} "
@@ -162,7 +165,7 @@ class Submariner(object):
         kubeconf_list = []
         for i in self.dr_only_list:
             kubeconf_list.append(config.clusters[i].RUN["kubeconfig"])
-        connct_check = "verify " + " ".join(kubeconf_list) + "--only connectivity"
+        connct_check = f"verify {kubeconf_list} --only connectivity"
         run_subctl_cmd(connct_check)
 
     def get_primary_cluster_index(self):
@@ -187,6 +190,5 @@ class Submariner(object):
             str: Name of the gateway node
 
         """
-        # TODO: For now we are just returning compute-1, later (when we move to AWS) we need to find a way
-        # to get actual nodes of the cluster
-        return config.ENV_DATA["submariner_default_gateway_node"]
+        # Always return the first worker node
+        return get_typed_worker_nodes()[0]
