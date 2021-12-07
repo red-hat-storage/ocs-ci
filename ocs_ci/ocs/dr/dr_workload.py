@@ -42,7 +42,7 @@ class BusyBox(DRWorkload):
         self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster")
         self.target_clone_dir = kwargs.get("target_clone_dir")
         self.drpc_yaml_file = os.path.join(
-            os.path.join(self.target_clone_dir, constants.dr_workload_repo_base_dir),
+            os.path.join(self.target_clone_dir, constants.DR_WORKLOAD_REPO_BASE_DIR),
             kwargs.get("subscription_busybox_drpc_yaml"),
         )
 
@@ -57,10 +57,14 @@ class BusyBox(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         templating.dump_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
 
+        # TODO
+        # drpc_yaml_file needs to be committed back to the repo
+        # because ACM would refetch from repo directly
+
         # Create the resources on Hub cluster
         config.switch_acm_ctx()
         workload_subscription_dir = os.path.join(
-            os.path.join(self.target_clone_dir, constants.dr_workload_repo_base_dir),
+            os.path.join(self.target_clone_dir, constants.DR_WORKLOAD_REPO_BASE_DIR),
             "subscription",
         )
         run_cmd(f"oc create -k {workload_subscription_dir}")

@@ -615,24 +615,25 @@ DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.y
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 
 # DR constants
-dr_default_namespace = "openshift-dr-systems"
-token_exchange_agent_label = "token-exchange-agent "
-rbd_mirroring_storagecluster_patch = (
+SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
+DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
+TOKEN_EXCHANGE_AGENT_LABEL = "token-exchange-agent "
+RBD_MIRRORING_STORAGECLUSTER_PATCH = (
     "oc get StorageCluster -n openshift-storage -o=jsonpath='{.items[0].metadata.name}')  "
     "-n openshift-storage --type json --patch  "
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
 )
-rbd_mirroring_enabled_query = (
+RBD_MIRRORING_ENABLED_QUERY = (
     "-o=jsonpath='{.items[?"
     "(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
 )
-rbd_sidecar_patch_cmd = (
+RBD_SIDECAR_PATCH_CMD = (
     " '[{ 'op': 'add', 'path': '/data/CSI_ENABLE_OMAP_GENERATOR', 'value': 'true' },"
     "'{ 'op': 'add', 'path': '/data/CSI_ENABLE_VOLUME_REPLICATION', 'value': 'true' }]'"
 )
-rbd_sidecar_count = 16
-dr_s3_secret_name_prefix = "odr-s3secret"
-dr_workload_repo_base_dir = "ocm-ramen-samples"
+RBD_SIDECAR_COUNT = 16
+DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
+DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 
 # constants
 RBD_INTERFACE = "rbd"

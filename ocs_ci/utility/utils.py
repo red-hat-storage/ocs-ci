@@ -18,6 +18,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
+import pexpect
 
 import hcl2
 import requests
@@ -41,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedImage,
     UnsupportedOSType,
+    InteractivePromptException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -456,6 +458,29 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     return mask_secrets(completed_process.stdout.decode(), secrets)
+
+
+def run_cmd_interactive(cmd, prompts, answers, timeout=300):
+    """
+    Handle interactive prompts with answers during subctl command
+
+    Args:
+        cmd(str): Command to be executed
+        prompts(list): of Expected questions during command run which needs to be provided
+        answer(list): of Answers for the prompt
+        timeout(int): Timeout in seconds, for pexpect to wait for prompt
+
+    Raises:
+        InteractivePromptException: in case something goes wrong
+
+    """
+    child = pexpect.spawn(cmd)
+    for prompt, answer in zip(prompts, answers):
+        if child.expect(prompt, timeout=timeout):
+            raise InteractivePromptException("Unexpected Prompt")
+
+        if not child.sendline("".join(answer, constants.ENTER_KEY)):
+            raise InteractivePromptException("Failed to provide answer to the prompt")
 
 
 def run_cmd_multicluster(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):

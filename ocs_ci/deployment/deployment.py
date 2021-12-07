@@ -211,10 +211,9 @@ class Deployment(object):
 
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.clusters):
-                if config.multicluster:
-                    if config.acm_index == i:
-                        continue
-                    config.switch_ctx(i)
+                if config.multicluster and config.acm_index == i:
+                    continue
+                config.switch_ctx(i)
                 try:
                     self.deploy_ocs()
 
@@ -238,7 +237,9 @@ class Deployment(object):
                         continue
                     else:
                         config.switch_ctx(i)
-                        ocs_registry_image = config.DEPLOYMENT["ocs_registry_image"]
+                        ocs_registry_image = config.DEPLOYMENT.get(
+                            "ocs_registry_image", None
+                        )
                         ocs_install_verification(ocs_registry_image=ocs_registry_image)
                 config.reset_ctx()
         else:
@@ -272,7 +273,7 @@ class Deployment(object):
             secret_yaml_files = []
             for region in dr_regions:
                 # Generate yaml file per region
-                secret_name = f"{constants.dr_s3_secret_name_prefix}-{s3_acm_secret_suffix}-{region}"
+                secret_name = f"{constants.DR_S3_SECRET_NAME_PREFIX}-{s3_acm_secret_suffix}-{region}"
                 s3_secret_data["metadata"]["name"] = secret_name
                 s3_secret_yaml = tempfile.NamedTemporaryFile(
                     mode="w+",
@@ -391,7 +392,7 @@ class Deployment(object):
         # Patch storagecluster on all the DR participating  clusters(except ACM)
         # Current CTX: ACM
         patch_cmd = (
-            f"oc patch storagecluster ${constants.rbd_mirroring_storagecluster_patch}"
+            f"oc patch storagecluster ${constants.RBD_MIRRORING_STORAGECLUSTER_PATCH}"
         )
         # run_cmd_mulctiluster will take care of changing the contexts
         run_cmd_multicluster(patch_cmd, skip_index=config.acm_index)
@@ -433,7 +434,7 @@ class Deployment(object):
         patch_cmd = (
             f"oc patch cm rook-ceph-operator-config "
             f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-            f"--type json --patch {constants.rbd_sidecar_patch_cmd}"
+            f"--type json --patch {constants.RBD_SIDECAR_PATCH_CMD}"
         )
         run_cmd(patch_cmd)
         # Number of containers should be 8/8 from 2 pods now which makes total 16 containers
@@ -459,9 +460,11 @@ class Deployment(object):
         """
         # Check mirror peer status only on HUB
         mirror_peer = ocp.OCP(
-            kind="MirrorPeer", namespace=constants.dr_default_namespace
+            kind="MirrorPeer", namespace=constants.DR_DEFAULT_NAMESPACE
         )
+        # Need to satisfy both the phases
         mirror_peer.wait_for_phase(phase="ExchangingSecret")
+        mirror_peer.wait_for_phase(phase="ExchangedSecret")
 
         # Check for token-exchange-agent pod and its status has to be running
         # on all participating clusters except HUB
@@ -473,7 +476,7 @@ class Deployment(object):
             else:
                 config.switch_ctx(index)
                 token_xchange_agent = get_pods_having_label(
-                    constants.token_exchange_agent_label
+                    constants.TOKEN_EXCHANGE_AGENT_LABEL
                 )
                 pod_status = token_xchange_agent["items"][0]["status"]["phase"]
                 pod_name = token_xchange_agent["items"][0]["metadata"]["name"]
