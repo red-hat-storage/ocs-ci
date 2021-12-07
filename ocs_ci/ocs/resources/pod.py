@@ -305,6 +305,7 @@ class Pod(OCS):
         buffer_compress_percentage=None,
         buffer_pattern=None,
         readwrite=None,
+        direct=0,
     ):
         """
         Execute FIO on a pod
@@ -338,6 +339,7 @@ class Pod(OCS):
                 content (on WRITEs) that compresses to the specified level
             buffer_pattern (str): fio will fill the I/O buffers with this pattern
             readwrite (str): Type of I/O pattern default is randrw from yaml
+            direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
 
         """
         if not self.wl_setup_done:
@@ -363,6 +365,7 @@ class Pod(OCS):
         self.io_params["rate"] = rate
         self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
+        self.io_params["direct"] = direct
         if buffer_compress_percentage:
             self.io_params["buffer_compress_percentage"] = buffer_compress_percentage
         if buffer_pattern:
