@@ -436,7 +436,7 @@ class DeploymentUI(PageNavigator):
             default_projects_is_checked = self.driver.find_element_by_id(
                 "no-label-switch-on"
             ).is_selected()
-            if default_projects_is_checked is False:
+            if not default_projects_is_checked:
                 logger.info("Show default projects")
                 self.do_click(
                     self.dep_loc["enable_default_porjects"], enable_screenshot=True

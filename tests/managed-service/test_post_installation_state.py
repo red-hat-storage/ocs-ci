@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -18,7 +19,6 @@ class TestPostInstallationState(ManageTest):
     """
 
     @tier1
-    @tier1
     @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
     def test_deployer_logs_not_empty(self):
@@ -31,25 +31,6 @@ class TestPostInstallationState(ManageTest):
         deployer_logs = pod.get_pod_logs(
             pod_name=deployer_pod["metadata"]["name"], container="manager"
         )
-        log_lines = deployer_logs.split("\n")
-        for line in log_lines:
-            if "ERR" in line:
-                log.info(f"{line}")
-        log.info(f"Deployer log has {len(log_lines)} lines.")
-        assert len(log_lines) > 100
-
-    @tier1
-    @managed_service_required
-    def test_connection_time_out(self):
-        """
-        Test that connection from mon pod to external domain is blocked and gets timeout
-        """
-        mon_pod = pod.get_mon_pods()[0]
-        try:
-            mon_pod.exec_cmd_on_pod("curl google.com")
-            assert False, "Curl command should have failed due to timeout"
-        except CommandFailed as cmdfailed:
-            assert "Connection timed out" in str(cmdfailed)
         log_lines = deployer_logs.split("\n")
         for line in log_lines:
             if "ERR" in line:
