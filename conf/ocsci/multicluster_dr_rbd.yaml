@@ -1,0 +1,3 @@
+ENV_DATA:
+  rbd_dr_scenario: True
+  dr_metadata_store: 's3'
