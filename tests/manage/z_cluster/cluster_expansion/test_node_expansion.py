@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_managed_service,
     skipif_flexy_deployment,
     skipif_ibm_flash,
     skipif_managed_service,

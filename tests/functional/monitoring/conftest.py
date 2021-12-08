@@ -1151,7 +1151,7 @@ def pytest_collection_modifyitems(items):
                 if testname in str(item):
                     logger.info(
                         f"Test {item} is removed from the collected items"
-                        f" till node implementation is in place"
+                        f" till noobaa is in place"
                     )
                     items.remove(item)
                     break
