@@ -820,7 +820,7 @@ class Deployment(object):
         from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
         from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
-        create_catalog_source()
+        # create_catalog_source()
         setup_ui = login_ui()
         deployment_obj = DeploymentUI(setup_ui)
         deployment_obj.install_ocs_ui()

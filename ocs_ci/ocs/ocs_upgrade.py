@@ -46,7 +46,15 @@ from ocs_ci.ocs.exceptions import (
     TimeoutException,
     ExternalClusterRGWAdminOpsUserException,
 )
-
+from ocs_ci.ocs.ui.base_ui import logger, login_ui
+from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
+from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.framework import config
+from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
+from ocs_ci.framework.testlib import ManageTest, skipif_ocs_version, skipif_ocp_version
+from tests.conftest import setup_ui
 
 log = logging.getLogger(__name__)
 
@@ -201,6 +209,10 @@ class OCSUpgrade(object):
     OCS Upgrade helper class
 
     """
+    ocp_version = get_ocp_version()
+    dep_loc = locators[ocp_version]["deployment"]
+    validation_loc = locators[ocp_version]["validation"]
+    operator = ODF_OPERATOR
 
     def __init__(
         self,
@@ -536,37 +548,49 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
+    logger.info("\\" * 100)
     if config.DEPLOYMENT.get("disconnected"):
         upgrade_ocs.ocs_registry_image = prepare_disconnected_ocs_deployment(
             upgrade=True
         )
         log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
+
+    channel = upgrade_ocs.set_upgrade_channel()
     with CephHealthMonitor(ceph_cluster):
-        channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
-        if upgrade_version != "4.9":
-            # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
-            # OCS automatically.
-            upgrade_ocs.update_subscription(channel)
-        if original_ocs_version == "4.8" and upgrade_version == "4.9":
-            deployment = Deployment()
-            deployment.subscribe_ocs()
-        if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
-            upgrade_in_current_source
-        ):
-            create_ocs_secret(config.ENV_DATA["cluster_namespace"])
-            for attempt in range(2):
-                # We need to do it twice, because some of the SA are updated
-                # after the first load of OCS pod after upgrade. So we need to
-                # link updated SA again.
-                log.info(
-                    f"Sleep 1 minute before attempt: {attempt+1}/2 "
-                    "of linking secret/SAs"
-                )
-                time.sleep(60)
-                link_all_sa_and_secret_and_delete_pods(
-                    constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
-                )
+        if config.UPGRADE.get("ui_upgrade"):
+            # upgrade_ocs.set_upgrade_images()
+            ocs_odf_upgrade_ui()
+
+            # ocs_version = version.get_semantic_ocs_version_from_config()
+
+        else:
+            # global channel
+            # channel = upgrade_ocs.set_upgrade_channel()
+            # upgrade_ocs.set_upgrade_images()
+            if upgrade_version != "4.9":
+                # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+                # OCS automatically.
+                upgrade_ocs.update_subscription(channel)
+            if original_ocs_version == "4.8" and upgrade_version == "4.9":
+                deployment = Deployment()
+                deployment.subscribe_ocs()
+            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+                upgrade_in_current_source
+            ):
+                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+                for attempt in range(2):
+                    # We need to do it twice, because some of the SA are updated
+                    # after the first load of OCS pod after upgrade. So we need to
+                    # link updated SA again.
+                    log.info(
+                        f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                        "of linking secret/SAs"
+                    )
+                    time.sleep(60)
+                    link_all_sa_and_secret_and_delete_pods(
+                        constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                    )
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)
@@ -602,3 +626,60 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         post_upgrade_verification=True,
         version_before_upgrade=upgrade_ocs.version_before_upgrade,
     )
+
+
+def ocs_odf_upgrade_ui():
+    original_ocs_version = config.ENV_DATA.get("ocs_version")
+    # upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
+    # upgrade_ocs = OCSUpgrade(
+    #     namespace=config.ENV_DATA["cluster_namespace"],
+    #     version_before_upgrade=original_ocs_version,
+    #     ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+    #     upgrade_in_current_source=upgrade_in_current_source,
+    # )
+    # csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
+    setup_ui = login_ui()
+    ocp_version = get_ocp_version()
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    # if ocp_version == "4.9" and ocs_version == version.VERSION_4_8:
+    logger.info("*" * 100)
+    val_obj = ValidationUI(setup_ui)
+    pagenav_obj = ValidationUI(setup_ui)
+
+    # _ = config.DEPLOYMENT.get("ocs_registry_image")
+    # channel = upgrade_ocs.set_upgrade_channel()
+    # upgrade_ocs.set_upgrade_images()
+
+    dep_obj = DeploymentUI(setup_ui)
+    dep_obj.operator = ODF_OPERATOR
+    # dep_obj.refresh_page()
+    dep_obj.install_ocs_operator()
+    logger.info(
+        "Click on Storage System under Provided APIs on Installed Operators Page"
+    )
+    val_obj.do_click(OCSUpgrade.validation_loc["storage-system-on-installed-operators"])
+    logger.info("Click on 'ocs-storagecluster-storagesystem' on Operator details page")
+    val_obj.do_click(OCSUpgrade.validation_loc["ocs-storagecluster-storgesystem"])
+    storage_systems_check = val_obj.check_element_text(
+        expected_text="StorageSystem details"
+    )
+    assert storage_systems_check, (
+        "Upgrade failure, couldn't navigate to StorageSystem details page after odf-operator installation as part of OCS to ODF "
+        "upgrade "
+    )
+    # dep_obj.refresh_page()
+    logger.info("Calling functions for other UI checks")
+    pagenav_obj.odf_overview_ui()
+    pagenav_obj.odf_storagesystems_ui()
+    # logger.info("Checking if upgrade completed")
+    # upgrade_ocs.check_if_upgrade_completed(
+    #     channel=channel, csv_name_pre_upgrade=csv_name_pre_upgrade
+    # )
+    # logger.info("Doing post upgrade verification")
+    # ocs_install_verification(
+    #     timeout=600,
+    #     skip_osd_distribution_check=True,
+    #     ocs_registry_image=upgrade_ocs.ocs_registry_image,
+    #     post_upgrade_verification=True,
+    #     version_before_upgrade=upgrade_ocs.version_before_upgrade,
+    # )

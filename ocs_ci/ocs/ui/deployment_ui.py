@@ -10,6 +10,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility import version
+from selenium.webdriver.common.by import By
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +76,9 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator is ODF_OPERATOR:
-            time.sleep(90)
+            success_icon= self.check_element_presence(locator=("//*[name()='svg' and @data-test='success-icon']", By.XPATH), timeout=300)
+            assert success_icon,(
+            "ODF operator installation failed")
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["warning-alert"],
                 expected_text="Refresh web console",
@@ -86,11 +90,6 @@ class DeploymentUI(PageNavigator):
                 self.do_click(self.validation_loc["refresh-web-console"])
                 self.page_has_loaded(retries=15, sleep_time=5)
         self.verify_operator_succeeded(operator=self.operator)
-        if self.operator_name is ODF_OPERATOR:
-            time.sleep(80)
-            self.refresh_popup()
-        self.verify_operator_succeeded(operator=self.operator_name)
-        self.refresh_popup()
 
     def refresh_popup(self):
         """

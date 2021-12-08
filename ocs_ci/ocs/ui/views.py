@@ -581,6 +581,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    "ocs-storagecluster-storgesystem": (".co-resource-item__resource-name[data-test-operand-link='ocs-storagecluster-storagesystem']", By.CSS_SELECTOR),
+
     "show-default-projects": ("label[for='no-label-switch-on']", By.CSS_SELECTOR),
     "storage-system-on-installed-operators": (
         "a[title='storagesystems.odf.openshift.io']",
