@@ -15,7 +15,7 @@ from uuid import uuid4
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.framework import config
