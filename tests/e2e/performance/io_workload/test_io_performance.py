@@ -4,7 +4,6 @@ Module to perform IOs with several weights
 import pytest
 import logging
 
-from ocs_ci.utility.performance_dashboard import push_perf_dashboard
 from ocs_ci.framework.testlib import ManageTest
 
 
@@ -69,7 +68,5 @@ class TestIOPerformance(ManageTest):
         writes = fio_result.get("jobs")[0].get("write").get("iops")
         w_bw = fio_result.get("jobs")[0].get("write").get("bw")
         r_bw = fio_result.get("jobs")[0].get("read").get("bw")
-        logging.info(f"Read: {reads}")
-        logging.info(f"Write: {writes}")
-
-        push_perf_dashboard(self.interface, reads, writes, r_bw, w_bw)
+        logging.info(f"Read: {reads} IOPS , {r_bw} MiB/Sec")
+        logging.info(f"Write: {writes} IOPS , {w_bw} MiB/Sec")
