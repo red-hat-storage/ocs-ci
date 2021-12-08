@@ -8,12 +8,13 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import (
-    get_nodes_where_ocs_pods_running,
     get_node_rack_or_zone,
     get_node_rack_or_zone_dict,
     get_node_names,
-    get_crashcollector_nodes,
     get_node_objs,
+)
+from ocs_ci.helpers.helpers import (
+    verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
 )
 from ocs_ci.framework.testlib import (
     tier2,
@@ -61,56 +62,6 @@ class TestAddNodeCrashCollector(ManageTest):
 
         """
         return get_node_rack_or_zone(failure_domain, node_obj) is not None
-
-    def check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(self):
-        """
-        check rook-ceph-crashcollector pods running on worker nodes
-        where rook-ceph pods are running.
-
-        Returns:
-            bool: True if the rook-ceph-crashcollector pods running on worker nodes
-                where rook-ceph pods are running. False otherwise.
-
-        """
-        logger.info(
-            "check rook-ceph-crashcollector pods running on worker nodes "
-            "where rook-ceph pods are running."
-        )
-        logger.info(
-            f"crashcollector nodes: {get_crashcollector_nodes()}, "
-            f"nodes where ocs pods running: {get_nodes_where_ocs_pods_running()}"
-        )
-        res = sorted(get_crashcollector_nodes()) == sorted(
-            get_nodes_where_ocs_pods_running()
-        )
-        if not res:
-            logger.warning(
-                "rook-ceph-crashcollector pods are not running on worker nodes "
-                "where rook-ceph pods are running."
-            )
-        return res
-
-    def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(
-        self, timeout=90
-    ):
-        """
-        Verify rook-ceph-crashcollector pods running on worker nodes
-        where rook-ceph pods are running.
-
-        Args:
-            timeout (int): time to wait for verifying
-
-        Returns:
-            bool: True if rook-ceph-crashcollector pods running on worker nodes
-                where rook-ceph pods are running in the given timeout. False otherwise.
-
-        """
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=10,
-            func=self.check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
-        )
-        return sample.wait_for_func_status(result=True)
 
     def test_crashcollector_pod_existence_on_ceph_pods_running_nodes(
         self, add_nodes, node_drain_teardown
@@ -171,9 +122,7 @@ class TestAddNodeCrashCollector(ManageTest):
             resource_count=3,
             timeout=1400,
         )
-        assert (
-            self.verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
-        )
+        assert verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
 
         schedule_nodes([drain_node])
 
@@ -185,6 +134,4 @@ class TestAddNodeCrashCollector(ManageTest):
             timeout=600,
         )
 
-        assert (
-            self.verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
-        )
+        assert verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
