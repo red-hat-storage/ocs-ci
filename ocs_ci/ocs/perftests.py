@@ -117,17 +117,6 @@ class PASTest(BaseTest):
         self.operator = benchmark_operator.BenchmarkOperator()
         self.operator.deploy()
 
-    def ripsaw_deploy(self, ripsaw):
-        """
-        Deploy the benchmark operator (formally ripsaw) CRD
-
-        Args:
-            ripsaw (obj): benchmark operator object
-
-        """
-        log.info("Deploying benchmark operator (ripsaw)")
-        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
-
     def es_info_backup(self, elasticsearch):
         """
         Saving the Original elastic-search IP and PORT - if defined in yaml
