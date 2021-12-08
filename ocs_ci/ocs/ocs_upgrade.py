@@ -671,6 +671,7 @@ def ocs_odf_upgrade_ui():
     logger.info("Calling functions for other UI checks")
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
+    logger.info("UI")
     # logger.info("Checking if upgrade completed")
     # upgrade_ocs.check_if_upgrade_completed(
     #     channel=channel, csv_name_pre_upgrade=csv_name_pre_upgrade
