@@ -483,7 +483,9 @@ def run_cmd_interactive(cmd, prompts, answers, timeout=300):
             raise InteractivePromptException("Failed to provide answer to the prompt")
 
 
-def run_cmd_multicluster(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd_multicluster(
+    cmd, secrets=None, timeout=600, ignore_error=False, skip_index=None, **kwargs
+):
     """
     Run command on multiple clusters. Useful in multicluster scenarios
     This is wrapper around exec_cmd
@@ -496,6 +498,7 @@ def run_cmd_multicluster(cmd, secrets=None, timeout=600, ignore_error=False, **k
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        skip_index (list of int): List of indexes that needs to be skipped from executing the command
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -508,12 +511,11 @@ def run_cmd_multicluster(cmd, secrets=None, timeout=600, ignore_error=False, **k
     """
     # Skip indexed cluster while running commands
     # Useful to skip operations on ACM cluster
-    skip_index = kwargs.get("skip_index", None)
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
     index = 0
     for cluster in config.clusters:
-        if skip_index and (skip_index == config.clusters.index(cluster)):
+        if skip_index and (config.clusters.index(cluster) in skip_index):
             continue
         else:
             config.switch_ctx(index)
