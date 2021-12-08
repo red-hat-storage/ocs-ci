@@ -140,6 +140,8 @@ class MultiClusterConfig:
         self.acm_index = None
         self.single_cluster_default = True
         self._single_cluster_init_cluster_configs()
+        # A dictionary to hold Cluster object and its index
+        self.cluster_map_by_index = dict()
 
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
@@ -151,6 +153,7 @@ class MultiClusterConfig:
         if self.nclusters > 1:
             for i in range(self.nclusters):
                 self.clusters.insert(i, Config())
+                self.cluster_map_by_index.update({self.clusters[i]: i})
             self.cluster_ctx = self.clusters[0]
             self.attr_init()
             self._refresh_ctx()

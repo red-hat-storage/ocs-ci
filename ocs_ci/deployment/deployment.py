@@ -1332,7 +1332,7 @@ class RBDDRDeployOps(object):
             index = +1
         # Check for RBD mirroring pods
         for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(config.clusters.index(cluster))
+            config.switch_ctx(config.cluster_map_by_index[cluster])
             mirror_pod = get_pod_count(label="app=rook-ceph-rbd-mirror")
             if not mirror_pod:
                 raise PodNotCreated(
@@ -1351,7 +1351,7 @@ class RBDDRDeployOps(object):
 
         """
         for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(config.clusters.index(cluster))
+            config.switch_ctx(config.cluster_map_by_index[cluster])
             volume_replication_data = templating.load_yaml(
                 constants.VOLUME_REPLICATION_CLASS
             )
@@ -1411,7 +1411,7 @@ class RBDDRDeployOps(object):
         # We will switch config ctx to Participating clusters
         index = 0
         for cluster in config.clusters:
-            if config.clusters.index(cluster) == config.acm_index:
+            if config.cluster_map_by_index[cluster] == config.acm_index:
                 continue
             else:
                 config.switch_ctx(index)
@@ -1505,7 +1505,7 @@ class MultiClusterDROperatorsDeploy(object):
             constants.OPENSHIFT_DR_CLUSTER_OPERATOR
         )
         for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(config.clusters.index(cluster))
+            config.switch_ctx(config.cluster_map_by_index[cluster])
             dr_cluster_operator_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="dr_cluster_operator_", delete=False
             )
