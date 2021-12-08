@@ -59,7 +59,7 @@ class Submariner(object):
     Submariner configuaration and deployment
     """
 
-    def __init__(self, index):
+    def __init__(self):
         # whether upstream OR downstream
         self.source = config.ENV_DATA["submariner_source"]
         # Designated broker cluster index where broker will be deployed
@@ -142,7 +142,7 @@ class Submariner(object):
 
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
-            cluster_index = config.clusters.index(cluster)
+            cluster_index = config.cluster_map_by_index[cluster]
             if cluster_index != config.acm_index:
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
