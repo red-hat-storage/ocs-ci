@@ -804,6 +804,21 @@ class AWSUPIFlexy(AWSBase):
             """
             self.flexy_instance.destroy()
 
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        OCP deployment specific to AWS UPI via Flexy
+
+        Args:
+             log_cli_level (str): openshift installer's log level
+                (default: 'DEBUG')
+        """
+        super(AWSUPIFlexy, self).deploy_ocp(log_cli_level)
+
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            logger.info("Create and attach volume for all workers")
+            create_and_attach_volume_for_all_workers(worker_suffix="node")
+
     def destroy_cluster(self, log_level="DEBUG"):
         """
         Destroy OCP cluster specific to AWS UPI Flexy

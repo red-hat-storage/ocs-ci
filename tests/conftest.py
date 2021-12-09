@@ -72,6 +72,7 @@ from ocs_ci.utility import (
     deployment_openshift_logging as ocp_logging_obj,
     ibmcloud,
     kms as KMS,
+    pagerduty,
     reporting,
     templating,
     users,
@@ -87,6 +88,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
+    get_ocs_build_number,
     get_running_ocp_version,
     get_openshift_client,
     get_system_architecture,
@@ -360,6 +362,115 @@ def log_ocs_version(cluster):
     with open(file_name, "w") as file_obj:
         report_ocs_version(cluster_version, image_dict, file_obj)
     log.info("human readable ocs version info written into %s", file_name)
+
+
+@pytest.fixture(scope="session")
+def pagerduty_service(request):
+    """
+    Create a Service in PagerDuty service. The service represents a cluster instance.
+    The service is deleted at the end of the test run.
+
+    Returns:
+        str: PagerDuty service json
+
+    """
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        pagerduty_api = pagerduty.PagerDutyAPI()
+        payload = pagerduty_api.get_service_dict()
+        service_response = pagerduty_api.create("services", payload=payload)
+        msg = f"Request {service_response.request.url} failed"
+        assert service_response.ok, msg
+        service = service_response.json().get("service")
+
+        def teardown():
+            """
+            Delete the service at the end of test run
+            """
+            service_id = service["id"]
+            log.info(f"Deleting service with id {service_id}")
+            delete_response = pagerduty_api.delete(f"services/{service_id}")
+            msg = f"Deletion of service {service_id} failed"
+            assert delete_response.ok, msg
+
+        request.addfinalizer(teardown)
+        return service
+    else:
+        log.info(
+            "PagerDuty service is not created because "
+            f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
+            "is not used"
+        )
+        return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def pagerduty_integration(request, pagerduty_service):
+    """
+    Create a new Pagerduty integration for service from pagerduty_service
+    fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
+    correct integration key. This is currently applicable only for ODF
+    Managed Service.
+
+    """
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        service_id = pagerduty_service["id"]
+        pagerduty_api = pagerduty.PagerDutyAPI()
+
+        log.info(
+            "Looking if Prometheus integration for pagerduty service with id "
+            f"{service_id} exists"
+        )
+        integration_key = None
+        for integration in pagerduty_service.get("integrations"):
+            if integration["summary"] == "Prometheus":
+                log.info(
+                    "Prometheus integration already exists. "
+                    "Skipping creation of new one."
+                )
+                integration_key = integration["integration_key"]
+                break
+
+        if not integration_key:
+            payload = pagerduty_api.get_integration_dict("Prometheus")
+            integration_response = pagerduty_api.create(
+                f"services/{service_id}/integrations", payload=payload
+            )
+            msg = f"Request {integration_response.request.url} failed"
+            assert integration_response.ok, msg
+            integration = integration_response.json().get("integration")
+            integration_key = integration["integration_key"]
+        pagerduty.set_pagerduty_integration_secret(integration_key)
+
+    def update_pagerduty_integration_secret():
+        """
+        Make sure that pagerduty secret is updated with correct integration
+        token. Check value of config.RUN['thread_pagerduty_secret_update']:
+            * required - secret is periodically updated to correct value
+            * not required - secret is not updated
+            * finished - thread is terminated
+
+        """
+        while config.RUN["thread_pagerduty_secret_update"] != "finished":
+            if config.RUN["thread_pagerduty_secret_update"] == "required":
+                pagerduty.set_pagerduty_integration_secret(integration_key)
+            time.sleep(60)
+
+    config.RUN["thread_pagerduty_secret_update"] = "not required"
+    thread = threading.Thread(
+        target=update_pagerduty_integration_secret,
+        name="thread_pagerduty_secret_update",
+    )
+
+    def finalizer():
+        """
+        Stop the thread that executed update_pagerduty_integration_secret()
+        """
+        config.RUN["thread_pagerduty_secret_update"] = "finished"
+        if thread:
+            thread.join()
+
+    request.addfinalizer(finalizer)
+    thread.start()
 
 
 @pytest.fixture(scope="class")
@@ -954,13 +1065,23 @@ def teardown_factory_fixture(request):
         """
         for instance in instances[::-1]:
             if not instance.is_deleted:
-                reclaim_policy = (
-                    instance.reclaim_policy if instance.kind == constants.PVC else None
-                )
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-                if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-                    helpers.validate_pv_delete(instance.backed_pv)
+                try:
+                    if (instance.kind == constants.PVC) and (instance.reclaim_policy):
+                        pass
+                    reclaim_policy = (
+                        instance.reclaim_policy
+                        if instance.kind == constants.PVC
+                        else None
+                    )
+                    instance.delete()
+                    instance.ocp.wait_for_delete(instance.name)
+                    if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
+                except CommandFailed as ex:
+                    log.warning(
+                        f"Resource is already in deleted state, skipping this step"
+                        f"Error: {ex}"
+                    )
 
     request.addfinalizer(finalizer)
     return factory
@@ -1225,7 +1346,7 @@ def health_checker(request, tier_marks_name):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request, log_cli_level):
+def cluster(request, log_cli_level, record_testsuite_property):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
     Specific platform deployment classes will handle the fine details
@@ -1276,6 +1397,7 @@ def cluster(request, log_cli_level):
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
+    record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
 @pytest.fixture(scope="class")

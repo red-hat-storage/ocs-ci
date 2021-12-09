@@ -1017,6 +1017,7 @@ class MCG:
                 )
 
     @property
+    @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
     def status(self):
         """
         Verify the status of NooBaa, and its default backing store and bucket class

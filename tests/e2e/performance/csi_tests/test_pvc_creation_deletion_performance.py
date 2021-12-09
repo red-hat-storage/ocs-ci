@@ -16,7 +16,6 @@ from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
-from ocs_ci.utility.performance_dashboard import push_to_pvc_time_dashboard
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.framework import config
@@ -297,15 +296,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.full_results.es_write()
         log.info(f"The Result can be found at : {self.full_results.results_link()}")
-
-        if not self.dev_mode:
-            # all the results are OK, the test passes, push the results to the codespeed
-            push_to_pvc_time_dashboard(
-                self.interface, "1-pvc-creation", creation_average
-            )
-            push_to_pvc_time_dashboard(
-                self.interface, "1-pvc-deletion", deletion_average
-            )
 
     def process_time_measurements(
         self, action_name, time_measures, accepted_deviation_percent, msg_prefix

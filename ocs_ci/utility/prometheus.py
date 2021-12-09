@@ -504,15 +504,20 @@ class PrometheusAPI(object):
                 sizes.append(len(metric["values"]))
             msg = "Metric sample series doesn't have the same size."
             assert all(size == sizes[0] for size in sizes), msg
-            # Check that we don't have holes in the response. If this fails,
-            # our Prometheus instance is missing some part of the data we are
-            # asking it about. For positive test cases, this is most likely a
-            # test blocker product bug.
-            start_dt = datetime.utcfromtimestamp(start)
-            end_dt = datetime.utcfromtimestamp(end)
-            duration = end_dt - start_dt
-            exp_samples = duration.seconds / step
-            assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
+            # Check if the query result is empty (which is a valid answer from
+            # validation standpoint).
+            if len(sizes) == 0:
+                logger.warning("prometheus query result is empty")
+            else:
+                # Check that we don't have holes in the response. If this
+                # fails, our Prometheus instance is missing some part of the
+                # data we are asking it about. For positive test cases, this is
+                # most likely a test blocker product bug.
+                start_dt = datetime.utcfromtimestamp(start)
+                end_dt = datetime.utcfromtimestamp(end)
+                duration = end_dt - start_dt
+                exp_samples = duration.seconds / step
+                assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
         # return actual result of the query
         return content["data"]["result"]
 

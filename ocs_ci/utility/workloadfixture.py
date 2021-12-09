@@ -14,6 +14,9 @@ import os
 import threading
 import time
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.utility.pagerduty import PagerDutyAPI
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 
@@ -34,7 +37,12 @@ def is_measurement_done(result_file):
 
 
 def measure_operation(
-    operation, result_file, minimal_time=None, metadata=None, measure_after=False
+    operation,
+    result_file,
+    minimal_time=None,
+    metadata=None,
+    measure_after=False,
+    pagerduty_service=None,
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -56,6 +64,8 @@ def measure_operation(
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
             and utilized data are measured after the utilization is completed
+        pagerduty_service (str): Service ID from PagerDuty system. This should
+            be unique for each cluster.
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -72,14 +82,14 @@ def measure_operation(
 
     """
 
-    def prometheus_log(info, alert_list):
+    def prometheus_log(info, prometheus_alert_list):
         """
         Log all alerts from Prometheus API every 3 seconds.
 
         Args:
             info (dict): Contains run key attribute that controls thread.
                 If `info['run'] == False` then thread will stop
-            alert_list (list): List to be populated with alerts
+            prometheus_alert_list (list): List to be populated with alerts
 
         """
         prometheus = PrometheusAPI()
@@ -91,9 +101,9 @@ def measure_operation(
             msg = f"Request {alerts_response.request.url} failed"
             assert alerts_response.ok, msg
             for alert in alerts_response.json().get("data").get("alerts"):
-                if alert not in alert_list:
+                if alert not in prometheus_alert_list:
                     logger.info(f"Adding {alert} to alert list")
-                    alert_list.append(alert)
+                    prometheus_alert_list.append(alert)
             time.sleep(3)
         logger.info("Logging of all prometheus alerts stopped")
 
@@ -111,6 +121,9 @@ def measure_operation(
     # if there is no file with results from previous run
     # then perform operation measurement
     else:
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            logger.info("Starting PagerDuty periodical update of pagerduty secret")
+            config.RUN["thread_pagerduty_secret_update"] = "required"
         logger.info(f"File {result_file} not created yet. Starting measurement...")
         if not measure_after:
             start_time = time.time()
@@ -119,12 +132,12 @@ def measure_operation(
         # while workload is running
         # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
         info = {"run": True}
-        alert_list = []
+        prometheus_alert_list = []
 
-        logging_thread = threading.Thread(
-            target=prometheus_log, args=(info, alert_list)
+        logging_thread_prometheus = threading.Thread(
+            target=prometheus_log, args=(info, prometheus_alert_list)
         )
-        logging_thread.start()
+        logging_thread_prometheus.start()
 
         try:
             result = operation()
@@ -154,15 +167,38 @@ def measure_operation(
             # Dumping measurement results into result file.
             stop_time = time.time()
             info["run"] = False
-            logging_thread.join()
+            logging_thread_prometheus.join()
             results = {
                 "start": start_time,
                 "stop": stop_time,
                 "result": result,
                 "metadata": metadata,
-                "prometheus_alerts": alert_list,
+                "prometheus_alerts": prometheus_alert_list,
                 "first_run": True,
             }
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            ):
+                # During testing of ODF Managed Service are also collected alerts
+                # in PagerDuty, Sendgrid and Dead Man's Snith systems
+                pagerduty = PagerDutyAPI()
+                logger.info("Logging all PagerDuty incidents")
+                incidents_response = pagerduty.get(
+                    "incidents",
+                    payload={
+                        "service_ids[]": pagerduty_service,
+                        "since": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.gmtime(start_time)
+                        ),
+                        "time_zone": "UTC",
+                    },
+                )
+                incidents_response.raise_for_status()
+                pagerduty_incidents = incidents_response.json().get("incidents")
+                results["pagerduty_incidents"] = pagerduty_incidents
+                logger.info("Stopping PagerDuty periodical update of pagerduty secret")
+                config.RUN["thread_pagerduty_secret_update"] = "required"
             logger.info(f"Results of measurement: {results}")
             with open(result_file, "w") as outfile:
                 logger.info(f"Dumping results of measurement into {result_file}")
