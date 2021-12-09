@@ -11,7 +11,6 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.utility import version
-from selenium.webdriver.common.by import By
 
 
 logger = logging.getLogger(__name__)
@@ -76,19 +75,21 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator is ODF_OPERATOR:
-            success_icon= self.check_element_presence(locator=("//*[name()='svg' and @data-test='success-icon']", By.XPATH), timeout=300)
-            assert success_icon,(
-            "ODF operator installation failed")
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["warning-alert"],
                 expected_text="Refresh web console",
+                timeout=300,
             )
-            if refresh_web_console_popup:
-                logger.info(
-                    "Refresh web console option is now available, click on it to see the changes"
-                )
-                self.do_click(self.validation_loc["refresh-web-console"])
-                self.page_has_loaded(retries=15, sleep_time=5)
+            logger.info(
+                "ODF Operator is successfully installed. "
+                "Refresh web console option is now available, click on it to see the console changes"
+            )
+            assert refresh_web_console_popup, (
+                "Refresh web console option is not found, there seems to be some issue with "
+                "ODF Operator installation"
+            )
+            self.do_click(self.validation_loc["refresh-web-console"])
+            self.page_has_loaded(retries=15, sleep_time=5)
         self.verify_operator_succeeded(operator=self.operator)
 
     def refresh_popup(self):
@@ -419,4 +420,5 @@ class DeploymentUI(PageNavigator):
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
-        self.install_storage_cluster()
+        if not config.UPGRADE.get("ui_upgrade"):
+            self.install_storage_cluster()

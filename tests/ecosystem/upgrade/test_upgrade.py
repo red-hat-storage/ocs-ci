@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.utility.reporting import get_polarion_id
-from tests.conftest import setup_ui
 
 log = logging.getLogger(__name__)
 
