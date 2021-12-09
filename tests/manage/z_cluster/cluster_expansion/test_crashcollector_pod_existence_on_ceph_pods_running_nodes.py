@@ -87,12 +87,12 @@ class TestAddNodeCrashCollector(ManageTest):
         logger.info(f"New worker node is {new_node_name}")
 
         logger.info(f"Checking if the rack/zone of the node {new_node_name} is exist")
-        timeout = 300
+        timeout = 120
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=10,
             func=self.is_node_rack_or_zone_exist,
-            node_obj=new_node,
+            node_obj=get_node_objs([new_node_name])[0],
             failure_domain=failure_domain,
         )
         assert sample.wait_for_func_status(
