@@ -118,6 +118,7 @@ class TestPodStartTime(PASTest):
         storageclass_factory,
         pod_factory,
         pvc_factory,
+        teardown_factory,
         samples_num,
         pvc_size,
     ):
@@ -147,6 +148,7 @@ class TestPodStartTime(PASTest):
         for i in range(samples_num):
             logging.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
+            teardown_factory(pvc_obj)
             timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
             helpers.wait_for_resource_state(
                 pvc_obj, constants.STATUS_BOUND, timeout=timeout
@@ -160,7 +162,7 @@ class TestPodStartTime(PASTest):
             pod_obj = pod_factory(
                 interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
             )
-
+            teardown_factory(pod_obj)
             pod_result_list.append(pod_obj)
 
         return pod_result_list

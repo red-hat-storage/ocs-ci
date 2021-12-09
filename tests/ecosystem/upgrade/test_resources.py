@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     bugzilla,
     red_squad,
+    brown_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp, defaults
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 
 @skipif_aws_creds_are_missing
 @post_upgrade
+@brown_squad
 @pytest.mark.polarion_id("OCS-2220")
 def test_storage_pods_running(multiregion_mirror_setup_session):
     """
@@ -45,6 +47,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
     config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
 )
 @pre_upgrade
+@brown_squad
 @ignore_leftovers
 def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_io):
     """
@@ -59,6 +62,7 @@ def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_i
     config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
 )
 @post_upgrade
+@brown_squad
 @pytest.mark.polarion_id("OCS-1862")
 def test_pod_io(
     pre_upgrade_filesystem_pods,
@@ -103,6 +107,7 @@ def test_pod_io(
 @post_upgrade
 @bugzilla("1974343")
 @pytest.mark.polarion_id("OCS-2629")
+@brown_squad
 def test_pod_log_after_upgrade():
     """
     Check OSD/MON/MGR pod logs after upgrade and verify the expected log exist

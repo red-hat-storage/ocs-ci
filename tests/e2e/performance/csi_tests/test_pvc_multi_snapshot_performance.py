@@ -16,6 +16,8 @@ from ocs_ci.framework.testlib import (
 
 log = logging.getLogger(__name__)
 
+SKIP_REASON = "Skipping multiple snapshot tests until github issue 5197 is addressed"
+
 
 @performance
 @skipif_ocp_version("<4.6")
@@ -26,6 +28,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
     The test is trying to to take the maximum number of snapshot for one PVC
     """
 
+    @pytest.mark.skip(SKIP_REASON)
     @pytest.mark.polarion_id("OCS-2623")
     def test_pvc_multiple_snapshot_performance(
         self,
@@ -112,7 +115,7 @@ class TestPvcMultiSnapshotPerformance(E2ETest):
         os.environ["PVCNAME"] = self.pvc_obj.name
         os.environ["INTERFACE"] = self.interface
 
-        main_script = "tests/e2e/performance/test_multi_snapshots.py"
+        main_script = "tests/e2e/performance/csi_tests/test_multi_snapshots.py"
         result = subprocess.run([main_script], stdout=subprocess.PIPE)
         log.info(f"Results from main script : {result.stdout.decode('utf-8')}")
 
