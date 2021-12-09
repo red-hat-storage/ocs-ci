@@ -106,12 +106,16 @@ class VSpherePreChecks(PreChecks):
 
     def template_check(self):
         """
-        Checks whether template exists in Datacenter
+        Checks whether template exists in Datacenter or not for UPI deployments
 
         Raises:
             TemplateNotFound: If template not found in Datacenter.
 
         """
+        # skip the template check for vSphere IPI
+        if self.deployment_type == "ipi":
+            return
+
         is_template_found = False
         logger.info(f"Checking for template existence in datacenter {self.datacenter}")
         for vm in self.dc.vmFolder.childEntity:

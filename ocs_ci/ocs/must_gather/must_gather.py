@@ -9,7 +9,7 @@ from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
-from ocs_ci.ocs.ocp import get_ocs_parsed_version
+from ocs_ci.utility import version
 from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
 
 
@@ -54,11 +54,13 @@ class MustGather(object):
         Search File Path
 
         """
-        version = get_ocs_parsed_version()
+        ocs_version = float(
+            f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+        )
         if self.type_log == "OTHERS" and storagecluster_independent_check():
-            files = GATHER_COMMANDS_VERSION[version]["OTHERS_EXTERNAL"]
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
-            files = GATHER_COMMANDS_VERSION[version][self.type_log]
+            files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
         for file in files:
             self.files_not_exist.append(file)
             for dir_name, subdir_list, files_list in os.walk(self.root):
@@ -179,7 +181,8 @@ class MustGather(object):
         Verify noobaa diagnostics folder exist
 
         """
-        if self.type_log == "OTHERS" and get_ocs_parsed_version() >= 4.6:
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if self.type_log == "OTHERS" and ocs_version >= version.VERSION_4_6:
             flag = False
             logger.info("Verify noobaa_diagnostics folder exist")
             for path, subdirs, files in os.walk(self.root):

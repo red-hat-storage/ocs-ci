@@ -17,8 +17,10 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     UnexpectedBehaviour,
     NodeHasNoAttachedVolume,
+    TimeoutExpiredError,
 )
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
+from ocs_ci.ocs.node import get_nodes
 
 
 logger = logging.getLogger(name=__file__)
@@ -209,7 +211,7 @@ def destroy_cluster(cluster):
         cluster (str): Cluster name or ID.
 
     """
-    cmd = f"ibmcloud ks cluster rm -c {cluster} -f"
+    cmd = f"ibmcloud ks cluster rm -c {cluster} -f --force-delete-storage"
     out = run_ibmcloud_cmd(cmd)
     logger.info(f"Destroy command output: {out}")
 
@@ -310,9 +312,9 @@ class IBMCloud(object):
                 storage backend, False otherwise
 
         """
-        provider_id = node[0].get()["spec"]["providerID"]
+        provider_id = node.get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
-        worker_id = node[0].get()["metadata"]["labels"][
+        worker_id = node.get()["metadata"]["labels"][
             "ibm-cloud.kubernetes.io/worker-id"
         ]
 
@@ -356,28 +358,66 @@ class IBMCloud(object):
         else:
             worker_id = out["volume_attachments"][0]["instance"]["name"]
             logger.info(f"volume is  attached to node: {worker_id}")
-            return worker_id
+            worker_nodes = get_nodes(node_type="worker")
+            for worker_node in worker_nodes:
+                logger.info(
+                    f"worker node id is:{worker_node.get()['metadata']['labels']['ibm-cloud.kubernetes.io/worker-id']}"
+                )
+                if (
+                    worker_node.get()["metadata"]["labels"][
+                        "ibm-cloud.kubernetes.io/worker-id"
+                    ]
+                    == worker_id
+                ):
+                    logger.info(f"return worker node is:{worker_id}")
+                    return worker_node
 
     def get_data_volumes(self):
         """
-        Returns volumes in IBM Cloud.
+        Returns volumes in IBM Cloud for cluster.
 
         Returns:
-            list: volumes in IBM Cloud.
+            list: volumes in IBM Cloud for cluster.
 
         """
         logger.info("get data volumes")
 
+        # get cluster ID
+        cmd = f"ibmcloud ks cluster get --cluster {config.ENV_DATA['cluster_name']} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        cluster_id = out["id"]
+
+        # get the volume list
         cmd = "ibmcloud is vols --output json"
         out = run_ibmcloud_cmd(cmd)
         out = json.loads(out)
 
         vol_ids = []
-        for vols in out:
-            vol_ids.append(vols["id"])
+        for vol in out:
+            if vol["volume_attachments"]:
+                if cluster_id in vol["volume_attachments"][0]["instance"]["name"]:
+                    vol_ids.append(vol["id"])
 
         logger.info(f"volume ids are : {vol_ids}")
         return vol_ids
+
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return out["volume_attachments"]
 
     def wait_for_volume_attach(self, volume):
         """
@@ -391,16 +431,13 @@ class IBMCloud(object):
                 instance, False otherwise
 
         """
-        cmd = f"ibmcloud is volume {volume} --output json"
-        out = run_ibmcloud_cmd(cmd)
-        out = json.loads(out)
-
-        if not out["volume_attachments"]:
-            logger.info("volume is not attached to node")
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
             return False
-        else:
-            logger.info("volume is attached to node")
-            return True
 
     def get_volume_id(self):
         """

@@ -7,6 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_vsphere_ipi,
+    skipif_ibm_power,
 )
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4, tier4c
 from ocs_ci.ocs import constants, machine, node
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @tier4c
 @skipif_aws_i3
 @skipif_vsphere_ipi
+@skipif_ibm_power
 @ignore_leftovers
 class TestWorkerNodesFailure(ManageTest):
     """

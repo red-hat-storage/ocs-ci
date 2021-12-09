@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import tempfile
 from time import sleep
 
 import boto3
@@ -20,6 +21,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
+    NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
@@ -28,7 +30,8 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
@@ -170,7 +173,7 @@ class MCG:
             or storagecluster_independent_check()
         ):
             if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
-                float(config.ENV_DATA["ocs_version"]) > 4.5
+                version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
             ):
                 logger.info("Checking whether RGW pod is not present")
                 pods = pod.get_pods_having_label(
@@ -702,14 +705,22 @@ class MCG:
             "pool_api", "delete_namespace_resource", {"name": ns_resource_name}
         )
 
-    def oc_create_bucketclass(self, name, backingstores, placement, namespace_policy):
+    def oc_create_bucketclass(
+        self,
+        name,
+        backingstores,
+        placement_policy,
+        namespace_policy,
+        replication_policy,
+    ):
         """
         Creates a new NooBaa bucket class using a template YAML
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
@@ -720,13 +731,13 @@ class MCG:
         bc_data["metadata"]["namespace"] = self.namespace
         bc_data["spec"] = {}
 
-        if (backingstores is not None) and (placement is not None):
+        if (backingstores is not None) and (placement_policy is not None):
             bc_data["spec"]["placementPolicy"] = {"tiers": [{}]}
             tiers = bc_data["spec"]["placementPolicy"]["tiers"][0]
             tiers["backingStores"] = [
                 backingstore.name for backingstore in backingstores
             ]
-            tiers["placement"] = placement
+            tiers["placement"] = placement_policy
 
         # In cases of Single and Cache namespace policies, we use the
         # write_resource key to populate the relevant YAML field.
@@ -748,21 +759,32 @@ class MCG:
                 }
 
             elif ns_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE:
-                bc_data["spec"]["placementPolicy"] = placement
+                bc_data["spec"]["placementPolicy"] = placement_policy
                 bc_data["spec"]["namespacePolicy"]["cache"] = namespace_policy["cache"]
+
+        if replication_policy:
+            bc_data["spec"].setdefault(
+                "replicationPolicy", json.dumps(replication_policy)
+            )
 
         return create_resource(**bc_data)
 
     def cli_create_bucketclass(
-        self, name, backingstores, placement=None, namespace_policy=None
+        self,
+        name,
+        backingstores,
+        placement_policy,
+        namespace_policy=None,
+        replication_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using the noobaa cli
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
-            placement (str): The placement policy to be used - Mirror | Spread
+            placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
+            replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
@@ -770,13 +792,28 @@ class MCG:
         """
         # TODO: Implement CLI namespace bucketclass support
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
-        bc = f" --backingstores={','.join(backingstore_name_list)} --placement={placement}"
-        placement_parameter = (
+        backingstores = f" --backingstores {','.join(backingstore_name_list)}"
+        placement_policy = f" --placement {placement_policy}"
+        placement_type = (
             f"{constants.PLACEMENT_BUCKETCLASS} "
-            if float(config.ENV_DATA["ocs_version"]) >= 4.7
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
             else ""
         )
-        self.exec_mcg_cmd(f"bucketclass create {placement_parameter}{name}{bc}")
+
+        with tempfile.NamedTemporaryFile(
+            delete=True, mode="wb", buffering=0
+        ) as replication_policy_file:
+            replication_policy_file.write(
+                json.dumps(replication_policy).encode("utf-8")
+            )
+            replication_policy = (
+                f" --replication-policy {replication_policy_file.name}"
+                if replication_policy
+                else ""
+            )
+            self.exec_mcg_cmd(
+                f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
+            )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
@@ -917,11 +954,16 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
+    @retry(NoobaaCliChecksumFailedException, tries=10, delay=15, backoff=1)
     def retrieve_noobaa_cli_binary(self):
         """
         Copy the NooBaa CLI binary from the operator pod
         if it wasn't found locally, or if the hashes between
         the two don't match.
+
+        Raises:
+            NoobaaCliChecksumFailedException: If checksum doesn't match.
+            AssertionError: In the case CLI binary doesn't exist.
 
         """
 
@@ -937,9 +979,11 @@ class MCG:
             remote_cli_bin_md5 = cal_md5sum(
                 self.operator_pod, constants.NOOBAA_OPERATOR_POD_CLI_PATH
             )
+            logger.info(f"Remote noobaa cli md5 hash: {remote_cli_bin_md5}")
             local_cli_bin_md5 = calc_local_file_md5_sum(
                 constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
             )
+            logger.info(f"Local noobaa cli md5 hash: {local_cli_bin_md5}")
             return remote_cli_bin_md5 == local_cli_bin_md5
 
         if (
@@ -947,9 +991,9 @@ class MCG:
             or not _compare_cli_hashes()
         ):
             cmd = (
-                f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                f"oc cp {self.namespace}/{self.operator_pod.name}:"
+                f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
             )
             subprocess.run(cmd, shell=True)
             # Add an executable bit in order to allow usage of the binary
@@ -965,11 +1009,13 @@ class MCG:
             assert os.access(
                 constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
             ), "The MCG CLI binary does not have execution permissions"
-            assert (
-                _compare_cli_hashes()
-            ), "Binary hash doesn't match the one on the operator pod"
+            if not _compare_cli_hashes():
+                raise NoobaaCliChecksumFailedException(
+                    "Binary hash doesn't match the one on the operator pod"
+                )
 
     @property
+    @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
     def status(self):
         """
         Verify the status of NooBaa, and its default backing store and bucket class

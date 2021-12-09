@@ -90,7 +90,12 @@ class DisruptionBase(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
         for pod_obj in self.pod_objs:
-            pod_obj.workload_setup(storage_type="fs")
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                pod_obj.pvc.storage_type = "block"
+            else:
+                pod_obj.pvc.storage_type = "fs"
+            pod_obj.workload_setup(storage_type=pod_obj.pvc.storage_type)
         log.info("Setup for running IO is completed on pods")
 
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
@@ -102,7 +107,10 @@ class DisruptionBase(ManageTest):
             else:
                 io_size = self.pvc_size - 1
             pod_obj.run_io(
-                storage_type="fs", size=f"{io_size}G", fio_filename=f"{pod_obj.name}_io"
+                storage_type=pod_obj.pvc.storage_type,
+                size=f"{io_size}G",
+                fio_filename=f"{pod_obj.name}_io",
+                end_fsync=1,
             )
         log.info("IO started on all pods.")
 
@@ -111,7 +119,11 @@ class DisruptionBase(ManageTest):
 
         if operation_to_disrupt == "delete_pods":
             ret = wait_for_resource_count_change(
-                get_all_pods, initial_num_of_pods, self.namespace, "decrease"
+                get_all_pods,
+                initial_num_of_pods,
+                self.namespace,
+                "decrease",
+                timeout=50,
             )
             assert ret, "Wait timeout: Pods are not being deleted."
             log.info("Pods deletion has started.")
@@ -149,7 +161,7 @@ class DisruptionBase(ManageTest):
 
         if operation_to_disrupt == "delete_pvcs":
             ret = wait_for_resource_count_change(
-                get_all_pvcs, initial_num_of_pvc, self.namespace, "decrease"
+                get_all_pvcs, initial_num_of_pvc, self.namespace, "decrease", timeout=50
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
             log.info("PVCs deletion has started.")

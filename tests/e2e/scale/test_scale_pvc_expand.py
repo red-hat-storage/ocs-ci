@@ -6,6 +6,8 @@ from ocs_ci.framework.testlib import (
     scale,
     ignore_leftovers,
     skipif_ocs_version,
+    skipif_external_mode,
+    ipi_deployment_required,
 )
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.utility import utils
@@ -13,12 +15,11 @@ from ocs_ci.utility import utils
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def resize_pvc(request):
     # Setup scale environment in the cluster
     resize_pvc = FioPodScale(
         kind=constants.POD,
-        pod_dict_path=constants.NGINX_POD_YAML,
         node_selector=constants.SCALE_NODE_SELECTOR,
     )
 
@@ -32,10 +33,8 @@ def resize_pvc(request):
 @scale
 @skipif_ocs_version("<4.5")
 @ignore_leftovers
-@pytest.mark.skip(
-    reason="Skipped due to scale_lib pod creations are "
-    "enhanced to use kube_job, TC needs update"
-)
+@skipif_external_mode
+@ipi_deployment_required
 @pytest.mark.parametrize(
     argnames=[
         "start_io",
@@ -57,11 +56,12 @@ class TestPVCExpand(E2ETest):
         Test case to scale pvc size expansion
         with and without IO running on the pods
         """
+
         # Create pvcs and scale pods
         logging.info("Create pvcs and scale pods")
         resize_pvc.create_scale_pods(
             scale_count=1500,
-            pods_per_iter=10,
+            pvc_per_pod_count=20,
             io_runtime=3600,
             start_io=start_io,
             pvc_size=pvc_size,
@@ -69,7 +69,10 @@ class TestPVCExpand(E2ETest):
 
         # Expand PVC to new size
         logging.info(f"Starting expanding PVC size to {pvc_new_size}Gi")
-        resize_pvc.pvc_expansion(pvc_new_size=pvc_new_size)
+        resize_pvc.pvc_expansion(
+            pvc_new_size=pvc_new_size,
+            wait_time=45,
+        )
 
         # Check ceph health status
         utils.ceph_health_check()

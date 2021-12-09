@@ -1,3 +1,2 @@
--e git+https://github.com/vasukulkarni/agent-python-pytest@v1.10.2#egg=pytest-reportportal
--e git+https://gitlab.com/mbukatov/ocp-network-split@v0.1.0#egg=ocp-network-split
+-e git+https://gitlab.com/mbukatov/ocp-network-split.git@v0.1.0#egg=ocp-network-split
 -e .

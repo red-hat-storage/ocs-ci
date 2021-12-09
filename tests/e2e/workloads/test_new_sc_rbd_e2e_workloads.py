@@ -29,7 +29,6 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         self,
         storageclass_factory,
         amq_factory_fixture,
-        couchbase_factory_fixture,
         pgsql_factory_fixture,
         replica,
         compression,
@@ -48,18 +47,6 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=5)
         self.amq, self.threads = amq_factory_fixture(sc_name=sc_obj.name)
 
-        cb_workload = executor_run_bg_ios_ops.submit(
-            bg_handler.handler,
-            couchbase_factory_fixture,
-            sc_name=sc_obj.name,
-            replicas=3,
-            skip_analyze=True,
-            run_in_bg=False,
-            num_items="1000",
-            num_threads="1",
-            iterations=1,
-        )
-
         pgsql_workload = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             pgsql_factory_fixture,
@@ -71,7 +58,7 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
             iterations=1,
         )
         bg_handler = flowtest.BackgroundOps()
-        bg_ops = [pgsql_workload, cb_workload]
+        bg_ops = [pgsql_workload]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
         # AMQ Validate the results
         log.info("Validate message run completely")

@@ -1,7 +1,11 @@
 """
 CSV related functionalities
 """
+import logging
+
 from ocs_ci.ocs.ocp import OCP
+
+log = logging.getLogger(__name__)
 
 
 class CSV(OCP):
@@ -41,3 +45,29 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
     csvs = CSV(namespace=namespace)
     csv_list = csvs.get()["items"]
     return [csv for csv in csv_list if csv_prefix in csv["metadata"]["name"]]
+
+
+def check_all_csvs_are_succeeded(namespace, timeout=600):
+    """
+    Check if all CSVs in namespace are in succeeded phase
+
+    Args:
+        namespace (str): namespace of CSV
+
+    Returns:
+        bool: True if all CSVs are in succeeded phase
+
+    """
+
+    csvs = CSV(namespace=namespace)
+    csv_list = csvs.get()["items"]
+    for csv in csv_list:
+        csv_name = csv["metadata"]["name"]
+        csv_phase = csv["status"]["phase"]
+        log.info(f"CSV: {csv_name} is in phase: {csv_phase}")
+        if csv_phase != "Succeeded":
+            log.error(
+                f"CSV: {csv_name} is not in Succeeded phase! Current phase: {csv_phase}"
+            )
+            return False
+    return True

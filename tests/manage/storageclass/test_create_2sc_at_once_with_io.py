@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -69,15 +68,25 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
         pod_obj_list = []
         for sc_obj in sc_obj_list:
             for pod_num in range(1, 5):
-                pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj)
+                pvc_obj = pvc_factory(
+                    interface=interface_type, storageclass=sc_obj, size=10
+                )
                 pod_obj_list.append(pod_factory(interface=interface_type, pvc=pvc_obj))
 
         log.info("Running io on pods")
-        for pod_obj in pod_obj_list:
-            pod_obj.run_io("fs", size="1G")
 
         for pod_obj in pod_obj_list:
-            get_fio_rw_iops(pod_obj)
+            pod_obj.run_io(
+                "fs",
+                size="2G",
+                rate="1500m",
+                runtime=60,
+                buffer_compress_percentage=60,
+                buffer_pattern="0xdeadface",
+                bs="8K",
+                jobs=5,
+                readwrite="readwrite",
+            )
 
         for sc_obj in sc_obj_list:
             cbp_name = sc_obj.get()["parameters"]["pool"]

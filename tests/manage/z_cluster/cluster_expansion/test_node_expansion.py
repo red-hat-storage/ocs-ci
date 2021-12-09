@@ -2,12 +2,19 @@ import logging
 
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_openshift_dedicated,
+    skipif_flexy_deployment,
+    skipif_ibm_flash,
+)
 
 logger = logging.getLogger(__name__)
 
 
+# https://github.com/red-hat-storage/ocs-ci/issues/4802
+@skipif_flexy_deployment
 @skipif_openshift_dedicated
+@skipif_ibm_flash
 @ignore_leftovers
 @tier1
 class TestAddNode(ManageTest):

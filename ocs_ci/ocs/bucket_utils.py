@@ -13,6 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.utility import templating
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
 
@@ -25,7 +26,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     login credentials and command to be ran
 
     Args:
-        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        mcg_obj: An MCG class instance
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
         signed_request_creds: a dictionary containing AWS S3 creds for a signed request
@@ -990,8 +991,11 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 def retrieve_verification_mode():
     if config.ENV_DATA["platform"].lower() == "ibm_cloud":
         verify = True
+    elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+        verify = get_root_ca_cert()
     else:
         verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
+    logger.debug(f"verification: '{verify}'")
     return verify
 
 
@@ -1019,6 +1023,35 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
     )
 
 
+def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey"):
+    """
+    Uses /dev/urandom to create and write random files in a given
+    directory in a pod
+
+    Args:
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod object in which the files should be
+        generated and written
+
+        file_dir (str): A string describing the path in which
+        to write the files to
+
+        amount (int): The amount of files to generate
+
+        pattern (str): The file name pattern to use
+
+    Returns:
+        list: A list with the names of all written objects
+    """
+    obj_lst = []
+    for i in range(amount):
+        object_key = pattern + "-{}".format(i)
+        obj_lst.append(object_key)
+        io_pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of={file_dir}/{object_key} bs=1M count=1 status=none"
+        )
+    return obj_lst
+
+
 def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
     """
     Prepares two directories and populate one of them with objects
@@ -1031,12 +1064,7 @@ def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
 
     """
     awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-
-    for i in range(amount):
-        object_key = f"ObjKey-{i}"
-        awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={original_dir}/{object_key} bs=1M count=1 status=none"
-        )
+    write_random_objects_in_pod(awscli_pod, original_dir, amount)
 
 
 def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=None):
@@ -1177,7 +1205,7 @@ def s3_get_object_acl(s3_obj, bucketname, object_key):
     return s3_obj.s3_client.get_object_acl(Bucket=bucketname, Key=object_key)
 
 
-def s3_head_object(s3_obj, bucketname, object_key):
+def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
     """
     Boto3 client based head_object operation to retrieve only metadata
 
@@ -1185,12 +1213,19 @@ def s3_head_object(s3_obj, bucketname, object_key):
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier for copied object
+        if_match (str): Return the object only if its entity tag (ETag)
+                        is the same as the one specified,
 
     Returns:
         dict : head object response
 
     """
-    return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+    if if_match:
+        return s3_obj.s3_client.head_object(
+            Bucket=bucketname, Key=object_key, IfMatch=if_match
+        )
+    else:
+        return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_list_objects_v1(
@@ -1307,3 +1342,85 @@ def get_bucket_available_size(mcg_obj, bucket_name):
     resp = bucket_read_api(mcg_obj, bucket_name)
     bucket_size = resp["storage"]["values"]["free"]
     return bucket_size
+
+
+def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
+    """
+    Compares the object lists of two given buckets
+
+    Args:
+        mcg_obj (MCG): An initialized MCG object
+        first_bucket_name (str): The name of the first bucket to compare
+        second_bucket_name (str): The name of the second bucket to compare
+
+    Returns:
+        bool: True if both buckets contain the same object names in all objects,
+        False otherwise
+    """
+
+    def _comparison_logic():
+        first_bucket_object_set = {
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
+        }
+        second_bucket_object_set = {
+            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
+        }
+        if first_bucket_object_set == second_bucket_object_set:
+            logger.info("Objects in both buckets are identical")
+            return True
+        else:
+            logger.warning(
+                f"""Buckets {first_bucket_name} and {second_bucket_name} do not contain the same objects.
+                    {first_bucket_name} objects:
+                    {first_bucket_object_set}
+                    {second_bucket_name} objects:
+                    {second_bucket_object_set}
+                    """
+            )
+            return False
+
+    try:
+        for comparison_result in TimeoutSampler(600, 30, _comparison_logic):
+            if comparison_result:
+                return True
+    except TimeoutExpiredError:
+        logger.error(
+            "The compared buckets did not contain the same set of objects after ten minutes"
+        )
+        return False
+
+
+def write_random_test_objects_to_bucket(
+    io_pod,
+    bucket_to_write,
+    file_dir,
+    amount=1,
+    mcg_obj=None,
+    s3_creds=None,
+):
+    """
+    Write files generated by /dev/urandom to a bucket
+
+    Args:
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod which should handle all needed IO operations
+        bucket_to_write (str): The bucket name to write the random files to
+        file_dir (str): The path to the folder where all random files will be
+        generated and copied from
+        amount (int, optional): The amount of random objects to write. Defaults to 1.
+        mcg_obj (MCG, optional): An MCG class instance
+        s3_creds (dict, optional): A dictionary containing S3-compatible credentials
+        for writing objects directly to buckets outside of the MCG. Defaults to None.
+
+    Returns:
+        list: A list containing the names of the random files that were written
+    """
+    full_object_path = f"s3://{bucket_to_write}"
+    obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount)
+    sync_object_directory(
+        io_pod,
+        file_dir,
+        full_object_path,
+        s3_obj=mcg_obj,
+        signed_request_creds=s3_creds,
+    )
+    return obj_lst

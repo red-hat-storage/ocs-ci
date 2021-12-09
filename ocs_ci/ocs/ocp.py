@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
@@ -46,6 +47,7 @@ class OCP(object):
         namespace=None,
         resource_name="",
         selector=None,
+        field_selector=None,
     ):
         """
         Initializer function
@@ -57,6 +59,8 @@ class OCP(object):
             resource_name (str): Resource name
             selector (str): The label selector to look for. It has higher
                 priority than resource_name and is used instead of the name.
+            field_selector (str): Selector (field query) to filter on, supports
+                '=', '==', and '!='. (e.g. status.phase=Running)
         """
         self._api_version = api_version
         self._kind = kind
@@ -64,6 +68,7 @@ class OCP(object):
         self._resource_name = resource_name
         self._data = {}
         self.selector = selector
+        self.field_selector = field_selector
 
     @property
     def api_version(self):
@@ -192,6 +197,7 @@ class OCP(object):
         retry=0,
         wait=3,
         dont_raise=False,
+        field_selector=None,
     ):
         """
         Get command - 'oc get <resource>'
@@ -204,6 +210,8 @@ class OCP(object):
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait between attempts for retry
             dont_raise (bool): If True will raise when get is not found
+            field_selector (str): Selector (field query) to filter on, supports
+                '=', '==', and '!='. (e.g. status.phase=Running)
 
         Example:
             get('my-pv1')
@@ -215,7 +223,8 @@ class OCP(object):
         """
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
-        if selector:
+        field_selector = field_selector if field_selector else self.field_selector
+        if selector or field_selector:
             resource_name = ""
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
@@ -224,6 +233,8 @@ class OCP(object):
             command += f" -n {self.namespace}"
         if selector is not None:
             command += f" --selector={selector}"
+        if field_selector is not None:
+            command += f" --field-selector={field_selector}"
         if out_yaml_format:
             command += " -o yaml"
         retry += 1
@@ -439,6 +450,19 @@ class OCP(object):
         """
         command = ["oc", "login", "-u", user, "-p", password]
         status = exec_cmd(command, secrets=[password])
+        # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
+        # defined, update kubeconfig file with proxy-url parameter to redirect
+        # client access through proxy server
+        if (
+            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+        ) and config.ENV_DATA.get("client_http_proxy"):
+            kubeconfig = os.getenv("KUBECONFIG")
+            if not kubeconfig or not os.path.exists(kubeconfig):
+                kubeconfig = os.path.join(
+                    config.ENV_DATA["cluster_path"],
+                    config.RUN.get("kubeconfig_location"),
+                )
+            update_kubeconfig_with_proxy_url_for_client(kubeconfig)
         return status
 
     def login_as_sa(self):
@@ -748,11 +772,7 @@ class OCP(object):
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
             if self.data["items"][0]["kind"].lower() == "build" and (
-                self.data["items"][0]
-                .get("metadata")
-                .get("annotations")
-                .get("openshift.io/build-config.name")
-                == "jax-rs-build"
+                "jax-rs-build" in self.data["items"][0].get("metadata").get("name")
             ):
                 return resource_info[column_index - 1]
         except Exception:
@@ -999,6 +1019,23 @@ def get_all_resource_names_of_a_kind(kind):
     ]
 
 
+def get_all_resource_of_kind_containing_string(search_string, kind):
+    """
+    Return all the resource of kind which name contain search_string
+    Args:
+         search_string (str): The string to search in name of the resource
+         kind (str): Kind of the resource to search for
+    Returns:
+        (list): List of resource
+    """
+
+    resource_list = []
+    for resource in OCP(kind=kind).get().get("items"):
+        if search_string in resource["metadata"]["name"]:
+            resource_list.append(resource)
+    return resource_list
+
+
 def get_clustername():
     """
     Return the name (DNS short name) of the cluster
@@ -1010,39 +1047,6 @@ def get_clustername():
 
     ocp_cluster = OCP(namespace="openshift-console", kind="", resource_name="route")
     return ocp_cluster.get()["items"][0]["spec"]["host"].split(".")[2]
-
-
-def get_ocs_version():
-    """
-    Return the OCS Version
-
-    Returns:
-         str: The version of the OCS
-
-    """
-
-    ocp_cluster = OCP(
-        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
-    )
-    for item in ocp_cluster.get()["items"]:
-        if item["metadata"]["name"].startswith("ocs-operator"):
-            return item["spec"]["version"]
-
-
-def get_ocs_parsed_version():
-    """
-    Returns ocs version as float
-
-    Returns:
-        float: ocs version number as major.minor (for example: 4.5)
-
-    """
-    ocs_ver = get_ocs_version().split("-")
-    major_minor = ocs_ver[0].split(".")
-    major = major_minor[0]
-    minor = major_minor[1]
-
-    return float(f"{major}.{minor}")
 
 
 def get_build():
@@ -1076,7 +1080,11 @@ def get_ocp_channel():
         kind="",
         resource_name="clusterversion",
     )
-    return ocp_cluster.get()["items"][0]["spec"]["channel"]
+    try:
+        cnl = ocp_cluster.get()["items"][0]["spec"]["channel"]
+    except Exception:
+        cnl = "None"
+    return cnl
 
 
 def switch_to_project(project_name):
@@ -1477,3 +1485,21 @@ def get_services_by_label(label, namespace):
     ocp_svc = OCP(kind=constants.SERVICE, namespace=namespace)
     svc = ocp_svc.get(selector=label).get("items")
     return svc
+
+
+def get_ocp_url():
+    """
+    Getting default URL for OCP console
+    Returns:
+        str: OCP console URL
+
+    """
+    oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    log.info("Get URL of OCP console")
+    url = oc_cmd.exec_oc_cmd(
+        "get consoles.config.openshift.io cluster -o" "jsonpath='{.status.consoleURL}'",
+        out_yaml_format=False,
+    )
+    log.info(f"OCP URL: {url}")
+
+    return str(url)

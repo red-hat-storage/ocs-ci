@@ -552,6 +552,134 @@ def create_custom_machineset(
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
 
+    # check for vmware and IPI platform
+    elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS,
+            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
+        )
+        for machine in machinesets_obj.get()["items"]:
+            # Get inputs from existing machineset config.
+            cls_id = machine.get("spec")["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ]
+            disk_size = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["diskGiB"]
+            memory = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
+                "memoryMiB"
+            ]
+            network_name = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["network"]["devices"][0]["networkName"]
+            num_cpu = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
+                "numCPUs"
+            ]
+            num_core = machine.get("spec")["template"]["spec"]["providerSpec"]["value"][
+                "numCoresPerSocket"
+            ]
+            vm_template = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["template"]
+            datacenter = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["datacenter"]
+            datastore = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["datastore"]
+            ds_folder = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["folder"]
+            ds_resourcepool = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["resourcePool"]
+            ds_server = machine.get("spec")["template"]["spec"]["providerSpec"][
+                "value"
+            ]["workspace"]["server"]
+
+            machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_VMWARE)
+
+            # Update machineset_yaml with required values.
+            machineset_yaml["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["metadata"]["name"] = f"{cls_id}-{role}"
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["selector"]["matchLabels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}"
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-cluster"
+            ] = cls_id
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-role"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machine-type"
+            ] = role
+            machineset_yaml["spec"]["template"]["metadata"]["labels"][
+                "machine.openshift.io/cluster-api-machineset"
+            ] = f"{cls_id}-{role}"
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "diskGiB"
+            ] = disk_size
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "memoryMiB"
+            ] = memory
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "network"
+            ]["devices"][0]["networkName"] = network_name
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "numCPUs"
+            ] = num_cpu
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "numCoresPerSocket"
+            ] = num_core
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "template"
+            ] = vm_template
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "workspace"
+            ]["datacenter"] = datacenter
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "workspace"
+            ]["datastore"] = datastore
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "workspace"
+            ]["folder"] = ds_folder
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "workspace"
+            ]["resourcepool"] = ds_resourcepool
+            machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                "workspace"
+            ]["server"] = ds_server
+
+            # Apply the labels
+            if labels:
+                for label in labels:
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"]["labels"][
+                        label[0]
+                    ] = label[1]
+                # Remove app label in case of infra nodes
+                if role == "infra":
+                    machineset_yaml["spec"]["template"]["spec"]["metadata"][
+                        "labels"
+                    ].pop(constants.APP_LABEL, None)
+
+            if taints:
+                machineset_yaml["spec"]["template"]["spec"].update({"taints": taints})
+
+            # Create new custom machineset
+            ms_obj = OCS(**machineset_yaml)
+            ms_obj.create()
+            if check_machineset_exists(f"{cls_id}-{role}"):
+                logging.info(f"Machineset {cls_id}-{role} created")
+                return f"{cls_id}-{role}"
+            else:
+                raise ResourceNotFoundError("Machineset resource not found")
+
     else:
         raise UnsupportedPlatformError("Functionality not supported in this platform")
 
@@ -794,6 +922,7 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=600):
 
     Args:
         machine_set (str): Name of the machine set
+        timeout (int): Timeout in secs, default 10mins
 
     Raises:
         ResourceWrongStatusException: In case the new spun machine fails

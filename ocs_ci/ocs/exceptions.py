@@ -18,6 +18,10 @@ class NoobaaHealthException(Exception):
     pass
 
 
+class NoobaaCliChecksumFailedException(Exception):
+    pass
+
+
 class UnexpectedBehaviour(Exception):
     pass
 
@@ -129,6 +133,10 @@ class NotSupportedFunctionError(Exception):
 
 
 class NonUpgradedImagesFoundError(Exception):
+    pass
+
+
+class NotAllPodsHaveSameImagesError(Exception):
     pass
 
 
@@ -260,11 +268,59 @@ class PoolNotFound(Exception):
     pass
 
 
+class PoolDidNotReachReadyState(Exception):
+    pass
+
+
+class PoolStateIsUnknow(Exception):
+    pass
+
+
+class PoolNotDeleted(Exception):
+    pass
+
+
 class PoolDataNotErased(Exception):
     pass
 
 
+class PoolSizeWrong(Exception):
+    pass
+
+
+class PoolCompressionWrong(Exception):
+    pass
+
+
+class PoolNotDeletedFromUI(Exception):
+    pass
+
+
+class PoolCephValueNotMatch(Exception):
+    pass
+
+
+class StorageClassNotDeletedFromUI(Exception):
+    pass
+
+
 class PvcNotDeleted(Exception):
+    pass
+
+
+class StorageclassNotCreated(Exception):
+    pass
+
+
+class StorageclassIsNotDeleted(Exception):
+    pass
+
+
+class ResourceNotDeleted(Exception):
+    pass
+
+
+class PageNotLoaded(Exception):
     pass
 
 
@@ -349,4 +405,40 @@ class IPAMAssignUpdateFailed(Exception):
 
 
 class NodeHasNoAttachedVolume(Exception):
+    pass
+
+
+class NotSupportedProxyConfiguration(Exception):
+    pass
+
+
+class OCSWorkerScaleFailed(Exception):
+    pass
+
+
+class OSDScaleFailed(Exception):
+    pass
+
+
+class PVCNotCreated(Exception):
+    pass
+
+
+class PodNotCreated(Exception):
+    pass
+
+
+class ElasticSearchNotDeployed(Exception):
+    pass
+
+
+class ManagedServiceAddonDeploymentError(Exception):
+    pass
+
+
+class ConfigurationError(Exception):
+    pass
+
+
+class BenchmarkTestFailed(Exception):
     pass

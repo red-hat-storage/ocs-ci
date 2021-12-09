@@ -128,7 +128,7 @@ class APIClientBase(metaclass=ABCMeta):
 
 
 class OCRESTClient(APIClientBase):
-    """ All activities using openshift REST client"""
+    """All activities using openshift REST client"""
 
     def __init__(self):
         """TODO: get REST client instance from ctx which is shared globally"""

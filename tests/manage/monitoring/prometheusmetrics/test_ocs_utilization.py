@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # cpu pod usage query inspired by Metrics Dashboard from OCP Console, see:
 # frontend/packages/dev-console/src/components/monitoring/queries.ts
 CPU_USAGE_POD = (
-    "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate"
+    "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate"
 )
 
 

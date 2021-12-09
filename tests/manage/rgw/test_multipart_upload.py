@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 import uuid
 
@@ -18,7 +19,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 logger = logging.getLogger(__name__)
 
 
-def setup(pod_obj, rgw_bucket_factory):
+def setup(pod_obj, rgw_bucket_factory, test_directory_setup):
     """
     Create the file to be used for the multipart upload test,
     and the bucket to upload it to.
@@ -26,6 +27,8 @@ def setup(pod_obj, rgw_bucket_factory):
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools
         rgw_bucket_factory: Calling this fixture creates a new bucket(s)
+        test_directory_setup: Calling this fixture will create origin and result
+                              directories under the test directory of awscli pod
 
     Returns:
         Tuple: Returns tuple containing the params used in this test case
@@ -33,13 +36,12 @@ def setup(pod_obj, rgw_bucket_factory):
     """
     bucket = rgw_bucket_factory(amount=1, interface="RGW-OC")[0]
     object_key = "ObjKey-" + str(uuid.uuid4().hex)
-    origin_dir = "/aws/objectdir"
-    res_dir = "/aws/partsdir"
+    origin_dir = test_directory_setup.origin_dir
+    res_dir = test_directory_setup.result_dir
     full_object_path = f"s3://{bucket.name}"
     # Creates a 500MB file and splits it into multiple parts
     pod_obj.exec_cmd_on_pod(
-        f'sh -c "mkdir {origin_dir}; mkdir {res_dir}; '
-        f"dd if=/dev/urandom of={origin_dir}/{object_key} bs=1MB count=500; "
+        f'sh -c "dd if=/dev/urandom of={origin_dir}/{object_key} bs=1MB count=500; '
         f'split -a 1 -b 41m {origin_dir}/{object_key} {res_dir}/part"'
     )
     parts = pod_obj.exec_cmd_on_pod(f'sh -c "ls -1 {res_dir}"').split()
@@ -53,12 +55,14 @@ class TestS3MultipartUpload(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-2245")
-    def test_multipart_upload_operations(self, awscli_pod, rgw_bucket_factory):
+    def test_multipart_upload_operations(
+        self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
+    ):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
         """
         bucket, key, origin_dir, res_dir, object_path, parts = setup(
-            awscli_pod, rgw_bucket_factory
+            awscli_pod_session, rgw_bucket_factory, test_directory_setup
         )
         bucketname = bucket.name
         bucket = OBC(bucketname)
@@ -79,7 +83,7 @@ class TestS3MultipartUpload(ManageTest):
         # Uploading individual parts to the Bucket
         logger.info(f"Uploading individual parts to the bucket {bucketname}")
         uploaded_parts = upload_parts(
-            bucket, awscli_pod, bucketname, key, res_dir, upload_id, parts
+            bucket, awscli_pod_session, bucketname, key, res_dir, upload_id, parts
         )
 
         # Listing the Uploaded parts
@@ -99,9 +103,9 @@ class TestS3MultipartUpload(ManageTest):
         logger.info(
             "Downloading the completed multipart object from the RGW bucket to the awscli pod"
         )
-        sync_object_directory(awscli_pod, object_path, res_dir, bucket)
+        sync_object_directory(awscli_pod_session, object_path, res_dir, bucket)
         assert verify_s3_object_integrity(
             original_object_path=f"{origin_dir}/{key}",
             result_object_path=f"{res_dir}/{key}",
-            awscli_pod=awscli_pod,
+            awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"

@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     aws_platform_required,
     bugzilla,
+    red_squad,
     skipif_aws_creds_are_missing,
 )
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -27,6 +28,7 @@ DOWNLOADED_OBJS = []
 @skipif_aws_creds_are_missing
 @aws_platform_required
 @pre_upgrade
+@red_squad
 def test_fill_bucket(
     mcg_obj_session, awscli_pod_session, multiregion_mirror_setup_session
 ):
@@ -81,6 +83,7 @@ def test_fill_bucket(
 @aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
+@red_squad
 def test_noobaa_postupgrade(
     mcg_obj_session, awscli_pod_session, multiregion_mirror_setup_session
 ):
@@ -126,6 +129,7 @@ def test_noobaa_postupgrade(
 @aws_platform_required
 @bugzilla("1820974")
 @pre_upgrade
+@red_squad
 def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
     """
     Test that all buckets in cluster are in OPTIMAL state before upgrade.
@@ -138,6 +142,7 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 @bugzilla("1820974")
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")
+@red_squad
 def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
     Test that all buckets in cluster are in OPTIMAL state after upgrade.
@@ -147,6 +152,7 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
 
 
 @pre_upgrade
+@red_squad
 def test_start_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running before upgrade.
@@ -160,6 +166,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2207")
 @bugzilla("1874243")
+@red_squad
 def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.

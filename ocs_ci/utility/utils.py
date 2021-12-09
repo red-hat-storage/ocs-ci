@@ -19,7 +19,7 @@ from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 
-import hcl
+import hcl2
 import requests
 import yaml
 import git
@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedImage,
     UnsupportedOSType,
 )
+from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 
@@ -676,6 +677,53 @@ def get_ocm_cli(
     log.info(f"OCM version: {ocm_version}")
 
     return ocm_binary_path
+
+
+def get_rosa_cli(
+    version=None,
+    bin_dir=None,
+    force_download=False,
+):
+    """
+    Download the ROSA binary, if not already present.
+    Update env. PATH and get path of the ROSA binary.
+
+    Args:
+        version (str): Version of the ROSA to download
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force ROSA download even if already present
+
+    Returns:
+        str: Path to the rosa binary
+
+    """
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    rosa_filename = "rosa"
+    rosa_binary_path = os.path.join(bin_dir, rosa_filename)
+    if os.path.isfile(rosa_binary_path) and force_download:
+        delete_file(rosa_binary_path)
+    if os.path.isfile(rosa_binary_path):
+        log.debug(f"rosa exists ({rosa_binary_path}), skipping download.")
+    else:
+        log.info(f"Downloading rosa cli ({version}).")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
+        download_file(url, rosa_filename)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    current_file_permissions = os.stat(rosa_binary_path)
+    os.chmod(
+        rosa_binary_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    rosa_version = run_cmd(f"{rosa_binary_path} version")
+    log.info(f"rosa version: {rosa_version}")
+
+    return rosa_binary_path
 
 
 def get_openshift_client(
@@ -1438,17 +1486,48 @@ def get_ocs_build_number():
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator
 
     build_num = ""
-    if config.REPORTING["us_ds"] == "DS":
-        build_str = get_csvs_start_with_prefix(
-            defaults.OCS_OPERATOR_NAME,
-            defaults.ROOK_CLUSTER_NAMESPACE,
-        )
-        try:
-            return build_str[0]["metadata"]["name"].partition(".")[2]
-        except (IndexError, AttributeError):
-            logging.warning("No version info found for OCS operator")
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_9
+    ):
+        operator_name = defaults.ODF_OPERATOR_NAME
+    else:
+        operator_name = defaults.OCS_OPERATOR_NAME
+    ocs_csvs = get_csvs_start_with_prefix(
+        operator_name,
+        defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+    try:
+        ocs_csv = ocs_csvs[0]
+        csv_labels = ocs_csv["metadata"]["labels"]
+        if "full_version" in csv_labels:
+            return csv_labels["full_version"]
+        build_num = ocs_csv["spec"]["version"]
+        operator_selector = get_selector_for_ocs_operator()
+        # This is a temporary solution how to get the build id from the registry image.
+        # Because we are now missing build ID in the CSV. If catalog source with our
+        # internal label exists, we will be getting build id from the tag of the image
+        # in catalog source. Boris is working on better way how to populate the internal
+        # build version in the CSV.
+        if operator_selector:
+            catalog_source = CatalogSource(
+                resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+                selector=operator_selector,
+            )
+            cs_data = catalog_source.get()["items"][0]
+            cs_image = cs_data["spec"]["image"]
+            image_tag = cs_image.split(":")[1]
+            if "-" in image_tag:
+                build_id = image_tag.split("-")[1]
+                build_num += f"-{build_id}"
+
+    except (IndexError, AttributeError, CommandFailed, KeyError):
+        log.exception("No version info found for OCS operator")
     return build_num
 
 
@@ -2332,7 +2411,7 @@ def remove_keys_from_tf_variable_file(tf_file, keys):
     from ocs_ci.utility.templating import dump_data_to_json
 
     with open(tf_file, "r") as fd:
-        obj = hcl.load(fd)
+        obj = hcl2.load(fd)
     for key in keys:
         obj["variable"].pop(key)
 
@@ -2438,7 +2517,11 @@ def skipif_ui_not_support(ui_test):
     from ocs_ci.ocs.ui.views import locators
 
     ocp_version = get_running_ocp_version()
-    if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
         return True
     try:
         locators[ocp_version][ui_test]
@@ -2766,7 +2849,7 @@ def mirror_image(image):
         mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
-        logging.info(
+        log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
         )
         exec_cmd(
@@ -2850,7 +2933,14 @@ def set_selinux_permissions(workers=None):
     for worker in worker_nodes:
         node = worker.get().get("metadata").get("name") if not workers else worker
         log.info(f"{node} is a RHEL based worker - applying '{cmd_list}'")
-        retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(node=node, cmd_list=cmd_list)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            retry(CommandFailed, tries=10, delay=3, backoff=2)(
+                ocp_obj.exec_oc_debug_cmd
+            )(node=node, cmd_list=cmd_list)
+        else:
+            retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+                node=node, cmd_list=cmd_list
+            )
 
 
 def set_registry_to_managed_state():
@@ -3004,7 +3094,7 @@ def get_module_ip(terraform_state_file, module):
     """
     ips = []
     with open(terraform_state_file) as fd:
-        obj = hcl.load(fd)
+        obj = json.loads(fd.read())
 
         if config.ENV_DATA.get("folder_structure"):
             resources = obj["resources"]

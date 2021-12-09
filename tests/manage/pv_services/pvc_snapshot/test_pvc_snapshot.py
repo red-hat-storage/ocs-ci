@@ -102,6 +102,7 @@ class TestPvcSnapshot(ManageTest):
             self.pvc_obj.name,
             snap_yaml,
             snap_name,
+            self.pvc_obj.namespace,
             helpers.default_volumesnapshotclass(interface).name,
         )
         snap_obj.ocp.wait_for_resource(

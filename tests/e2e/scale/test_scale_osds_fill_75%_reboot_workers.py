@@ -29,14 +29,18 @@ logger = logging.getLogger(__name__)
 @scale
 @ignore_leftovers
 @skipif_external_mode
+@pytest.mark.skip(
+    reason="Skipped due to failure in 75% filling-up cluster "
+    "which created more PODs and failed for memory issue"
+)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-XXXX")
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2117")
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-XXXX")
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2117")
         ),
     ],
 )

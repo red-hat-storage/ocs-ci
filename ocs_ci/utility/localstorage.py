@@ -216,7 +216,7 @@ def get_lso_channel():
     channel_names = [channel["name"] for channel in channels]
 
     # Ensure channel_names is sorted
-    versions = [LooseVersion(name) for name in channel_names]
+    versions = [LooseVersion(name) for name in channel_names if name != "stable"]
     versions.sort()
     sorted_versions = [v.vstring for v in versions]
 

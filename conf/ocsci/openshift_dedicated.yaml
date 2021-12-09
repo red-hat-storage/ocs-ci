@@ -10,8 +10,10 @@ ENV_DATA:
   skip_ocs_deployment: true
 
 # AUTH:
-#  openshiftdedicated:
-#    token: OCM TOKEN KEY PLACEHOLDER
+#   pagerduty:
+#     api_key: PAGERDUTY API KEY PLACEHOLDER FOR MANAGED SERVICE
+#   openshiftdedicated:
+#     token: OCM TOKEN KEY PLACEHOLDER
 
 DEPLOYMENT:
   ocs_csv_channel: "alpha"

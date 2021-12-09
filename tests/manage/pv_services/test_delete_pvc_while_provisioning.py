@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     tier4,
     polarion_id,
-    skipif_ocs_version,
     bugzilla,
 )
 from ocs_ci.helpers.helpers import (
@@ -60,7 +59,7 @@ class TestDeletePvcWhileProvisioning(ManageTest):
         """
         self.proj_obj = project_factory()
 
-    @skipif_ocs_version("<4.9")
+    @pytest.mark.skip(reason="Deprecated")
     def test_delete_rbd_pvc_while_thick_provisioning(
         self,
         resource_to_delete,

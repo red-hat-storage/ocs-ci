@@ -24,10 +24,8 @@ class ScalePodPGSQL(Postgresql):
 
         """
         super().__init__(**kwargs)
+        Postgresql.deploy(self)
         self._node_selector = node_selector
-
-    def apply_crd(self, crd):
-        Postgresql.apply_crd(self, crd=crd)
 
     def setup_postgresql(self, replicas, node_selector=None):
         # Node selector for postgresql

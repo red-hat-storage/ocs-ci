@@ -6,7 +6,7 @@ apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
 kind: Benchmark
 metadata:
   name: smallfile-benchmark
-  namespace: my-ripsaw
+  namespace: benchmark-operator
 spec:
   test_user: homer_simpson
   clustername: place-holder
@@ -30,3 +30,10 @@ spec:
       files: 50000
       storageclass: ocs-storageclass-ceph-rbd
       storagesize: 100Gi
+      job_timeout: 18000
+      response-times: true
+      stonewall: false
+      finish: true
+      # Un comments the next line when the drop-cache-kernel will support multi-arch
+      #drop_cache_kernel: true
+      #drop_cache_rook_ceph: true

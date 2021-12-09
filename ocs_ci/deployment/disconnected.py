@@ -13,12 +13,11 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_opm_tool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NotFoundError
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
-    get_image_with_digest,
     get_latest_ds_olm_tag,
     get_ocp_version,
     login_to_mirror_registry,
@@ -94,6 +93,10 @@ def prune_and_mirror_index_image(
         f"-p {','.join(packages)} "
         f"-t {mirrored_index_image}"
     )
+    if config.DEPLOYMENT.get("opm_index_prune_binary_image"):
+        cmd += (
+            f" --binary-image {config.DEPLOYMENT.get('opm_index_prune_binary_image')}"
+        )
     # opm tool doesn't have --authfile parameter, we have to supply auth
     # file through env variable
     os.environ["REGISTRY_AUTH_FILE"] = pull_secret_path
@@ -111,7 +114,7 @@ def prune_and_mirror_index_image(
     logger.info(f"Mirror images related to index image: {mirrored_index_image}")
     cmd = (
         f"oc adm catalog mirror {mirrored_index_image} -a {pull_secret_path} --insecure "
-        f"{config.DEPLOYMENT['mirror_registry']} --index-filter-by-os='.*'"
+        f"{config.DEPLOYMENT['mirror_registry']} --index-filter-by-os='.*' --max-per-registry=2"
     )
     oc_acm_result = exec_cmd(cmd, timeout=7200)
 
@@ -142,7 +145,7 @@ def prune_and_mirror_index_image(
                 for policy in icsp["spec"]["repositoryDigestMirrors"]:
                     # we use only first defined mirror for particular source,
                     # because we don't use any ICSP with more mirrors for one
-                    # source and it will make the logic wery complex and
+                    # source and it will make the logic very complex and
                     # confusing
                     line = line.replace(policy["source"], policy["mirrors"][0])
                 mapping_file_content.append(line)
@@ -210,22 +213,44 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
     )
     # Disable the default OperatorSources
-    exec_cmd(
-        """oc patch OperatorHub cluster --type json """
-        """-p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'"""
-    )
+    disable_default_sources()
 
     pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
 
-    ocp_version = get_ocp_version()
-    index_image = f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{ocp_version}"
-    mirrored_index_image = (
-        f"{config.DEPLOYMENT['mirror_registry']}/{constants.MIRRORED_INDEX_IMAGE_NAMESPACE}/"
-        f"{constants.MIRRORED_INDEX_IMAGE_NAME}:v{ocp_version}"
-    )
+    # prepare main index image (redhat-operators-index for live deployment or
+    # ocs-registry image for unreleased version)
+    if config.DEPLOYMENT.get("live_deployment"):
+        index_image = (
+            f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{get_ocp_version()}"
+        )
+        mirrored_index_image = (
+            f"{config.DEPLOYMENT['mirror_registry']}/{constants.MIRRORED_INDEX_IMAGE_NAMESPACE}/"
+            f"{constants.MIRRORED_INDEX_IMAGE_NAME}:v{get_ocp_version()}"
+        )
+    else:
+        if upgrade:
+            index_image = config.UPGRADE.get("upgrade_ocs_registry_image", "")
+        else:
+            index_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+
+        ocs_registry_image_and_tag = index_image.rsplit(":", 1)
+        image_tag = (
+            ocs_registry_image_and_tag[1]
+            if len(ocs_registry_image_and_tag) == 2
+            else None
+        )
+        if not image_tag:
+            image_tag = get_latest_ds_olm_tag(
+                upgrade=False if upgrade else config.UPGRADE.get("upgrade", False),
+                latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest"),
+            )
+            index_image = f"{config.DEPLOYMENT['default_ocs_registry_image'].split(':')[0]}:{image_tag}"
+        mirrored_index_image = f"{config.DEPLOYMENT['mirror_registry']}{index_image[index_image.index('/'):]}"
+    logger.debug(f"index_image: {index_image}")
+    logger.debug(f"mirrored_index_image: {mirrored_index_image}")
 
     prune_and_mirror_index_image(
         index_image,
@@ -233,140 +258,32 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         constants.DISCON_CL_REQUIRED_PACKAGES,
     )
 
-    # create redhat-operators CatalogSource
-    catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
-
-    catalog_source_manifest = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="catalog_source_manifest", delete=False
-    )
-    catalog_source_data["spec"]["image"] = f"{mirrored_index_image}"
-    catalog_source_data["metadata"]["name"] = "redhat-operators"
-    catalog_source_data["spec"]["displayName"] = "Red Hat Operators - Mirrored"
-    # remove ocs-operator-internal label
-    catalog_source_data["metadata"]["labels"].pop("ocs-operator-internal", None)
-
-    templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
-    exec_cmd(
-        f"oc {'replace' if upgrade else 'apply'} -f {catalog_source_manifest.name}"
-    )
-    catalog_source = CatalogSource(
-        resource_name="redhat-operators",
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
-    # Wait for catalog source is ready
-    catalog_source.wait_for_state("READY")
-
+    # in case of live deployment, we have to create the mirrored
+    # redhat-operators catalogsource
     if config.DEPLOYMENT.get("live_deployment"):
-        # deployment from live can continue as normal now (ocs-operator images
-        # are already mirrored as part of redhat-operators)
-        return
+        # create redhat-operators CatalogSource
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
-    if upgrade:
-        ocs_registry_image = config.UPGRADE.get("upgrade_ocs_registry_image", "")
-    else:
-        ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
-    logger.debug(f"ocs-registry-image: {ocs_registry_image}")
-    ocs_registry_image_and_tag = ocs_registry_image.rsplit(":", 1)
-    image_tag = (
-        ocs_registry_image_and_tag[1] if len(ocs_registry_image_and_tag) == 2 else None
-    )
-    if not image_tag and config.REPORTING.get("us_ds") == "DS":
-        image_tag = get_latest_ds_olm_tag(
-            upgrade=False if upgrade else config.UPGRADE.get("upgrade", False),
-            latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest"),
+        catalog_source_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="catalog_source_manifest", delete=False
         )
-        ocs_registry_image = f"{config.DEPLOYMENT['default_ocs_registry_image'].split(':')[0]}:{image_tag}"
-    bundle_image = f"{constants.OCS_OPERATOR_BUNDLE_IMAGE}:{image_tag}"
-    logger.debug(f"ocs-operator-bundle image: {bundle_image}")
+        catalog_source_data["spec"]["image"] = f"{mirrored_index_image}"
+        catalog_source_data["metadata"]["name"] = constants.OPERATOR_CATALOG_SOURCE_NAME
+        catalog_source_data["spec"]["displayName"] = "Red Hat Operators - Mirrored"
+        # remove ocs-operator-internal label
+        catalog_source_data["metadata"]["labels"].pop("ocs-operator-internal", None)
 
-    csv_yaml = get_csv_from_image(bundle_image)
-    ocs_operator_image = (
-        csv_yaml.get("spec", {})
-        .get("install", {})
-        .get("spec", {})
-        .get("deployments", [{}])[0]
-        .get("spec", {})
-        .get("template", {})
-        .get("spec", {})
-        .get("containers", [{}])[0]
-        .get("image")
-    )
-    logger.debug(f"ocs-operator-image: {ocs_operator_image}")
-
-    # prepare list related images (bundle, registry and operator images and all
-    # images from relatedImages section from csv)
-    ocs_related_images = []
-    ocs_related_images.append(get_image_with_digest(bundle_image))
-    ocs_registry_image_with_digest = get_image_with_digest(ocs_registry_image)
-    ocs_related_images.append(ocs_registry_image_with_digest)
-    ocs_related_images.append(get_image_with_digest(ocs_operator_image))
-    ocs_related_images += [
-        image["image"] for image in csv_yaml.get("spec").get("relatedImages")
-    ]
-    logger.debug(f"OCS Related Images: {ocs_related_images}")
-
-    mirror_registry = config.DEPLOYMENT["mirror_registry"]
-    # prepare images mapping file for mirroring
-    mapping_file_content = [
-        f"{image}={mirror_registry}{image[image.index('/'):image.index('@')]}\n"
-        for image in ocs_related_images
-    ]
-    logger.debug(f"Mapping file content: {mapping_file_content}")
-
-    name = "ocs-images"
-    mapping_file = os.path.join(config.ENV_DATA["cluster_path"], f"{name}-mapping.txt")
-    # write mapping file to disk
-    with open(mapping_file, "w") as f:
-        f.writelines(mapping_file_content)
-
-    # prepare ImageContentSourcePolicy for OCS images
-    with open(constants.TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML) as f:
-        ocs_icsp = yaml.safe_load(f)
-
-    ocs_icsp["metadata"]["name"] = name
-    ocs_icsp["spec"]["repositoryDigestMirrors"] = []
-    for image in ocs_related_images:
-        ocs_icsp["spec"]["repositoryDigestMirrors"].append(
-            {
-                "mirrors": [
-                    f"{mirror_registry}{image[image.index('/'):image.index('@')]}"
-                ],
-                "source": image[: image.index("@")],
-            }
-        )
-    logger.debug(f"OCS imageContentSourcePolicy: {yaml.safe_dump(ocs_icsp)}")
-
-    ocs_icsp_file = os.path.join(
-        config.ENV_DATA["cluster_path"], f"{name}-imageContentSourcePolicy.yaml"
-    )
-    with open(ocs_icsp_file, "w+") as fs:
-        yaml.safe_dump(ocs_icsp, fs)
-
-    # create ImageContentSourcePolicy
-    exec_cmd(f"oc apply -f {ocs_icsp_file}")
-
-    # mirror images based on mapping file
-    with prepare_customized_pull_secret(ocs_related_images) as authfile_fo:
-        login_to_mirror_registry(authfile_fo.name)
-        exec_cmd(
-            f"oc image mirror --filter-by-os='.*' -f {mapping_file} --insecure "
-            f"--registry-config={authfile_fo.name} --max-per-registry=2",
-            timeout=3600,
-        )
-
-        # mirror also OCS registry image with the original version tag (it will
-        # be used for creating CatalogSource)
-        mirrored_ocs_registry_image = (
-            f"{mirror_registry}{ocs_registry_image[ocs_registry_image.index('/'):]}"
+        templating.dump_data_to_temp_yaml(
+            catalog_source_data, catalog_source_manifest.name
         )
         exec_cmd(
-            f"podman push --tls-verify=false --authfile {authfile_fo.name} "
-            f"{ocs_registry_image} {mirrored_ocs_registry_image}"
+            f"oc {'replace' if upgrade else 'apply'} -f {catalog_source_manifest.name}"
         )
+        catalog_source = CatalogSource(
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
 
-    # wait for newly created imageContentSourcePolicy is applied on all nodes
-    logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-    time.sleep(60)
-    wait_for_machineconfigpool_status("all")
-
-    return mirrored_ocs_registry_image
+    return mirrored_index_image
