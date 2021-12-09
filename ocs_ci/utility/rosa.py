@@ -10,9 +10,13 @@ import os
 import re
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
+from ocs_ci.ocs.exceptions import (
+    ManagedServiceAddonDeploymentError,
+    ClusterCreationError,
+)
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -60,6 +64,16 @@ def create_cluster(cluster_name, version):
         if status == "ready":
             logger.info("Cluster was installed")
             break
+        if status == "error":
+            describe_cmd = f"rosa describe cluster --cluster={cluster_name} -o json"
+            cluster_details = utils.run_cmd(describe_cmd)
+            logger.error(
+                f"Error code: {cluster_details.get('status').get('provision_error_code')}"
+            )
+            logger.error(
+                f"{cluster_details.get('status').get('provision_error_message')}"
+            )
+            raise ClusterCreationError("Cluster creation failed")
     cluster_info = ocm.get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name

@@ -436,6 +436,10 @@ class ManagedServiceAddonDeploymentError(Exception):
     pass
 
 
+class ClusterCreationError(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 
