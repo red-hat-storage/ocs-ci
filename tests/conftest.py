@@ -1978,7 +1978,16 @@ def rgw_obj_fixture(request):
     rgw_deployments = get_deployments_having_label(
         label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    if rgw_deployments:
+    try:
+        storageclass = OCP(
+            kind=constants.STORAGECLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW,
+        ).get()
+    except CommandFailed:
+        storageclass = None
+
+    if rgw_deployments or storageclass:
         return RGW()
     else:
         return None
