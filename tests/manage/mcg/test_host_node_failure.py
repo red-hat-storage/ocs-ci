@@ -183,7 +183,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[noobaa_sts],
             resource_count=1,
-            timeout=600 if noobaa_sts == constants.NOOBAA_DB_STATEFULSET else 60,
+            timeout=800 if noobaa_sts == constants.NOOBAA_DB_STATEFULSET else 60,
             sleep=30 if noobaa_sts == constants.NOOBAA_DB_STATEFULSET else 3,
         )
 
