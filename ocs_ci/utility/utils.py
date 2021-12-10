@@ -460,14 +460,13 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
-def run_cmd_interactive(cmd, prompts, answers, timeout=300):
+def run_cmd_interactive(cmd, prompts_answers, timeout=300):
     """
     Handle interactive prompts with answers during subctl command
 
     Args:
         cmd(str): Command to be executed
-        prompts(list): of Expected questions during command run which needs to be provided
-        answer(list): of Answers for the prompt
+        prompts_answers(dict): Prompts as keys and answers as values
         timeout(int): Timeout in seconds, for pexpect to wait for prompt
 
     Raises:
@@ -475,7 +474,7 @@ def run_cmd_interactive(cmd, prompts, answers, timeout=300):
 
     """
     child = pexpect.spawn(cmd)
-    for prompt, answer in zip(prompts, answers):
+    for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
             raise InteractivePromptException("Unexpected Prompt")
 
