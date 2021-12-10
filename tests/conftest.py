@@ -2378,7 +2378,7 @@ def bucket_factory_fixture(
             current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
-                created_bucket.verify_health()
+                created_bucket.verify_health(**kwargs)
 
         return current_call_created_buckets
 
