@@ -305,16 +305,18 @@ class TestBucketDeletion(MCGTest):
                 rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
                 mcg_obj.s3_resource.Bucket(bucketname).delete()
 
-    @pytest.fixture()
+    @pytest.fixture(scope="function")
     def default_bucket_teardown(self, request, mcg_obj):
         """
         Recreates first.bucket
-
         """
 
         def finalizer():
             if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+                logger.info("Creating the default bucket: first.bucket")
                 mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+            else:
+                logger.info("Skipping creation of first.bucket as it already exists")
 
         request.addfinalizer(finalizer)
 
@@ -326,6 +328,7 @@ class TestBucketDeletion(MCGTest):
         """
         Test with deletion of all buckets including the default first.bucket.
         """
+
         logger.info("Listing all buckets in the cluster")
         buckets = mcg_obj.s3_client.list_buckets()
 
