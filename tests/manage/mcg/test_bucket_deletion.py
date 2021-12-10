@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     performance,
     skipif_openshift_dedicated,
     bugzilla,
+    skipif_ocs_version,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -324,6 +325,7 @@ class TestBucketDeletion(MCGTest):
     @skipif_openshift_dedicated
     @bugzilla("1980299")
     @pytest.mark.polarion_id("OCS-2704")
+    @skipif_ocs_version("<4.9")
     def test_delete_all_buckets(self, mcg_obj, bucket_factory, default_bucket_teardown):
         """
         Test with deletion of all buckets including the default first.bucket.
