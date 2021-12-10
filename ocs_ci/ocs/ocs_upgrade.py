@@ -557,74 +557,80 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     channel = upgrade_ocs.set_upgrade_channel()
     with CephHealthMonitor(ceph_cluster):
         upgrade_ocs.set_upgrade_images()
+        ui_upgrade_supported = False
         if config.UPGRADE.get("ui_upgrade"):
             ocp_version = get_ocp_version()
-
             if (
                 Version.coerce(ocp_version) == Version.coerce("4.9")
                 and original_ocs_version == "4.8"
                 and upgrade_version == "4.9"
             ):
+                ui_upgrade_supported = True
+            else:
+                log.warning(
+                    "UI upgrade combination is not supported. It will fallback to CLI upgrade"
+                )
+            if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
-        else:
-            if upgrade_version != "4.9":
-                # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
-                # OCS automatically.
-                upgrade_ocs.update_subscription(channel)
-            if original_ocs_version == "4.8" and upgrade_version == "4.9":
-                deployment = Deployment()
-                deployment.subscribe_ocs()
-            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
-                upgrade_in_current_source
-            ):
-                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
-                for attempt in range(2):
-                    # We need to do it twice, because some of the SA are updated
-                    # after the first load of OCS pod after upgrade. So we need to
-                    # link updated SA again.
-                    log.info(
-                        f"Sleep 1 minute before attempt: {attempt+1}/2 "
-                        "of linking secret/SAs"
-                    )
-                    time.sleep(60)
-                    link_all_sa_and_secret_and_delete_pods(
-                        constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
-                    )
-        if operation:
-            log.info(f"Calling test function: {operation}")
-            _ = operation(*operation_args, **operation_kwargs)
-            # Workaround for issue #2531
-            time.sleep(30)
-            # End of workaround
+            else:
+                if upgrade_version != "4.9":
+                    # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+                    # OCS automatically.
+                    upgrade_ocs.update_subscription(channel)
+                if original_ocs_version == "4.8" and upgrade_version == "4.9":
+                    deployment = Deployment()
+                    deployment.subscribe_ocs()
+                if (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                ) and not (upgrade_in_current_source):
+                    create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+                    for attempt in range(2):
+                        # We need to do it twice, because some of the SA are updated
+                        # after the first load of OCS pod after upgrade. So we need to
+                        # link updated SA again.
+                        log.info(
+                            f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                            "of linking secret/SAs"
+                        )
+                        time.sleep(60)
+                        link_all_sa_and_secret_and_delete_pods(
+                            constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                        )
+            if operation:
+                log.info(f"Calling test function: {operation}")
+                _ = operation(*operation_args, **operation_kwargs)
+                # Workaround for issue #2531
+                time.sleep(30)
+                # End of workaround
 
-        for sample in TimeoutSampler(
-            timeout=725,
-            sleep=5,
-            func=upgrade_ocs.check_if_upgrade_completed,
-            channel=channel,
-            csv_name_pre_upgrade=csv_name_pre_upgrade,
-        ):
-            try:
-                if sample:
-                    log.info("Upgrade success!")
-                    break
-            except TimeoutException:
-                raise TimeoutException("No new CSV found after upgrade!")
-        old_image = upgrade_ocs.get_images_post_upgrade(
-            channel, pre_upgrade_images, upgrade_version
+            for sample in TimeoutSampler(
+                timeout=725,
+                sleep=5,
+                func=upgrade_ocs.check_if_upgrade_completed,
+                channel=channel,
+                csv_name_pre_upgrade=csv_name_pre_upgrade,
+            ):
+                try:
+                    if sample:
+                        log.info("Upgrade success!")
+                        break
+                except TimeoutException:
+                    raise TimeoutException("No new CSV found after upgrade!")
+            old_image = upgrade_ocs.get_images_post_upgrade(
+                channel, pre_upgrade_images, upgrade_version
+            )
+        verify_image_versions(
+            old_image,
+            upgrade_ocs.get_parsed_versions()[1],
+            upgrade_ocs.version_before_upgrade,
         )
-    verify_image_versions(
-        old_image,
-        upgrade_ocs.get_parsed_versions()[1],
-        upgrade_ocs.version_before_upgrade,
-    )
-    ocs_install_verification(
-        timeout=600,
-        skip_osd_distribution_check=True,
-        ocs_registry_image=upgrade_ocs.ocs_registry_image,
-        post_upgrade_verification=True,
-        version_before_upgrade=upgrade_ocs.version_before_upgrade,
-    )
+        ocs_install_verification(
+            timeout=600,
+            skip_osd_distribution_check=True,
+            ocs_registry_image=upgrade_ocs.ocs_registry_image,
+            post_upgrade_verification=True,
+            version_before_upgrade=upgrade_ocs.version_before_upgrade,
+        )
 
 
 def ocs_odf_upgrade_ui():
