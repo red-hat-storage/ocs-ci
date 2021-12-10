@@ -33,6 +33,8 @@ class Config:
     UI_SELENIUM: dict = field(default_factory=dict)
     PERF: dict = field(default_factory=dict)
     COMPONENTS: dict = field(default_factory=dict)
+    # Used for multicluster only
+    MULTICLUSTER: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
@@ -140,8 +142,6 @@ class MultiClusterConfig:
         self.acm_index = None
         self.single_cluster_default = True
         self._single_cluster_init_cluster_configs()
-        # A dictionary to hold Cluster object and its index
-        self.cluster_map_by_index = dict()
 
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
@@ -153,7 +153,7 @@ class MultiClusterConfig:
         if self.nclusters > 1:
             for i in range(self.nclusters):
                 self.clusters.insert(i, Config())
-                self.cluster_map_by_index.update({self.clusters[i]: i})
+                self.clusters[i].MULTICLUSTER["multicluster_index"] = i
             self.cluster_ctx = self.clusters[0]
             self.attr_init()
             self._refresh_ctx()
@@ -193,7 +193,12 @@ class MultiClusterConfig:
         self._refresh_ctx()
 
     def switch_acm_ctx(self):
-        self.switch_ctx(self.acm_index)
+        self.switch_ctx(self.get_acm_index())
+
+    def get_acm_index(self):
+        for cluster in self.clusters:
+            if cluster.MULTICLUSTER["acm_cluster"]:
+                return cluster.MULTICLUSTER["multicluster_index"]
 
     def switch_default_cluster_ctx(self):
         # We can check any conf for default_cluster_context_index
