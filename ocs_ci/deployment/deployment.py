@@ -239,16 +239,16 @@ class Deployment(object):
 
         # Multicluster: Handle all ODF multicluster DR ops
         if config.multicluster:
-            dr_conf = self.get_dr_conf()
+            dr_conf = self.get_rdr_conf()
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
             deploy_dr.deploy()
 
-    def get_dr_conf(self):
+    def get_rdr_conf(self):
         """
-        Aggregate important DR parameters in the dictionary
+        Aggregate important Regional DR parameters in the dictionary
 
         Returns:
-            dict: of DR config parameters
+            dict: of Regional DR config parameters
 
         """
         dr_conf = dict()
@@ -1445,9 +1445,12 @@ class MultiClusterDROperatorsDeploy(object):
         self.rbd_dr = dr_conf.get("rbd_dr_scenario", False)
         # CephFS For future usecase
         self.cephfs_dr = dr_conf.get("cephfs_dr_scenario", False)
-        self.meta_map = {"s3": self.s3_meta_obj_store, "mcg": self.mcg_meta_obj_store}
+        self.meta_map = {
+            "awss3": self.s3_meta_obj_store,
+            "mcg": self.mcg_meta_obj_store,
+        }
         # Default to s3 for metadata store
-        self.meta_obj_store = dr_conf.get("dr_metadata_store", "s3")
+        self.meta_obj_store = dr_conf.get("dr_metadata_store", "awss3")
         self.meta_obj = self.meta_map[self.meta_obj_store]()
 
     def deploy(self):
@@ -1518,7 +1521,7 @@ class MultiClusterDROperatorsDeploy(object):
 
     class s3_meta_obj_store:
         """
-        Internal class to handle s3 metadata obj store
+        Internal class to handle aws s3 metadata obj store
 
         """
 

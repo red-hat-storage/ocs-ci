@@ -50,7 +50,7 @@ def run_subctl_cmd_interactive(cmd, prompt, answer):
     """
     cmd = " ".join("subctl", cmd)
     run_cmd_interactive(
-        cmd, [prompt], [answer], timeout=config.ENV_DATA["submariner_prompt_timeout"]
+        cmd, {prompt: answer}, timeout=config.ENV_DATA["submariner_prompt_timeout"]
     )
 
 
@@ -177,7 +177,7 @@ class Submariner(object):
             int: Index of the cluster designated as primary
 
         """
-        for i in range(config.clusters):
+        for i in range(len(config.clusters)):
             if config.clusters[i].get("MULTICLUSTER").get("primary_cluster"):
                 return i
         return -1
