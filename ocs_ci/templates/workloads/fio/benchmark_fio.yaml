@@ -2,7 +2,7 @@ apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
 kind: Benchmark
 metadata:
   name: fio-benchmark
-  namespace: my-ripsaw
+  namespace: benchmark-operator
 spec:
   clustername: env_ocpversion_ocsversion
   test_user: interface_iopattern
@@ -32,6 +32,7 @@ spec:
       log_sample_rate: 10000
       storageclass: ocs-storagecluster-ceph-rbd
       storagesize: 12Gi
+      job_timeout: 18000
 #      rook_ceph_drop_caches: True
 #      rook_ceph_drop_cache_pod_ip:
 #######################################

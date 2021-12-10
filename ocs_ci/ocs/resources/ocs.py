@@ -192,22 +192,6 @@ def get_version_info(namespace=None):
     return info
 
 
-def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
-    """
-    Get the job instance for the given job name
-
-    Args:
-        name (str): The name of the job
-        namespace (str): The namespace to look in
-
-    Returns:
-        OCS: A job OCS instance
-    """
-    ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
-    ocp_dict = ocp_obj.get(resource_name=name)
-    return OCS(**ocp_dict)
-
-
 def get_ocs_csv():
     """
     Get the OCS CSV object
@@ -231,13 +215,16 @@ def get_ocs_csv():
     ocs_csv_name = None
     # OCS CSV is extracted from the available CSVs in cluster namespace
     # for Openshift dedicated platform
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+    ):
         ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
         for item in ocp_cluster.get()["items"]:
             if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME):
                 ocs_csv_name = item["metadata"]["name"]
         if not ocs_csv_name:
-            raise CSVNotFound("No OCS CSV found for openshift dedicated")
+            raise CSVNotFound(f"No OCS CSV found for {config.ENV_DATA['platform']}")
     else:
         ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
     ocs_csv = CSV(resource_name=ocs_csv_name, namespace=namespace)

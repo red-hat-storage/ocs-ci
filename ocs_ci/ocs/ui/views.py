@@ -2,6 +2,9 @@ from selenium.webdriver.common.by import By
 
 osd_sizes = ("512", "2048", "4096")
 
+OCS_OPERATOR = "OpenShift Container Storage"
+ODF_OPERATOR = "OpenShift Data Foundation"
+
 login = {
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
@@ -13,7 +16,7 @@ login = {
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
-        'a[data-test="ocs-operator-ocs-catalogsource-openshift-marketplace"]',
+        'a[data-test="ocs-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
@@ -31,6 +34,7 @@ deployment = {
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),
@@ -102,6 +106,39 @@ deployment_4_7 = {
     ),
     "enable_encryption": ('input[data-test="encryption-checkbox"]', By.CSS_SELECTOR),
     "click_install_lso_page": ('button[data-test="install-operator"]', By.CSS_SELECTOR),
+}
+
+deployment_4_9 = {
+    "drop_down_projects": (
+        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_default_porjects": ('span[class="pf-c-switch__toggle"]', By.CSS_SELECTOR),
+    "choose_openshift-storage_project": (
+        "//span[text()='openshift-storage']",
+        By.XPATH,
+    ),
+    "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
+    "click_odf_operator": (
+        'a[data-test="odf-operator-redhat-operators-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_console_plugin": ('input[data-test="Enable-radio-input"]', By.CSS_SELECTOR),
+    "odf_operator_installed": (
+        'a[data-test-operator-row="OpenShift Data Foundation"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_system_tab": (
+        'a[data-test-id="horizontal-link-Storage System"]',
+        By.CSS_SELECTOR,
+    ),
+    "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
+    "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
+    "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
+    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
+    "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
 }
 
 generic_locators = {
@@ -214,6 +251,7 @@ pvc = {
         'button[data-test="storageclass-dropdown"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class_name": ('//*[text()="{}"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
         'a[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,
@@ -252,6 +290,23 @@ pvc_4_7 = {
     "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
     "Block": ("input[value='Block']", By.CSS_SELECTOR),
     "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
+    "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
+    "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
+    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "pvc-status": (
+        "dd[data-test-id='pvc-status'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
+    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
+    "expected-capacity": (
+        "//dd[contains(text(),'{}') and @data-test='pvc-requested-capacity']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
+        By.XPATH,
+    ),
 }
 
 pvc_4_8 = {
@@ -260,7 +315,13 @@ pvc_4_8 = {
     "ReadWriteOnce": ("input[value='ReadWriteOnce']", By.CSS_SELECTOR),
     "test-pvc-fs": ("a[title='test-pvc-fs']", By.CSS_SELECTOR),
     "test-pvc-rbd-thick": ("a[title='test-pvc-rbd-thick']", By.CSS_SELECTOR),
+    "resize-pending": (
+        "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
+        By.CSS_SELECTOR,
+    ),
+    "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -287,15 +348,44 @@ page_nav = {
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
+    "block_pool_link": (
+        'a[data-test-id="horizontal-link-Block Pools"]',
+        By.CSS_SELECTOR,
+    ),
+    "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
 }
 
-infra = {
+acm_page_nav = {
+    "Home": ("//button[text()='Home']", By.XPATH),
+    "Welcome_page": ("Welcome", By.LINK_TEXT),
+    "Overview_page": ("Overview", By.LINK_TEXT),
+    "Infrastructure": ("//button[text()='Infrastructure']", By.XPATH),
+    "Clusters_page": ("Clusters", By.LINK_TEXT),
+    "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
+    "Automation_page": ("Automation", By.LINK_TEXT),
+    "Infrastructure_environments_page": ("Infrastructure environments", By.LINK_TEXT),
+    "Applications": ("Applications", By.LINK_TEXT),
+    "Governance": ("Governance", By.LINK_TEXT),
+    "Credentials": ("Credentials", By.LINK_TEXT),
+    "Import_cluster": ("importCluster", By.ID),
+    "Import_cluster_enter_name": ("clusterName", By.ID),
+}
+
+add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
         By.CSS_SELECTOR,
     ),
+    "odf_operator": (
+        'a[data-test-operator-row="OpenShift Data Foundation"]',
+        By.CSS_SELECTOR,
+    ),
     "storage_cluster_tab": (
         'a[data-test-id="horizontal-link-Storage Cluster"]',
+        By.CSS_SELECTOR,
+    ),
+    "storage_system_tab": (
+        'a[data-test-id="horizontal-link-Storage System"]',
         By.CSS_SELECTOR,
     ),
     "kebab_storage_cluster": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
@@ -306,19 +396,66 @@ infra = {
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+block_pool = {
+    "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
+    "new_pool_name": (
+        'input[data-test="new-pool-name-textbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "first_select_replica": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
+    "second_select_replica_2": ("//button[text()='2-way Replication']", By.XPATH),
+    "second_select_replica_3": ("//button[text()='3-way Replication']", By.XPATH),
+    "conpression_checkbox": (
+        'input[data-test="compression-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "pool_confirm_create": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "actions_inside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
+    "edit_pool_inside_pool": (
+        'button[data-test-action="Edit BlockPool"]',
+        By.CSS_SELECTOR,
+    ),
+    "delete_pool_inside_pool": (
+        'button[data-test-action="Delete BlockPool"]',
+        By.CSS_SELECTOR,
+    ),
+    "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
+    "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
+    "compression_checkbox_edit": (
+        'input[data-test="compression-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+}
+
+storageclass = {
+    "create_storageclass_button": ("Create StorageClass", By.LINK_TEXT),
+    "input_storageclass_name": ('input[id="storage-class-name"]', By.CSS_SELECTOR),
+    "provisioner_dropdown": (
+        'button[data-test="storage-class-provisioner-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "rbd_provisioner": ("openshift-storage.rbd.csi.ceph.com", By.LINK_TEXT),
+    "pool_dropdown": ('button[id="pool-dropdown-id"]', By.CSS_SELECTOR),
+    "save_storageclass": ('button[id="save-changes"]', By.CSS_SELECTOR),
+    "action_inside_storageclass": (
+        'button[data-test-id="actions-menu-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "delete_inside_storageclass": (
+        'button[data-test-action="Delete StorageClass"]',
+        By.CSS_SELECTOR,
+    ),
+    "confirm_delete_inside_storageclass": ("//button[text()='Delete']", By.XPATH),
+}
+
 validation = {
-    "object_service_tab": (
-        'a[data-test-id="horizontal-link-Object Service"]',
-        By.CSS_SELECTOR,
-    ),
-    "persistent_storage_tab": (
-        'a[data-test-id="horizontal-link-Persistent Storage"]',
-        By.CSS_SELECTOR,
-    ),
     "object_service_button": ("//button[text()='Object Service']", By.XPATH),
     "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -346,9 +483,104 @@ validation = {
         'a[data-test-id="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
+    "capacity_breakdown_options": (
+        'button[class="pf-c-select__toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
+    "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
+}
+
+validation_4_7 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object Service"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Persistent Storage"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+validation_4_8 = {
+    "object_service_tab": (
+        'a[data-test-id="horizontal-link-Object"]',
+        By.CSS_SELECTOR,
+    ),
+    "persistent_storage_tab": (
+        'a[data-test-id="horizontal-link-Block and File"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+validation_4_9 = {
+    "storage_systems": (
+        "a[data-test-id='horizontal-link-Storage Systems']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-storagesystem-status": (
+        "//*[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "ocs-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
+        By.CSS_SELECTOR,
+    ),
+    "overview": (
+        "a[data-test-id='horizontal-link-Overview']",
+        By.CSS_SELECTOR,
+    ),
+    "blockandfile": (
+        "a[data-test-id='horizontal-link-Block and File']",
+        By.CSS_SELECTOR,
+    ),
+    "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
+    "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
+    "ocs-storagecluster-cephblockpool-status": (
+        "//*[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "ocs-storagecluster-cephblockpool": (
+        ".co-resource-item__resource-name[data-test='ocs-storagecluster-cephblockpool']",
+        By.CSS_SELECTOR,
+    ),
+    "odf-health-icon-color": (
+        "//*[@data-test='OpenShift Data Foundation-health-item-icon']//*[@aria-labelledby='icon-title-403']",
+        By.XPATH,
+    ),
+    "odf-capacityCardLink": ("//a[@class='odf-capacityCardLink--ellipsis']", By.XPATH),
+    "odf-performanceCardLink": (
+        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
+        By.CSS_SELECTOR,
+    ),
+    "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "console_plugin_option": (
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        By.CSS_SELECTOR,
+    ),
+    "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
+    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
+    "refresh-web-console": (
+        "//button[normalize-space()='Refresh web console']",
+        By.XPATH,
+    ),
+    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
+    "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
 }
 
 locators = {
+    "4.9": {
+        "login": login,
+        "page": page_nav,
+        "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
+        "generic": generic_locators,
+        "validation": {**validation, **validation_4_8, **validation_4_9},
+        "acm_page": acm_page_nav,
+        "add_capacity": add_capacity,
+    },
     "4.8": {
         "login": login,
         "page": page_nav,
@@ -359,21 +591,23 @@ locators = {
         "bucketclass": bucketclass,
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
-        "infra": infra,
+        "validation": {**validation, **validation_4_8},
+        "add_capacity": add_capacity,
+        "block_pool": block_pool,
+        "storageclass": storageclass,
     },
     "4.7": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_7},
         "pvc": {**pvc, **pvc_4_7},
-        "infra": infra,
-        "validation": validation,
+        "add_capacity": add_capacity,
+        "validation": {**validation, **validation_4_7},
     },
     "4.6": {
         "login": login,
         "page": page_nav,
         "deployment": {**deployment, **deployment_4_6},
         "pvc": pvc,
-        "infra": infra,
     },
 }

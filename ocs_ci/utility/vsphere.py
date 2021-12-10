@@ -612,6 +612,19 @@ class VSPHERE(object):
         tasks = [vm.Destroy_Task() for vm in vms]
         WaitForTasks(tasks, self._si)
 
+    def remove_vms_from_inventory(self, vms):
+        """
+        Remove the VM's from inventory
+
+        Args:
+            vms (list): VM instance list
+
+        """
+        self.poweroff_vms(vms)
+        for vm in vms:
+            logger.info(f"Removing VM from inventory: {vm.name}")
+            vm.UnregisterVM()
+
     def destroy_pool(self, pool, dc, cluster):
         """
         Deletes the Resource Pool

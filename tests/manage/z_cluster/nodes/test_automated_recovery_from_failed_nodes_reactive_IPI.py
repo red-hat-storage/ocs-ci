@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    aws_platform_required,
+    aws_based_platform_required,
     ipi_deployment_required,
     ignore_leftovers,
 )
@@ -18,6 +18,7 @@ from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
     wait_for_resource_state,
+    wait_for_rook_ceph_pod_status,
 )
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -35,7 +36,7 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4
 @tier4b
-@aws_platform_required
+@aws_based_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
@@ -188,7 +189,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4
 @tier4a
-@aws_platform_required
+@aws_based_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
@@ -261,7 +262,14 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         nodes.stop_nodes(self.osd_worker_node, wait=True)
         log.info(f"Successfully powered off node: {self.osd_worker_node[0].name}")
 
-        wait_for_resource_state(temp_osd, constants.STATUS_TERMINATING, timeout=240)
+        timeout = 420
+        assert wait_for_rook_ceph_pod_status(
+            temp_osd, constants.STATUS_TERMINATING, timeout
+        ), (
+            f"The pod {osd_real_name} didn't reach the status {constants.STATUS_TERMINATING} "
+            f"after {timeout} seconds"
+        )
+
         # Validate that the OSD in terminate state has a new OSD in Pending
         all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         new_osd = None

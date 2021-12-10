@@ -1,0 +1,4 @@
+# Use this config file to set ROOK LOG LEVEL to DEBUG.
+---
+DEPLOYMENT:
+  rook_log_level: "DEBUG"

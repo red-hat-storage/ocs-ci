@@ -1,20 +1,26 @@
 import logging
 from subprocess import TimeoutExpired
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
 
 
-def get_all_pvs():
+def get_all_pvs(selector=None):
     """
     Gets all pv in openshift-storage namespace
+
+    Args:
+        selector (str): The Selector name
 
     Returns:
          dict: Dict of all pv in openshift-storage namespace
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=selector
+    )
     return ocp_pv_obj.get()
 
 
@@ -61,13 +67,14 @@ def get_pv_name(pv_obj):
     return pv_obj.get("metadata").get("name")
 
 
-def verify_new_pv_available_in_sc(old_pv_objs, sc_name, timeout=120):
+def verify_new_pvs_available_in_sc(old_pv_objs, sc_name, num_of_new_pvs=1, timeout=120):
     """
     Verify that the new pv, that has been created in a specific storage class, is available.
 
     Args:
         old_pv_objs (list): List of dictionaries of the pv objects
         sc_name (str): The name of the storage class
+        num_of_new_pvs (int): Number of the new pvs that should be available in the storage class
         timeout (int): time to wait for the new pv to come up
 
     Returns:
@@ -75,31 +82,33 @@ def verify_new_pv_available_in_sc(old_pv_objs, sc_name, timeout=120):
 
     """
     try:
-        for new_pv_objs in TimeoutSampler(
+        for total_pv_objs in TimeoutSampler(
             timeout=timeout,
             sleep=10,
             func=get_pv_objs_in_sc,
             sc_name=sc_name,
         ):
-            num_of_new_pv = len(new_pv_objs)
-            expected_num_of_new_pv = len(old_pv_objs) + 1
-            if num_of_new_pv == expected_num_of_new_pv:
-                logger.info(f"Found {expected_num_of_new_pv} PVs as expected")
+            num_of_total_pvs = len(total_pv_objs)
+            expected_num_of_total_pvs = len(old_pv_objs) + num_of_new_pvs
+            if num_of_total_pvs == expected_num_of_total_pvs:
+                logger.info(f"Found {expected_num_of_total_pvs} PVs as expected")
                 break
     except TimeoutError:
         logger.warning(
-            f"expected to find {expected_num_of_new_pv} PVs in sc {sc_name}, but find {num_of_new_pv} PVs"
+            f"expected to find {expected_num_of_total_pvs} PVs in sc {sc_name}, but find {num_of_total_pvs} PVs"
         )
         return False
 
     old_pv_names = [get_pv_name(pv) for pv in old_pv_objs]
-    new_pv_obj = [pv for pv in new_pv_objs if get_pv_name(pv) not in old_pv_names][0]
-    new_pv_status = get_pv_status(new_pv_obj)
-    if new_pv_status not in [constants.STATUS_AVAILABLE, constants.STATUS_BOUND]:
-        logger.warning(f"New pv is in status {new_pv_status}")
-        return False
+    new_pv_objs = [pv for pv in total_pv_objs if get_pv_name(pv) not in old_pv_names]
+    for new_pv_obj in new_pv_objs:
+        new_pv_status = get_pv_status(new_pv_obj)
+        new_pv_name = get_pv_name(new_pv_obj)
+        if new_pv_status not in [constants.STATUS_AVAILABLE, constants.STATUS_BOUND]:
+            logger.warning(f"New pv '{new_pv_name}' is in status {new_pv_status}")
+            return False
 
-    logger.info(f"new pv is ready with status {new_pv_status}")
+        logger.info(f"New pv '{new_pv_name}' is ready with status {new_pv_status}")
 
     return True
 
@@ -148,3 +157,88 @@ def get_pv_size(pv_obj):
     """
     storage_size = pv_obj.get("spec").get("capacity").get("storage")
     return convert_device_size(storage_size, "GB")
+
+
+def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):
+    """
+    Check for pvs present for OCS cluster expansion
+
+    Args:
+        sc (str): Name of SC
+
+    Return:
+        bool: True if pv present false if not
+    """
+    from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
+
+    flexible_scaling = is_flexible_scaling_enabled()
+    arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+
+    if not flexible_scaling and not arbiter_deployment:
+        for rack_no in range(0, 3):
+            pv_check_list = list()
+            nodes_obj = ocp.OCP(
+                kind=constants.NODE,
+                selector=f"{constants.TOPOLOGY_ROOK_LABEL}=rack{rack_no}",
+            )
+            nodes_data = nodes_obj.get().get("items")
+            node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
+            logger.info(node_names)
+            for nodes in node_names:
+                pvs_data = get_all_pvs(
+                    selector=f"{constants.HOSTNAME_LABEL}={nodes}"
+                ).get("items")
+                for pv in pvs_data:
+                    if pv["spec"]["storageClassName"] == sc:
+                        if get_pv_status(pv) == constants.STATUS_AVAILABLE:
+                            pv_check_list.append(pv["metadata"]["name"])
+            logger.info(pv_check_list)
+            if pv_check_list:
+                return True
+            else:
+                return False
+    elif flexible_scaling and not arbiter_deployment:
+        pv_check_list = list()
+        nodes_obj = ocp.OCP(
+            kind=constants.NODE,
+            selector=f"{constants.OPERATOR_NODE_LABEL}",
+        )
+        nodes_data = nodes_obj.get()["items"]
+        node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
+        logger.info(node_names)
+        for nodes in node_names:
+            pvs_data = get_all_pvs(selector=f"{constants.HOSTNAME_LABEL}={nodes}").get(
+                "items"
+            )
+            for pv in pvs_data:
+                if pv["spec"]["storageClassName"] == sc:
+                    if get_pv_status(pv) == constants.STATUS_AVAILABLE:
+                        pv_check_list.append(pv["metadata"]["name"])
+        logger.info(pv_check_list)
+        if pv_check_list:
+            return True
+        else:
+            return False
+
+    # TODO: need to handle it for arbiter_deployment
+    # elif not flexible_scaling and arbiter_deployment:
+
+
+def get_node_pv_objs(sc_name, node_name):
+    """
+    Get the pv objects that associated to a node in a specific Storage class
+
+    Args:
+        sc_name (str): The storage class name
+        node_name (str): The node name
+
+    Returns:
+        list: list of dictionaries of the pv objects that associated to the node name
+
+    """
+    pv_objs = get_pv_objs_in_sc(sc_name)
+    return [
+        pv_obj
+        for pv_obj in pv_objs
+        if pv_obj["metadata"]["labels"]["kubernetes.io/hostname"] == node_name
+    ]

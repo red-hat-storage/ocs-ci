@@ -25,7 +25,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
@@ -721,6 +721,24 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_rook_version():
+    """
+    Get the rook image information from rook-ceph-operator pod
+
+    Returns:
+        str: rook version
+
+    """
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    rook_operator = get_pod_name_by_pattern("rook-ceph-operator", namespace)
+    out = run_cmd(
+        f"oc -n {namespace} get pods {rook_operator[0]} -o yaml",
+    )
+    version = yaml.safe_load(out)
+    rook_version = version["spec"]["containers"][0]["image"]
+    return rook_version
+
+
 def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
@@ -742,25 +760,25 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if ocsci_config.ENV_DATA.get("ocs_version") == "4.2":
-        rook_operator = get_pod_name_by_pattern("rook-ceph-operator", namespace)
-        out = run_cmd(
-            f"oc -n {namespace} get pods {rook_operator[0]} -o yaml",
-        )
-        version = yaml.safe_load(out)
-        rook_version = version["spec"]["containers"][0]["image"]
+    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
-        ] = rook_version
+        ] = get_rook_version()
         rook_toolbox = OCS(**tool_box_data)
         rook_toolbox.create()
     else:
         if external_mode:
             toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["spec"]["template"]["spec"]["containers"][0][
+                "image"
+            ] = get_rook_version()
             toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
-            env = [{"name": "ROOK_ADMIN_SECRET", "value": keyring_dict["key"]}]
+            env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
+            # replace secret
+            env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
+            env.append({"name": "ROOK_CEPH_SECRET", "value": keyring_dict["key"]})
             toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
             # add ceph volumeMounts
             ceph_volume_mount_path = {"mountPath": "/etc/ceph", "name": "ceph-config"}
@@ -772,6 +790,24 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
+
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1982721
+        # TODO: Remove workaround when bug 1982721 is fixed
+        # https://github.com/red-hat-storage/ocs-ci/issues/4585
+        if ocsci_config.ENV_DATA.get("is_multus_enabled"):
+            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["spec"]["template"]["spec"]["containers"][0][
+                "image"
+            ] = get_rook_version()
+            toolbox["metadata"]["name"] += "-multus"
+            toolbox["spec"]["template"]["metadata"]["annotations"] = {
+                "k8s.v1.cni.cncf.io/networks": "openshift-storage/ocs-public"
+            }
+            toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
+            rook_toolbox = OCS(**toolbox)
+            rook_toolbox.create()
+            return
+
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
@@ -833,8 +869,8 @@ def run_must_gather(log_dir_path, image, command=None):
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
-    ocs_version = float(ocsci_config.ENV_DATA["ocs_version"])
-    timeout = 1500 if ocs_version >= 4.6 else 600
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
@@ -870,20 +906,29 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
+    ocs_version = version.get_semantic_ocs_version_from_config()
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7
+        if ocs_version < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
-    nb_db_pod = Pod(
-        **get_pods_having_label(
-            label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )[0]
-    )
+    try:
+        nb_db_pod = Pod(
+            **get_pods_having_label(
+                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+    except IndexError:
+        log.warning(
+            "Unable to find pod using label `%s` in namespace `%s`",
+            nb_db_label,
+            defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    if float(ocsci_config.ENV_DATA["ocs_version"]) < 4.7:
+    if ocs_version < version.VERSION_4_7:
         cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
     else:
         cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
@@ -1139,3 +1184,22 @@ def reboot_node(ceph_node, timeout=300):
     except SSHException:
         log.exception(f"Failed to connect to node {ceph_node.hostname}")
         raise
+
+
+def enable_console_plugin():
+    """
+    Enables console plugin for ODF
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if (
+        ocs_version >= version.VERSION_4_9
+        and ocsci_config.ENV_DATA["enable_console_plugin"]
+    ):
+        log.info("Enabling console plugin")
+        ocp_obj = OCP()
+        patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
+        patch_cmd = (
+            f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" --type json -p {patch}"
+        )
+        ocp_obj.exec_oc_cmd(command=patch_cmd)

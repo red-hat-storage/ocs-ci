@@ -1,22 +1,27 @@
 # import pytest
 import time
 import logging
+import os
 import re
 
-from elasticsearch import Elasticsearch
+import requests
+import json
 
-from ocs_ci.framework.testlib import BaseTest
+from elasticsearch import Elasticsearch, exceptions as esexp
 
-from ocs_ci.ocs import defaults, constants, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.version import get_environment_info
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
-from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.resources import pod
+from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.helpers.performance_lib import run_oc_command
+
+from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
+from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.version import get_environment_info
+
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +46,11 @@ class PASTest(BaseTest):
         self.benchmark_obj = None  # place holder for the benchmark object
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
-        self.pod_obj = OCP(kind="pod")
+        self.pod_obj = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
+
+        # Place holders for test results file (all sub-tests together)
+        self.results_path = ""
+        self.results_file = ""
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
@@ -52,6 +61,10 @@ class PASTest(BaseTest):
 
         self.get_node_info(node_type="master")
         self.get_node_info(node_type="worker")
+
+    def teardown(self):
+        if hasattr(self, "operator"):
+            self.operator.cleanup()
 
     def get_osd_info(self):
         """
@@ -95,6 +108,14 @@ class PASTest(BaseTest):
         self.environment[f"{node_type}_nodes_memory"] = oc_cmd.exec_oc_debug_cmd(
             node=nodes[0], cmd_list=["free | grep Mem | awk '{print $2}'"]
         ).rstrip()
+
+    def deploy_benchmark_operator(self):
+        """
+        Deploy the benchmark operator
+
+        """
+        self.operator = benchmark_operator.BenchmarkOperator()
+        self.operator.deploy()
 
     def ripsaw_deploy(self, ripsaw):
         """
@@ -219,7 +240,7 @@ class PASTest(BaseTest):
         self.benchmark_obj.create()
 
         # This time is only for reporting - when the benchmark started.
-        self.start_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        self.start_time = self.get_time()
 
         # Wait for benchmark client pod to be created
         log.info(f"Waiting for {self.client_pod_name} to Start")
@@ -228,7 +249,7 @@ class PASTest(BaseTest):
             sleep,
             get_pod_name_by_pattern,
             self.client_pod_name,
-            constants.RIPSAW_NAMESPACE,
+            benchmark_operator.BMO_NAME,
         ):
             try:
                 if bm_pod[0] is not None:
@@ -250,58 +271,93 @@ class PASTest(BaseTest):
 
         Raise:
             exception for too much restarts of the test.
+            ResourceWrongStatusException : test Failed / Error
+            TimeoutExpiredError : test did not completed on time.
 
         """
         log.info(f"Waiting for {self.client_pod_name} to complete")
 
         Finished = 0
         restarts = 0
-        while not Finished:
+        total_time = timeout
+        while not Finished and total_time > 0:
             results = run_oc_command(
                 "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
-                namespace="my-ripsaw",
+                namespace=benchmark_operator.BMO_NAME,
             )
-            fname = ""
+            (fname, status) = ["", ""]
             for name in results:
-                if re.search(self.client_pod_name, name):
-                    (fname, status) = name.split()
-                    continue
+                # looking for the pod which run the benchmark (not the IO)
+                # this pod contain the `client` in his name, and there is only one
+                # pod like this, other pods have the `server` in the name.
+                (fname, status) = name.split()
+                if re.search("client", fname):
+                    break
+                else:
+                    (fname, status) = ["", ""]
+
+            if fname == "":  # there is no `client` pod !
+                err_msg = f"{self.client_pod} Failed to run !!!"
+                log.error(err_msg)
+                raise Exception(err_msg)
+
             if not fname == self.client_pod:
+                # The client pod name is different from previous check, it was restarted
                 log.info(
                     f"The pod {self.client_pod} was restart. the new client pod is {fname}"
                 )
                 self.client_pod = fname
                 restarts += 1
-            if restarts > 3:
+                # in case of restarting the benchmark, reset the timeout as well
+                total_time = timeout
+
+            if restarts > 3:  # we are tolerating only 3 restarts
                 err_msg = f"Too much restarts of the benchmark ({restarts})"
                 log.error(err_msg)
                 raise Exception(err_msg)
+
             if status == "Succeeded":
-                self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+                # Getting the end time of the benchmark - for reporting.
+                self.end_time = self.get_time()
                 self.test_logs = self.pod_obj.exec_oc_cmd(
                     f"logs {self.client_pod}", out_yaml_format=False
                 )
                 log.info(f"{self.client_pod} completed successfully")
                 Finished = 1
+            elif (
+                status != constants.STATUS_RUNNING
+                and status != constants.STATUS_PENDING
+            ):
+                # if the benchmark pod is not in Running state (and not Completed/Pending),
+                # no need to wait for timeout.
+                # Note: the pod can be in pending state in case of restart.
+                err_msg = f"{self.client_pod} Failed to run - ({status})"
+                log.error(err_msg)
+                raise exceptions.ResourceWrongStatusException(
+                    self.client_pod,
+                    describe_out=err_msg,
+                    column="Status",
+                    expected="Succeeded",
+                    got=status,
+                )
             else:
                 log.info(
                     f"{self.client_pod} is in {status} State, and wait to Succeeded State."
                     f" wait another {sleep} sec. for benchmark to complete"
                 )
                 time.sleep(sleep)
+                total_time -= sleep
 
-        self.pod_obj.wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
-            resource_name=self.client_pod,
-            timeout=timeout,
-            sleep=sleep,
-        )
+        if not Finished:
+            err_msg = (
+                f"{self.client_pod} did not completed on time, "
+                f"maybe timeout ({timeout}) need to be increase"
+            )
+            log.error(err_msg)
+            raise exceptions.TimeoutExpiredError(
+                self.client_pod, custom_message=err_msg
+            )
 
-        # Getting the end time of the benchmark - for reporting.
-        self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
-        self.test_logs = self.pod_obj.exec_oc_cmd(
-            f"logs {self.client_pod}", out_yaml_format=False
-        )
         # Saving the benchmark internal log into a file at the logs directory
         log_file_name = f"{self.full_log_path}/test-pod.log"
         try:
@@ -393,3 +449,70 @@ class PASTest(BaseTest):
             OK = False
 
         return OK
+
+    def get_kibana_indexid(self, server, name):
+        """
+        Get the kibana Index ID by its name.
+
+        Args:
+            server (str): the IP (or name) of the Kibana server
+            name (str): the name of the index
+
+        Returns:
+            str : the index ID of the given name
+                  return None if the index does not exist.
+
+        """
+
+        port = 5601
+        http_link = f"http://{server}:{port}/api/saved_objects"
+        search_string = f"_find?type=index-pattern&search_fields=title&search='{name}'"
+        log.info(f"Connecting to Kibana {server} on port {port}")
+        try:
+            res = requests.get(f"{http_link}/{search_string}")
+            res = json.loads(res.content.decode())
+            for ind in res.get("saved_objects"):
+                if ind.get("attributes").get("title") in [name, f"{name}*"]:
+                    log.info(f"The Kibana indexID for {name} is {ind.get('id')}")
+                    return ind.get("id")
+        except esexp.ConnectionError:
+            log.warning("Cannot connect to Kibana server {}:{}".format(server, port))
+        log.warning(f"Can not find the Kibana index : {name}")
+        return None
+
+    def write_result_to_file(self, res_link):
+        """
+        Write the results link into file, to combine all sub-tests results
+        together in one file, so it can be easily pushed into the performance dashboard
+
+        Args:
+            res_link (str): http link to the test results in the ES server
+
+        """
+        if not os.path.exists(self.results_path):
+            os.makedirs(self.results_path)
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+
+        log.info(f"Try to push results into : {self.results_file}")
+        try:
+            with open(self.results_file, "a+") as f:
+                f.write(f"{res_link}\n")
+            f.close()
+        except FileNotFoundError:
+            log.info("The file does not exist, so create new one.")
+            with open(self.results_file, "w+") as f:
+                f.write(f"{res_link}\n")
+            f.close()
+        except OSError as err:
+            log.error(f"OS error: {err}")
+
+    @staticmethod
+    def get_time():
+        """
+        Getting the current GMT time in a specific format for the ES report
+
+        Returns:
+            str : current date and time in formatted way
+
+        """
+        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())

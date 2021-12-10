@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 class TestAddCapacity(ManageTest):
     def test_add_capacity(
         self,
+        add_capacity_setup,
         project_factory,
         multi_dc_pod,
         multi_pvc_factory,
@@ -194,11 +195,15 @@ class TestAddCapacity(ManageTest):
 
         # New osd (all) pods corresponding to the additional capacity should be
         # in running state
+        if is_flexible_scaling_enabled():
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
             timeout=1200,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=result * 3,
+            resource_count=result * replica_count,
         )
 
         #################################

@@ -1,6 +1,5 @@
 import logging
 import pytest
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -75,15 +74,22 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
 
         log.info("Creating PVCs and PODs")
         for sc_obj in sc_obj_list:
-            pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj)
+            pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj, size=10)
             pod_obj_list.append(pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj))
 
         log.info("Running IO on pods")
         for pod_obj in pod_obj_list:
-            pod_obj.run_io("fs", size="1G")
-
-        for pod_obj in pod_obj_list:
-            get_fio_rw_iops(pod_obj)
+            pod_obj.run_io(
+                "fs",
+                size="1G",
+                rate="1500m",
+                runtime=60,
+                buffer_compress_percentage=60,
+                buffer_pattern="0xdeadface",
+                bs="8K",
+                jobs=5,
+                readwrite="readwrite",
+            )
 
         log.info(f"validating info on pool {pool_obj.name}")
         validate_rep_result = validate_replica_data(pool_obj.name, self.replica)

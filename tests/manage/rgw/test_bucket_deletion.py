@@ -2,13 +2,15 @@ import logging
 
 import botocore
 import pytest
-from ocs_ci.ocs.bucket_utils import retrieve_test_objects_to_pod, sync_object_directory
+from flaky import flaky
+from ocs_ci.ocs.bucket_utils import sync_object_directory
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +45,9 @@ class TestBucketDeletion:
             ),
         ],
     )
+    @flaky
     def test_bucket_delete_with_objects(
-        self, rgw_bucket_factory, interface, awscli_pod
+        self, rgw_bucket_factory, interface, awscli_pod_session
     ):
         """
         Negative test with deletion of bucket has objects stored in.
@@ -53,10 +56,11 @@ class TestBucketDeletion:
         bucketname = bucket.name
         obc_obj = OBC(bucketname)
         try:
-            data_dir = "/data"
+            data_dir = AWSCLI_TEST_OBJ_DIR
             full_object_path = f"s3://{bucketname}"
-            retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            sync_object_directory(awscli_pod, data_dir, full_object_path, obc_obj)
+            sync_object_directory(
+                awscli_pod_session, data_dir, full_object_path, obc_obj
+            )
 
             logger.info(f"Deleting bucket: {bucketname}")
             if interface == "S3":

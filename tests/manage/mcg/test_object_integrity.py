@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from flaky import flaky
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
@@ -24,6 +25,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@flaky
 @skipif_openshift_dedicated
 class TestObjectIntegrity(MCGTest):
     """
@@ -54,6 +56,14 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
+                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
+                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                marks=[tier1],
+            ),
+            pytest.param(
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -77,6 +87,8 @@ class TestObjectIntegrity(MCGTest):
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
+            "IBMCOS-OC-1",
+            "IBMCOS-CLI-1",
             "AWS-OC-Cache",
         ],
     )

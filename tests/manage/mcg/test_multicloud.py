@@ -25,6 +25,8 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("cli", {"gcp": [(1, None)]})),
             pytest.param(("oc", {"gcp": [(1, None)]})),
+            pytest.param(("cli", {"ibmcos": [(1, None)]})),
+            pytest.param(("oc", {"ibmcos": [(1, None)]})),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -35,6 +37,8 @@ class TestMultiCloud(MCGTest):
             "AZURE-OC-1",
             "GCP-CLI-1",
             "GCP-OC-1",
+            "IBMCOS-CLI-1",
+            "IBMCOS-OC-1",
         ],
     )
     def test_multicloud_backingstore_creation(
@@ -56,6 +60,8 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("cli", {"gcp": [(1, None)]})),
             pytest.param(("oc", {"gcp": [(1, None)]})),
+            pytest.param(("cli", {"ibmcos": [(1, None)]})),
+            pytest.param(("oc", {"ibmcos": [(1, None)]})),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -66,6 +72,8 @@ class TestMultiCloud(MCGTest):
             "AZURE-OC-1",
             "GCP-CLI-1",
             "GCP-OC-1",
+            "IBMCOS-CLI-1",
+            "IBMCOS-OC-1",
         ],
     )
     def test_multicloud_backingstore_deletion(

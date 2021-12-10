@@ -76,11 +76,7 @@ def get_environment_info():
     results["ceph_version"] = utils.get_ceph_version()
     results["rook_version"] = utils.get_rook_version()
 
-    results["ocs_build"] = ocp.get_ocs_version()
-    # Extracting the version number x.y.z from full build name
-    m = re.match(r"(\d.\d).(\d)", results["ocs_build"])
-    if m and m.group(1) is not None:
-        results["ocs_version"] = m.group(1)
+    results["ocs_build"] = utils.get_ocs_build_number()
 
     # Getting the instance type for cloud or Arch type for None cloud
     worker_lbl = node.get_nodes(num_of_nodes=1)[0].data["metadata"]["labels"]

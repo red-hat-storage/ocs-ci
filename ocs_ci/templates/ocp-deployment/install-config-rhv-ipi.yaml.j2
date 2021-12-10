@@ -7,8 +7,8 @@ compute:
   platform:
     ovirt:
       cpu:
-        cores: {{ worker_num_cpus | default(4) }}
-        sockets: 1
+        cores: {{ worker_num_cores | default(4) }}
+        sockets: {{ worker_num_sockets | default(1) }}
       memoryMB: {{ compute_memory | default(16348) }}
       osDisk:
         sizeGB: 120
@@ -21,8 +21,8 @@ controlPlane:
   platform:
     ovirt:
       cpu:
-        cores: {{ master_num_cpus | default(4) }}
-        sockets: 1
+        cores: {{ master_num_cores | default(4) }}
+        sockets: {{ master_num_sockets | default(1) }}
       memoryMB: {{ master_memory | default(16384) }}
       osDisk:
         sizeGB: 120

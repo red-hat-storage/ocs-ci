@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import sys
 import time
 
@@ -7,10 +8,9 @@ import pytest
 import yaml
 
 from ocs_ci import framework
-from getpass import getuser
-from ocs_ci.utility import utils
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+from ocs_ci.utility import utils
 
 
 def check_config_requirements():
@@ -56,13 +56,56 @@ def init_ocsci_conf(arguments=None):
 
     Args:
         arguments (list): Arguments for pytest execution
+
     """
+    if "multicluster" in arguments:
+        parser = argparse.ArgumentParser(add_help=False)
+        subparser = parser.add_subparsers(title="subcommand", dest="subcommand")
+        mcluster_parser = subparser.add_parser(
+            "multicluster",
+            description="multicluster nclusters --cluster1 <> --cluster2 <> ...",
+        )
+
+        # We need this nclusters here itself to do add_arguments for
+        # N number of clusters in the function init_multicluster_ocsci_conf()
+        mcluster_parser.add_argument(
+            "nclusters", type=int, help="Number of clusters to be deployed"
+        )
+        args, _ = parser.parse_known_args(arguments)
+        init_multicluster_ocsci_conf(arguments, args.nclusters)
+        arguments.remove("multicluster")
+        for i in range(args.nclusters):
+            arguments.remove(f"--cluster{i+1}")
+        arguments.remove(str(args.nclusters))
+
+        # Remove original args and replace them with args with suffix
+        # i.e --cluster-name will be translated to --cluster-name1 etc and --cluster-name along with
+        # values will be removed from the list to make parse happy
+        for each in framework.config.multicluster_args:
+            for arg in each:
+                if arg.startswith("--"):
+                    match = re.search(r"\d+$", arg)
+                    if match:
+                        arguments.remove(re.sub(r"\d+$", "", arg))
+                else:
+                    arguments.remove(arg)
+        # Add only suffixed(cluster number) cluster args in the args list
+        # i.e only --cluster-name1, --cluster-path1, --ocsci-conf1 etc
+        for each in framework.config.multicluster_args:
+            arguments.extend(each)
+    else:
+        framework.config.init_cluster_configs()
+        process_ocsci_conf(arguments)
+        check_config_requirements()
+
+
+def process_ocsci_conf(arguments):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ocsci-conf", action="append", default=[])
     parser.add_argument(
         "--ocs-version",
         action="store",
-        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8"],
+        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "4.10"],
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
@@ -72,6 +115,7 @@ def init_ocsci_conf(arguments=None):
         choices=["rgw", "cephfs", "noobaa", "blockpools"],
         help=("disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."),
     )
+
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
@@ -109,15 +153,100 @@ def init_ocsci_conf(arguments=None):
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
     if args.disable_components:
         framework.config.ENV_DATA["disable_components"] = args.disable_components
-    check_config_requirements()
+
+
+def init_multicluster_ocsci_conf(args, nclusters):
+    """
+    Parse multicluster specific arguments and seperate out each cluster's configuration.
+    Then instantiate Config class for each cluster
+
+    Params:
+        args (list): of arguments passed
+        nclusters (int): Number of clusters (>1)
+
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    # Dynamically adding the argument --cluster$i to enforce
+    # user's to pass --cluster$i param followed by normal cluster conf
+    # options so that separation of per cluster conf will be easier
+    for i in range(nclusters):
+        parser.add_argument(
+            f"--cluster{i+1}",
+            required=True,
+            action="store_true",
+            help=(
+                "Index argument for per cluster args, "
+                "this marks the start of the cluster{i} args"
+                "any args between --cluster{i} and --cluster{i+1} will be",
+                "considered as arguments for cluster{i}",
+            ),
+        )
+
+    # Parsing just to enforce `nclusters` number of  --cluster{i} arguments are passed
+    _, _ = parser.parse_known_args(args[2:])
+    multicluster_conf, common_argv = tokenize_per_cluster_args(args[2:], nclusters)
+
+    # We need to seperate common arguments and cluster specific arguments
+    framework.config.multicluster = True
+    framework.config.nclusters = nclusters
+    framework.config.init_cluster_configs()
+    framework.config.reset_ctx()
+    for index in range(nclusters):
+        framework.config.switch_ctx(index)
+        process_ocsci_conf(common_argv + multicluster_conf[index][1:])
+        for arg in range(len(multicluster_conf[index][1:])):
+            if multicluster_conf[index][arg + 1].startswith("--"):
+                multicluster_conf[index][
+                    arg + 1
+                ] = f"{multicluster_conf[index][arg+1]}{index + 1}"
+        framework.config.multicluster_args.append(multicluster_conf[index][1:])
+        check_config_requirements()
+
+
+def tokenize_per_cluster_args(args, nclusters):
+    """
+    Seperate per cluster arguments so that parsing becomes easy
+
+    Params:
+        args: Combined arguments
+        nclusters(int): total number of clusters
+
+    Returns:
+        list of lists: Each cluster conf per list
+            ex: [[cluster1_conf], [cluster2_conf]...]
+
+    """
+    per_cluster_argv = list()
+    multi_cluster_argv = list()
+    common_argv = list()
+    cluster_ctx = False
+    regexp = re.compile(r"--cluster[0-9]+")
+    index = 0
+
+    for i in range(1, nclusters + 1):
+        while index < len(args):
+            if args[index] == f"--cluster{i}":
+                cluster_ctx = True
+            elif regexp.search(args[index]):
+                cluster_ctx = False
+                break
+            if cluster_ctx:
+                per_cluster_argv.append(args[index])
+            else:
+                common_argv.append(args[index])
+            index = index + 1
+        multi_cluster_argv.append(per_cluster_argv)
+        per_cluster_argv = []
+    return multi_cluster_argv, common_argv
 
 
 def main(argv=None):
     arguments = argv or sys.argv[1:]
     init_ocsci_conf(arguments)
-    pytest_logs_dir = utils.ocsci_log_path()
-    utils.create_directory_path(framework.config.RUN["log_dir"])
-    launch_name = f"{utils.get_testrun_name()}-{getuser()}"
+    for i in range(framework.config.nclusters):
+        framework.config.switch_ctx(i)
+        pytest_logs_dir = utils.ocsci_log_path()
+        utils.create_directory_path(framework.config.RUN["log_dir"])
     arguments.extend(
         [
             "-p",
@@ -128,8 +257,6 @@ def main(argv=None):
             "ocs_ci.framework.pytest_customization.reports",
             "--logger-logsdir",
             pytest_logs_dir,
-            "--rp-launch",
-            launch_name,
         ]
     )
     return pytest.main(arguments)

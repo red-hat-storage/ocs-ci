@@ -17,12 +17,19 @@ class BucketClass:
     """
 
     def __init__(
-        self, name, backingstores, namespacestores, placement_policy, namespace_policy
+        self,
+        name,
+        backingstores,
+        namespacestores,
+        placement_policy,
+        replication_policy,
+        namespace_policy,
     ):
         self.name = name
         self.backingstores = backingstores
         self.namespacestores = namespacestores
         self.placement_policy = placement_policy
+        self.replication_policy = replication_policy
         self.namespace_policy = namespace_policy
 
     # TODO: verify health of bucketclass
@@ -72,6 +79,14 @@ def bucket_class_factory(
 
                 - backingstore_dict (dict): A dictionary compatible with the backing store factory
                   requirements. (Described in backingstore.py, under _create_backingstore)
+
+                - replication_policy (tuple): A tuple representing the replication policy
+                  to be added to the bucketclass, containing the following fields,
+                  in this particular order:
+                    - rule_id (str): A rule ID / name
+                    - destination_bucket (str): The name of the bucket to replicate all objects to
+                    - prefix (str, optional): A prefix to limit replication only to objects beginning
+                      with the chosen prefix.
 
                 - namespace_policy_dict (dict):  A dictionary compatible with the namespace store factory.
                 Needs to contain the following keys and values:
@@ -135,10 +150,18 @@ def bucket_class_factory(
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]
-                namespace_policy["read_resources"] = [
-                    nss.name for nss in namespacestores
-                ]
-                namespace_policy["write_resource"] = namespacestores[0].name
+                if namespace_policy["type"] == "Cache":
+                    namespace_policy["cache"] = {
+                        "hubResource": namespacestores[0].name,
+                        "caching": {
+                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                        },
+                    }
+                else:
+                    namespace_policy["read_resources"] = [
+                        nss.name for nss in namespacestores
+                    ]
+                    namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
             backingstores = [
@@ -157,20 +180,38 @@ def bucket_class_factory(
         else:
             placement_policy = "Spread"
 
+        if "replication_policy" in bucket_class_dict:
+            replication_policy_tuple = bucket_class_dict["replication_policy"]
+            replication_policy = [
+                {
+                    "rule_id": replication_policy_tuple[0],
+                    "destination_bucket": replication_policy_tuple[1],
+                    "filter": {
+                        "prefix": replication_policy_tuple[2]
+                        if replication_policy_tuple[2] is not None
+                        else ""
+                    },
+                }
+            ]
+        else:
+            replication_policy = None
+
         bucket_class_name = create_unique_resource_name(
             resource_description="bucketclass", resource_type=interface.lower()
         )
         interfaces[interface.lower()](
             name=bucket_class_name,
             backingstores=backingstores,
-            placement=placement_policy,
+            placement_policy=placement_policy,
             namespace_policy=namespace_policy,
+            replication_policy=replication_policy,
         )
         bucket_class_object = BucketClass(
             bucket_class_name,
             backingstores,
             namespacestores,
             placement_policy,
+            replication_policy,
             namespace_policy,
         )
         created_bucket_classes.append(bucket_class_object)

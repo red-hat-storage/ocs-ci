@@ -11,11 +11,16 @@ import os
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     UnsupportedPlatformVersionError,
     UnexpectedBehaviour,
+    NodeHasNoAttachedVolume,
+    TimeoutExpiredError,
 )
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
+from ocs_ci.ocs.node import get_nodes
 
 
 logger = logging.getLogger(name=__file__)
@@ -37,6 +42,35 @@ def login():
     logger.info("Logging to IBM cloud")
     run_cmd(login_cmd, secrets=[api_key])
     logger.info("Successfully logged in to IBM cloud")
+    config.RUN["ibmcloud_last_login"] = time.time()
+
+
+def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+    """
+    Wrapper function for `run_cmd` which if needed will perform IBM Cloud login
+    command before running the ibmcloud command. In the case run_cmd will fail
+    because the IBM cloud got disconnected, it will login and re-try.
+
+    Args:
+        cmd (str): command to run
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(``**kwargs``)
+        timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
+    """
+    last_login = config.RUN.get("ibmcloud_last_login", 0)
+    timeout_from_last_login = time.time() - last_login
+    # Login if the timeout from last login is greater than 9.5 minutes.
+    if not last_login or timeout_from_last_login > 570:
+        login()
+    try:
+        return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    except CommandFailed as ex:
+        if "Please login" in ex.message:
+            login()
+            return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
 
 
 def get_cluster_details(cluster):
@@ -47,7 +81,7 @@ def get_cluster_details(cluster):
         cluster (str): Cluster name or ID
 
     """
-    out = run_cmd(f"ibmcloud ks cluster get --cluster {cluster} -json")
+    out = run_ibmcloud_cmd(f"ibmcloud ks cluster get --cluster {cluster} -json")
     return json.loads(out)
 
 
@@ -62,7 +96,7 @@ def list_clusters(provider=None):
     cmd = "ibmcloud ks clusters -s -json"
     if provider:
         cmd += f" --provider {provider}"
-    out = run_cmd(cmd)
+    out = run_ibmcloud_cmd(cmd)
     return json.loads(out)
 
 
@@ -70,7 +104,7 @@ def get_ibmcloud_ocp_version():
     """
     Get OCP version available in IBM Cloud.
     """
-    out = run_cmd("ibmcloud ks versions --json")
+    out = run_ibmcloud_cmd("ibmcloud ks versions --json")
     data = json.loads(out)["openshift"]
     major, minor = get_ocp_version().split(".")
     for version in data:
@@ -110,7 +144,7 @@ def create_cluster(cluster_name):
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
         cos_instance = config.ENV_DATA["cos_instance"]
         cmd += f" --cos-instance {cos_instance}"
-    out = run_cmd(cmd)
+    out = run_ibmcloud_cmd(cmd)
     logger.info(f"Create cluster output: {out}")
     logger.info("Sleeping for 60 seconds before taking cluster info")
     time.sleep(60)
@@ -164,7 +198,7 @@ def get_kubeconfig(cluster, path):
     basepath = os.path.dirname(path)
     os.makedirs(basepath, exist_ok=True)
     cmd = f"ibmcloud ks cluster config --cluster {cluster} --admin --output yaml"
-    output = run_cmd(cmd)
+    output = run_ibmcloud_cmd(cmd)
     with open(path, "w+") as fd:
         fd.write(output)
 
@@ -177,8 +211,8 @@ def destroy_cluster(cluster):
         cluster (str): Cluster name or ID.
 
     """
-    cmd = f"ibmcloud ks cluster rm -c {cluster} -f"
-    out = run_cmd(cmd)
+    cmd = f"ibmcloud ks cluster rm -c {cluster} -f --force-delete-storage"
+    out = run_ibmcloud_cmd(cmd)
     logger.info(f"Destroy command output: {out}")
 
 
@@ -203,3 +237,279 @@ def add_deployment_dependencies():
     ]
     for cr in wa_crs:
         run_cmd(f"oc apply -f {cr}")
+
+
+class IBMCloud(object):
+    """
+    Wrapper for Ibm Cloud
+    """
+
+    def restart_nodes(self, nodes, timeout=900, wait=True):
+        """
+        Reboot the nodes on IBM Cloud.
+
+        Args:
+            nodes (list): The worker node instance
+
+        """
+        logger.info("restarting nodes")
+        provider_id = nodes[0].get()["spec"]["providerID"]
+        cluster_id = provider_id.split("/")[5]
+
+        cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        worker_nodes = json.loads(out)
+
+        if len(worker_nodes) > 0:
+            for node in worker_nodes:
+                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {node['id']} -f"
+                out = run_ibmcloud_cmd(cmd)
+                logger.info(f"Node restart command output: {out}")
+
+    def attach_volume(self, volume, node):
+        """
+        Attach volume to node on IBM Cloud.
+
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node id to attach.
+
+        """
+        logger.info(
+            f"attach_volumes:{node[0].get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
+        )
+        provider_id = node[0].get()["spec"]["providerID"]
+        cluster_id = provider_id.split("/")[5]
+        worker_id = node[0].get()["metadata"]["labels"][
+            "ibm-cloud.kubernetes.io/worker-id"
+        ]
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if len(out["volume_attachments"]) == 0:
+            cmd = (
+                f"ibmcloud ks storage attachment  create --cluster {cluster_id} --worker {worker_id}"
+                f"  --volume {volume} --output json"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"attachment command output: {out}")
+        else:
+            logger.info(f"volume is already attached to node: {out}")
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        """
+        Detach volume from node on IBM Cloud.
+
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node id to detach.
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
+        """
+        provider_id = node.get()["spec"]["providerID"]
+        cluster_id = provider_id.split("/")[5]
+        worker_id = node.get()["metadata"]["labels"][
+            "ibm-cloud.kubernetes.io/worker-id"
+        ]
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if out["status"] == "available":
+            attachment_id = out["volume_attachments"][0]["id"]
+
+            cmd = (
+                f"ibmcloud ks storage attachment  rm --cluster {cluster_id} --worker {worker_id}"
+                f"  --attachment {attachment_id}"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"detachment command output: {out}")
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get the node by attached volume on IBM Cloud.
+
+        Args:
+            volume (str): volume id.
+
+        Raises:
+            NodeHasNoAttachedVolume: In case the volume is not attached to node
+
+        Returns:
+            str: worker id
+
+        """
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if not out["volume_attachments"]:
+            logger.info("volume is not attached to node")
+            raise NodeHasNoAttachedVolume("volume not attached to node")
+        else:
+            worker_id = out["volume_attachments"][0]["instance"]["name"]
+            logger.info(f"volume is  attached to node: {worker_id}")
+            worker_nodes = get_nodes(node_type="worker")
+            for worker_node in worker_nodes:
+                logger.info(
+                    f"worker node id is:{worker_node.get()['metadata']['labels']['ibm-cloud.kubernetes.io/worker-id']}"
+                )
+                if (
+                    worker_node.get()["metadata"]["labels"][
+                        "ibm-cloud.kubernetes.io/worker-id"
+                    ]
+                    == worker_id
+                ):
+                    logger.info(f"return worker node is:{worker_id}")
+                    return worker_node
+
+    def get_data_volumes(self):
+        """
+        Returns volumes in IBM Cloud for cluster.
+
+        Returns:
+            list: volumes in IBM Cloud for cluster.
+
+        """
+        logger.info("get data volumes")
+
+        # get cluster ID
+        cmd = f"ibmcloud ks cluster get --cluster {config.ENV_DATA['cluster_name']} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        cluster_id = out["id"]
+
+        # get the volume list
+        cmd = "ibmcloud is vols --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        vol_ids = []
+        for vol in out:
+            if vol["volume_attachments"]:
+                if cluster_id in vol["volume_attachments"][0]["instance"]["name"]:
+                    vol_ids.append(vol["id"])
+
+        logger.info(f"volume ids are : {vol_ids}")
+        return vol_ids
+
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return out["volume_attachments"]
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Checks volume is attached to node or not
+
+        Args:
+            volume (str): The volume to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
+            return False
+
+    def get_volume_id(self):
+        """
+        Returns Volumeid with the name taken from constants
+
+        Returns:
+            str: volume id if the volume exists otherwise create
+                new volume
+
+        """
+        zone = config.ENV_DATA["zone"]
+
+        cmd = "ibmcloud is vols --output json "
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        vol_id = ""
+        for vols in out:
+            vol_name = str(vols["name"]).strip()
+            if vol_name == constants.IBMCLOUD_VOLUME_NAME:
+                vol_id = vols["id"]
+                return vol_id
+
+        cmd = f"ibmcloud is volume-create {constants.IBMCLOUD_VOLUME_NAME} general-purpose {zone} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        vol_id = out["id"]
+        return vol_id
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Reboot the nodes which are not ready on IBM Cloud.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        logger.info("restarting nodes by stop and start")
+        provider_id = nodes[0].get()["spec"]["providerID"]
+        cluster_id = provider_id.split("/")[5]
+
+        cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        worker_nodes = json.loads(out)
+
+        worker_nodes_not_ready = []
+        for worker_node in worker_nodes:
+            if worker_node["health"]["message"] != "Ready":
+                worker_nodes_not_ready.append(worker_node["id"])
+
+        if len(worker_nodes_not_ready) > 0:
+            for not_ready_node in worker_nodes_not_ready:
+                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f"
+                out = run_ibmcloud_cmd(cmd)
+                logger.info(f"Node restart command output: {out}")
+
+    def delete_volume_id(self, volume):
+        """
+        Deletes Volumeid
+
+        Args:
+            volume (str): The volume to be deleted
+
+        """
+        cmd = f"ibmcloud is volume-delete {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        logger.info("Sleeping for 60 seconds to delete the volume")
+        time.sleep(60)
+
+        if out[0]["result"]:
+            logger.info(f"volume is deleted successfully: {volume}")
+        else:
+            logger.info("volume is not deleted")

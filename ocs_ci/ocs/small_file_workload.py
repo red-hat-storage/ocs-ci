@@ -1,11 +1,7 @@
 """
-Test to exercise Small File Workload
+Class to implement the Small Files benchmark as a subclass of the benchmark operator
 
-Note:
-This test is using the ripsaw and the elastic search, so it start process with
-port forwarding on port 9200 from the host that run the test (localhost) to
-the elastic-search within the open-shift cluster, so, if you host is listen to
-port 9200, this test can not be running in your host.
+This workload is required an elastic-search instance to run.
 
 """
 
@@ -13,129 +9,209 @@ port 9200, this test can not be running in your host.
 import logging
 
 # Local modules
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, benchmark_operator
+from ocs_ci.ocs.benchmark_operator import BenchmarkOperator
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.version import get_environment_info
-from ocs_ci.ocs import constants
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
 
-def smallfile_workload(ripsaw, es, file_size, files, threads, samples, interface):
+class SmallFiles(BenchmarkOperator):
     """
-    Run SmallFile Workload
-    SmallFile workload uses https://github.com/distributed-system-analysis/smallfile
-
-    smallfile is a python-based distributed POSIX workload generator which can be
-    used to quickly measure performance and scaling for a variety of metadata-intensive
-    workloads
-
-    Args:
-        ripsaw -- Ripsaw fixture to setup/teardown ripsaw
-        es -- Elastic search fixture
-        file_siles -- size of file to be created
-        files -- number of files to be created
-        threads -- number of threads to run
-        samples -- samples taken if running performance tests
-        interface -- CephFileSystem or CephBlockPool
-
-    Returns:
-        backup_es (str) -- backup elastic search location
-        environment (dict) -- environment (user is changed at times)
-        sf_data (dict) -- small file data extracted from yaml and modified by this routine
-
+    Small_Files workload benchmark
     """
 
-    # Loading the main template yaml file for the benchmark
-    sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+    def __init__(self, es, **kwargs):
+        """
+        Initializer function
 
-    # Saving the Original elastic-search IP and PORT - if defined in yaml
-    if "elasticsearch" in sf_data["spec"]:
-        sf_data["spec"]["elasticsearch"][
-            "url"
-        ] = f"http://{sf_data['spec']['elasticsearch']['server']}:{sf_data['spec']['elasticsearch']['port']}"
-        backup_es = sf_data["spec"]["elasticsearch"]
-    else:
-        log.warning("Elastic Search information does not exists in YAML file")
-        sf_data["spec"]["elasticsearch"] = {}
+        Args:
+            es (obj): elastic search instance object
 
-    # Use the internal define elastic-search server in the test - if exist
-    if es:
-        sf_data["spec"]["elasticsearch"] = {
-            "url": f"http://{es.get_ip()}:{es.get_port()}",
-            "server": es.get_ip(),
-            "port": es.get_port(),
-        }
-    else:
-        del sf_data["spec"]["elasticsearch"]
+        """
+        self.es = es
+        self.dev_mode = config.RUN["cli_params"].get("dev_mode")
+        super().__init__(**kwargs)
 
-    log.info("Apply Operator CRD")
-    ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
-    if interface == constants.CEPHBLOCKPOOL:
-        storageclass = constants.DEFAULT_STORAGECLASS_RBD
-    else:
-        storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
-    log.info(f"Using {storageclass} Storageclass")
-    sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-    log.info("Running SmallFile bench")
+        # Loading the main template yaml file for the benchmark
+        log.info("Loading the CRD Template file")
+        self.crd_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+        assert (
+            self._setup_elasticsearch()
+        ), "Can not execute the workload without ES server"
+        self.deploy()
 
-    """
-    Setting up the parameters for this test
-    """
-    sf_data["spec"]["workload"]["args"]["file_size"] = file_size
-    sf_data["spec"]["workload"]["args"]["files"] = files
-    sf_data["spec"]["workload"]["args"]["threads"] = threads
-    sf_data["spec"]["workload"]["args"]["samples"] = samples
-    """
-    Calculating the size of the volume that need to be test, it should
-    be at least twice in the size then the size of the files, and at
-    least 100Gi.
+    def _setup_elasticsearch(self):
+        """
+        Setting up the elastic search parameters in the CRD object.
 
-    Since the file_size is in Kb and the vol_size need to be in Gb, more
-    calculation is needed.
-    """
-    vol_size = int(files * threads * file_size * 3)
-    vol_size = int(vol_size / constants.GB2KB)
-    if vol_size < 100:
-        vol_size = 100
-    sf_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
-    environment = get_environment_info()
-    if not environment["user"] == "":
-        sf_data["spec"]["test_user"] = environment["user"]
-    else:
-        # since full results object need this parameter, initialize it from CR file
-        environment["user"] = sf_data["spec"]["test_user"]
+        Return:
+            bool : True if there is ES to connect, False otherwise
 
-    sf_data["spec"]["clustername"] = environment["clustername"]
+        """
+        log.info("Setting up the elasticsearch configuration")
+        self.crd_data["spec"]["elasticsearch"] = {}
+        if not self.dev_mode and config.PERF.get("production_es"):
+            log.info("Setting ES to production !")
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("production_es_server"),
+                "port": config.PERF.get("production_es_port"),
+            }
+        elif self.dev_mode and config.PERF.get("dev_lab_es"):
+            log.info("Setting ES to development one !")
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+            }
 
-    sf_obj = OCS(**sf_data)
-    sf_obj.create()
-    log.info(f"The smallfile yaml file is {sf_data}")
+        if not self.crd_data["spec"]["elasticsearch"] == {}:
+            self.crd_data["spec"]["elasticsearch"]["url"] = "http://{}:{}".format(
+                self.crd_data["spec"]["elasticsearch"]["server"],
+                self.crd_data["spec"]["elasticsearch"]["port"],
+            )
+            self.crd_data["spec"]["elasticsearch"]["parallel"] = True
 
-    # wait for benchmark pods to get created - takes a while
-    for bench_pod in TimeoutSampler(
-        240,
-        10,
-        get_pod_name_by_pattern,
-        "smallfile-client",
-        constants.RIPSAW_NAMESPACE,
-    ):
-        try:
-            if bench_pod[0] is not None:
-                small_file_client_pod = bench_pod[0]
-                break
-        except IndexError:
-            log.info("Bench pod not ready yet")
+        # Saving the Original elastic-search IP and PORT - if defined in yaml
+        self.backup_es = self.crd_data["spec"]["elasticsearch"]
 
-    bench_pod = OCP(kind="pod", namespace=constants.RIPSAW_NAMESPACE)
-    log.info("Waiting for SmallFile benchmark to Run")
-    assert bench_pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        resource_name=small_file_client_pod,
-        sleep=30,
-        timeout=600,
-    )
-    return backup_es, environment, sf_data
+        # Use the internal define elastic-search server in the test - if exist
+        if self.es:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "url": f"http://{self.es.get_ip()}:{self.es.get_port()}",
+                "server": self.es.get_ip(),
+                "port": self.es.get_port(),
+                "parallel": True,
+            }
+        if self.crd_data["spec"]["elasticsearch"] == {}:
+            log.error(
+                "No ElasticSearch server is available. workload can not be execute"
+            )
+            return False
+
+        return True
+
+    def setup_storageclass(self, interface):
+        """
+        Setting up the storageclass parameter in the CRD object
+
+        Args:
+            interface (str): the storage interface
+
+        """
+        if interface == constants.CEPHBLOCKPOOL:
+            storageclass = constants.DEFAULT_STORAGECLASS_RBD
+        else:
+            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+        log.info(f"Using {storageclass} Storageclass")
+        self.crd_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+
+    def setup_test_params(self, file_size, files, threads, samples):
+        """
+        Setting up the parameters for this test
+
+        Args:
+            file_size (int): the file size in KB
+            files (int): number of file to use in the test
+            threads (int): number of threads to use in the test
+            samples (int): number of sample to run the test
+
+        """
+        self.crd_data["spec"]["workload"]["args"]["file_size"] = file_size
+        self.crd_data["spec"]["workload"]["args"]["files"] = files
+        self.crd_data["spec"]["workload"]["args"]["threads"] = threads
+        self.crd_data["spec"]["workload"]["args"]["samples"] = samples
+
+    def setup_vol_size(self, file_size, files, threads, total_capacity):
+        """
+        Calculating the size of the volume that need to be test, it should
+        be at least twice in the size then the size of the files, and at
+        least 100Gi.
+
+        Since the file_size is in Kb and the vol_size need to be in Gb, more
+        calculation is needed.
+
+        Args:
+            file_size (int): the file size in KB
+            files (int): number of file to use in the test
+            threads (int): number of threads to use in the test
+            total_capacity (int): The total usable storage capacity in GiB
+
+        """
+        vol_size = int(files * threads * file_size * 3)
+        vol_size = int(vol_size / constants.GB2KB)
+        if vol_size < 100:
+            vol_size = 100
+        errmsg = (
+            "There is not enough storage to run the test. "
+            f"Storage capacity : {total_capacity:,.2f} GiB, "
+            f"Needed capacity is more then {vol_size:,.2f} GiB"
+        )
+        assert vol_size < total_capacity, errmsg
+        self.crd_data["spec"]["workload"]["args"]["storagesize"] = f"{vol_size}Gi"
+
+    def setup_operations(self, ops):
+        """
+        Setting up the test operations
+
+        Args:
+            ops : can be list of operations or a string of one operation
+
+        """
+        if isinstance(ops, list):
+            self.crd_data["spec"]["workload"]["args"]["operation"] = ops
+        elif isinstance(ops, str):
+            self.crd_data["spec"]["workload"]["args"]["operation"] = [ops]
+
+    def run(self):
+        """
+        Run the benchmark and wait until it completed
+
+        """
+        # Create the benchmark object
+        self.sf_obj = OCS(**self.crd_data)
+        self.sf_obj.create()
+
+        # Wait for benchmark pods to get created - takes a while
+        for bench_pod in TimeoutSampler(
+            240,
+            10,
+            get_pod_name_by_pattern,
+            "smallfile-client",
+            benchmark_operator.BMO_NAME,
+        ):
+            try:
+                if bench_pod[0] is not None:
+                    small_file_client_pod = bench_pod[0]
+                    break
+            except IndexError:
+                log.info("Bench pod not ready yet")
+
+        bench_pod = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
+        log.info("Waiting for SmallFile benchmark to Run")
+        assert bench_pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=small_file_client_pod,
+            sleep=30,
+            timeout=600,
+        )
+        log.info("The SmallFiles benchmark is running, wait for completion")
+        bench_pod.wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=small_file_client_pod,
+            timeout=18000,
+            sleep=60,
+        )
+        log.info("The SmallFiles benchmark is completed")
+
+    def delete(self):
+        """
+        Delete the benchmark
+
+        """
+        log.info("Deleting The Small Files benchmark")
+        self.sf_obj.delete()

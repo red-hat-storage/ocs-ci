@@ -6,15 +6,19 @@ from tempfile import NamedTemporaryFile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.deployment.deployment import create_catalog_source
+from ocs_ci.deployment.deployment import (
+    create_catalog_source,
+    create_ocs_secret,
+    Deployment,
+)
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
+from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -26,16 +30,22 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.utility import version
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
+    exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
     load_config_file,
     TimeoutSampler,
 )
+from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.exceptions import (
+    TimeoutException,
+    ExternalClusterRGWAdminOpsUserException,
+)
 
 
 log = logging.getLogger(__name__)
@@ -58,6 +68,21 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
     """
     old_csv_images = set(old_csv_images.values())
     new_csv_images = set(new_csv_images.values())
+    # Ignore the same SHA images for BZ:
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1994007
+    for old_image in old_csv_images.copy():
+        old_image_sha = None
+        if constants.SHA_SEPARATOR in old_image:
+            _, old_image_sha = old_image.split(constants.SHA_SEPARATOR)
+        if old_image_sha:
+            for new_image in new_csv_images:
+                if old_image_sha in new_image:
+                    log.info(
+                        f"There is a new image: {new_image} with the same SHA "
+                        f"which is the same as the old image: {old_image}. "
+                        "This image will be ignored because of this BZ: 1994007"
+                    )
+                    old_csv_images.remove(old_image)
     old_images_for_upgrade = old_csv_images - new_csv_images
     log.info(
         f"Old images which are going to be upgraded: "
@@ -144,6 +169,13 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
         osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
         osd_count = get_osd_count()
+        # In the debugging issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/5031
+        # Noticed that it's taking about 1 more minute from previous check till actual
+        # OSD pods getting restarted.
+        # Hence adding sleep here for 120 seconds to be sure, OSD pods upgrade started.
+        log.info("Waiting for 2 minutes before start checking OSD pods")
+        time.sleep(120)
         verify_pods_upgraded(
             old_images,
             selector=constants.OSD_APP_LABEL,
@@ -160,6 +192,8 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 selector=constants.RGW_APP_LABEL,
                 count=rgw_count,
             )
+    if upgrade_version >= parse_version("4.6"):
+        verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
 
 
 class OCSUpgrade(object):
@@ -312,8 +346,12 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
 
         """
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+            subscription_name = constants.ODF_SUBSCRIPTION
+        else:
+            subscription_name = constants.OCS_SUBSCRIPTION
         subscription = OCP(
-            resource_name=constants.OCS_SUBSCRIPTION,
+            resource_name=subscription_name,
             kind="subscription",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
@@ -325,7 +363,7 @@ class OCSUpgrade(object):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {constants.OCS_SUBSCRIPTION} "
+            f"patch subscription {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
@@ -347,6 +385,9 @@ class OCSUpgrade(object):
             bool: True if upgrade completed, False otherwise
 
         """
+        if not check_all_csvs_are_succeeded(self.namespace):
+            log.warning("One of CSV is still not upgraded!")
+            return False
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=OCS_OPERATOR_NAME,
@@ -398,6 +439,7 @@ class OCSUpgrade(object):
         else:
             timeout = 200 * get_osd_count()
         csv_post_upgrade.wait_for_phase("Succeeded", timeout=timeout)
+
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
             pre_upgrade_images, post_upgrade_images
@@ -416,9 +458,12 @@ class OCSUpgrade(object):
         )
 
         if not self.upgrade_in_current_source:
-            if not ocs_catalog.is_exist() and not self.upgrade_in_current_source:
+            disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+            if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
+                # We can return here as new CatalogSource contains right images
+                return
             image_url = ocs_catalog.get_image_url()
             image_tag = ocs_catalog.get_image_name()
             log.info(f"Current image is: {image_url}, tag: {image_tag}")
@@ -453,13 +498,13 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     """
 
     ceph_cluster = CephCluster()
+    original_ocs_version = config.ENV_DATA.get("ocs_version")
+    upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
     upgrade_ocs = OCSUpgrade(
         namespace=config.ENV_DATA["cluster_namespace"],
-        version_before_upgrade=config.ENV_DATA.get("ocs_version"),
+        version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-        upgrade_in_current_source=config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        ),
+        upgrade_in_current_source=upgrade_in_current_source,
     )
     upgrade_version = upgrade_ocs.get_upgrade_version()
     assert (
@@ -469,6 +514,25 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # For external cluster , create the secrets if upgraded version is 4.8
+    if (
+        config.DEPLOYMENT["external_mode"]
+        and original_ocs_version == "4.7"
+        and upgrade_version == "4.8"
+    ):
+        access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
+        secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
+        if not (access_key and secret_key):
+            raise ExternalClusterRGWAdminOpsUserException(
+                "Access and secret key for rgw-admin-ops-user not found"
+            )
+        cmd = (
+            f'oc create secret generic --type="kubernetes.io/rook"'
+            f' "rgw-admin-ops-user" --from-literal=accessKey={access_key} --from-literal=secretKey={secret_key}'
+        )
+        exec_cmd(cmd)
+
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
@@ -480,7 +544,29 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
-        upgrade_ocs.update_subscription(channel)
+        if upgrade_version != "4.9":
+            # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+            # OCS automatically.
+            upgrade_ocs.update_subscription(channel)
+        if original_ocs_version == "4.8" and upgrade_version == "4.9":
+            deployment = Deployment()
+            deployment.subscribe_ocs()
+        if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+            upgrade_in_current_source
+        ):
+            create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+            for attempt in range(2):
+                # We need to do it twice, because some of the SA are updated
+                # after the first load of OCS pod after upgrade. So we need to
+                # link updated SA again.
+                log.info(
+                    f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                    "of linking secret/SAs"
+                )
+                time.sleep(60)
+                link_all_sa_and_secret_and_delete_pods(
+                    constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                )
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)

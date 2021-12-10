@@ -35,7 +35,7 @@ setup(
         "oauth2client==4.1.3",
         "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
-        "pyhcl==0.4.4",
+        "python-hcl2==3.0.1",
         # issue opened for botocore
         # https://github.com/boto/botocore/issues/1872
         # till above issue fixed, manually pointing python-dateutil to 2.8.0
@@ -45,7 +45,8 @@ setup(
         "semantic-version==2.8.5",
         "jsonschema>=3.2.0",
         "google-cloud-storage==1.29.0",
-        "elasticsearch==7.8.0",
+        "google-auth==1.35.0",
+        "elasticsearch==7.14.0",
         "numpy==1.19.5",
         "python-ipmi==0.4.2",
         "scipy==1.6.0",
@@ -68,6 +69,11 @@ setup(
         "greenlet<1.0.0",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser",
+        "flaky==3.7.0",
+        "ocp-network-split",
+        "pyopenssl",
+        "pyparsing ==2.4.7",
+        "mysql-connector-python==8.0.27",
     ],
     entry_points={
         "console_scripts": [
@@ -78,6 +84,7 @@ setup(
             "aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup",
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
+            "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
         ],
     },
     zip_safe=True,

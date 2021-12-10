@@ -15,21 +15,22 @@ import base64
 from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
+from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NotAllPodsHaveSameImagesError,
     NonUpgradedImagesFoundError,
-    ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
-from ocs_ci.ocs.resources.ocs import OCS, get_job_obj
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
@@ -300,6 +301,11 @@ class Pod(OCS):
         fio_filename=None,
         bs="4K",
         end_fsync=0,
+        invalidate=None,
+        buffer_compress_percentage=None,
+        buffer_pattern=None,
+        readwrite=None,
+        direct=0,
     ):
         """
         Execute FIO on a pod
@@ -328,6 +334,13 @@ class Pod(OCS):
             bs (str): Block size, e.g. 4K
             end_fsync (int): If 1, fio will sync file contents when a write
                 stage has completed. Fio default is 0
+            invalidate (bool): Invalidate the buffer/page cache parts of the files to be used prior to starting I/O
+            buffer_compress_percentage (int): If this is set, then fio will attempt to provide I/O buffer
+                content (on WRITEs) that compresses to the specified level
+            buffer_pattern (str): fio will fill the I/O buffers with this pattern
+            readwrite (str): Type of I/O pattern default is randrw from yaml
+            direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
+
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -337,7 +350,13 @@ class Pod(OCS):
             self.io_params["rwmixread"] = rw_ratio
         else:
             self.io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
-        self.io_params["runtime"] = runtime
+        if invalidate is not None:
+            self.io_params["invalidate"] = invalidate
+        if runtime != 0:
+            self.io_params["runtime"] = runtime
+        else:
+            del self.io_params["runtime"]
+            del self.io_params["time_based"]
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params["size"] = size
         if fio_filename:
@@ -346,6 +365,13 @@ class Pod(OCS):
         self.io_params["rate"] = rate
         self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
+        self.io_params["direct"] = direct
+        if buffer_compress_percentage:
+            self.io_params["buffer_compress_percentage"] = buffer_compress_percentage
+        if buffer_pattern:
+            self.io_params["buffer_pattern"] = buffer_pattern
+        if readwrite:
+            self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
         self.fio_thread = self.wl_obj.run(**self.io_params)
@@ -495,6 +521,7 @@ def get_all_pods(
     selector_label="app",
     exclude_selector=False,
     wait=False,
+    field_selector=None,
 ):
     """
     Get all pods in a namespace.
@@ -506,12 +533,18 @@ def get_all_pods(
             Example: ['alertmanager','prometheus']
         selector_label (str): Label of selector (default: app).
         exclude_selector (bool): If list of the resource selector not to search with
+        field_selector (str): Selector (field query) to filter on, supports
+            '=', '==', and '!='. (e.g. status.phase=Running)
 
     Returns:
         list: List of Pod objects
 
     """
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(
+        kind=constants.POD,
+        namespace=namespace,
+        field_selector=field_selector,
+    )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
     # So, we are waiting for the pods to come up on new node
@@ -1104,7 +1137,11 @@ def get_pod_obj(name, namespace=None):
 
 
 def get_pod_logs(
-    pod_name, container=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE, previous=False
+    pod_name,
+    container=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    previous=False,
+    all_containers=False,
 ):
     """
     Get logs from a given pod
@@ -1113,6 +1150,7 @@ def get_pod_logs(
     container (str): Name of the container
     namespace (str): Namespace of the pod
     previous (bool): True, if pod previous log required. False otherwise.
+    all_containers (bool): fetch logs from all containers of the resource
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
@@ -1123,6 +1161,9 @@ def get_pod_logs(
         cmd += f" -c {container}"
     if previous:
         cmd += " --previous"
+    if all_containers:
+        cmd += " --all-containers=true"
+
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
 
@@ -1385,33 +1426,15 @@ def wait_for_storage_pods(timeout=200):
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL not in pod.get_labels()
+        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
+        not in pod.get_labels().values()
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
             state = constants.STATUS_COMPLETED
-
-        try:
-            helpers.wait_for_resource_state(
-                resource=pod_obj, state=state, timeout=timeout
-            )
-        except ResourceWrongStatusException:
-            # 'rook-ceph-crashcollector' on the failed node stucks at
-            # pending state. BZ 1810014 tracks it.
-            # Ignoring 'rook-ceph-crashcollector' pod health check as
-            # WA and deleting its deployment so that the pod
-            # disappears. Will revert this WA once the BZ is fixed
-            if "rook-ceph-crashcollector" in pod_obj.name:
-                ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-                pod_name = pod_obj.name
-                deployment_name = "-".join(pod_name.split("-")[:-2])
-                command = f"delete deployment {deployment_name}"
-                ocp_obj.exec_oc_cmd(command=command)
-                logger.info(f"Deleted deployment for pod {pod_obj.name}")
-            else:
-                raise
+        helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
@@ -1430,10 +1453,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
 
     namespace = config.ENV_DATA["cluster_namespace"]
-    pod = OCP(
-        kind=constants.POD,
-        namespace=namespace,
-    )
+    pod = OCP(kind=constants.POD, namespace=namespace)
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
         f"and upgraded."
@@ -1443,6 +1463,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     selector_label, selector_value = selector.split("=")
     while True:
         pod_count = 0
+        pod_images = {}
         try:
             pods = get_all_pods(namespace, [selector_value], selector_label)
             pods_len = len(pods)
@@ -1452,13 +1473,27 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
                     f"Number of found pods {pods_len} is not as expected: " f"{count}"
                 )
             for pod in pods:
-                verify_images_upgraded(old_images, pod.get())
+                pod_obj = pod.get()
+                verify_images_upgraded(old_images, pod_obj)
+                current_pod_images = get_images(pod_obj)
+                for container_name, container_image in current_pod_images.items():
+                    if container_name not in pod_images:
+                        pod_images[container_name] = container_image
+                    else:
+                        if pod_images[container_name] != container_image:
+                            raise NotAllPodsHaveSameImagesError(
+                                f"Not all the pods with the selector: {selector} have the same "
+                                f"images! Image for container {container_name} has image {container_image} "
+                                f"which doesn't match with: {pod_images} differ! This means "
+                                "that upgrade hasn't finished to restart all the pods yet! "
+                                "Or it's caused by other discrepancy which needs to be investigated!"
+                            )
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
                 f"Failed when getting pods with selector {selector}." f"Error: {ex}"
             )
-        except NonUpgradedImagesFoundError as ex:
+        except (NonUpgradedImagesFoundError, NotAllPodsHaveSameImagesError) as ex:
             logger.warning(ex)
         check_timeout_reached(start_time, timeout, info_message)
         if pods_len != count:
@@ -1710,13 +1745,20 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
+    ocs_version_pattern_dict = {
+        "4.6": f"ocs-osd-removal-{osd_id}",
+        "4.7": "ocs-osd-removal-job",
+        "4.8": "ocs-osd-removal-",
+        "4.9": "ocs-osd-removal-job",
+    }
+
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) == Version.coerce("4.7"):
-        pattern = "ocs-osd-removal-job"
-    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
-        pattern = "ocs-osd-removal-"
-    else:
-        pattern = f"ocs-osd-removal-{osd_id}"
+    pattern = ocs_version_pattern_dict.get(ocs_version)
+    if not pattern:
+        logger.warning(
+            f"ocs version {ocs_version} didn't match any of the known versions"
+        )
+        return None
 
     try:
         for osd_removal_pod_names in TimeoutSampler(
@@ -1764,24 +1806,25 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_id):
+def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job
 
     Args:
-        osd_id (str): The osd id
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
+    osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
     if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_id} -o yaml"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
 
-    logger.info(f"Executing OSD removal job on OSD-{osd_id}")
+    logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
@@ -1857,8 +1900,14 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     # Verify OSD removal from the ocs-osd-removal pod logs
     logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
     logs = get_pod_logs(osd_removal_pod_name)
-    pattern = f"purged osd.{osd_id}"
-    if not re.search(pattern, logs):
+    patterns = [
+        f"purged osd.{osd_id}",
+        f"purge osd.{osd_id}",
+        f"completed removal of OSD {osd_id}",
+    ]
+
+    is_osd_pattern_in_logs = any([re.search(pattern, logs) for pattern in patterns])
+    if not is_osd_pattern_in_logs:
         logger.warning(
             f"Didn't find the removal of OSD from {osd_removal_pod_name} pod logs"
         )
@@ -1879,10 +1928,8 @@ def delete_osd_removal_job(osd_id):
 
     """
     ocs_version = config.ENV_DATA["ocs_version"]
-    if Version.coerce(ocs_version) == Version.coerce("4.7"):
+    if Version.coerce(ocs_version) >= Version.coerce("4.7"):
         job_name = "ocs-osd-removal-job"
-    elif Version.coerce(ocs_version) == Version.coerce("4.8"):
-        job_name = "ocs-osd-removal"
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
@@ -2169,3 +2216,50 @@ def get_mon_pod_id(mon_pod):
 
     """
     return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
+
+
+def delete_all_osd_removal_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Delete all the osd removal jobs in a specific namespace
+
+    Args:
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        bool: True, if all the jobs deleted successfully. False, otherwise
+
+    """
+    result = True
+    osd_removal_jobs = get_jobs_with_prefix("ocs-osd-removal-", namespace=namespace)
+    for osd_removal_job in osd_removal_jobs:
+        osd_removal_job.delete()
+        try:
+            osd_removal_job.ocp.wait_for_delete(resource_name=osd_removal_job.name)
+        except TimeoutError:
+            logger.warning(
+                f"{osd_removal_job.name} job did not get deleted successfully"
+            )
+            result = False
+
+    return result
+
+
+def get_crashcollector_pods(
+    crashcollector_label=constants.CRASHCOLLECTOR_APP_LABEL, namespace=None
+):
+    """
+    Fetches info about crashcollector pods in the cluster
+
+    Args:
+        crashcollector_label (str): label associated with mon pods
+            (default: defaults.CRASHCOLLECTOR_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of crashcollector pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    crashcollectors = get_pods_having_label(crashcollector_label, namespace)
+    return [Pod(**crashcollector) for crashcollector in crashcollectors]

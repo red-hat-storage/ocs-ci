@@ -1780,7 +1780,6 @@ def update_config_from_s3(
         with NamedTemporaryFile(mode="w", prefix="config", delete=True) as auth:
             s3.meta.client.download_file(bucket_name, filename, auth.name)
             config_yaml = load_yaml(auth.name)
-        # set in config and store it for that scope
         config.update(config_yaml)
         return config_yaml
     except NoCredentialsError:
@@ -1880,13 +1879,14 @@ def create_and_attach_ebs_volumes(
             )
 
 
-def create_and_attach_volume_for_all_workers(device_size=None):
+def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="worker"):
     """
     Create volumes on workers
 
     Args:
         device_size (int): Size in GB, if not specified value from:
             config.ENV_DATA["device_size"] will be used
+        worker_suffix (str): Worker name suffix (default: worker)
 
     """
     device_size = device_size or int(
@@ -1894,6 +1894,6 @@ def create_and_attach_volume_for_all_workers(device_size=None):
     )
     infra_id = get_infra_id(config.ENV_DATA["cluster_path"])
     create_and_attach_ebs_volumes(
-        f"{infra_id}-worker*",
+        f"{infra_id}-{worker_suffix}*",
         device_size,
     )

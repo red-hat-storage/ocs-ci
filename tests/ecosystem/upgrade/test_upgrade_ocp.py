@@ -1,12 +1,18 @@
 import logging
+import os
+
+from pkg_resources import parse_version
+from semantic_version import Version
 
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_ocp_version,
     expose_ocp_version,
     ceph_health_check,
+    load_config_file,
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -26,12 +32,43 @@ class TestUpgradeOCP(ManageTest):
     5. monitor cluster health
     """
 
+    def load_ocp_version_config_file(self, ocp_upgrade_version):
+        """
+        Loads config file to the ocs-ci config with upgrade version
+
+        Args:
+            ocp_upgrade_version (str): version to be upgraded
+
+        """
+
+        version = Version.coerce(ocp_upgrade_version)
+        short_ocp_upgrade_version = ".".join([str(version.major), str(version.minor)])
+        version_before_upgrade = parse_version(
+            config.DEPLOYMENT.get("installer_version")
+        )
+        version_post_upgrade = parse_version(ocp_upgrade_version)
+        version_change = version_post_upgrade > version_before_upgrade
+        if version_change:
+            version_config_file = os.path.join(
+                constants.OCP_VERSION_CONF_DIR,
+                f"ocp-{short_ocp_upgrade_version}-config.yaml",
+            )
+            logger.debug(f"config file to be loaded: {version_config_file}")
+            load_config_file(version_config_file)
+        else:
+            logger.info(
+                f"Upgrade version {version_post_upgrade} is not higher than old version:"
+                f" {version_before_upgrade}, new config file will not be loaded"
+            )
+
     def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
         """
 
+        cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
+        logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
@@ -116,6 +153,12 @@ class TestUpgradeOCP(ManageTest):
                 if sampler:
                     logger.info("Upgrade Completed Successfully!")
                     break
+
+        cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
+        logger.debug(f"Cluster versions post upgrade:\n{cluster_ver}")
+
+        # load new config file
+        self.load_ocp_version_config_file(ocp_upgrade_version)
 
         new_ceph_cluster = CephCluster()
         new_ceph_cluster.wait_for_rebalance(timeout=1800)

@@ -5,7 +5,7 @@ from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.resources.ocs import get_job_obj
+from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs import cluster
@@ -120,7 +120,7 @@ def osd_device_replacement(nodes):
         osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
     # Run ocs-osd-removal job
-    osd_removal_job = run_osd_removal_job(osd_id)
+    osd_removal_job = run_osd_removal_job([osd_id])
     assert osd_removal_job, "ocs-osd-removal failed to create"
     is_completed = verify_osd_removal_job_completed_successfully(osd_id)
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"

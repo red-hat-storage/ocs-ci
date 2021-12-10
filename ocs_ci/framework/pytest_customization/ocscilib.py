@@ -27,10 +27,8 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
-    ChannelNotFound,
-    ResourceWrongStatusException,
 )
-from ocs_ci.ocs.resources.ocs import get_ocs_csv, get_version_info
+from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
     dump_config_to_file,
@@ -38,7 +36,6 @@ from ocs_ci.utility.utils import (
     get_cluster_name,
     get_cluster_version,
     get_csi_versions,
-    get_ocp_version,
     get_ocs_build_number,
     get_testrun_name,
     load_config_file,
@@ -54,26 +51,78 @@ handler.setFormatter(logging.Formatter(LOG_FORMAT))
 log.addHandler(handler)
 
 
+def _pytest_addoption_cluster_specific(parser):
+    """
+    Handle multicluster options here
+    We will add options which will have suffix number same as its cluster number
+    i.e `--cluster1 --cluster-name xyz --cluster-path /a/b/c --ocsci-conf /path/to/c1
+    --ocsci-conf /path/to/c2...` will get translated to `--cluster1 --cluster-name1 xyz
+    --cluster-path1 /a/b/c --ocsci-conf1 /path/to/c1 --ocsci-conf1 /path/to/c2`
+
+    Rest of the general run-ci options will be handled by pytest_addoption
+
+    """
+
+    for i in range(ocsci_config.nclusters):
+        # If it's not multicluster then no suffix will be added
+        suffix = i + 1 if ocsci_config.multicluster else ""
+        parser.addoption(
+            f"--ocsci-conf{suffix}",
+            dest=f"ocsci_conf{suffix}",
+            action="append",
+            help="Path to config file of OCS CI",
+        )
+        parser.addoption(
+            f"--cluster-path{suffix}",
+            dest=f"cluster_path{suffix}",
+            help="Path to cluster directory",
+        )
+        parser.addoption(
+            f"--cluster-name{suffix}",
+            dest=f"cluster_name{suffix}",
+            help="Name of cluster",
+        )
+        parser.addoption(
+            f"--ocs-version{suffix}",
+            dest=f"ocs_version{suffix}",
+            help="ocs version for which ocs-ci to be run",
+        )
+        parser.addoption(
+            f"--ocp-version{suffix}",
+            dest=f"ocp_version{suffix}",
+            help="""
+             OCP version to be used for deployment. This version will be used for
+             load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
+             for example those values:
+             4.2: for nightly 4.2 OCP build
+             4.2-ga: for latest GAed 4.2 OCP build
+             4.2-ga-minus1: for latest GAed 4.2 build - 1
+             """,
+        )
+        parser.addoption(
+            f"--ocs-registry-image{suffix}",
+            dest=f"ocs_registry_image{suffix}",
+            help=(
+                "ocs registry image to be used for deployment "
+                "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
+            ),
+        )
+        parser.addoption(
+            f"--osd-size{suffix}",
+            dest=f"osd_size{suffix}",
+            type=int,
+            help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+        )
+
+
 def pytest_addoption(parser):
     """
     Add necessary options to initialize OCS CI library.
     """
-    parser.addoption(
-        "--ocsci-conf",
-        dest="ocsci_conf",
-        action="append",
-        help="Path to config file of OCS CI",
-    )
-    parser.addoption(
-        "--cluster-path",
-        dest="cluster_path",
-        help="Path to cluster directory",
-    )
-    parser.addoption(
-        "--cluster-name",
-        dest="cluster_name",
-        help="Name of cluster",
-    )
+    # Handle only cluster specific options from the below call
+    # Rest of the options which are general, will be handled here itself
+    _pytest_addoption_cluster_specific(parser)
+
     parser.addoption(
         "--teardown",
         dest="teardown",
@@ -140,11 +189,6 @@ def pytest_addoption(parser):
         help="Enable logging of cluster utilization metrics every 10 seconds",
     )
     parser.addoption(
-        "--ocs-version",
-        dest="ocs_version",
-        help="ocs version for which ocs-ci to be run",
-    )
-    parser.addoption(
         "--upgrade-ocs-version",
         dest="upgrade_ocs_version",
         help="ocs version to upgrade (e.g. 4.3)",
@@ -170,18 +214,6 @@ def pytest_addoption(parser):
         """,
     )
     parser.addoption(
-        "--ocp-version",
-        dest="ocp_version",
-        help="""
-        OCP version to be used for deployment. This version will be used for
-        load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
-        for example those values:
-        4.2: for nightly 4.2 OCP build
-        4.2-ga: for latest GAed 4.2 OCP build
-        4.2-ga-minus1: for latest GAed 4.2 build - 1
-        """,
-    )
-    parser.addoption(
         "--ocp-installer-version",
         dest="ocp_installer_version",
         help="""
@@ -191,26 +223,12 @@ def pytest_addoption(parser):
         """,
     )
     parser.addoption(
-        "--ocs-registry-image",
-        dest="ocs_registry_image",
-        help=(
-            "ocs registry image to be used for deployment "
-            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
-        ),
-    )
-    parser.addoption(
         "--upgrade-ocs-registry-image",
         dest="upgrade_ocs_registry_image",
         help=(
             "ocs registry image to be used for upgrade "
             "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
         ),
-    )
-    parser.addoption(
-        "--osd-size",
-        dest="osd_size",
-        type=int,
-        help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
     )
     parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
@@ -277,72 +295,64 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
-    set_rp_client_log_level()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
     if ocscilib_module not in config.getoption("-p"):
         return
-    if not (config.getoption("--help") or config.getoption("collectonly")):
-        process_cluster_cli_params(config)
-        config_file = os.path.expanduser(
-            os.path.join(
-                ocsci_config.RUN["log_dir"],
-                f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+    for i in range(ocsci_config.nclusters):
+        log.debug(f"Pytest configure switching to: cluster={i}")
+        ocsci_config.switch_ctx(i)
+
+        if not (config.getoption("--help") or config.getoption("collectonly")):
+            process_cluster_cli_params(config)
+            config_file = os.path.expanduser(
+                os.path.join(
+                    ocsci_config.RUN["log_dir"],
+                    f"run-{ocsci_config.RUN['run_id']}-cl{i}-config.yaml",
+                )
             )
-        )
-        dump_config_to_file(config_file)
-        log.info(
-            f"Dump of the consolidated config file is located here: " f"{config_file}"
-        )
-        if config.getoption("--reportportal"):
-            set_rp_client_log_level()
-            set_report_portal_config(config)
-
-        # Add OCS related versions to the html report and remove
-        # extraneous metadata
-        markers_arg = config.getoption("-m")
-
-        # add logs url
-        logs_url = ocsci_config.RUN.get("logs_url")
-        if logs_url:
-            config._metadata["Logs URL"] = logs_url
-
-        if ocsci_config.RUN["cli_params"].get("teardown") or (
-            "deployment" in markers_arg and ocsci_config.RUN["cli_params"].get("deploy")
-        ):
+            dump_config_to_file(config_file)
             log.info(
-                "Skipping versions collecting because: Deploy or destroy of "
-                "cluster is performed."
+                f"Dump of the consolidated config file is located here: "
+                f"{config_file}"
             )
-            return
-        elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
-            log.info(
-                "Skipping version collection because we skipped " "the OCS deployment"
-            )
-            return
-        elif ocsci_config.RUN["cli_params"].get("dev_mode"):
-            log.info("Running in development mode")
-            return
-        print("Collecting Cluster versions")
-        # remove extraneous metadata
-        del config._metadata["Python"]
-        del config._metadata["Packages"]
-        del config._metadata["Plugins"]
-        del config._metadata["Platform"]
 
-        config._metadata["Test Run Name"] = get_testrun_name()
-        gather_version_info_for_report(config)
+            # Add OCS related versions to the html report and remove
+            # extraneous metadata
+            markers_arg = config.getoption("-m")
 
-        try:
-            ocs_csv = get_ocs_csv()
-            ocs_csv_version = ocs_csv.data["spec"]["version"]
-            config.addinivalue_line(
-                "rp_launch_tags", f"ocs_csv_version:{ocs_csv_version}"
-            )
-        except (ResourceNotFoundError, ChannelNotFound, ResourceWrongStatusException):
-            # might be using exisitng cluster path using GUI installation
-            log.warning("Unable to get CSV version for Reporting")
+            # add logs url
+            logs_url = ocsci_config.RUN.get("logs_url")
+            if logs_url:
+                config._metadata["Logs URL"] = logs_url
+
+            if ocsci_config.RUN["cli_params"].get("teardown") or (
+                "deployment" in markers_arg
+                and ocsci_config.RUN["cli_params"].get("deploy")
+            ):
+                log.info(
+                    "Skipping versions collecting because: Deploy or destroy of "
+                    "cluster is performed."
+                )
+                return
+            elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
+                log.info(
+                    "Skipping version collection because we skipped "
+                    "the OCS deployment"
+                )
+                return
+            elif ocsci_config.RUN["cli_params"].get("dev_mode"):
+                log.info("Running in development mode")
+                return
+            print("Collecting Cluster versions")
+            # remove extraneous metadata
+            for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
+                if config._metadata.get(extra_meta):
+                    del config._metadata[extra_meta]
+
+            config._metadata["Test Run Name"] = get_testrun_name()
+            gather_version_info_for_report(config)
 
 
 def gather_version_info_for_report(config):
@@ -368,8 +378,7 @@ def gather_version_info_for_report(config):
         config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
-        if ocsci_config.REPORTING["us_ds"] == "DS":
-            config._metadata["OCS operator"] = get_ocs_build_number()
+        config._metadata["OCS operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         skip_list = ["ocs-operator"]
@@ -424,7 +433,8 @@ def process_cluster_cli_params(config):
         ClusterNameNotProvidedError: If a cluster name is missing
         ClusterNameLengthError: If a cluster name is too short or too long
     """
-    cluster_path = get_cli_param(config, "cluster_path")
+    suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
+    cluster_path = get_cli_param(config, f"cluster_path{suffix}")
     if not cluster_path:
         raise ClusterPathNotProvidedError()
     cluster_path = os.path.expanduser(cluster_path)
@@ -437,17 +447,27 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
-    cluster_name = get_cli_param(config, "cluster_name")
+    ocsci_config.RUN["kubeconfig"] = os.path.join(
+        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    )
+    cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
     )
     ocsci_config.RUN["cli_params"]["deploy"] = get_cli_param(
         config, "deploy", default=False
     )
-    live_deployment = get_cli_param(config, "live_deploy", default=False)
-    ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment or (
-        ocsci_config.DEPLOYMENT.get("live_deployment", False)
-    )
+    live_deployment = get_cli_param(
+        config, "live_deploy", default=False
+    ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
+    ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
+    if live_deployment:
+        ocsci_config.REPORTING[
+            "default_ocs_must_gather_latest_tag"
+        ] = f"v{ocsci_config.ENV_DATA['ocs_version']}"
+        ocsci_config.REPORTING["ocs_must_gather_image"] = ocsci_config.REPORTING[
+            "ocs_live_must_gather_image"
+        ]
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
@@ -460,7 +480,7 @@ def process_cluster_cli_params(config):
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE["upgrade_ocs_version"] = upgrade_ocs_version
-    ocs_registry_image = get_cli_param(config, "ocs_registry_image")
+    ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
@@ -615,56 +635,6 @@ def pytest_runtest_makereport(item, call):
             log.exception("Failed to collect performance stats")
 
 
-def set_report_portal_config(config):
-    """
-    Add settings for report portal like description and tags for the launch.
-
-    Args:
-        config (pytest.config): Pytest config object
-
-    """
-    rp_tags = list()
-    rp_tags.append(ocsci_config.ENV_DATA.get("platform"))
-    rp_tags.append(ocsci_config.ENV_DATA.get("deployment_type"))
-    if ocsci_config.REPORTING.get("us_ds") == "us":
-        rp_tags.append("upstream")
-    else:
-        rp_tags.append("downstream")
-    worker_instance_type = ocsci_config.ENV_DATA.get("worker_instance_type")
-    rp_tags.append(f"worker_instance_type:{worker_instance_type}")
-    rp_tags.append(f"ocp_version:{get_ocp_version()}")
-    rp_tags.append(f"ocs_version:{ocsci_config.ENV_DATA.get('ocs_version')}")
-    if ocsci_config.DEPLOYMENT.get("ocs_registry_image"):
-        ocs_registry_image = ocsci_config.DEPLOYMENT.get("ocs_registry_image")
-        rp_tags.append(f"ocs_registry_image:{ocs_registry_image}")
-        rp_tags.append(f"ocs_registry_tag:{ocs_registry_image.split(':')[1]}")
-    if ocsci_config.DEPLOYMENT.get("ui_deployment"):
-        rp_tags.append("ui_deployment")
-    if ocsci_config.DEPLOYMENT.get("live_deployment"):
-        rp_tags.append("live_deployment")
-    if ocsci_config.DEPLOYMENT.get("stage"):
-        rp_tags.append("stage_deployment")
-    if not ocsci_config.DEPLOYMENT.get("allow_lower_instance_requirements"):
-        rp_tags.append("production")
-    if ocsci_config.ENV_DATA.get("fips"):
-        rp_tags.append("fips")
-    if ocsci_config.ENV_DATA.get("encryption_at_rest"):
-        rp_tags.append("encryption_at_rest")
-
-    for tag in rp_tags:
-        if tag:
-            config.addinivalue_line("rp_launch_tags", tag.lower())
-    description = ""
-    display_name = ocsci_config.REPORTING.get("display_name")
-    if display_name:
-        description += f"Job name: {display_name}"
-    jenkins_job_url = ocsci_config.RUN.get("jenkins_build_url")
-    if jenkins_job_url:
-        description += f" Jenkins job: {jenkins_job_url}"
-    if description:
-        config.option.rp_launch_description = description
-
-
 def set_log_level(config):
     """
     Set the log level of this module based on the pytest.ini log_cli_level
@@ -675,13 +645,3 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
-
-
-def set_rp_client_log_level():
-    """
-    Change log level of the reportportal_client logger. Default value is ERROR to limit
-    the amount of noise in our log files from this logger.
-    """
-    rp_logger = logging.getLogger("reportportal_client")
-    level = ocsci_config.REPORTING.get("rp_client_log_level")
-    rp_logger.setLevel(logging.getLevelName(level))

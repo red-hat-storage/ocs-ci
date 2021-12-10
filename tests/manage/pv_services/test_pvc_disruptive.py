@@ -320,7 +320,7 @@ class TestPVCDisruption(ManageTest):
         # Wait for setup on pods to complete
         for pod_obj in pod_objs:
             logger.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
+            for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     logger.info(
                         f"Setup for running IO is completed on pod " f"{pod_obj.name}."

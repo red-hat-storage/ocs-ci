@@ -23,9 +23,13 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
+)
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +39,16 @@ def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    result = storage_cluster.add_capacity(osd_size)
+    if ui_add_capacity_conditions():
+        try:
+            result = ui_add_capacity(osd_size)
+        except Exception as e:
+            logging.error(
+                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
+            )
+            result = storage_cluster.add_capacity(osd_size)
+    else:
+        result = storage_cluster.add_capacity(osd_size)
     osd_pods_post_expansion = get_osd_pods()
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
@@ -51,11 +64,15 @@ def add_capacity_test():
     ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
 
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    if is_flexible_scaling_enabled():
+        replica_count = 1
+    else:
+        replica_count = 3
     pod.wait_for_resource(
         timeout=300,
         condition=constants.STATUS_RUNNING,
         selector="app=rook-ceph-osd",
-        resource_count=result * 3,
+        resource_count=result * replica_count,
     )
 
     # Verify status of rook-ceph-osd-prepare pods. Verifies bug 1769061
@@ -78,7 +95,7 @@ def add_capacity_test():
 @tier1
 @acceptance
 @polarion_id("OCS-1191")
-@pytest.mark.last
+@pytest.mark.second_to_last
 @skipif_openshift_dedicated
 @skipif_aws_i3
 @skipif_bm

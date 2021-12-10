@@ -48,7 +48,7 @@ def add_million_files(pod_name, ocp_obj):
             logging.info(f"{dispv} local files created")
             test_file_list.append(fname.split(os.sep)[-1])
     tmploc = ntar_loc.split("/")[-1]
-    run_cmd(f"tar cfz {tarfile} -C {new_dir} .")
+    run_cmd(f"tar cfz {tarfile} -C {new_dir} .", timeout=1800)
     ocp_obj.exec_oc_cmd(
         f"rsync {ntar_loc} {pod_name}:{constants.MOUNT_POINT}", timeout=300
     )
@@ -128,18 +128,10 @@ def million_file_cephfs(request):
 @pytest.mark.parametrize(
     argnames=["resource_to_delete"],
     argvalues=[
-        pytest.param(
-            *["mgr"],
-        ),
-        pytest.param(
-            *["mon"],
-        ),
-        pytest.param(
-            *["osd"],
-        ),
-        pytest.param(
-            *["mds"],
-        ),
+        pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2606")),
+        pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2607")),
+        pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2608")),
+        pytest.param(*["mds"], marks=pytest.mark.polarion_id("OCS-2609")),
     ],
 )
 class TestMillionCephfsFiles(E2ETest):

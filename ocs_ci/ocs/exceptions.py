@@ -2,6 +2,10 @@ class CommandFailed(Exception):
     pass
 
 
+class UnexpectedDeploymentConfiguration(Exception):
+    pass
+
+
 class UnsupportedOSType(Exception):
     pass
 
@@ -11,6 +15,10 @@ class CephHealthException(Exception):
 
 
 class NoobaaHealthException(Exception):
+    pass
+
+
+class NoobaaCliChecksumFailedException(Exception):
     pass
 
 
@@ -128,6 +136,10 @@ class NonUpgradedImagesFoundError(Exception):
     pass
 
 
+class NotAllPodsHaveSameImagesError(Exception):
+    pass
+
+
 class UnexpectedImage(Exception):
     pass
 
@@ -232,6 +244,10 @@ class ExternalClusterDetailsException(Exception):
     pass
 
 
+class ExternalClusterRGWAdminOpsUserException(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -252,11 +268,59 @@ class PoolNotFound(Exception):
     pass
 
 
+class PoolDidNotReachReadyState(Exception):
+    pass
+
+
+class PoolStateIsUnknow(Exception):
+    pass
+
+
+class PoolNotDeleted(Exception):
+    pass
+
+
 class PoolDataNotErased(Exception):
     pass
 
 
+class PoolSizeWrong(Exception):
+    pass
+
+
+class PoolCompressionWrong(Exception):
+    pass
+
+
+class PoolNotDeletedFromUI(Exception):
+    pass
+
+
+class PoolCephValueNotMatch(Exception):
+    pass
+
+
+class StorageClassNotDeletedFromUI(Exception):
+    pass
+
+
 class PvcNotDeleted(Exception):
+    pass
+
+
+class StorageclassNotCreated(Exception):
+    pass
+
+
+class StorageclassIsNotDeleted(Exception):
+    pass
+
+
+class ResourceNotDeleted(Exception):
+    pass
+
+
+class PageNotLoaded(Exception):
     pass
 
 
@@ -328,9 +392,53 @@ class TemplateNotFound(Exception):
     pass
 
 
+class PVNotSufficientException(Exception):
+    pass
+
+
 class IPAMReleaseUpdateFailed(Exception):
     pass
 
 
 class IPAMAssignUpdateFailed(Exception):
+    pass
+
+
+class NodeHasNoAttachedVolume(Exception):
+    pass
+
+
+class NotSupportedProxyConfiguration(Exception):
+    pass
+
+
+class OCSWorkerScaleFailed(Exception):
+    pass
+
+
+class OSDScaleFailed(Exception):
+    pass
+
+
+class PVCNotCreated(Exception):
+    pass
+
+
+class PodNotCreated(Exception):
+    pass
+
+
+class ElasticSearchNotDeployed(Exception):
+    pass
+
+
+class ManagedServiceAddonDeploymentError(Exception):
+    pass
+
+
+class ConfigurationError(Exception):
+    pass
+
+
+class BenchmarkTestFailed(Exception):
     pass

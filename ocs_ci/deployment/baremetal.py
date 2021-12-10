@@ -2,6 +2,7 @@ import json
 import os
 import logging
 import tempfile
+from datetime import datetime
 from time import sleep
 
 import yaml
@@ -540,7 +541,19 @@ class BAREMETALUPI(Deployment):
             Returns:
                 str: response message
             """
-            payload = {"status": bm_status}
+            if bm_status == constants.BM_STATUS_PRESENT:
+                now = datetime.today().strftime("%Y-%m-%d")
+                payload = {
+                    "status": bm_status,
+                    "cluster_name": config.ENV_DATA["cluster_name"],
+                    "creation_date": now,
+                }
+            else:
+                payload = {
+                    "status": bm_status,
+                    "cluster_name": "null",
+                    "creation_date": "null",
+                }
             headers = {"content-type": "application/json"}
             response = requests.put(
                 url=self.helper_node_details["bm_status_check"],
@@ -706,6 +719,18 @@ def clean_disk():
             logger.info(out)
 
     for worker in workers:
+        cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
+        out = ocp_obj.exec_oc_debug_cmd(node=worker.name, cmd_list=[cmd])
+        disk_to_ignore_cleanup_raw = json.loads(str(out))
+        disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+        for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
+            if disk_to_ignore_cleanup["mountpoint"] == "/boot":
+                logger.info(
+                    f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
+                )
+                selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
+                # Adding break when root disk is found
+                break
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
         )
@@ -719,8 +744,11 @@ def clean_disk():
             lsblk_output = json.loads(str(out))
             lsblk_devices_to_clean = lsblk_output["blockdevices"]
             for device_to_clean in lsblk_devices_to_clean:
-                if not device_to_clean.get("children"):
-                    logger.info("Cleaning Disk")
+                if device_to_clean["name"] == str(selected_disk_to_ignore_cleanup):
+                    logger.info(
+                        f"Skipping disk cleanup for {device_to_clean['name']} because it's a root disk"
+                    )
+                else:
                     out = ocp_obj.exec_oc_debug_cmd(
                         node=worker.name,
                         cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"],

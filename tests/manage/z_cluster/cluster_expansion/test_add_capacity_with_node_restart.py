@@ -9,7 +9,10 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+    is_flexible_scaling_enabled,
+)
 
 
 @pytest.mark.parametrize(
@@ -31,6 +34,7 @@ class TestAddCapacityNodeRestart(ManageTest):
 
     def test_add_capacity_node_restart(
         self,
+        add_capacity_setup,
         nodes,
         multi_pvc_factory,
         pod_factory,
@@ -74,11 +78,15 @@ class TestAddCapacityNodeRestart(ManageTest):
         # 'wip-add-capacity-e_e' will be merged into master I will use the functions from this branch.
 
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        if is_flexible_scaling_enabled():
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
             timeout=600,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=result * 3,
+            resource_count=result * replica_count,
         )
 
         # Verify OSDs are encrypted

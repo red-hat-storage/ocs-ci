@@ -38,8 +38,6 @@
 /tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
 /tests/e2e/flowtest/ @red-hat-storage/magenta-squad
 /tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
-/tests/e2e/logging/ @red-hat-storage/magenta-squad
-/tests/e2e/registry/ @red-hat-storage/magenta-squad
 /tests/e2e/workloads/ @red-hat-storage/magenta-squad
 /tests/e2e/performance/ @red-hat-storage/grey-squad
 /tests/e2e/scale/ @red-hat-storage/orange-squad

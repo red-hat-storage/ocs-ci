@@ -6,8 +6,8 @@ metadata:
 spec:
   containers:
     - name: awscli
-      image: quay.io/multiarch-origin-e2e/aws-cli:latest
-      # Override the default `aws` entrypoint in order to 
+      image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:1.0
+      # Override the default `aws` entrypoint in order to
       # allow the pod to run continuously and act as a relay
       command: ['/bin/sh']
       stdin: true

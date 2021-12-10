@@ -28,6 +28,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo,
     create_rhelpod,
+    delete_file,
     get_cluster_name,
     get_infra_id,
     run_cmd,
@@ -56,6 +57,9 @@ class AWSBase(CloudDeploymentBase):
         """
         super(AWSBase, self).__init__()
         self.aws = AWSUtil(self.region)
+        # dict of cluster prefixes with special handling rules (for existence
+        # check or during a cluster cleanup)
+        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def host_network_update(self):
         """
@@ -170,9 +174,6 @@ class AWSIPI(AWSBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
-        # dict of cluster prefixes with special handling rules (for existence
-        # check or during a cluster cleanup)
-        self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -255,6 +256,7 @@ class AWSUPI(AWSBase):
             # setup necessary env variables
             upi_env_vars = {
                 "INSTANCE_NAME_PREFIX": config.ENV_DATA["cluster_name"],
+                "CLUSTER_NAME": config.ENV_DATA["cluster_name"],
                 "AWS_REGION": config.ENV_DATA["region"],
                 "rhcos_ami": config.ENV_DATA.get("rhcos_ami"),
                 "route53_domain_name": config.ENV_DATA["base_domain"],
@@ -268,10 +270,14 @@ class AWSUPI(AWSBase):
                 "remove_bootstrap": "yes",
                 "IAAS_PLATFORM": "aws",
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
+                "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
+                "DISABLE_MASTER_MACHINESET": "yes",
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
                 upi_env_vars["remove_bootstrap"] = "No"
+
+            logger.info(f"UPI ENV VARS = {upi_env_vars}")
 
             for key, value in upi_env_vars.items():
                 if value:
@@ -300,6 +306,13 @@ class AWSUPI(AWSBase):
                 self.upi_script_path,
             )
             shutil.copy2(os.path.join(bindir, "oc"), self.upi_script_path)
+            # and another UGLY WORKAROUND: copy openshift-install also to the
+            # absolute_cluster_path (for more details, see
+            # https://github.com/red-hat-storage/ocs-ci/pull/4650)
+            shutil.copy2(
+                os.path.join(bindir, "openshift-install"),
+                os.path.abspath(os.path.join(self.cluster_path, "..")),
+            )
 
         def deploy(self, log_cli_level="DEBUG"):
             """
@@ -362,6 +375,11 @@ class AWSUPI(AWSBase):
                 "Removing openshift-misc directory located at %s", self.upi_repo_path
             )
             shutil.rmtree(self.upi_repo_path)
+            # Delete openshift-install copied to cluster_dir (see WORKAROUND at
+            # the end of deploy_prereq method of this class)
+            delete_file(
+                os.path.abspath(os.path.join(self.cluster_path, "../openshift-install"))
+            )
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -785,6 +803,21 @@ class AWSUPIFlexy(AWSBase):
             Destroy cluster using Flexy
             """
             self.flexy_instance.destroy()
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        OCP deployment specific to AWS UPI via Flexy
+
+        Args:
+             log_cli_level (str): openshift installer's log level
+                (default: 'DEBUG')
+        """
+        super(AWSUPIFlexy, self).deploy_ocp(log_cli_level)
+
+        lso_type = config.DEPLOYMENT.get("type")
+        if lso_type == constants.AWS_EBS:
+            logger.info("Create and attach volume for all workers")
+            create_and_attach_volume_for_all_workers(worker_suffix="node")
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

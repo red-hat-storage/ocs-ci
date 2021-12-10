@@ -2,7 +2,7 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
-  name: ocs-catalogsource
+  name: redhat-operators
   namespace: openshift-marketplace
   labels:
       ocs-operator-internal: "true"
@@ -14,6 +14,7 @@ spec:
   image: quay.io/rhceph-dev/ocs-registry:latest
   publisher: Red Hat
   sourceType: grpc
+  priority: 100
   # If the registry image still have the same tag (latest-stable-4.6, or for stage testing)
   # we need to have this updateStrategy, otherwise we will not see new pushed content.
   updateStrategy:

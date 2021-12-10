@@ -11,9 +11,13 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
     vsphere_platform_required,
     bugzilla,
+    skipif_ibm_cloud,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
+from ocs_ci.helpers.helpers import (
+    wait_for_ct_pod_recovery,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
@@ -103,6 +107,9 @@ class TestDiskFailures(ManageTest):
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
 
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -162,6 +169,7 @@ class TestDiskFailures(ManageTest):
 
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
+    @skipif_ibm_cloud
     def test_detach_attach_2_data_volumes(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):

@@ -7,7 +7,7 @@ nodes
 import logging
 import pytest
 
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, is_flexible_scaling_enabled
 from ocs_ci.ocs.cluster import count_cluster_osd, validate_osd_utilization
 from ocs_ci.framework import config
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
@@ -29,14 +29,18 @@ logger = logging.getLogger(__name__)
 @scale
 @ignore_leftovers
 @skipif_external_mode
+@pytest.mark.skip(
+    reason="Skipped due to failure in 75% filling-up cluster "
+    "which created more PODs and failed for memory issue"
+)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
         pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-XXXX")
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2117")
         ),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-XXXX")
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2117")
         ),
     ],
 )
@@ -88,11 +92,15 @@ class TestScaleOSDsRebootNodes(E2ETest):
         osd_size = storage_cluster.get_osd_size()
         count = storage_cluster.add_capacity(osd_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        if is_flexible_scaling_enabled():
+            replica_count = 1
+        else:
+            replica_count = 3
         pod.wait_for_resource(
             timeout=300,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=count * 3,
+            resource_count=count * replica_count,
         )
         assert ceph_health_check(
             delay=120, tries=50

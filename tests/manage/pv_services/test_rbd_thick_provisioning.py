@@ -4,11 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    skipif_ocs_version,
     polarion_id,
     ManageTest,
     tier1,
-    acceptance,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import TimeoutSampler
@@ -16,7 +14,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
-@skipif_ocs_version("<4.8")
+@pytest.mark.skip(reason="Deprecated")
 class TestRbdThickProvisioning(ManageTest):
     """
     Tests to verify PVC creation and consumption using RBD thick provisioning enabled storage class
@@ -36,7 +34,6 @@ class TestRbdThickProvisioning(ManageTest):
             rbd_thick_provision=True,
         )
 
-    @acceptance
     @tier1
     @polarion_id("OCS-2500")
     def test_rbd_thick_provisioning(self, multi_pvc_factory, pod_factory):
@@ -97,7 +94,7 @@ class TestRbdThickProvisioning(ManageTest):
         # Wait for setup on pods to complete
         for pod_obj in pods:
             log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(180, 2, getattr, pod_obj, "wl_setup_done"):
+            for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     log.info(
                         f"Setup for running IO is completed on pod " f"{pod_obj.name}."

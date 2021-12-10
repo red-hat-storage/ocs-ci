@@ -7,18 +7,22 @@ log = logging.getLogger(__name__)
 
 def pytest_collection_modifyitems(items):
     """
-    A pytest hook to skip certain tests when running on vSphere.
+    A pytest hook to skip tests from summary report
 
     Args:
         items: list of collected tests
 
     """
     skip_list = [
-        "test_scale_pvc_expand",
-        "test_ceph_pod_respin_in_scaled_cluster",
         "test_scale_osds_fill_75%_reboot_workers",
+        "test_scale_pgsql",
+        "test_scale_amq",
+        "test_osd_balance",
     ]
-    if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+    if (
+        config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.CLOUD_PLATFORMS
+    ):
         for item in items.copy():
             for testname in skip_list:
                 if testname in str(item.fspath):

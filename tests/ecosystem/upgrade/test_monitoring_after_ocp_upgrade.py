@@ -5,6 +5,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     pre_ocp_upgrade,
     post_ocp_upgrade,
+    magenta_squad,
 )
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
@@ -28,6 +29,7 @@ def pre_upgrade_monitoring_pvc():
 
 
 @pre_ocp_upgrade
+@magenta_squad
 def test_monitoring_before_ocp_upgrade():
     """
     Test monitoring before ocp upgrade
@@ -38,6 +40,7 @@ def test_monitoring_before_ocp_upgrade():
 
 
 @post_ocp_upgrade
+@magenta_squad
 @pytest.mark.polarion_id("OCS-712")
 def test_monitoring_after_ocp_upgrade(pre_upgrade_monitoring_pvc):
     """

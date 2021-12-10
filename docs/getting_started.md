@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-1. Python version >= 3.7 
+1. Python version >= 3.7
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel (or similar packages for ubuntu).
 3. Configure AWS Account credentials when testing with AWS platforms,
@@ -27,8 +27,15 @@ There are additional prerequisites if you plan to execute AWS UPI deployments
 ##### AWS UPI with RHEL workers
 Along with AWS UPI prerequisites we need following
 
-1. openshift-dev.pem needs to be availavle to ocs-ci
+1. openshift-dev.pem needs to be available to ocs-ci
 2. provide ops-mirror.pem in data/ directory [ops-mirror](https://github.com/openshift/shared-secrets/blob/master/mirror/ops-mirror.pem).
+
+#### vSphere IPI
+Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
+system trust before installing an OCP cluster
+
+Follow this [procedure](https://docs.openshift.com/container-platform/4.7/installing/installing_vsphere/installing-vsphere-installer-provisioned.html#installation-adding-vcenter-root-certificates_installing-vsphere-installer-provisioned)
+to add vCenter’s trusted root CA certificates.
 
 ##### Mac OSX Users
 The system `sed` package is not compatible with the script used to install AWS
@@ -96,7 +103,7 @@ All elasticsearch configuration done in the `ocs_ci/framework/conf/default_confi
 
 In order to deploy a cluster to AWS with the Openshift Installer,
 you will need to download the pull secret for your account.
-Download this file from [openshift.com](https://cloud.openshift.com/clusters/install)
+Download this file from [openshift.com](https://console.redhat.com/openshift/install/pull-secret)
 and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
 The name of the file should be `pull-secret`.

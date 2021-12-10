@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ibm_cloud,
     skipif_lso,
+    skipif_ibm_power,
     skipif_vsphere_ipi,
     skipif_tainted_nodes,
     tier4,
@@ -304,7 +305,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 if az_count == 1:
                     label_to_search = "topology.rook.io/rack"
                 else:
-                    label_to_search = "failure-domain.beta.kubernetes.io/zone"
+                    label_to_search = constants.ZONE_LABEL
 
                 mon_pod_nodes = [
                     pod.get_pod_node(pod_obj).name for pod_obj in ceph_cluster.mons
@@ -525,6 +526,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4a
     @pytest.mark.parametrize(
         argnames=[
@@ -680,6 +682,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4b
     @pytest.mark.parametrize(
         argnames=[
@@ -845,6 +848,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
     @skipif_bm
     @skipif_ibm_cloud
+    @skipif_ibm_power
     @tier4c
     @pytest.mark.parametrize(
         argnames=[
