@@ -1239,7 +1239,7 @@ def get_non_acm_cluster_config():
     """
     non_acm_list = []
     for i in len(ocsci_config.clusters):
-        if i == ocsci_config.acm_index:
+        if i == ocsci_config.get_acm_index():
             continue
         else:
             non_acm_list.append(ocsci_config.clusters[i])
@@ -1256,5 +1256,5 @@ def get_primary_cluster_config():
 
     """
     for cluster in range(ocsci_config.clusters):
-        if cluster.DEPLOYMENT["designated_primary_cluster"]:
+        if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster

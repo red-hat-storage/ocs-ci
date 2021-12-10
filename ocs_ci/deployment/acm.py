@@ -142,8 +142,8 @@ class Submariner(object):
 
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
-            cluster_index = config.cluster_map_by_index[cluster]
-            if cluster_index != config.acm_index:
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            if cluster_index != config.get_acm_index():
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
                     f"{config.ENV_DATA['submariner_info_file']} "
@@ -178,7 +178,7 @@ class Submariner(object):
 
         """
         for i in range(config.clusters):
-            if config.clusters[i].get("ENV_DATA").get("designated_primary_cluster"):
+            if config.clusters[i].get("MULTICLUSTER").get("primary_cluster"):
                 return i
         return -1
 
