@@ -10,7 +10,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
-from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -26,10 +25,6 @@ class DeploymentUI(PageNavigator):
         super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
         self.validation_loc = locators[self.ocp_version]["validation"]
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        self.operator = (
-            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
-        )
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -74,7 +69,7 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
-        if self.operator is ODF_OPERATOR:
+        if self.operator_name is ODF_OPERATOR:
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["warning-alert"],
                 expected_text="Refresh web console",
@@ -90,7 +85,7 @@ class DeploymentUI(PageNavigator):
             )
             self.do_click(self.validation_loc["refresh-web-console"])
             self.page_has_loaded(retries=15, sleep_time=5)
-        self.verify_operator_succeeded(operator=self.operator)
+        self.verify_operator_succeeded(operator=self.operator_name)
 
     def refresh_popup(self):
         """
@@ -100,7 +95,7 @@ class DeploymentUI(PageNavigator):
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
             self.do_click(locator=self.dep_loc["refresh_popup"])
-        if self.operator is ODF_OPERATOR:
+        if self.operator_name is ODF_OPERATOR:
             time.sleep(90)
             refresh_web_console_popup = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["warning-alert"],
@@ -111,7 +106,7 @@ class DeploymentUI(PageNavigator):
                     "Refresh web console option is now available, click on it to see the changes"
                 )
                 self.do_click(self.validation_loc["refresh-web-console"])
-        self.verify_operator_succeeded(operator=self.operator)
+        self.verify_operator_succeeded(operator=self.operator_name)
         if self.operator_name is ODF_OPERATOR:
             time.sleep(80)
             self.refresh_popup()

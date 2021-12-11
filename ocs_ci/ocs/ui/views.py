@@ -583,6 +583,7 @@ validation_4_9 = {
         ".co-resource-item__resource-name[data-test-operand-link='ocs-storagecluster-storagesystem']",
         By.CSS_SELECTOR,
     ),
+    "resources-tab": ("a[data-test-id='horizontal-link-Resources']", By.CSS_SELECTOR),
 }
 
 locators = {

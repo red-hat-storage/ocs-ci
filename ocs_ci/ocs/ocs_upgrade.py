@@ -5,6 +5,8 @@ from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 import time
 
+from selenium.webdriver.common.by import By
+
 from ocs_ci.framework import config
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
@@ -51,9 +53,6 @@ from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-
-
-from semantic_version import Version
 
 log = logging.getLogger(__name__)
 
@@ -559,9 +558,8 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         upgrade_ocs.set_upgrade_images()
         ui_upgrade_supported = False
         if config.UPGRADE.get("ui_upgrade"):
-            ocp_version = get_ocp_version()
             if (
-                Version.coerce(ocp_version) == Version.coerce("4.9")
+                version.get_semantic_ocp_version_from_config() == version.VERSION_4_9
                 and original_ocs_version == "4.8"
                 and upgrade_version == "4.9"
             ):
@@ -589,7 +587,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
                         # after the first load of OCS pod after upgrade. So we need to
                         # link updated SA again.
                         log.info(
-                            f"Sleep 1 minute before attempt: {attempt+1}/2 "
+                            f"Sleep 1 minute before attempt: {attempt + 1}/2 "
                             "of linking secret/SAs"
                         )
                         time.sleep(60)
@@ -652,13 +650,15 @@ def ocs_odf_upgrade_ui():
     val_obj.do_click(OCSUpgrade.validation_loc["storage-system-on-installed-operators"])
     logger.info("Click on 'ocs-storagecluster-storagesystem' on Operator details page")
     val_obj.do_click(OCSUpgrade.validation_loc["ocs-storagecluster-storgesystem"])
-    storage_systems_check = val_obj.check_element_text(
-        expected_text="StorageSystem details"
+    logger.info("Click on Resources")
+    val_obj.do_click(OCSUpgrade.validation_loc["resources-tab"])
+    logger.info("Storage Cluster Status Check")
+    storage_cluster_status_check = val_obj.wait_until_expected_text_is_found(
+        locator=("//*[text()= 'Ready']", By.XPATH), expected_text="Ready", timeout=600
     )
-    assert storage_systems_check, (
-        "Upgrade failure, couldn't navigate to StorageSystem details page after "
-        "odf-operator installation as part of OCS to ODF upgrade "
-    )
+    assert (
+        storage_cluster_status_check
+    ), "Storage Cluster Status reported on UI is not 'Ready'"
     logger.info("Calling functions for other UI checks")
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
