@@ -614,9 +614,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
                         break
                 except TimeoutException:
                     raise TimeoutException("No new CSV found after upgrade!")
-            old_image = upgrade_ocs.get_images_post_upgrade(
-                channel, pre_upgrade_images, upgrade_version
-            )
+        old_image = upgrade_ocs.get_images_post_upgrade(
+            channel, pre_upgrade_images, upgrade_version
+        )
         verify_image_versions(
             old_image,
             upgrade_ocs.get_parsed_versions()[1],
