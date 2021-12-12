@@ -3603,3 +3603,53 @@ def get_secret_names(namespace=defaults.ROOK_CLUSTER_NAMESPACE, resource_name=""
     secret_obj = ocp.OCP(kind=constants.SECRET, namespace=namespace)
     secrets_objs = secret_obj.get(resource_name=resource_name)
     return [secret_obj["metadata"]["name"] for secret_obj in secrets_objs["items"]]
+
+
+def check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running():
+    """
+    check rook-ceph-crashcollector pods running on worker nodes
+    where rook-ceph pods are running.
+
+    Returns:
+        bool: True if the rook-ceph-crashcollector pods running on worker nodes
+            where rook-ceph pods are running. False otherwise.
+
+    """
+    logger.info(
+        "check rook-ceph-crashcollector pods running on worker nodes "
+        "where rook-ceph pods are running."
+    )
+    logger.info(
+        f"crashcollector nodes: {node.get_crashcollector_nodes()}, "
+        f"nodes where ocs pods running: {node.get_nodes_where_ocs_pods_running()}"
+    )
+    res = sorted(node.get_crashcollector_nodes()) == sorted(
+        node.get_nodes_where_ocs_pods_running()
+    )
+    if not res:
+        logger.warning(
+            "rook-ceph-crashcollector pods are not running on worker nodes "
+            "where rook-ceph pods are running."
+        )
+    return res
+
+
+def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(timeout=90):
+    """
+    Verify rook-ceph-crashcollector pods running on worker nodes
+    where rook-ceph pods are running.
+
+    Args:
+        timeout (int): time to wait for verifying
+
+    Returns:
+        bool: True if rook-ceph-crashcollector pods running on worker nodes
+            where rook-ceph pods are running in the given timeout. False otherwise.
+
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
+    )
+    return sample.wait_for_func_status(result=True)
