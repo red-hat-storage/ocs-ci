@@ -440,16 +440,19 @@ class VMWareNodes(NodesBase):
 
     def terminate_nodes(self, nodes, wait=True):
         """
-        Terminate the VM's
+        Terminate the VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
-            wait (bool): True for waiting the instances to terminate,
+            wait (bool): True for waiting the VMs to terminate,
             False otherwise
 
         """
         vms = self.get_vm_nodes_in_dc(nodes)
-        self.vsphere.destroy_vms(vms)
+        self.vsphere.remove_vms_from_inventory(vms)
+        if wait:
+            for vm in vms:
+                self.vsphere.wait_for_vm_delete(vm)
 
 
 class AWSNodes(NodesBase):
