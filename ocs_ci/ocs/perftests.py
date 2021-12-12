@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.ocs.ocp import OCP
@@ -56,10 +57,18 @@ class PASTest(BaseTest):
         self.results_path = ""
         self.results_file = ""
 
+        # Getting the full path for the test logs
+        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split("]")[0]
+        self.full_log_path = self.full_log_path.replace("::", "/").replace("[", "-")
+        log.info(f"Logs file path name is : {self.full_log_path}")
+
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
         self.environment = get_environment_info()
         self.environment["clusterID"] = get_running_cluster_id()
+
+        self.ceph_cluster = CephCluster()
+        self.used_capacity = self.get_cephfs_data()
 
         self.get_osd_info()
 
@@ -69,6 +78,95 @@ class PASTest(BaseTest):
     def teardown(self):
         if hasattr(self, "operator"):
             self.operator.cleanup()
+
+        now_data = self.get_cephfs_data()
+        # Wait 1 minutes for the backend deletion actually start.
+        log.info("Waiting for Ceph to finish cleaning up")
+        time.sleep(60)
+
+        # Quarry the storage usage every 2 Min. if no difference between two
+        # samples, the backend cleanup is done.
+        still_going_down = True
+        while still_going_down:
+            new_data = self.get_cephfs_data()
+            # no deletion operation is in progress
+            if abs(now_data - new_data) < 1:
+                still_going_down = False
+                # up to 2% inflation of usage is acceptable
+                if new_data > (self.used_capacity * 1.02):
+                    log.warning(
+                        f"usage capacity after the test ({new_data:.2f} GiB) "
+                        f"is more then in the begining of it ({self.used_capacity:.2f} GiB)"
+                    )
+            else:
+                log.info(f"Last usage : {now_data}, Current usage {new_data}")
+                now_data = new_data
+                log.info("Waiting for Ceph to finish cleaning up")
+                time.sleep(120)
+                still_going_down = True
+        log.info("Storage usage was cleandup")
+
+    def create_new_pool(self, pool_name):
+        """
+        Creating new Storage pool for RBD / CephFS to use in a test so it can be
+        deleted in the end of the test for fast cleanup
+
+        Args:
+            pool_name (str):  the name of the pool to create
+
+        """
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.ceph_cluster.create_new_blockpool(pool_name=pool_name)
+            self.ceph_cluster.set_pgs(poolname=pool_name, pgs=128)
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.ceph_cluster.create_new_filesystem(fs_name=pool_name)
+            self.ceph_cluster.toolbox.exec_ceph_cmd(
+                f"ceph fs subvolumegroup create {pool_name} csi"
+            )
+            self.ceph_cluster.set_pgs(poolname=f"{pool_name}-data0", pgs=128)
+
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephblockpool", ratio=0.24
+        )
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephfilesystem-data0", ratio=0.24
+        )
+        return
+
+    def delete_ceph_pool(self, pool_name):
+        """
+        Delete Storage pool (RBD / CephFS) that was created for the test for
+        fast cleanup.
+
+        Args:
+            pool_name (str):  the name of the pool to be delete
+
+        """
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.ceph_cluster.delete_blockpool(pool_name=pool_name)
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.ceph_cluster.delete_filesystem(fs_name=pool_name)
+
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephblockpool", ratio=0.49
+        )
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephfilesystem-data0", ratio=0.49
+        )
+        return
+
+    def get_cephfs_data(self):
+        """
+        Look through ceph pods and find space usage on all ceph pools
+
+        Returns:
+            int: total used capacity in GiB.
+        """
+        ceph_status = self.ceph_cluster.toolbox.exec_ceph_cmd(ceph_cmd="ceph df")
+        total_used = 0
+        for pool in ceph_status["pools"]:
+            total_used += pool["stats"]["bytes_used"]
+        return total_used / constants.GB
 
     def get_osd_info(self):
         """
