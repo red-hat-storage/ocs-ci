@@ -20,7 +20,7 @@ class TestMCGRecovery(E2ETest):
             pytest.param(
                 2,
                 15,
-                marks=[tier4, pytest.mark.polarion_id("E2E TODO")],
+                marks=[tier4, pytest.mark.polarion_id("OCS-2716")],
             ),
         ],
     )
