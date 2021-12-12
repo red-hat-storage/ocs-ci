@@ -116,7 +116,6 @@ from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase_new import CouchBase
@@ -4094,19 +4093,6 @@ def load_cluster_info_file(request):
     example related to disconnected cluster)
     """
     load_cluster_info()
-
-
-@pytest.fixture(scope="function")
-def ripsaw(request):
-    # Create benchmark Operator (formerly ripsaw)
-    ripsaw = RipSaw()
-
-    def teardown():
-        ripsaw.cleanup()
-        time.sleep(10)
-
-    request.addfinalizer(teardown)
-    return ripsaw
 
 
 @pytest.fixture(scope="function")
