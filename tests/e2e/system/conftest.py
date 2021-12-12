@@ -209,9 +209,6 @@ def setup_mcg_system(
     cld_mgr,
     test_directory_setup,
 ):
-    # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
-    # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
-
     def mcg_system_setup(bucket_amount=5, object_amount=10):
         # Create standard MCG buckets
         test_buckets = bucket_factory(
