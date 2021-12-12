@@ -241,7 +241,7 @@ def setup_mcg_system(
                 mcg_obj=mcg_obj_session,
             ), "Some or all written objects were not found in the list of downloaded objects"
 
-        # E2E TODO: Create RGW kafka notification & see the objects are notified to kafka
+        # E2E TODO: Create RGW kafka notification & see the objects are notified to kafka.
 
         # Create two MCG buckets with a bidirectional replication policy
         bucketclass = {
