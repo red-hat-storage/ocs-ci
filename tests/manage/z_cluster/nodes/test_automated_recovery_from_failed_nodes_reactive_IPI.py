@@ -182,7 +182,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=80)
 
 
 @ignore_leftovers

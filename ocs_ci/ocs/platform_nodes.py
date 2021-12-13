@@ -225,7 +225,9 @@ class VMWareNodes(NodesBase):
 
     def get_vm_nodes_in_dc(self, nodes, dc=None):
         """
-        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope)
+        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope).
+        Note: If one of the nodes failed with an exception, it will not return his
+        corresponding VM object.
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -235,7 +237,8 @@ class VMWareNodes(NodesBase):
             list: vSphere vm objects list in the Datacenter
 
         """
-        vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
+        dc = dc or self.datacenter
+        vms_in_dc = self.vsphere.get_all_vms_in_dc(dc)
         node_names = set([node.get().get("metadata").get("name") for node in nodes])
         vms = []
         for vm in vms_in_dc:
@@ -245,6 +248,9 @@ class VMWareNodes(NodesBase):
                     vms.append(vm)
             except Exception as e:
                 logger.info(f"Failed to get the vm name due to exception: {e}")
+
+        if len(vms) < len(nodes):
+            logger.warning("Didn't find all the VM objects for all the nodes")
 
         return vms
 
