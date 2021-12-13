@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import tier1, ManageTest, acceptance
 from ocs_ci.ocs import constants, node
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +128,11 @@ class TestRawBlockPV(ManageTest):
                 )
 
         for pod in pods:
-            get_fio_rw_iops(pod)
+            # Wait for fio to start by verifying fio_thread attribute
+            for fio_thread in TimeoutSampler(20, 5, getattr, pod, "fio_thread"):
+                if fio_thread:
+                    get_fio_rw_iops(pod)
+                    break
         return pods, pvcs, pvs
 
     def test_raw_block_pv(self, storageclass, namespace, teardown_factory):
