@@ -47,20 +47,20 @@ class RGW(object):
             tuple: Endpoint, Access key, Secret key
 
         """
-        if (
-            secret_name == constants.NOOBAA_OBJECTSTOREUSER_SECRET
-            and storagecluster_independent_check()
-        ):
-            secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
         secret_ocp_obj = OCP(kind=constants.SECRET, namespace=self.namespace)
         route_ocp_obj = OCP(
             kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
         )
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        if config.DEPLOYMENT["external_mode"]:
+
+        if storagecluster_independent_check():
             endpoint = route_ocp_obj.get(
                 resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
             )
+            if secret_name == constants.NOOBAA_OBJECTSTOREUSER_SECRET:
+                secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
+            elif secret_name == constants.CEPH_OBJECTSTOREUSER_SECRET:
+                secret_name = constants.CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET
         else:
             endpoint = route_ocp_obj.get(
                 resource_name=constants.RGW_SERVICE_INTERNAL_MODE

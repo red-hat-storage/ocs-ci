@@ -2005,7 +2005,7 @@ def rgw_deployments(request):
         pytest.skip("There is no RGW deployment available for this test.")
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def rgw_endpoint(request):
     """
     Expose RGW service and return external RGW endpoint address if available.

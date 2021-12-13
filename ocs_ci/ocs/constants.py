@@ -890,9 +890,15 @@ OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}
 CEPH_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
     "", "ocs-storagecluster", "cephobjectstoreuser"
 )
-NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
-NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
-EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
+CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "ocs-storagecluster", "cephobjectstoreuser"
+)
+NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "noobaa", "ceph-objectstore-user"
+)
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "noobaa", "ceph-objectstore-user"
+)
 OCS_SECRET = "ocs-secret"
 MANAGED_SMTP_SECRET = "ocs-converged-smtp"
 MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
