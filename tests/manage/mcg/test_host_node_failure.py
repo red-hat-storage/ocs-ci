@@ -203,4 +203,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         self.sanity_helpers.health_check()
 
         # Creates bucket then writes, reads and deletes objects
-        self.sanity_helpers.obc_put_obj_create_delete(mcg_obj, bucket_factory)
+        # TODO: Reduce timeout in future versions once 2028559 is fixed
+        self.sanity_helpers.obc_put_obj_create_delete(
+            mcg_obj, bucket_factory, timneout=900
+        )
