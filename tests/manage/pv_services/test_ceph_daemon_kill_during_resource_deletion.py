@@ -306,15 +306,9 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         log.info("Verified: PVCs are deleted.")
 
         # Verify PVs are deleted
-        # WA for the issue 4905
-        pv_delete_timeout = (
-            600
-            if config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
-            else 200
-        )
         for pv_obj in pv_objs:
             assert pv_obj.ocp.wait_for_delete(
-                pv_obj.name, pv_delete_timeout
+                pv_obj.name, 120
             ), f"PV {pv_obj.name} is not deleted"
         log.info("Verified: PVs are deleted.")
 
