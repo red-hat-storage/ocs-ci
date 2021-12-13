@@ -72,8 +72,9 @@ class NamespaceStore:
                 func=_cli_deletion_flow,
             )
             if not sample.wait_for_func_status(result=True):
-                log.error(f"Failed to {self.name}")
-                raise TimeoutExpiredError
+                err_msg = f"Failed to {self.name}"
+                log.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
 
         log.info(f"Verifying whether namespacestore {self.name} exists after deletion")
         ns_deleted_successfully = False
@@ -229,8 +230,9 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     endpoint=endpointMap[platform],
                 )
                 if not sample.wait_for_func_status(result=True):
-                    log.error(f"{nss_name} failed its verification check")
-                    raise TimeoutExpiredError
+                    err_msg = f"{nss_name} failed its verification check"
+                    log.error(err_msg)
+                    raise TimeoutExpiredError(err_msg)
 
                 nss_obj = NamespaceStore(
                     name=nss_name,

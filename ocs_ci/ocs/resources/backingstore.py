@@ -98,8 +98,9 @@ class BackingStore:
                 func=_cli_deletion_flow,
             )
             if not sample.wait_for_func_status(result=True):
-                log.error(f"Failed to {self.name}")
-                raise TimeoutExpiredError
+                err_msg = f"Failed to {self.name}"
+                log.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
@@ -142,8 +143,9 @@ class BackingStore:
                 namespace=namespace,
             )
             if not sample.wait_for_func_status(result=True):
-                log.error(f"{self.name} was not deleted properly, leftovers were found")
-                raise TimeoutExpiredError
+                err_msg = f"{self.name} was not deleted properly, leftovers were found"
+                log.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
 
         def _check_resources_deleted(namespace=None):
             """
