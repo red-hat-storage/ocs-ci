@@ -2122,8 +2122,8 @@ def get_ocs_olm_operator_tags(limit=100):
     headers = {"Authorization": f"Bearer {quay_access_token}"}
     image = "ocs-registry"
     try:
-        ocs_version = float(config.ENV_DATA.get("ocs_version"))
-        if ocs_version < 4.5:
+        ocs_version = version_module.get_semantic_ocs_version_from_config()
+        if ocs_version < version_module.VERSION_4_5:
             image = "ocs-olm-operator"
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
