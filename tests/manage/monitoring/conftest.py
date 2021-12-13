@@ -416,6 +416,29 @@ def workload_storageutilization_95p_rbd(
 
 
 @pytest.fixture
+def workload_storageutilization_99p_rbd(
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+):
+    fixture_name = "workload_storageutilization_99p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path,
+        target_percentage=0.99,
+    )
+    return measured_op
+
+
+@pytest.fixture
 def workload_storageutilization_05p_cephfs(
     project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
 ):
