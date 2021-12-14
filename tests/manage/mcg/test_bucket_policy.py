@@ -243,9 +243,11 @@ class TestS3BucketPolicy(MCGTest):
         bucket_policy_generated = gen_bucket_policy(
             user_list=[obc_obj.obc_account, user.email_id],
             actions_list=["PutObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
             else ["GetObject", "DeleteObject"],
-            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
+            effect="Allow"
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+            else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -283,7 +285,7 @@ class TestS3BucketPolicy(MCGTest):
             f" is denied to Get object"
         )
         try:
-            if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
                 s3_get_object(user, obc_obj.bucket_name, object_key)
             else:
                 s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
@@ -330,7 +332,7 @@ class TestS3BucketPolicy(MCGTest):
             f"is denied to Delete object"
         )
         try:
-            if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
                 s3_delete_object(user, obc_obj.bucket_name, object_key)
             else:
                 s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
@@ -352,7 +354,9 @@ class TestS3BucketPolicy(MCGTest):
             actions_list=["GetObject", "DeleteObject"]
             if float(config.ENV_DATA["ocs_version"]) <= 4.6
             else ["PutObject"],
-            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
+            effect="Allow"
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6
+            else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         new_policy = json.dumps(new_policy_generated)
