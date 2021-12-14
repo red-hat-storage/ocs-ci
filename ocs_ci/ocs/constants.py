@@ -1332,7 +1332,7 @@ SQUADS = {
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
-    "Purple": ["/test_must_gather", "/upgrade/"],
+    "Purple": ["/ecosystem/"],
     "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
