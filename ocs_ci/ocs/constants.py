@@ -11,6 +11,8 @@ and with consideration of the entire project.
 
 import os
 
+from ocs_ci.framework import config
+
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -888,9 +890,14 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
-MANAGED_SMTP_SECRET = "ocs-converged-smtp"
-MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
-MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
+# Names of Managed Service secrets are derived from addon name
+try:
+    addon_name = config.DEPLOYMENT.get("addon_name")
+except AttributeError:
+    addon_name = ""
+MANAGED_SMTP_SECRET = f"{addon_name}-smtp"
+MANAGED_PAGERDUTY_SECRET = f"{addon_name}-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET = f"{addon_name}-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
