@@ -580,6 +580,7 @@ locators = {
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
         "add_capacity": add_capacity,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
     },
     "4.8": {
         "login": login,
