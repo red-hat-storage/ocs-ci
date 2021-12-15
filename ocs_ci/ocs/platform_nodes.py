@@ -427,7 +427,7 @@ class VMWareNodes(NodesBase):
             False otherwise
 
         """
-        vms = self.get_vm_nodes_in_dc(nodes)
+        vms = self.get_vms(nodes)
         self.vsphere.remove_vms_from_inventory(vms)
         if wait:
             for vm in vms:
