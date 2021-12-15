@@ -890,9 +890,9 @@ EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("externa
 OCS_SECRET = "ocs-secret"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
-MANAGED_SMTP_SECRET_SUFFIX = f"-smtp"
-MANAGED_PAGERDUTY_SECRET_SUFFIX = f"-pagerduty"
-MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = f"-deadmanssnitch"
+MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
+MANAGED_PAGERDUTY_SECRET_SUFFIX = "-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = "-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
