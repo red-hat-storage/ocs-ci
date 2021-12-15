@@ -990,6 +990,10 @@ class MCG:
             not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             or not _compare_cli_hashes()
         ):
+            logger.info(
+                f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
+                "attempting to copy it from the MCG operator pod"
+            )
             if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
                 cmd = (
                     f"oc cp {self.namespace}/{self.operator_pod.name}:"
