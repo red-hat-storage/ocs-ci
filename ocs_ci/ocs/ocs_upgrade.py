@@ -553,8 +553,8 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         )
         log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
 
-    channel = upgrade_ocs.set_upgrade_channel()
     with CephHealthMonitor(ceph_cluster):
+        channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         ui_upgrade_supported = False
         if config.UPGRADE.get("ui_upgrade"):
@@ -575,25 +575,25 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
                     # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
                     # OCS automatically.
                     upgrade_ocs.update_subscription(channel)
-                if original_ocs_version == "4.8" and upgrade_version == "4.9":
-                    deployment = Deployment()
-                    deployment.subscribe_ocs()
-                if (
-                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                ) and not (upgrade_in_current_source):
-                    create_ocs_secret(config.ENV_DATA["cluster_namespace"])
-                    for attempt in range(2):
-                        # We need to do it twice, because some of the SA are updated
-                        # after the first load of OCS pod after upgrade. So we need to
-                        # link updated SA again.
-                        log.info(
-                            f"Sleep 1 minute before attempt: {attempt + 1}/2 "
-                            "of linking secret/SAs"
-                        )
-                        time.sleep(60)
-                        link_all_sa_and_secret_and_delete_pods(
-                            constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
-                        )
+            if original_ocs_version == "4.8" and upgrade_version == "4.9":
+                deployment = Deployment()
+                deployment.subscribe_ocs()
+            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+                upgrade_in_current_source
+            ):
+                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+                for attempt in range(2):
+                    # We need to do it twice, because some of the SA are updated
+                    # after the first load of OCS pod after upgrade. So we need to
+                    # link updated SA again.
+                    log.info(
+                        f"Sleep 1 minute before attempt: {attempt + 1}/2 "
+                        "of linking secret/SAs"
+                    )
+                    time.sleep(60)
+                    link_all_sa_and_secret_and_delete_pods(
+                        constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                    )
             if operation:
                 log.info(f"Calling test function: {operation}")
                 _ = operation(*operation_args, **operation_kwargs)
