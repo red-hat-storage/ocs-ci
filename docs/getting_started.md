@@ -99,6 +99,7 @@ an ES server need to be deployed in the LAB, and the IP/Port need to be configur
 
 All elasticsearch configuration done in the `ocs_ci/framework/conf/default_config.yaml` at the `PERF:` section.
 
+For creating a new performance test, pleas use the template from : `template_test/Performance_template.py`
 ### Pull Secret
 
 In order to deploy a cluster to AWS with the Openshift Installer,
