@@ -1009,10 +1009,11 @@ def verify_managed_service_resources():
 
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    addon_name = config.DEPLOYMENT["addon_name"]
     for secret_name in {
-        constants.MANAGED_SMTP_SECRET,
-        constants.MANAGED_PAGERDUTY_SECRET,
-        constants.MANAGED_DEADMANSSNITCH_SECRET,
+        addon_name + constants.MANAGED_SMTP_SECRET_SUFFIX,
+        addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX,
+        addon_name + constants.MANAGED_DEADMANSSNITCH_SECRET_SUFFIX,
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name

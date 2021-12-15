@@ -11,8 +11,6 @@ and with consideration of the entire project.
 
 import os
 
-from ocs_ci.framework import config
-
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -891,13 +889,10 @@ NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
 # Names of Managed Service secrets are derived from addon name
-try:
-    addon_name = config.DEPLOYMENT.get("addon_name")
-except AttributeError:
-    addon_name = ""
-MANAGED_SMTP_SECRET = f"{addon_name}-smtp"
-MANAGED_PAGERDUTY_SECRET = f"{addon_name}-pagerduty"
-MANAGED_DEADMANSSNITCH_SECRET = f"{addon_name}-deadmanssnitch"
+# Following secret strings contain only suffix
+MANAGED_SMTP_SECRET_SUFFIX = f"-smtp"
+MANAGED_PAGERDUTY_SECRET_SUFFIX = f"-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = f"-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {

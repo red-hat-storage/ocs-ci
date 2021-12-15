@@ -21,18 +21,23 @@ def set_pagerduty_integration_secret(integration_key):
         integration_key (str): Integration key taken from PagerDuty Prometheus integration
 
     """
-    logger.info("Setting up PagerSuty integration")
+    logger.info("Setting up PagerDuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
+    addon_name = config.DEPLOYMENT["addon_name"]
     cmd = (
-        f"oc create secret generic {constants.MANAGED_PAGERDUTY_SECRET} "
+        f"oc create secret generic {addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX} "
         f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
         f"--kubeconfig {kubeconfig} --dry-run -o yaml"
     )
     secret_data = exec_cmd(
-        cmd, secrets=[integration_key, constants.MANAGED_PAGERDUTY_SECRET]
+        cmd,
+        secrets=[
+            integration_key,
+            addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX,
+        ],
     ).stdout
     with tempfile.NamedTemporaryFile(
-        prefix=f"{constants.MANAGED_PAGERDUTY_SECRET}_"
+        prefix=f"{addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX}_"
     ) as secret_file:
         secret_file.write(secret_data)
         secret_file.flush()
