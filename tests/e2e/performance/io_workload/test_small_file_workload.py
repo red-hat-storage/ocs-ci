@@ -20,13 +20,14 @@ import os.path
 from elasticsearch import Elasticsearch, exceptions as ESExp
 import numpy as np
 import pytest
-import time
+
+# import time
 
 # Local modules
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs import benchmark_operator, constants, exceptions
+from ocs_ci.ocs import benchmark_operator, constants
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
@@ -376,26 +377,8 @@ class TestSmallFileWorkload(PASTest):
         log.info("Starting the test setup")
         self.benchmark_name = "SmallFiles"
         self.client_pod_name = "smallfile-client"
-        if config.PERF.get("deploy_internal_es"):
-            self.es = ElasticSearch()
-        else:
-            if config.PERF.get("internal_es_server") == "":
-                self.es = None
-                return
-            else:
-                self.es = {
-                    "server": config.PERF.get("internal_es_server"),
-                    "port": config.PERF.get("internal_es_port"),
-                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
-                }
-                # verify that the connection to the elasticsearch server is OK
-                if not super(TestSmallFileWorkload, self).es_connect():
-                    self.es = None
-                    return
 
         super(TestSmallFileWorkload, self).setup()
-        # deploy the benchmark-operator
-        self.deploy_benchmark_operator()
 
     def setting_storage_usage(self, file_size, files, threads, samples, clients):
         """
@@ -546,13 +529,18 @@ class TestSmallFileWorkload(PASTest):
         log.info("cleanup the environment")
         if isinstance(self.es, ElasticSearch):
             self.es.cleanup()
-        self.operator.cleanup()
+        try:
+            self.operator.cleanup()
+        except Exception:
+            # nothig to do, the benchmark-operator did not deployed. this is for
+            # the results collecting and pushing results into the dashboard
+            pass
         # wait up to 45 min for the ceph cluster be health OK after backend
         # operation completed.
         log.info("Verify (and wait if needed) that ceph health is OK")
         ceph_health_check(tries=45, delay=60)
         # Let the background operation (delete backed images) to finish
-        time.sleep(120)
+        # time.sleep(120)
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "samples", "clients", "interface"],
@@ -578,6 +566,26 @@ class TestSmallFileWorkload(PASTest):
             interface (str) : the volume type (rbd / cephfs)
 
         """
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+                return
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not super(TestSmallFileWorkload, self).es_connect():
+                    self.es = None
+                    return
+
+        # deploy the benchmark-operator
+        self.deploy_benchmark_operator()
+
         # verify that there is an elasticsearch server for the benchmark
         if not self.es:
             log.error("This test must have an Elasticsearch server")
@@ -679,24 +687,13 @@ class TestSmallFileWorkload(PASTest):
         """
 
         # TODO : This function will push the results (if exists) to the performance dashboard.
-
+        self.number_of_tests = 4
         self.results_path = get_full_test_logs_path(
             cname=self, fname="test_smallfile_workload"
         )
         self.results_file = os.path.join(self.results_path, "all_results.txt")
         log.info(f"Check results in {self.results_file}")
-        try:
-            input_file = open(self.results_file, "r")
-            data = input_file.read().split("\n")
-            data.pop()  # remove the last empty element
-            input_file.close()
-            if len(data) != 4:
-                log.error("Not all tests finished")
-                raise exceptions.BenchmarkTestFailed()
-            else:
-                log.info("All test finished OK, and the results can be found at :")
-                for res in data:
-                    log.info(res)
-        except OSError as err:
-            log.error(f"OS error: {err}")
-            raise err
+
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name=self.benchmark_name)
