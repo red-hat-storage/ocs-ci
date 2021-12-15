@@ -4,6 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     post_ocs_upgrade,
     ManageTest,
@@ -27,6 +28,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
     @post_ocs_upgrade
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-2449")
+    @brown_squad
     def test_check_mon_pdb_post_upgrade(self):
         """
         Testcase to check disruptions_allowed and minimum
@@ -61,6 +63,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
     @post_ocs_upgrade
     @bugzilla("1861104")
     @pytest.mark.polarion_id("OCS-2626")
+    @brown_squad
     def test_check_osd_pdb_post_upgrade(self):
         """
         Test to verify OSD PDBs
