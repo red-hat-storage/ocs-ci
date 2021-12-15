@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
+    tier4,
     ignore_leftovers,
     polarion_id,
 )
@@ -17,8 +18,9 @@ class TestMCGRecovery(E2ETest):
 
     """
 
-    @ignore_leftovers
+    @tier4
     @tier4a
+    @ignore_leftovers
     @polarion_id("OCS-2716")
     @pytest.mark.parametrize(
         argnames=["bucket_amount", "object_amount"],
