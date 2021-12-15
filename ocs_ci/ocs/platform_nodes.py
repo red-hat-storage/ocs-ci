@@ -76,12 +76,16 @@ class PlatformNodesFactory:
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
+            "vsphere_ipi": VMWareIPINodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
-            platform += "_lso"
+        if platform == constants.VSPHERE_PLATFORM:
+            if cluster.is_lso_cluster():
+                platform += "_lso"
+            elif config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
         return self.cls_map[platform]()
 
 
@@ -221,37 +225,6 @@ class VMWareNodes(NodesBase):
         for node in node_names:
             node_vms = [vm for vm in vms_in_pool if vm.name in node]
             vms.extend(node_vms)
-        return vms
-
-    def get_vm_nodes_in_dc(self, nodes, dc=None):
-        """
-        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope).
-        Note: If one of the nodes failed with an exception, it will not return his
-        corresponding VM object.
-
-        Args:
-            nodes (list): The OCS objects of the nodes
-            dc (str): The Datacenter name. If not specified, it will use the current dc.
-
-        Returns:
-            list: vSphere vm objects list in the Datacenter
-
-        """
-        dc = dc or self.datacenter
-        vms_in_dc = self.vsphere.get_all_vms_in_dc(dc)
-        node_names = set([node.get().get("metadata").get("name") for node in nodes])
-        vms = []
-        for vm in vms_in_dc:
-            try:
-                vm_name = vm.name
-                if vm_name in node_names:
-                    vms.append(vm)
-            except Exception as e:
-                logger.info(f"Failed to get the vm name due to exception: {e}")
-
-        if len(vms) < len(nodes):
-            logger.warning("Didn't find all the VM objects for all the nodes")
-
         return vms
 
     def get_data_volumes(self, pvs=None):
@@ -2603,3 +2576,42 @@ class IBMCloud(NodesBase):
 
         """
         self.create_nodes(node_conf, node_type, num_nodes)
+
+
+class VMWareIPINodes(VMWareNodes):
+    """
+    VMWare IPI nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_vms(self, nodes):
+        """
+        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope).
+        Note: If one of the nodes failed with an exception, it will not return his
+        corresponding VM object.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: vSphere vm objects list in the Datacenter
+
+        """
+        vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
+        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        vms = []
+        for vm in vms_in_dc:
+            try:
+                vm_name = vm.name
+                if vm_name in node_names:
+                    vms.append(vm)
+            except Exception as e:
+                logger.info(f"Failed to get the vm name due to exception: {e}")
+
+        if len(vms) < len(nodes):
+            logger.warning("Didn't find all the VM objects for all the nodes")
+
+        return vms

@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     ignore_leftovers,
 )
+from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
@@ -182,7 +183,12 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=80)
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            tries = 120
+        else:
+            tries = 40
+
+        self.sanity_helpers.health_check(tries=tries)
 
 
 @ignore_leftovers
