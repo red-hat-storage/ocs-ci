@@ -322,6 +322,12 @@ pvc_4_8 = {
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 
+pvc_4_9 = {
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+}
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -580,6 +586,7 @@ locators = {
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
         "add_capacity": add_capacity,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.8": {
         "login": login,
