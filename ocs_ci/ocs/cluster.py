@@ -825,7 +825,7 @@ class CephCluster(object):
         """
         # Make sure the the default filesystem is not deleted.
         if fs_name == "ocs-storagecluster-cephfilesystem":
-            pass
+            return
 
         # Delete the filesystem
         self.CEPHFS.delete(resource_name=fs_name)
@@ -876,7 +876,7 @@ class CephCluster(object):
         """
         # Make sure the the default RBD pool is not deleted.
         if pool_name == "ocs-storagecluster-cephblockpool":
-            pass
+            return
 
         # Delete the RBD pool
         self.RBD.delete(resource_name=pool_name)
