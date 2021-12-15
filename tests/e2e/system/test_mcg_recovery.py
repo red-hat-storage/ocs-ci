@@ -1,8 +1,12 @@
 import logging
-
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier4
+from ocs_ci.framework.pytest_customization.marks import (
+    tier4a,
+    tier4,
+    ignore_leftovers,
+    polarion_id,
+)
 from ocs_ci.framework.testlib import E2ETest
 
 log = logging.getLogger(__name__)
@@ -14,15 +18,13 @@ class TestMCGRecovery(E2ETest):
 
     """
 
+    @tier4
+    @tier4a
+    @ignore_leftovers
+    @polarion_id("OCS-2716")
     @pytest.mark.parametrize(
         argnames=["bucket_amount", "object_amount"],
-        argvalues=[
-            pytest.param(
-                2,
-                15,
-                marks=[tier4, pytest.mark.polarion_id("OCS-2716")],
-            ),
-        ],
+        argvalues=[pytest.param(2, 15)],
     )
     def test_mcg_db_backup_recovery(
         self,
