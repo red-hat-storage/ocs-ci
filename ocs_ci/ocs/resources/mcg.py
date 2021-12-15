@@ -990,12 +990,23 @@ class MCG:
             not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             or not _compare_cli_hashes()
         ):
-            cmd = (
-                f"oc cp {self.namespace}/{self.operator_pod.name}:"
-                f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            )
-            subprocess.run(cmd, shell=True)
+            if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
+                cmd = (
+                    f"oc cp {self.namespace}/{self.operator_pod.name}:"
+                    f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                    f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                )
+                exec_cmd(cmd)
+            else:
+                cmd = (
+                    f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                    f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                    f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                )
+                proc = subprocess.run(cmd, shell=True)
+                logger.info(
+                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
+                )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             os.chmod(
