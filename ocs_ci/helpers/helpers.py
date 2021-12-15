@@ -3784,8 +3784,6 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         == mon_deployment_name
     ]
     mon_pod_running = mon_pod_running[0]
-    # cluster_namespace = 'rook-ceph'
-    # good_mon_id = mon_pod_running.get().get('metadata').get('labels').get('mon')
     monmap_path = "/tmp/monmap"
     args_from_mon_containers = (
         running_mon_pod_yaml.get("spec")
