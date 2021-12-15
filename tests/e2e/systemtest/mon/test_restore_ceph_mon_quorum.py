@@ -2,12 +2,12 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, ignore_leftovers, systemtests
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_ceph_tools_pod
 from ocs_ci.helpers.helpers import (
-    mon_quorom_lost,
+    induce_mon_quorum_loss,
     recover_mon_quorum,
     modify_deployment_replica_count,
 )
@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
+@systemtests
+@pytest.mark.polarion_id("OCS-2720")
 class TestRestoreCephMonQuorum(E2ETest):
     """
     The objective of this test case is to verify that
@@ -64,22 +66,22 @@ class TestRestoreCephMonQuorum(E2ETest):
         # ToDo: Run background IOs
 
     @pytest.fixture(autouse=True)
-    def base_teardown(self, request):
+    def rook_operator_teardown(self, request):
         def finalizer():
             op_obj = OCP(
                 kind=constants.DEPLOYMENT,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
-            op_obj = op_obj.get(resource_name="rook-ceph-operator")
+            pod_obj = OCP(
+                kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            op_obj = op_obj.get(resource_name=constants.ROOK_CEPH_OPERATOR)
             if op_obj.get("spec").get("replicas") != 1:
                 modify_deployment_replica_count(
-                    deployment_name="rook-ceph-operator", replica_count=1
+                    deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
                 ), "Failed to scale up rook-ceph-operator to 1"
 
                 log.info("Validate all mons are up and running")
-                pod_obj = OCP(
-                    kind=constants.POD, amespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-                )
                 pod_obj.wait_for_resource(
                     condition=constants.STATUS_RUNNING,
                     selector=constants.MON_APP_LABEL,
@@ -107,10 +109,14 @@ class TestRestoreCephMonQuorum(E2ETest):
         """
 
         # Take mons out of the quorum and confirm it
-        mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id = mon_quorom_lost()
+        (
+            self.mon_pod_obj_list,
+            mon_pod_running,
+            ceph_mon_daemon_id,
+        ) = induce_mon_quorum_loss()
 
         # Recover mon quorum
-        recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id)
+        recover_mon_quorum(self.mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id)
 
         # Remove crash list from ceph health
         log.info("Silence the ceph warnings by “archiving” the crash")

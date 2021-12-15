@@ -3657,7 +3657,7 @@ def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(timeou
     return sample.wait_for_func_status(result=True)
 
 
-def mon_quorom_lost():
+def induce_mon_quorum_loss():
     """
     Take mon quorum out by deleting /var/lib/ceph/mon directory
     so that it will start crashing and the quorum is lost
@@ -3688,6 +3688,7 @@ def mon_quorom_lost():
         pod_obj.get().get("metadata").get("labels").get("ceph_daemon_id")
         for pod_obj in mon_pod_obj
     ]
+    logger.info(f"Crashed ceph mon daemon id: {ceph_mon_daemon_id}")
 
     # Wait for sometime after the mon crashes
     time.sleep(300)
@@ -3720,11 +3721,16 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     Recover mon quorum back by following
     procedure mentioned in https://access.redhat.com/solutions/5898541
 
+    Args:
+        mon_pod_obj_list (list): List of mon objects
+        mon_pod_running (obj): A mon object which is running
+        ceph_mon_daemon_id (list): List of crashed ceph mon id
+
     """
     # Scale down rook-ceph-operator
     logger.info("Scale down rook-ceph-operator")
     if not modify_deployment_replica_count(
-        deployment_name="rook-ceph-operator", replica_count=0
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=0
     ):
         raise CommandFailed("Failed to scale down rook-ceph-operator to 0")
     logger.info("Successfully scaled down rook-ceph-operator to 0")
@@ -3853,7 +3859,7 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     # Scale up the rook-ceph-operator deployment
     logger.info("Scale up rook-ceph-operator")
     if not modify_deployment_replica_count(
-        deployment_name="rook-ceph-operator", replica_count=1
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
     ):
         raise CommandFailed("Failed to scale up rook-ceph-operator to 1")
     logger.info("Successfully scaled up rook-ceph-operator to 1")
