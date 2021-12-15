@@ -1251,26 +1251,27 @@ def add_squad_analysis_to_email(session, soup):
     # sort out failed and skipped test cases to failed and skipped dicts
     for result in session.results.values():
         if result.failed or result.skipped:
-            unassigned = True
-            for squad, res in constants.SQUADS.items():
-                for item in res:
-                    if item in result.nodeid:
-                        if result.failed:
-                            if squad not in failed:
-                                failed[squad] = []
-                            failed[squad].append(result.nodeid)
-                            unassigned = False
+            squad_marks = [
+                key[:-6].capitalize() for key in result.keywords if "_squad" in key
+            ]
+            if squad_marks:
+                for squad in squad_marks:
+                    if result.failed:
+                        if squad not in failed:
+                            failed[squad] = []
+                        failed[squad].append(result.nodeid)
 
-                        if result.skipped:
-                            if squad not in skipped:
-                                skipped[squad] = []
-                            try:
-                                skipped_message = result.longrepr[2][8:]
-                            except TypeError:
-                                skipped_message = "--unknown--"
-                            skipped[squad].append((result.nodeid, skipped_message))
-                            unassigned = False
-            if unassigned:
+                    if result.skipped:
+                        if squad not in skipped:
+                            skipped[squad] = []
+                        try:
+                            skipped_message = result.longrepr[2][8:]
+                        except TypeError:
+                            skipped_message = "--unknown--"
+                        skipped[squad].append((result.nodeid, skipped_message))
+
+            else:
+                # unassigned
                 if result.failed:
                     if "UNASSIGNED" not in failed:
                         failed["UNASSIGNED"] = []
