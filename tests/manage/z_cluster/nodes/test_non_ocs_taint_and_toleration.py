@@ -6,7 +6,12 @@ from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
 )
-from ocs_ci.framework.testlib import tier4c, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    tier4c,
+    E2ETest,
+    ignore_leftovers,
+    skipif_tainted_nodes,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -15,9 +20,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
-    get_all_nodes,
-    check_taint_on_nodes,
-    get_node_objs,
+    get_worker_nodes,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import bugzilla
@@ -29,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 @tier4c
 @ignore_leftovers
+@skipif_tainted_nodes
 @bugzilla("1992472")
 @pytest.mark.polarion_id("OCS-2705")
 class TestNonOCSTaintAndTolerations(E2ETest):
@@ -53,9 +57,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
 
         def finalizer():
-            nodes = get_node_objs(node_names=get_all_nodes())
             assert untaint_nodes(
-                taint_label="xyz=true:NoSchedule", nodes_to_untaint=nodes
+                taint_label="xyz=true:NoSchedule",
             ), "Failed to untaint"
 
         request.addfinalizer(finalizer)
@@ -63,20 +66,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
     def test_non_ocs_taint_and_tolerations(self):
         """
         Test runs the following steps
-        1. Check if nodes are not ocs tainted
-        2. Taint ocs nodes with non-ocs taint
-        3. Set tolerations on storagecluster, subscription and configmap
-        4. Add Capacity
-        5. Respin all ocs pods and check if it runs on ocs nodes with tolerations
+        1. Taint ocs nodes with non-ocs taint
+        2. Set tolerations on storagecluster, subscription and configmap
+        3. Add Capacity
+        4. Respin all ocs pods and check if it runs on ocs nodes with tolerations
 
         """
 
-        # Check ocs taints on nodes
-        assert not check_taint_on_nodes(), "Nodes already ocs tainted"
-
         # Taint all nodes with non-ocs taint
-        ocp_nodes = get_all_nodes()
-        taint_nodes(nodes=ocp_nodes, taint_label="xyz=true:NoSchedule")
+        ocs_nodes = get_worker_nodes()
+        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
 
         # Add tolerations to the storagecluster
         storagecluster_obj = ocp.OCP(
@@ -97,11 +96,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         storagecluster_obj.patch(params=param, format_type="merge")
 
         # Add tolerations to the subscription
-        sub_list = [
-            constants.ODF_SUBSCRIPTION,
-            constants.OCS_SUB,
-            constants.MCG_SUB,
-        ]
+        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
         param = (
             '{"spec": {"config":  {"tolerations": '
             '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
@@ -121,21 +116,14 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         )
-        plugin_tol = configmap_obj.get().get("data").get("CSI_PLUGIN_TOLERATIONS")
-        provisioner_tol = (
-            configmap_obj.get().get("data").get("CSI_PROVISIONER_TOLERATIONS")
-        )
-        plugin_tol += (
+        toleration = configmap_obj.get().get("data").get("CSI_PLUGIN_TOLERATIONS")
+        toleration += (
             '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
         )
-        provisioner_tol += (
-            '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
-        )
-        plugin_tol = plugin_tol.replace('"', '\\"').replace("\n", "\\n")
-        provisioner_tol = provisioner_tol.replace('"', '\\"').replace("\n", "\\n")
+        toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
         param_cmd = (
-            f'[{{"op": "replace", "path": "/data/CSI_PLUGIN_TOLERATIONS", "value": "{plugin_tol}" }}, '
-            f'{{"op": "replace", "path": "/data/CSI_PROVISIONER_TOLERATIONS", "value": "{provisioner_tol}" }}]'
+            f'[{{"op": "replace", "path": "/data/CSI_PLUGIN_TOLERATIONS", "value": "{toleration}" }}, '
+            f'{{"op": "replace", "path": "/data/CSI_PROVISIONER_TOLERATIONS", "value": "{toleration}" }}]'
         )
         configmap_obj.patch(params=param_cmd, format_type="json")
 
@@ -159,7 +147,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             resource_count=count * replica_count,
         ), "New OSDs failed to reach running state"
 
-        assert check_ceph_health_after_add_capacity()
+        check_ceph_health_after_add_capacity()
 
         # Respin all pods and check it if is still running
         # Excluding tool-box pod because of https://bugzilla.redhat.com/show_bug.cgi?id=2012084

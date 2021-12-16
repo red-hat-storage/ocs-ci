@@ -154,10 +154,6 @@ PRIVILEGED = "privileged"
 ANYUID = "anyuid"
 CLUSTER_SERVICE_VERSION = "csv"
 
-# Subscriptions
-OCS_SUB = "ocs-operator-stable-4.9-redhat-operators-openshift-marketplace"
-MCG_SUB = "mcg-operator-stable-4.9-redhat-operators-openshift-marketplace"
-
 # Other
 SECRET = "Secret"
 TEST = "test"
