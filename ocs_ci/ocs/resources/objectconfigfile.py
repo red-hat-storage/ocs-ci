@@ -22,10 +22,33 @@ import time
 import yaml
 
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 
 
 logger = logging.getLogger(name=__file__)
+
+
+def link_spec_volume(spec_dict, volume_name, pvc_name):
+    """
+    Find volume of given name in given spec dict, and set given pvc name as
+    a pvc for the volume in the spec.
+
+    Args:
+        spec_dict (dict): dictionary with a container/template spec
+        volume_name (str): name of the volume in the spec dict to link
+        pvc_name (str): name of the target pvc (for the given volume)
+
+    Raises:
+        NotFoundError when given volume is not found in given spec
+    """
+    is_pvc_linked = False
+    for vol in spec_dict["volumes"]:
+        if vol["name"] == volume_name:
+            vol["persistentVolumeClaim"]["claimName"] = pvc_name
+            is_pvc_linked = True
+            break
+    if not is_pvc_linked:
+        raise NotFoundError("volume %s not found in given spec")
 
 
 class ObjectConfFile:
