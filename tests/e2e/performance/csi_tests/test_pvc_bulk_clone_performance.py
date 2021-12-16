@@ -4,23 +4,95 @@ Total number of clones in bulk will be 50
 """
 import logging
 import pytest
+from uuid import uuid4
 
 from ocs_ci.utility import utils
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.framework.testlib import performance
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.ocs.perfresult import PerfResult
 
 log = logging.getLogger(__name__)
 
+
+class ResultsAnalyse(PerfResult):
+    """
+    This class generates results for all tests as one unit
+    and saves them to an elastic search server on the cluster
+
+    """
+
+    def __init__(self, uuid, crd, full_log_path):
+        """
+        Initialize the object by reading some of the data from the CRD file and
+        by connecting to the ES server and read all results from it.
+
+        Args:
+            uuid (str): the unique uid of the test
+            crd (dict): dictionary with test parameters - the test yaml file
+                        that modify it in the test itself.
+            full_log_path (str): the path of the results files to be found
+
+        """
+        super(ResultsAnalyse, self).__init__(uuid, crd)
+        self.new_index = "pod_reattach_time_fullres"
+        self.full_log_path = full_log_path
+        # make sure we have connection to the elastic search server
+        self.es_connect()
 
 @performance
 class TestBulkCloneCreation(PASTest):
     """
     Base class for bulk creation of PVC clones
     """
+
+    def setup(self):
+        """
+        Setting up test parameters
+        """
+        logging.info("Starting the test setup")
+        super(TestBulkCloneCreation, self).setup()
+        self.benchmark_name = "pod_bulk_clone_creation_time"
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an empty FIOResultsAnalyse object
+
+        Returns:
+            FIOResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("index", full_results.new_index)
+        return full_results
+
 
     @pytest.fixture()
     def namespace(self, project_factory, interface_iterate):
@@ -158,6 +230,29 @@ class TestBulkCloneCreation(PASTest):
                 f"Total creation time = {total_time} secs, data size = {total_files_size} MB, speed = {speed} MB/sec "
                 f"for {self.interface} clone in bulk of {pvc_count} clones."
             )
+
+            # Produce ES report
+            # Collecting environment information
+            self.get_env_info()
+
+            # Initialize the results doc file.
+            full_results = self.init_full_results(
+                ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            )
+
+            full_results.add_key("interface", self.interface)
+            full_results.add_key("bulk_size", pvc_count)
+            full_results.add_key("clone_size", vol_size)
+            full_results.add_key("bulk_creation_time", total_time)
+            full_results.add_key("data_size(MB)", total_files_size)
+            full_results.add_key("speed", speed)
+
+            # Write the test results into the ES server
+            full_results.es_write()
+            # write the ES link to the test results in the test log.
+            logging.info(f"The result can be found at : {full_results.results_link()}")
+
+
 
         # Finally is used to clean-up the resources created
         # Irrespective of try block pass/fail finally will be executed.
