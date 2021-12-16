@@ -358,6 +358,7 @@ class AWSUPI(AWSBase):
             # Change dir back to ocs-ci dir
             os.chdir(cidir)
 
+            logger.info(stdout)
             if proc.returncode:
                 logger.error(stderr)
                 if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
@@ -366,7 +367,6 @@ class AWSUPI(AWSBase):
                     except Exception as ex:
                         logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
-            logger.info(stdout)
 
             self.test_cluster()
 
