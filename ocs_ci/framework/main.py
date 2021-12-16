@@ -127,8 +127,8 @@ def process_ocsci_conf(arguments):
     )
 
     args, unknown = parser.parse_known_args(args=arguments)
-    ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
+    ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
