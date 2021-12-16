@@ -1008,8 +1008,10 @@ class MCG:
                     f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
                 )
                 proc = subprocess.run(cmd, shell=True)
+                proc_out = proc.stdout.decode() if proc.stdout else ""
+                proc_err = proc.stderr.decode() if proc.stderr else ""
                 logger.info(
-                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
+                    f"MCG CLI copying process stdout:{proc_out}, stderr: {proc_err}"
                 )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
