@@ -20,6 +20,7 @@ from ocs_ci.ocs import cluster, constants, defaults, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
     labels_map = {

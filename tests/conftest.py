@@ -76,6 +76,7 @@ from ocs_ci.utility import (
     reporting,
     templating,
     users,
+    version,
 )
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
@@ -3729,7 +3730,7 @@ def nb_ensure_endpoint_count(request):
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
-    if float(config.ENV_DATA["ocs_version"]) < 4.6:
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
         noobaa = OCP(kind="noobaa", namespace=namespace)
         resource = noobaa.get()["items"][0]
         endpoints = resource.get("spec", {}).get("endpoints", {})
