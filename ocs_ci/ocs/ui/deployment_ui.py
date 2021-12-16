@@ -90,7 +90,6 @@ class DeploymentUI(PageNavigator):
     def refresh_popup(self):
         """
         Refresh PopUp
-
         """
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
