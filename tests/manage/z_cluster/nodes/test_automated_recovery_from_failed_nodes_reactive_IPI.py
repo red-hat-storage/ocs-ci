@@ -184,7 +184,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Perform cluster and Ceph health checks
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            tries = 120
+            tries = 180
         else:
             tries = 40
 
