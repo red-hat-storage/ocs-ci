@@ -1301,6 +1301,12 @@ QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
 QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
 QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
 
+# logreader workload deployment yaml files
+LOGWRITER_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "logwriter")
+LOGWRITER_CEPHFS_REPRODUCER = os.path.join(LOGWRITER_DIR, "cephfs.reproducer.yaml")
+LOGWRITER_CEPHFS_READER = os.path.join(LOGWRITER_DIR, "cephfs.logreader.yaml")
+LOGWRITER_CEPHFS_WRITER = os.path.join(LOGWRITER_DIR, "cephfs.logwriter.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
