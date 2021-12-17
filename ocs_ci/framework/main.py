@@ -136,8 +136,7 @@ def process_ocsci_conf(arguments):
         ocs_version_from_image = utils.get_ocs_version_from_image(ocs_registry_image)
         if ocs_version and ocs_version != ocs_version_from_image:
             framework.config.DEPLOYMENT["ignore_csv_mismatch"] = True
-        if not ocs_version:
-            ocs_version = ocs_version_from_image
+        ocs_version = ocs_version_from_image
     if ocs_version:
         version_config_file = os.path.join(
             OCS_VERSION_CONF_DIR, f"ocs-{ocs_version}.yaml"
