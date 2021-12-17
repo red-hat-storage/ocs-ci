@@ -992,7 +992,7 @@ class MCG:
         ):
             logger.info(
                 f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                "attempting to copy it from the MCG operator pod"
+                " attempting to copy it from the MCG operator pod"
             )
             if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
                 cmd = (
@@ -1008,10 +1008,8 @@ class MCG:
                     f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
                 )
                 proc = subprocess.run(cmd, shell=True, capture_output=True)
-                proc_out = proc.stdout.decode() if proc.stdout else ""
-                proc_err = proc.stderr.decode() if proc.stderr else ""
                 logger.info(
-                    f"MCG CLI copying process stdout:{proc_out}, stderr: {proc_err}"
+                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
                 )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
