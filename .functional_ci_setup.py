@@ -68,7 +68,7 @@ def write_aws_creds():
 
 
 def write_pull_secret():
-    secret_dir = os.path.join(env["WORKSPACE"], "data")
+    secret_dir = os.path.abspath(os.path.join(".", "data"))
     os.makedirs(secret_dir, exist_ok=True)
     secret = env["PULL_SECRET"]
     # In Jenkins, this is a JSON string. In GitLab CI, the JSON will be
