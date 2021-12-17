@@ -79,6 +79,9 @@ def write_pull_secret():
         pass
     with open(os.path.join(secret_dir, "pull-secret"), "w") as secret_file:
         secret_file.write(secret)
+    with open(os.path.join(secret_dir, "auth.yaml"), "w") as auth_file:
+        auth = dict(quay=dict(access_token=env["QUAY_TOKEN"]))
+        auth_file.write(yaml.safe_dump(auth))
 
 
 def get_ocsci_conf(upgrade_run=False, pre_upgrade=False):
