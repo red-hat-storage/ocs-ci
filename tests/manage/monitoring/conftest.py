@@ -76,11 +76,15 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir):
+def split_index(split_index=None):
+    return split_index
+
+
+@pytest.fixture
+def measure_stop_ceph_mon(measurement_dir, split_index):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
-
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
             Ceph Monitor pod
@@ -92,7 +96,7 @@ def measure_stop_ceph_mon(measurement_dir):
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
     # get monitor deployments to stop, leave even number of monitors
-    split_index = len(mons) // 2 if len(mons) > 3 else 2
+    split_index = split_index if split_index else len(mons) // 2 if len(mons) > 3 else 2
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
