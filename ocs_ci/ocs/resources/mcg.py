@@ -1007,7 +1007,7 @@ class MCG:
                     f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
                     f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
                 )
-                proc = subprocess.run(cmd, shell=True)
+                proc = subprocess.run(cmd, shell=True, capture_output=True)
                 proc_out = proc.stdout.decode() if proc.stdout else ""
                 proc_err = proc.stderr.decode() if proc.stderr else ""
                 logger.info(
