@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4, tier4a
+from ocs_ci.framework.testlib import tier4, tier4a, bugzilla
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -64,6 +64,46 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
             "Storage cluster is in degraded state",
             ["pending"],
             "warning",
+        ),
+    ]:
+        prometheus.check_alert_list(
+            label=target_label,
+            msg=target_msg,
+            alerts=alerts,
+            states=target_states,
+            severity=target_severity,
+        )
+        api.check_alert_cleared(
+            label=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+        )
+
+
+@tier4
+@tier4a
+@bugzilla("1944513")
+@pytest.mark.polarion_id("OCS-2724")
+@pytest.mark.parametrize("split_index", [1])
+def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
+    """
+    Test to verify that CephMonQuorumLost alert is seen and
+    that this alert is cleared when monitors are back online.
+    """
+    api = prometheus.PrometheusAPI()
+
+    # get alerts from time when manager deployment was scaled down
+    alerts = measure_stop_ceph_mon.get("prometheus_alerts")
+    for target_label, target_msg, target_states, target_severity in [
+        (
+            constants.ALERT_MONQUORUMLOST,
+            "Storage quorum is lost",
+            ["pending", "firing"],
+            "error",
+        ),
+        (
+            constants.ALERT_CLUSTERERRORSTATE,
+            "Storage cluster is in error state",
+            ["pending", "firing"],
+            "error",
         ),
     ]:
         prometheus.check_alert_list(
