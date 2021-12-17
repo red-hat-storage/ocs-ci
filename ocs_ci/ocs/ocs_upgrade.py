@@ -654,11 +654,11 @@ def ocs_odf_upgrade_ui():
     val_obj.do_click(OCSUpgrade.validation_loc["resources-tab"])
     logger.info("Storage Cluster Status Check")
     storage_cluster_status_check = val_obj.wait_until_expected_text_is_found(
-        locator=("//*[text()= 'Ready']", By.XPATH), expected_text="Ready", timeout=600
+        locator=("//*[text()= 'Ready']", By.XPATH), expected_text="Ready", timeout=1200
     )
     assert (
         storage_cluster_status_check
-    ), "Storage Cluster Status reported on UI is not 'Ready'"
+    ), "Storage Cluster Status reported on UI is not 'Ready', Timeout 1200 seconds exceeded"
     logger.info("Calling functions for other UI checks")
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
