@@ -1,3 +1,6 @@
 ---
+# This configuration file is for OCS to ODF upgrade via UI.
+# Currently this is implemented to upgrade OCS 4.8 to ODF 4.9 via UI.
+
 UPGRADE:
   ui_upgrade: true
