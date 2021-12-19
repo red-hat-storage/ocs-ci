@@ -41,7 +41,7 @@ class ResultsAnalyse(PerfResult):
 
         """
         super(ResultsAnalyse, self).__init__(uuid, crd)
-        self.new_index = "pod_reattach_time_fullres"
+        self.new_index = "bulk_clone_perf_fullres"
         self.full_log_path = full_log_path
         # make sure we have connection to the elastic search server
         self.es_connect()
