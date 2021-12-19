@@ -77,12 +77,12 @@ class TestScaleBucketReplication(E2ETest):
         s3bench,
         wait_time=120,
     ):
-
         """
         Test unidirectional bucket replication adding objects to:
             - Object buckets - backingstore
             - Namespace buckets - namespacestore
         """
+
         replication_buckets = bucket_factory(
             amount=self.MCG_BUCKET,
             bucketclass=replication_bucketclass,
