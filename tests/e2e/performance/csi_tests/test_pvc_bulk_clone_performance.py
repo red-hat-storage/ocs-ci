@@ -1,6 +1,7 @@
 """
 Test to measure pvc scale creation time. Total pvc count would be 50, 1 clone per PVC
 Total number of clones in bulk will be 50
+The results are uploaded to the ES server
 """
 import logging
 import pytest
@@ -11,6 +12,7 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.framework.testlib import performance
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -43,6 +45,7 @@ class ResultsAnalyse(PerfResult):
         self.full_log_path = full_log_path
         # make sure we have connection to the elastic search server
         self.es_connect()
+
 
 @performance
 class TestBulkCloneCreation(PASTest):
@@ -93,7 +96,6 @@ class TestBulkCloneCreation(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
-
     @pytest.fixture()
     def namespace(self, project_factory, interface_iterate):
         """
@@ -102,6 +104,14 @@ class TestBulkCloneCreation(PASTest):
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
         self.interface = interface_iterate
+
+        if self.interface == constants.CEPHFILESYSTEM:
+            sc = "CephFS"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            sc = "RBD"
+
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{sc}"
 
     @pytest.mark.usefixtures(namespace.__name__)
     @pytest.mark.polarion_id("OCS-2621")
@@ -251,8 +261,6 @@ class TestBulkCloneCreation(PASTest):
             full_results.es_write()
             # write the ES link to the test results in the test log.
             logging.info(f"The result can be found at : {full_results.results_link()}")
-
-
 
         # Finally is used to clean-up the resources created
         # Irrespective of try block pass/fail finally will be executed.
