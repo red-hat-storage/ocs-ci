@@ -1885,7 +1885,7 @@ def add_new_disk_for_vsphere(sc_name):
 
 def get_odf_zone_count():
     """
-    Get the number of Avaialbility zones used by ODF cluster
+    Get the number of Availability zones used by ODF cluster
 
     Returns:
          int : the number of availability zones
