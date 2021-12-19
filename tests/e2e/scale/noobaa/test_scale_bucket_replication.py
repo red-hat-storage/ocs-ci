@@ -34,8 +34,8 @@ class TestScaleBucketReplication(E2ETest):
     Test MCG scale bucket replication
     """
 
-    MCG_S3_OBJ = 100
-    MCG_BUCKET = 5
+    MCG_S3_OBJ = 1000
+    MCG_BUCKET = 50
 
     @pytest.mark.parametrize(
         argnames=["bucketclass", "replication_bucketclass"],
