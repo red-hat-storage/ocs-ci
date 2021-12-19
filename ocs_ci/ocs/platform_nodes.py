@@ -417,22 +417,6 @@ class VMWareNodes(NodesBase):
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
         node_cls_obj.add_node()
 
-    def terminate_nodes(self, nodes, wait=True):
-        """
-        Terminate the VMs
-
-        Args:
-            nodes (list): The OCS objects of the nodes
-            wait (bool): True for waiting the VMs to terminate,
-            False otherwise
-
-        """
-        vms = self.get_vms(nodes)
-        self.vsphere.remove_vms_from_inventory(vms)
-        if wait:
-            for vm in vms:
-                self.vsphere.wait_for_vm_delete(vm)
-
 
 class AWSNodes(NodesBase):
     """
@@ -2615,3 +2599,19 @@ class VMWareIPINodes(VMWareNodes):
             logger.warning("Didn't find all the VM objects for all the nodes")
 
         return vms
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        self.vsphere.remove_vms_from_inventory(vms)
+        if wait:
+            for vm in vms:
+                self.vsphere.wait_for_vm_delete(vm)
