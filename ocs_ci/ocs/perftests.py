@@ -620,9 +620,7 @@ class PASTest(BaseTest):
                 f"platform={platform},"
                 f"topology={topology},"
                 f"test={test_name},"
-                f"eslink={self.es_link},"
-                "logfile=None,"
-                f" Into : {db.creds}"
+                f"eslink={self.es_link}, logfile=None"
             )
 
             db.add_results(
