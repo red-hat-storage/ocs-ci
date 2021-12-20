@@ -4403,6 +4403,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
     request.addfinalizer(finalizer)
     return
 
+
 @pytest.fixture()
 def vault_tenant_sa_setup_factory(request):
     """
@@ -4456,7 +4457,9 @@ def vault_tenant_sa_setup_factory(request):
 
         vault.create_token_reviewer_resources()
         if use_auth_path and use_namespace:
-            vault.vault_kube_auth_setup(auth_path=vault_resource_name, auth_namespace=vault_resource_name)
+            vault.vault_kube_auth_setup(
+                auth_path=vault_resource_name, auth_namespace=vault_resource_name
+            )
         elif use_auth_path:
             vault.vault_kube_auth_setup(auth_path=vault_resource_name)
         elif use_namespace:
@@ -4500,7 +4503,9 @@ def vault_tenant_sa_setup_factory(request):
                 raise
             else:
                 vault.kmsid = "vault-tenant-sa"
-                vault.create_vault_csi_kms_connection_details(kv_version=kv_version, kms_type=constants.VAULT_TENANT_SA)
+                vault.create_vault_csi_kms_connection_details(
+                    kv_version=kv_version, kms_type=constants.VAULT_TENANT_SA
+                )
         return vault
 
     def finalizer():
