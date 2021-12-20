@@ -11,6 +11,9 @@ from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.utility import version
 from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
+from ocs_ci.framework import config as ocsci_config
+from ocs_ci.utility.utils import mirror_image
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -133,6 +136,32 @@ class MustGather(object):
             f"directories list of pods: {pod_names} list of log directories: {pod_files}\n"
             f"The difference between pod files and actual pods is: {diff}\n"
         )
+
+    def check_mg_output_disconnected_env(self):
+        """
+        Verify MG does not need to download JQ on disconnected cluster
+
+        """
+        logger.info("")
+        self.root = tempfile.mkdtemp()
+        latest_tag = ocsci_config.REPORTING.get(
+            "ocs_must_gather_latest_tag",
+            ocsci_config.REPORTING.get(
+                "default_ocs_must_gather_latest_tag",
+                ocsci_config.DEPLOYMENT["default_latest_tag"],
+            ),
+        )
+        ocs_must_gather_image = ocsci_config.REPORTING["ocs_must_gather_image"]
+        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        if ocsci_config.DEPLOYMENT.get("disconnected"):
+            ocs_must_gather_image_and_tag = mirror_image(ocs_must_gather_image_and_tag)
+        cmd = f"adm must-gather --image={ocs_must_gather_image_and_tag} --dest-dir={self.root}"
+        occli = OCP()
+        output = occli.exec_oc_cmd(command=cmd, out_yaml_format=False, timeout=900)
+        if "cannot stat 'jq'" in output:
+            raise ValueError(
+                f"must-gather fails in an disconnected environment\n{output}"
+            )
 
     def check_pod_name_pattern(self, pod_name):
         """
