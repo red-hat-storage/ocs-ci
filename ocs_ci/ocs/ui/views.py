@@ -525,7 +525,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-storagesystem-status": (
-        "//*[@data-test='status-text']",
+        "//*[text()= 'Ready']",
         By.XPATH,
     ),
     "ocs-storagecluster-storagesystem": (
@@ -543,7 +543,7 @@ validation_4_9 = {
     "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
     "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
     "ocs-storagecluster-cephblockpool-status": (
-        "//*[@data-test='status-text']",
+        "//*[text()= 'Ready']",
         By.XPATH,
     ),
     "ocs-storagecluster-cephblockpool": (

@@ -326,9 +326,7 @@ class ValidationUI(PageNavigator):
             f"cephblockpool status error | expected status:Ready \n "
             f"actual status:{cephblockpool_status}"
         )
-        logger.info(
-            "Successfully verified the status of cephblockpool, test successful!"
-        )
+        logger.info("Verification of cephblockpool status is successful!")
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
