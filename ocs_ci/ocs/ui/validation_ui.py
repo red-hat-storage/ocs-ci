@@ -281,7 +281,7 @@ class ValidationUI(PageNavigator):
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate again to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]))
+        self.do_click((self.validation_loc["overview"]), enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=5)
         logger.info(
             "Successfully navigated back to ODF tab under Storage, test successful!"
@@ -316,7 +316,10 @@ class ValidationUI(PageNavigator):
         logger.info(
             "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
         )
-        self.do_click(self.validation_loc["ocs-storagecluster-cephblockpool"])
+        self.do_click(
+            self.validation_loc["ocs-storagecluster-cephblockpool"],
+            enable_screenshot=True,
+        )
         self.page_has_loaded(retries=15, sleep_time=2)
         logger.info("Verifying the status of 'ocs-storagecluster-cephblockpool'")
         cephblockpool_status = self.get_element_text(

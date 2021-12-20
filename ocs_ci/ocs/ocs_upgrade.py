@@ -659,6 +659,9 @@ def ocs_odf_upgrade_ui():
     assert (
         storage_cluster_status_check
     ), "Storage Cluster Status reported on UI is not 'Ready', Timeout 1200 seconds exceeded"
-    logger.info("Calling functions for other UI checks")
+    logger.info(
+        "Storage Cluster Status reported on UI is 'Ready', verification successful"
+    )
+    val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
