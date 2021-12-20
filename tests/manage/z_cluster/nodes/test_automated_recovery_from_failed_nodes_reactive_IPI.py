@@ -53,6 +53,15 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             remove_label_from_worker_node(worker_nodes, label_key="dc")
             for thread in self.threads:
                 thread.join()
+
+            log.info("Get the machine set name from one of the worker node names")
+            machine_name = machine.get_machine_from_node_name(worker_nodes[0])
+            machineset_name = machine.get_machineset_from_machine_name(machine_name)
+            log.info(
+                "Verify that the current replica count is equal to the ready replica count"
+            )
+            machine.change_current_replica_count_to_ready_replica_count(machineset_name)
+
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -163,7 +172,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             # running node. Waiting for all dc app pod to reach running state
             pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=720)
             log.info("All the dc pods reached running state")
-            pod.wait_for_storage_pods()
+            pod.wait_for_storage_pods(timeout=300)
 
         except ResourceWrongStatusException:
             if failure == "shutdown":
@@ -184,7 +193,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Perform cluster and Ceph health checks
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            tries = 180
+            tries = 200
         else:
             tries = 40
 
