@@ -4,7 +4,6 @@ metadata:
   name: ceph-csi-kms-config
   namespace: openshift-storage
 data:
-  encryptionKMSType: vaulttenantsa
   vaultBackend: ""
   vaultBackendPath: ""
   vaultNamespace: ""

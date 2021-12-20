@@ -73,6 +73,7 @@ class Vault(KMS):
         self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
+        self.kms_type = constants.VAULT_TOKEN
         self.ca_cert_name = None
         self.client_cert_name = None
         self.client_key_name = None
@@ -87,8 +88,8 @@ class Vault(KMS):
         # Base64 encoded (with padding) token
         self.vault_path_token = None
         self.vault_policy_name = None
-        self.kube_auth_path = None
-        self.kube_auth_namespace = None
+        self.vault_kube_auth_path = "kubernetes"
+        self.vault_kube_auth_namespace = None
 
     def deploy(self):
         """
@@ -765,7 +766,7 @@ class Vault(KMS):
     def create_vault_csi_kms_connection_details(
         self,
         kv_version,
-        kms_type="vaulttokens",
+        kms_type=constants.VAULT_TOKEN,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     ):
         """
@@ -773,27 +774,53 @@ class Vault(KMS):
         configmap resource
 
         """
-        # TODO: Add steps for vaulttenantsa config
+
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
         )
-        conn_str = csi_kms_conn_details["data"]["1-vault"]
-        buf = json.loads(conn_str)
-        buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
-        buf["VAULT_BACKEND_PATH"] = self.vault_backend_path
-        buf["VAULT_CACERT"] = get_default_if_keyval_empty(
-            config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
-        )
-        buf["VAULT_NAMESPACE"] = self.vault_namespace
-        buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
-            config.ENV_DATA, "VAULT_TOKEN_NAME", constants.EXTERNAL_VAULT_CSI_KMS_TOKEN
-        )
-        if kv_version == "v1":
-            buf["VAULT_BACKEND"] = "kv"
-        else:
-            buf["VAULT_BACKEND"] = "kv-v2"
+        if kms_type == constants.VAULT_TOKEN:
+            conn_str = csi_kms_conn_details["data"]["1-vault"]
+            buf = json.loads(conn_str)
+            buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
+            buf["VAULT_BACKEND_PATH"] = self.vault_backend_path
+            buf["VAULT_CACERT"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
+            )
+            buf["VAULT_NAMESPACE"] = self.vault_namespace
+            buf["VAULT_TOKEN_NAME"] = get_default_if_keyval_empty(
+                config.ENV_DATA,
+                "VAULT_TOKEN_NAME",
+                constants.EXTERNAL_VAULT_CSI_KMS_TOKEN,
+            )
+            if kv_version == "v1":
+                buf["VAULT_BACKEND"] = "kv"
+            else:
+                buf["VAULT_BACKEND"] = "kv-v2"
 
-        csi_kms_conn_details["data"]["1-vault"] = json.dumps(buf)
+            csi_kms_conn_details["data"]["1-vault"] = json.dumps(buf)
+
+        else:
+            conn_str = csi_kms_conn_details["data"]["vault-tenant-sa"]
+            buf = json.loads(conn_str)
+            buf["vaultAddress"] = f"https://{self.vault_server}:{self.port}"
+            buf["vaultBackendPath"] = self.vault_backend_path
+            buf["vaultCAFromsecret"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
+            )
+            buf["vaultClientCertFromSecret"] = self.client_cert_name
+            buf["vaultClientCertKeyFromSecret"] = self.client_key_name
+            if self.vault_namespace:
+                buf["vaultNamespace"] = self.vault_namespace
+            if self.vault_kube_auth_path:
+                buf["vaultAuthPath"] = self.vault_kube_auth_path
+            else:
+                buf.pop("vaultAuthPath")
+            if self.vault_kube_auth_namespace:
+                buf["vaultAuthNamespace"] = self.vault_kube_auth_namespace
+            else:
+                buf.pop("vaultAuthNamespace")
+            csi_kms_conn_details["data"]["vault-tenant-sa"] = json.dumps(buf)
+
         csi_kms_conn_details["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
 
@@ -805,16 +832,26 @@ class Vault(KMS):
 
         """
 
-        rbd_vault_token_reviewer = templating.load_yaml(
-            constants.RBD_CSI_VAULT_TOKEN_REVIEWER
-        )
-        self.create_resource(rbd_vault_token_reviewer, prefix="rbd-token-review")
-        logger.info("rbd-csi-vault-token-reviewer resources created successfully")
+        try:
+            rbd_vault_token_reviewer = templating.load_yaml(
+                constants.RBD_CSI_VAULT_TOKEN_REVIEWER, multi_document=True
+            )
+            self.create_resource(rbd_vault_token_reviewer, prefix="rbd-token-review")
+            logger.info("rbd-csi-vault-token-reviewer resources created successfully")
+
+        except CommandFailed as cfe:
+            if "AlreadyExists" in str(cfe):
+                logger.info("rbd-csi-vault-token-reviewer resources already exists")
+            else:
+                raise
 
     def create_tenant_sa(self, namespace):
         """
         This function will create the serviceaccount in the tenant namespace to
         authenticate to Vault when vaulttenantsa KMS type is used for PV encryption.
+
+        Args:
+            namespace (str): The tenant namespace where the service account will be created
         """
 
         tenant_sa = templating.load_yaml(constants.RBD_CSI_VAULT_TENANT_SA)
@@ -824,16 +861,67 @@ class Vault(KMS):
 
     def create_tenant_configmap(
         self,
-        namespace,
+        tenant_namespace,
+        vault_backend=None,
+        vault_backend_path=None,
+        vault_namespace=None,
+        vault_role=None,
+        vault_auth_path=None,
+        vault_auth_namespace=None,
     ):
         """
         This functional will create a configmap in the tenant namespace to override
         the vault config in csi-kms-connection-details configmap.
+
+        Args:
+            tenant_namespace (str): Tenant namespace
+            vault_backend (str): KV version to be used, either kv or kv-v2
+            vault_backend_path (str): The backend path in Vault where the encryption
+                                      keys will be stored
+            vault_namespace (str): Namespace in Vault, if exists, where the backend
+                                   path is created
+            vault_role (str): (Vaulttenantsa) The role name in Vault configured with
+                              kube auth method for the given policy and tenant namespace
+            vault_auth_path (str): (Vaulttenantsa) The path where kubernetes auth
+                                   method is enabled
+            vault_auth_namespace (str): (Vaulttenantsa) The namespace where kubernetes
+                                        auth method is enabled, if exists
         """
 
+        logger.info(f"Creating tenant configmap in namespace {tenant_namespace}")
         tenant_cm = templating.load_yaml(constants.RBD_CSI_VAULT_TENANT_CONFIGMAP)
-        tenant_cm["metadata"]["namespace"] = namespace
-        # TO DO: Update only the required values in the configmap
+        tenant_cm["metadata"]["namespace"] = tenant_namespace
+
+        if vault_backend is None:
+            tenant_cm["data"].pop("vaultBackend")
+        else:
+            tenant_cm["data"]["vaultBackend"] = vault_backend
+
+        if vault_backend_path is None:
+            tenant_cm["data"].pop("vaultBackendPath")
+        else:
+            tenant_cm["data"]["vaultBackendPath"] = vault_backend_path
+
+        if vault_namespace is None:
+            tenant_cm["data"].pop("vaultNamespace")
+        else:
+            tenant_cm["data"]["vaultNamespace"] = vault_namespace
+
+        if vault_role is None:
+            tenant_cm["data"].pop("vaultRole")
+        else:
+            tenant_cm["data"]["vaultRole"] = vault_role
+
+        if vault_auth_path is None:
+            tenant_cm["data"].pop("vaultAuthPath")
+        else:
+            tenant_cm["data"]["vaultAuthPath"] = vault_auth_path
+
+        if vault_auth_namespace is None:
+            tenant_cm["data"].pop("vaultAuthNamespace")
+        else:
+            tenant_cm["data"]["vaultAuthNamespace"] = vault_auth_namespace
+
         self.create_resource(tenant_cm, prefix="tenant-cm")
         logger.info("Tenant ConfigMap ceph-csi-kms-config created successfully")
 
@@ -841,7 +929,7 @@ class Vault(KMS):
         self,
         auth_path=None,
         auth_namespace=None,
-        token_reviewer_name="rbd-csi-vault-token-review",
+        token_reviewer_name=constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME,
     ):
         """
         Setup kubernetes auth method in Vault
@@ -857,50 +945,97 @@ class Vault(KMS):
         """
 
         # Get secret name from serviceaccount
-        cmd = f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[0].name}}'"
-        secret_name = run_cmd(cmd=cmd)
+        logger.info("Retrieving secret name from serviceaccount ")
+        cmd = (
+            f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
+            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        secrets = run_cmd(cmd=cmd).split()
+        for secret in secrets:
+            if "rbd-csi-vault-token-review-token" in secret:
+                secret_name = secret
+        if not secret_name:
+            raise NotFoundError("Secret name not found")
 
         # Get token from secrets
-        cmd = f"oc get secret {secret_name} -o jsonpath='{{.data['token']}}' | base64 --decode; echo"
-        token = run_cmd(cmd=cmd)
+        logger.info(f"Retrieving token from {secret_name}")
+        cmd = (
+            fr"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
+            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        token = base64.b64decode(run_cmd(cmd=cmd)).decode()
+        token_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="test", delete=True, dir="."
+        )
+        token_file_name = os.path.basename(token_file.name)
+        with open(token_file.name, "w") as t:
+            t.write(token)
 
         # Get ca.crt from secret
-        cmd = fr"oc get secret {secret_name} -o jsonpath='{{.data['ca\.crt']}}' | base64 --decode; echo"
-        ca_crt = run_cmd(cmd=cmd)
+        logger.info(f"Retrieving CA cert from {secret_name}")
+        ca_regex = r"{.data['ca\.crt']}"
+        cmd = f'oc get secret -n {constants.OPENSHIFT_STORAGE_NAMESPACE} {secret_name} -o jsonpath="{ca_regex}"'
+        ca_crt = base64.b64decode(run_cmd(cmd=cmd)).decode()
+        ca_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="test", dir=".", delete=True
+        )
+        ca_file_name = os.path.basename(ca_file.name)
+        with open(ca_file.name, "w") as ca:
+            ca.write(ca_crt)
 
         # get cluster API endpoint
-        k8s_host = run_cmd(cmd="oc whoami --show-server")
+        k8s_host = run_cmd(cmd="oc whoami --show-server").strip()
 
         # enable kubernetes auth method
         if auth_path and auth_namespace:
-            self.kube_auth_path = auth_path
-            self.kube_auth_namespace = auth_namespace
+            self.vault_kube_auth_path = auth_path
+            self.vault_kube_auth_namespace = auth_namespace
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
-            self.kube_auth_path = auth_path
+            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -path={auth_path} kubernetes"
 
         elif auth_namespace:
-            self.kube_auth_namespace = auth_namespace
+            self.vault_kube_auth_namespace = auth_namespace
             cmd = f"vault auth enable -namespace={auth_namespace} kubernetes"
 
         else:
             cmd = "vault auth enable kubernetes"
-
-        out = subprocess.check_output(shlex.split(cmd))
-        # TODO: Add code to handle a scenario where kubernetes auth is already enabled in the path
-
-        # Configure kubernetes auth method
-        cmd = (
-            f"vault write auth/{auth_path}/config token_reviewer_jwt={token} "
-            f"kubernetes_host={k8s_host} kubernetes_ca_cert={ca_crt}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        out = subprocess.check_output(shlex.split(cmd))
-        if "Success" in out.decode():
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "path is already in use" not in err:
+                raise VaultOperationError
+        if auth_namespace:
+            cmd = (
+                f"vault write -namespace={self.vault_kube_auth_namespace} "
+                f"auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
+            )
+        # Configure kubernetes auth method
+        else:
+            cmd = (
+                f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
+            )
+        os.environ.pop("VAULT_FORMAT")
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True,
+            env=os.environ,
+        )
+
+        if "Success" in proc.stdout.decode():
             logger.info("vault: Kubernetes auth method configured successfully")
         else:
             raise VaultOperationError("Failed to configure kubernetes auth method")
+        token_file.close()
+        ca_file.close()
 
     def create_vault_kube_auth_role(
         self,
@@ -917,8 +1052,9 @@ class Vault(KMS):
            sa_name (str): Service account in the tenant namespace to be used for authentication
 
         """
+
         cmd = (
-            f"vault write auth/{self.kube_auth_path}/role/{role_name} "
+            f"vault write auth/{self.vault_kube_auth_path}/role/{role_name} "
             f"bound_service_account_names={sa_name} policies={self.vault_policy_name} "
             f"bound_service_account_namespaces={tenant_namespace}"
         )
@@ -999,7 +1135,7 @@ def vault_kv_list(path):
         list: of kv present in the path
 
     """
-    cmd = f"vault kv list {path}"
+    cmd = f"vault kv list -format=json {path}"
     out = subprocess.check_output(shlex.split(cmd))
     json_out = json.loads(out)
     return json_out
@@ -1078,3 +1214,18 @@ def remove_kmsid(kmsid):
     if kmsid in kmsid_list:
         raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")
     logger.info(f"KMS ID {kmsid} deleted")
+
+
+def remove_token_reviewer_resources():
+    """
+    Delete the SA, clusterRole and clusterRoleBindings for token reviewer
+
+    """
+
+    run_cmd(
+        f"oc delete sa {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+    )
+    run_cmd(f"oc delete ClusterRole {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}")
+    run_cmd(
+        f"oc delete ClusterRoleBinding {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}"
+    )

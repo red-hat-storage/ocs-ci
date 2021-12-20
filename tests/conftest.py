@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import random
@@ -4147,19 +4148,15 @@ def load_cluster_info_file(request):
 def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
-
     """
     vault = KMS.Vault()
 
-    def factory(kv_version, kms_type="vaulttokens"):
+    def factory(kv_version):
         """
         Args:
-            kv_version (str): KV version to be used, either v1 or v2
-            kms_type (str): KMS_PROVIDER to be used, either 'vaulttoken' or 'vaulttenantsa'
-
+            kv_version(str): KV version to be used, either v1 or v2
         Returns:
             object: Vault(KMS) object
-
         """
         vault.gather_init_vault_conf()
         vault.update_vault_env_vars()
@@ -4190,32 +4187,17 @@ def pv_encryption_kms_setup_factory(request):
                 resource_name="csi-kms-connection-details", column="NAME"
             )
             new_kmsid = vault_resource_name
-            if kms_type == "vaulttenantsa":
-                vault.create_token_reviewer_resources()
-                vault.vault_kube_auth_setup()
-                vdict = defaults.VAULT_TENANT_SA_CONNECTION_CONF
-                for key in vdict.keys():
-                    old_key = key
-                vdict[new_kmsid] = vdict.pop(old_key)
-                vdict[new_kmsid]["vaultBackendPath"] = vault_resource_name
-                vdict[new_kmsid]["vaultNamespace"] = vault_resource_name
-                vault.kmsid = vault_resource_name
-                if kv_version == "v1":
-                    vdict[new_kmsid]["vaultBackend"] = "kv"
-                else:
-                    vdict[new_kmsid]["vaultBackend"] = "kv-v2"
+            vdict = defaults.VAULT_CSI_CONNECTION_CONF
+            for key in vdict.keys():
+                old_key = key
+            vdict[new_kmsid] = vdict.pop(old_key)
+            vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
+            vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+            vault.kmsid = vault_resource_name
+            if kv_version == "v1":
+                vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
             else:
-                vdict = defaults.VAULT_CSI_CONNECTION_CONF
-                for key in vdict.keys():
-                    old_key = key
-                vdict[new_kmsid] = vdict.pop(old_key)
-                vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
-                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
-                vault.kmsid = vault_resource_name
-                if kv_version == "v1":
-                    vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
-                else:
-                    vdict[new_kmsid]["VAULT_BACKEND"] = "kv-v2"
+                vdict[new_kmsid]["VAULT_BACKEND"] = "kv-v2"
             KMS.update_csi_kms_vault_connection_details(vdict)
 
         except CommandFailed as cfe:
@@ -4223,9 +4205,7 @@ def pv_encryption_kms_setup_factory(request):
                 raise
             else:
                 vault.kmsid = "1-vault"
-                vault.create_vault_csi_kms_connection_details(
-                    kv_version=kv_version, kms_type=kms_type
-                )
+                vault.create_vault_csi_kms_connection_details(kv_version=kv_version)
 
         return vault
 
@@ -4236,7 +4216,6 @@ def pv_encryption_kms_setup_factory(request):
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(vault.kmsid)
-        # Delete the resources in vault
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
         vault.remove_vault_namespace()
@@ -4420,6 +4399,122 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                     f"Could not delete storageclass {instances.name} from UI."
                     f"Deleted from CLI"
                 )
+
+    request.addfinalizer(finalizer)
+    return
+
+@pytest.fixture()
+def vault_tenant_sa_setup_factory(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap for
+    vault tenant sa method of PV encryption
+
+    """
+    vault = KMS.Vault()
+
+    def factory(
+        kv_version,
+        use_auth_path=False,
+        use_namespace=True,
+        use_backend=False,
+    ):
+        """
+        Args:
+            kv_version (str): KV version to be used, either v1 or v2
+            use_auth_path (bool): Use a non-default auth path (used with kubernetes auth method)
+            use_namespace (bool): Use namespace in Vault
+            use_backend (bool): Specify VaultBackend variable in the configmap when set to True
+
+        Returns:
+            object: Vault(KMS) object
+
+        """
+        vault.gather_init_vault_conf()
+        vault.update_vault_env_vars()
+
+        # Check if cert secrets already exist, if not create cert resources
+        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        try:
+            ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                vault.create_ocs_vault_cert_resources()
+
+        # Create vault namespace, backend path and policy in vault
+        vault_resource_name = create_unique_resource_name("test", "vault")
+
+        if use_namespace:
+            vault.vault_create_namespace(namespace=vault_resource_name)
+
+        vault.vault_create_backend_path(
+            backend_path=vault_resource_name, kv_version=kv_version
+        )
+        vault.vault_create_policy(policy_name=vault_resource_name)
+        vault.kmsid = vault_resource_name
+
+        vault.create_token_reviewer_resources()
+        if use_auth_path and use_namespace:
+            vault.vault_kube_auth_setup(auth_path=vault_resource_name, auth_namespace=vault_resource_name)
+        elif use_auth_path:
+            vault.vault_kube_auth_setup(auth_path=vault_resource_name)
+        elif use_namespace:
+            vault.vault_kube_auth_setup(auth_namespace=vault_resource_name)
+        else:
+            vault.vault_kube_auth_setup()
+
+        # If csi-kms-connection-details exists, edit the configmap to add new vault config
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            vdict = copy.deepcopy(defaults.VAULT_TENANT_SA_CONNECTION_CONF)
+            for key in vdict.keys():
+                old_key = key
+            vdict[vault.kmsid] = vdict.pop(old_key)
+            vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
+            if use_namespace:
+                vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
+                vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
+            else:
+                vdict[vault.kmsid].pop("vaultNamespace")
+                vdict[vault.kmsid].pop("vaultAuthNamespace")
+            if use_auth_path:
+                vdict[vault.kmsid]["vaultAuthPath"] = vault_resource_name
+            else:
+                vdict[vault.kmsid].pop("vaultAuthPath")
+            if use_backend:
+                if kv_version == "v1":
+                    vdict[vault.kmsid]["vaultBackend"] = "kv"
+                else:
+                    vdict[vault.kmsid]["vaultBackend"] = "kv-v2"
+            else:
+                vdict[vault.kmsid].pop("vaultBackend")
+            KMS.update_csi_kms_vault_connection_details(vdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                vault.kmsid = "vault-tenant-sa"
+                vault.create_vault_csi_kms_connection_details(kv_version=kv_version, kms_type=constants.VAULT_TENANT_SA)
+        return vault
+
+    def finalizer():
+        """
+        Cleanup for vault resources and csi-kms-connection-details configMap
+
+        """
+        vault.remove_vault_backend_path()
+        vault.remove_vault_policy()
+        if "VAULT_NAMESPACE" in os.environ:
+            vault.remove_vault_namespace()
+        KMS.remove_token_reviewer_resources()
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(vault.kmsid)
 
     request.addfinalizer(finalizer)
     return factory
