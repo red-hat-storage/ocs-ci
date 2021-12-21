@@ -3,10 +3,12 @@
 Module for version related util functions.
 """
 
+import re
 from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
+from ocs_ci.ocs.exceptions import WrongVersionExpression
 
 
 def get_semantic_version(version, only_major_minor=False, ignore_pre_release=False):
@@ -92,3 +94,25 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
             return get_semantic_version(
                 item["spec"]["version"], only_major_minor, ignore_pre_release
             )
+
+
+def compare_versions(expression):
+    """
+    Evaluate version comparison expression
+
+    Args:
+        expression (str): expression string like '4.11>=4.2',
+            supported operators are: >,<,=>,=<,==,!=
+
+    Returns:
+        Boolean: evaluated comparison expression
+
+    """
+    pattern = r" *([\d.]+) *([=!<>]{1,2}) *([\d.]+) *"
+    m = re.fullmatch(pattern, expression)
+    if not m:
+        raise WrongVersionExpression(
+            f"Expression '{expression}' doesn't match pattern '{pattern}'."
+        )
+    v1, op, v2 = m.groups()
+    return eval(f"get_semantic_version(v1, True){op}get_semantic_version(v2, True)")
