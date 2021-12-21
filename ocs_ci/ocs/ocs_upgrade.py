@@ -662,6 +662,8 @@ def ocs_odf_upgrade_ui():
     logger.info(
         "Storage Cluster Status reported on UI is 'Ready', verification successful"
     )
+    logger.info("Click on 'ocs-storagecluster")
+    val_obj.do_click(OCSUpgrade.validation_loc["ocs-storagecluster"])
     val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()

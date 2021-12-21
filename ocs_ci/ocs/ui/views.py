@@ -554,7 +554,7 @@ validation_4_9 = {
         "//*[@data-test='OpenShift Data Foundation-health-item-icon']//*[@aria-labelledby='icon-title-403']",
         By.XPATH,
     ),
-    "odf-capacityCardLink": ("//a[@class='odf-capacityCardLink--ellipsis']", By.XPATH),
+    "odf-capacityCardLink": (".odf-capacityCardLink--ellipsis", By.CSS_SELECTOR),
     "odf-performanceCardLink": (
         "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
@@ -584,6 +584,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "resources-tab": ("a[data-test-id='horizontal-link-Resources']", By.CSS_SELECTOR),
+    "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
+    "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
 }
 
 locators = {

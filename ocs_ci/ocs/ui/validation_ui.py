@@ -245,8 +245,20 @@ class ValidationUI(PageNavigator):
         """
 
         self.odf_console_plugin_check()
-
         self.navigate_odf_overview_page()
+        system_capacity_check = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["system-capacity"],
+            expected_text="System Capacity",
+            timeout=5,
+        )
+        if system_capacity_check:
+            logger.info(
+                "System Capacity Card found on OpenShift Data Foundation Overview page"
+            )
+        else:
+            logger.critical(
+                "System Capacity Card not found on OpenShift Data Foundation Overview page"
+            )
         logger.info(
             "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
         )
@@ -259,7 +271,7 @@ class ValidationUI(PageNavigator):
                 "Successfully navigated to 'StorageSystem details' page from System Capacity Card"
             )
         else:
-            logger.error(
+            logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
             )
         logger.info("Click on StorageSystems breadcrumb")
@@ -278,7 +290,7 @@ class ValidationUI(PageNavigator):
                 "Successfully navigated to 'StorageSystem details' page from Performance Card"
             )
         else:
-            logger.error(
+            logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from Performance Card"
             )
         logger.info("Now again click on StorageSystems breadcrumb")
