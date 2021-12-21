@@ -46,6 +46,9 @@ class MustGather(object):
         """
         Collect ocs_must_gather and copy the logs to a temporary folder.
 
+        Verify the output of mg command does not contain "cannot stat 'jq'"
+        https://bugzilla.redhat.com/show_bug.cgi?id=1974959
+
         """
         self.root = tempfile.mkdtemp()
         latest_tag = ocsci_config.REPORTING.get(
