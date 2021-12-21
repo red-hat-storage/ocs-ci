@@ -543,7 +543,9 @@ class PASTest(BaseTest):
         Args:
             test_name (str): the test name as defined in the performance dashboard
 
-        :return:
+        Returns:
+            None in case of pushing the results to the dashboard failed
+
         """
 
         try:
@@ -552,7 +554,7 @@ class PASTest(BaseTest):
             log.error(
                 f"Results cannot be pushed to the performance dashboard, no connection [{ex}]"
             )
-            return
+            return None
 
         log.info(f"Full version is : {self.environment.get('ocs_build')}")
         version = self.environment.get("ocs_build").split("-")[0]
