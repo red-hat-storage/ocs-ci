@@ -519,10 +519,9 @@ class PASTest(BaseTest):
 
         es_links = []
         try:
-            input_file = open(self.results_file, "r")
-            data = input_file.read().split("\n")
+            with open(self.results_file, "r") as f:
+                data = f.read().split("\n")
             data.pop()  # remove the last empty element
-            input_file.close()
             if len(data) != self.number_of_tests:
                 log.error("Not all tests finished")
                 raise exceptions.BenchmarkTestFailed()
