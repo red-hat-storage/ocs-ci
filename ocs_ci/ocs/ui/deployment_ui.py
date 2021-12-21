@@ -55,7 +55,6 @@ class DeploymentUI(PageNavigator):
     def install_ocs_operator(self):
         """
         Install OCS/ODF Opeartor
-
         """
         self.navigate_operatorhub_page()
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
@@ -70,22 +69,10 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
-            refresh_web_console_popup = self.wait_until_expected_text_is_found(
-                locator=self.validation_loc["warning-alert"],
-                expected_text="Refresh web console",
-                timeout=300,
-            )
-            logger.info(
-                "ODF Operator is successfully installed. "
-                "Refresh web console option is now available, click on it to see the console changes"
-            )
-            assert refresh_web_console_popup, (
-                "Refresh web console option is not found, there seems to be some issue with "
-                "ODF Operator installation"
-            )
-            self.do_click(self.validation_loc["refresh-web-console"])
-            self.page_has_loaded(retries=15, sleep_time=5)
+            time.sleep(80)
+            self.refresh_popup()
         self.verify_operator_succeeded(operator=self.operator_name)
+        self.refresh_popup()
 
     def refresh_popup(self):
         """
@@ -94,23 +81,6 @@ class DeploymentUI(PageNavigator):
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
             self.do_click(locator=self.dep_loc["refresh_popup"])
-        if self.operator_name is ODF_OPERATOR:
-            time.sleep(90)
-            refresh_web_console_popup = self.wait_until_expected_text_is_found(
-                locator=self.validation_loc["warning-alert"],
-                expected_text="Refresh web console",
-            )
-            if refresh_web_console_popup:
-                logger.info(
-                    "Refresh web console option is now available, click on it to see the changes"
-                )
-                self.do_click(self.validation_loc["refresh-web-console"])
-        self.verify_operator_succeeded(operator=self.operator_name)
-        if self.operator_name is ODF_OPERATOR:
-            time.sleep(80)
-            self.refresh_popup()
-        self.verify_operator_succeeded(operator=self.operator_name)
-        self.refresh_popup()
 
     def install_local_storage_operator(self):
         """

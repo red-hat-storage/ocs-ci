@@ -6,7 +6,6 @@ from tempfile import NamedTemporaryFile
 import time
 
 from selenium.webdriver.common.by import By
-
 from ocs_ci.framework import config
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
@@ -209,9 +208,7 @@ class OCSUpgrade(object):
     """
 
     ocp_version = get_ocp_version()
-    dep_loc = locators[ocp_version]["deployment"]
     validation_loc = locators[ocp_version]["validation"]
-    operator = ODF_OPERATOR
 
     def __init__(
         self,
@@ -649,9 +646,12 @@ def ocs_odf_upgrade_ui():
     )
     val_obj.do_click(OCSUpgrade.validation_loc["storage-system-on-installed-operators"])
     logger.info("Click on 'ocs-storagecluster-storagesystem' on Operator details page")
-    val_obj.do_click(OCSUpgrade.validation_loc["ocs-storagecluster-storgesystem"])
+    val_obj.do_click(
+        OCSUpgrade.validation_loc["ocs-storagecluster-storgesystem"],
+        enable_screenshot=True,
+    )
     logger.info("Click on Resources")
-    val_obj.do_click(OCSUpgrade.validation_loc["resources-tab"])
+    val_obj.do_click(OCSUpgrade.validation_loc["resources-tab"], enable_screenshot=True)
     logger.info("Storage Cluster Status Check")
     storage_cluster_status_check = val_obj.wait_until_expected_text_is_found(
         locator=("//*[text()= 'Ready']", By.XPATH), expected_text="Ready", timeout=1200

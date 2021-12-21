@@ -231,7 +231,10 @@ class ValidationUI(PageNavigator):
                         logger.info(
                             "Refresh web console option is now available, click on it to see the changes"
                         )
-                        self.do_click(self.validation_loc["refresh-web-console"])
+                        self.do_click(
+                            self.validation_loc["refresh-web-console"],
+                            enable_screenshot=True,
+                        )
 
     def odf_overview_ui(
         self,
@@ -306,13 +309,13 @@ class ValidationUI(PageNavigator):
             enable_screenshot=True,
         )
         logger.info("Click on 'Object' tab")
-        self.do_click(self.validation_loc["object"])
+        self.do_click(self.validation_loc["object"], enable_screenshot=True)
         logger.info("Click on 'Block and File' tab")
-        self.do_click(self.validation_loc["blockandfile"])
+        self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
         logger.info("Click on Overview tab")
         self.do_click(self.validation_loc["overview"])
         logger.info("Click on 'BlockPools' tab")
-        self.do_click(self.validation_loc["blockpools"])
+        self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         logger.info(
             "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
         )
