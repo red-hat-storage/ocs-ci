@@ -2478,7 +2478,9 @@ def skipif_ocp_version(expressions):
     """
     ocp_version = get_running_ocp_version()
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    return any(ocp_version + expr for expr in expr_list)
+    return any(
+        version_module.compare_versions(ocp_version + expr) for expr in expr_list
+    )
 
 
 def skipif_ocs_version(expressions):
@@ -2495,7 +2497,10 @@ def skipif_ocs_version(expressions):
         'True' if test needs to be skipped else 'False'
     """
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    return any(config.ENV_DATA["ocs_version"] + expr for expr in expr_list)
+    return any(
+        version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
+        for expr in expr_list
+    )
 
 
 def skipif_ui_not_support(ui_test):
