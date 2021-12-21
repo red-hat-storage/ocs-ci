@@ -310,8 +310,9 @@ class ValidationUI(PageNavigator):
         )
         logger.info("Click on 'Object' tab")
         self.do_click(self.validation_loc["object"], enable_screenshot=True)
-        logger.info("Click on 'Block and File' tab")
-        self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Click on 'Block and File' tab")
+            self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
         logger.info("Click on Overview tab")
         self.do_click(self.validation_loc["overview"])
         logger.info("Click on 'BlockPools' tab")
