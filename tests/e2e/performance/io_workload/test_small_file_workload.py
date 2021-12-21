@@ -686,7 +686,6 @@ class TestSmallFileWorkload(PASTest):
         and reporting the full results (links in the ES) of previous tests (4)
         """
 
-        # TODO : This function will push the results (if exists) to the performance dashboard.
         self.number_of_tests = 4
         self.results_path = get_full_test_logs_path(
             cname=self, fname="test_smallfile_workload"
