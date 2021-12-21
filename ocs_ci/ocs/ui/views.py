@@ -334,11 +334,6 @@ pvc_4_9 = {
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
 
-pvc_4_9 = {
-    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
-    "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
-    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-}
 storage_class = {
     "create-sc": (
         "#yaml-create",
@@ -382,9 +377,9 @@ storage_class = {
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
     "tls-server-name": ("#kms-service-tls", By.CSS_SELECTOR),
     "vault-enterprise-namespace": ("#kms-service-namespace", By.CSS_SELECTOR),
-    "browse-ca-certificate": ("#kms-service-ca-cert-browse-button", By.CSS_SELECTOR),
-    "browse-client-certificate": ("#kms-service-cert-browse-button", By.CSS_SELECTOR),
-    "browse-client-private-key": ("#kms-service-key-browse-button", By.CSS_SELECTOR),
+    "browse-ca-certificate": ("//*[@id='modal-container']/div/div/div/form/div/div[2]/div/div/div[4]/div[2]/div/input", By.XPATH),
+    "browse-client-certificate": ("(//input[@type='file'])[2]", By.XPATH),
+    "browse-client-private-key": ("(//input[@type='file'])[3]", By.XPATH),
     "pvc-expansion-check": (
         "input[class='create-storage-class-form__checkbox']",
         By.CSS_SELECTOR,
@@ -689,21 +684,13 @@ locators = {
     "4.9": {
         "login": login,
         "page": page_nav,
-        "generic": generic_locators,
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
-        "storage_class": {**storage_class, **storage_class_4_9},
-        "validation": {**validation, **validation_4_8},
-        "deployment": {**deployment, **deployment_4_7},
-    },
-    "4.9": {
-        "login": login,
-        "page": page_nav,
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "storage_class": {**storage_class, **storage_class_4_9},
     },
     "4.8": {
         "login": login,

@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
     argnames=["kv_version"],
     argvalues=[
         pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
-        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+        # pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
 class TestPVEncryption(ManageTest):
@@ -89,7 +89,7 @@ class TestPVEncryption(ManageTest):
         self.vault.remove_vault_namespace()
 
     @tier1
-    @skipif_ocs_version("<4.7")
+    @skipif_ocs_version("<4.8")
     def test_for_encrypted_pv_ui(
         self,
         project_factory,

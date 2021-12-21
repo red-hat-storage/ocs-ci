@@ -326,6 +326,21 @@ class BaseUI:
             logger.error("Expected element not found on UI")
             return False
 
+    # def send_keys(self, locator, text):
+    #     """
+    #     Send text to element on OpenShift Console
+    #
+    #     Args:
+    #         locator (set): (GUI element needs to operate on (str), type (By))
+    #         text (str): Send text to element
+    #         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+    #
+    #     """
+    #
+    #     element = self.driver.find_element(locator)
+    #     element.send_keys(text)
+    #     self.take_screenshot()
+
 
 class PageNavigator(BaseUI):
     """
@@ -698,7 +713,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
