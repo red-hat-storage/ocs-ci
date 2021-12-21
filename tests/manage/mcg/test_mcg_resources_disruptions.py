@@ -243,23 +243,23 @@ class TestMCGResourcesDisruptions(MCGTest):
         ocp_scc = ocp.OCP(kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         pod_data = pod_obj.get()
 
-        log.info("Verifying current SCC is noobaa in db pod")
+        log.info("Verifying current SCC is noobaa-endpoint in db pod")
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
-            == constants.NOOBAA_RESOURCE_NAME
+            == constants.NOOBAA_ENDPOINT_DEPLOYMENT
         ), "Invalid default scc"
 
         log.info("Deleting the user array from the Noobaa scc")
         ocp_scc.patch(
-            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
             params='[{"op": "remove", "path": "/users/0", '
             '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
             format_type="json",
         )
         assert not helpers.validate_scc_policy(
-            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            sa_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            scc_name=constants.NOOBAA_RESOURCE_NAME,
+            scc_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
         ), "SA name is  present in noobaa scc"
         log.info("Adding the noobaa system sa user to anyuid scc")
         ocp_scc.patch(
@@ -269,7 +269,7 @@ class TestMCGResourcesDisruptions(MCGTest):
             format_type="json",
         )
         assert helpers.validate_scc_policy(
-            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            sa_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             scc_name=constants.ANYUID,
         ), "SA name is not present in anyuid scc"
