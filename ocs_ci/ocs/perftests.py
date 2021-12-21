@@ -551,7 +551,7 @@ class PASTest(BaseTest):
             db = PerfDash()
         except MissingRequiredConfigKeyError as ex:
             log.error(
-                f"Results can not push to performance dashboard, no connection [{ex}]"
+                f"Results cannot be pushed to the performance dashboard, no connection [{ex}]"
             )
             return
 
