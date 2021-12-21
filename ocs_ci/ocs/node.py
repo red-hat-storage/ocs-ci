@@ -1894,7 +1894,7 @@ def get_odf_zone_count():
     az_count = node_obj.get(selector=constants.ZONE_LABEL)
     az = set()
     for node in az_count.get("items"):
-        node_lables = node.get("metadata").get("labels")
+        node_lables = node.get("metadata")["labels"]
         if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
-            az.add(node.get("metadata").get("labels").get(constants.ZONE_LABEL))
+            az.add(node.get("metadata")["labels"][constants.ZONE_LABEL])
     return len(az)
