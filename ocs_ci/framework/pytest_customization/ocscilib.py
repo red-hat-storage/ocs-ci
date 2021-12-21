@@ -284,6 +284,15 @@ def pytest_addoption(parser):
         failed / or had error in the provided report.
         """,
     )
+    parser.addoption(
+        "--default-cluster-context-index",
+        dest="default_cluster_context_index",
+        default=0,
+        help="""
+        Sets the default index of the cluster whose context needs to be
+        loaded when run-ci starts
+        """,
+    )
 
 
 def pytest_configure(config):

@@ -128,6 +128,11 @@ def process_ocsci_conf(arguments):
         choices=["rgw", "cephfs", "noobaa", "blockpools"],
         help=("disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."),
     )
+    parser.add_argument(
+        "--default-cluster-context-index",
+        action="store",
+        default=0,
+    )
 
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
@@ -166,6 +171,10 @@ def process_ocsci_conf(arguments):
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
     if args.disable_components:
         framework.config.ENV_DATA["disable_components"] = args.disable_components
+    if args.default_cluster_context_index:
+        framework.config.ENV_DATA[
+            "default_cluster_context_index"
+        ] = args.default_cluter_context_index
 
 
 def init_multicluster_ocsci_conf(args, nclusters):
@@ -214,6 +223,8 @@ def init_multicluster_ocsci_conf(args, nclusters):
                 ] = f"{multicluster_conf[index][arg+1]}{index + 1}"
         framework.config.multicluster_args.append(multicluster_conf[index][1:])
         check_config_requirements()
+    # Set context to default_cluster_context_index
+    framework.config.switch_default_cluster_ctx()
 
 
 def tokenize_per_cluster_args(args, nclusters):
