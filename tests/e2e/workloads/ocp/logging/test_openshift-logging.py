@@ -80,7 +80,7 @@ class Testopenshiftloggingonocs(E2ETest):
         """
 
         elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
-        if version.get_semantic_ocp_version_from_config() <= version.VERSION_4_7:
+        if version.get_semantic_ocp_version_from_config() <= version.VERSION_4_4:
 
             project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
                 command="indices", out_yaml_format=False
