@@ -627,7 +627,7 @@ def get_osd_running_nodes():
         list: OSD node names
 
     """
-    return [pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()]
+    return list({pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()})
 
 
 def get_osds_per_node():
