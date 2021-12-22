@@ -208,7 +208,8 @@ class OCSUpgrade(object):
     """
 
     ocp_version = get_ocp_version()
-    validation_loc = locators[ocp_version]["validation"]
+    if config.UPGRADE.get("ui_upgrade"):
+        validation_loc = locators[ocp_version]["validation"]
 
     def __init__(
         self,
