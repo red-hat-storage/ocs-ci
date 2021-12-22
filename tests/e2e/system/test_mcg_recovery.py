@@ -12,16 +12,16 @@ from ocs_ci.framework.testlib import E2ETest
 log = logging.getLogger(__name__)
 
 
+@tier4
+@tier4a
+@ignore_leftovers
+@polarion_id("OCS-2716")
 class TestMCGRecovery(E2ETest):
     """
     Test MCG system recovery
 
     """
 
-    @tier4
-    @tier4a
-    @ignore_leftovers
-    @polarion_id("OCS-2716")
     @pytest.mark.parametrize(
         argnames=["bucket_amount", "object_amount"],
         argvalues=[pytest.param(2, 15)],
