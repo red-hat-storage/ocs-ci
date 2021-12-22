@@ -207,10 +207,6 @@ class OCSUpgrade(object):
 
     """
 
-    ocp_version = get_ocp_version()
-    if config.UPGRADE.get("ui_upgrade"):
-        validation_loc = locators[ocp_version]["validation"]
-
     def __init__(
         self,
         namespace,
@@ -225,6 +221,9 @@ class OCSUpgrade(object):
         self.subscription_plan_approval = config.DEPLOYMENT.get(
             "subscription_plan_approval"
         )
+        self.ocp_version = get_ocp_version()
+        if config.UPGRADE.get("ui_upgrade"):
+            self.validation_loc = locators[self.ocp_version]["validation"]
 
     @property
     def version_before_upgrade(self):
@@ -645,14 +644,26 @@ def ocs_odf_upgrade_ui():
     logger.info(
         "Click on Storage System under Provided APIs on Installed Operators Page"
     )
-    val_obj.do_click(OCSUpgrade.validation_loc["storage-system-on-installed-operators"])
+    original_ocs_version = config.ENV_DATA.get("ocs_version")
+    upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
+    upgrade_ocs = OCSUpgrade(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        version_before_upgrade=original_ocs_version,
+        ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+        upgrade_in_current_source=upgrade_in_current_source,
+    )
+    val_obj.do_click(
+        upgrade_ocs.validation_loc["storage-system-on-installed-operators"]
+    )
     logger.info("Click on 'ocs-storagecluster-storagesystem' on Operator details page")
     val_obj.do_click(
-        OCSUpgrade.validation_loc["ocs-storagecluster-storgesystem"],
+        upgrade_ocs.validation_loc["ocs-storagecluster-storgesystem"],
         enable_screenshot=True,
     )
     logger.info("Click on Resources")
-    val_obj.do_click(OCSUpgrade.validation_loc["resources-tab"], enable_screenshot=True)
+    val_obj.do_click(
+        upgrade_ocs.validation_loc["resources-tab"], enable_screenshot=True
+    )
     logger.info("Storage Cluster Status Check")
     storage_cluster_status_check = val_obj.wait_until_expected_text_is_found(
         locator=("//*[text()= 'Ready']", By.XPATH), expected_text="Ready", timeout=1200
@@ -664,7 +675,7 @@ def ocs_odf_upgrade_ui():
         "Storage Cluster Status reported on UI is 'Ready', verification successful"
     )
     logger.info("Click on 'ocs-storagecluster")
-    val_obj.do_click(OCSUpgrade.validation_loc["ocs-storagecluster"])
+    val_obj.do_click(upgrade_ocs.validation_loc["ocs-storagecluster"])
     val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
