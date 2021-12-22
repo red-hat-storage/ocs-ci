@@ -15,12 +15,13 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
-
+from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
 
 log = logging.getLogger(__name__)
@@ -38,9 +39,12 @@ class PASTest(BaseTest):
         """
         Setting up the environment for each performance and scale test
 
+        Args:
+            name (str): The test name that will use in the performance dashboard
         """
         log.info("Setting up test environment")
         self.crd_data = None  # place holder for Benchmark CDR data
+        self.es = None  # place holder for the incluster deployment elasticsearch
         self.es_backup = None  # place holder for the elasticsearch backup
         self.main_es = None  # place holder for the main elasticsearch object
         self.benchmark_obj = None  # place holder for the benchmark object
@@ -505,3 +509,141 @@ class PASTest(BaseTest):
 
         """
         return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+
+    def check_tests_results(self):
+        """
+        Check that all sub-tests (test multiplication by parameters) finished and
+        pushed the data to the ElastiSearch server.
+        It also generate the es link to push into the performance dashboard.
+        """
+
+        es_links = []
+        try:
+            with open(self.results_file, "r") as f:
+                data = f.read().split("\n")
+            data.pop()  # remove the last empty element
+            if len(data) != self.number_of_tests:
+                log.error("Not all tests finished")
+                raise exceptions.BenchmarkTestFailed()
+            else:
+                log.info("All test finished OK, and the results can be found at :")
+                for res in data:
+                    log.info(res)
+                    es_links.append(res)
+        except OSError as err:
+            log.error(f"OS error: {err}")
+            raise err
+
+        self.es_link = ",".join(es_links)
+
+    def push_to_dashboard(self, test_name):
+        """
+        Pushing the test results into the performance dashboard, if exist
+
+        Args:
+            test_name (str): the test name as defined in the performance dashboard
+
+        Returns:
+            None in case of pushing the results to the dashboard failed
+
+        """
+
+        try:
+            db = PerfDash()
+        except MissingRequiredConfigKeyError as ex:
+            log.error(
+                f"Results cannot be pushed to the performance dashboard, no connection [{ex}]"
+            )
+            return None
+
+        log.info(f"Full version is : {self.environment.get('ocs_build')}")
+        version = self.environment.get("ocs_build").split("-")[0]
+        try:
+            build = self.environment.get("ocs_build").split("-")[1]
+            build = build.split(".")[0]
+        except Exception:
+            build = "GA"
+
+        # Getting the topology from the cluster
+        az = node.get_odf_zone_count()
+        if az == 0:
+            az = 1
+        topology = f"{az}-AZ"
+
+        # Check if it is Arbiter cluster
+        my_obj = OCP(
+            kind="StorageCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        arbiter = (
+            my_obj.data.get("items")[0].get("spec").get("arbiter").get("enable", False)
+        )
+
+        if arbiter:
+            topology = "Strech-Arbiter"
+
+        # Check if run on LSO
+        try:
+            ns = OCP(kind="namespace", resource_name=defaults.LOCAL_STORAGE_NAMESPACE)
+            ns.get()
+            platform = f"{self.environment.get('platform')}-LSO"
+        except Exception:
+            platform = self.environment.get("platform")
+
+        # Check if encrypted cluster
+        encrypt = (
+            my_obj.data.get("items")[0]
+            .get("spec")
+            .get("encryption")
+            .get("enable", False)
+        )
+        kms = (
+            my_obj.data.get("items")[0]
+            .get("spec")
+            .get("encryption")
+            .get("kms")
+            .get("enable", False)
+        )
+        if kms:
+            platform = f"{platform}-KMS"
+        elif encrypt:
+            platform = f"{platform}-Enc"
+
+        if self.dev_mode:
+            port = "8181"
+        else:
+            port = "8080"
+
+        try:
+            log.info(
+                "Trying to push :"
+                f"version={version},"
+                f"build={build},"
+                f"platform={platform},"
+                f"topology={topology},"
+                f"test={test_name},"
+                f"eslink={self.es_link}, logfile=None"
+            )
+
+            db.add_results(
+                version=version,
+                build=build,
+                platform=platform,
+                topology=topology,
+                test=test_name,
+                eslink=self.es_link,
+                logfile=None,
+            )
+            resultslink = (
+                f"http://{db.creds['host']}:{port}/index.php?"
+                f"version1={db.get_version_id(version)}"
+                f"&build1={db.get_build_id(version, build)}"
+                f"&platform1={db.get_platform_id(platform)}"
+                f"&az_topology1={db.get_topology_id(topology)}"
+                f"&test_name%5B%5D={db.get_test_id(test_name)}"
+                "&submit=Choose+options"
+            )
+            log.info(f"Full results report can be found at : {resultslink}")
+        except Exception as ex:
+            log.error(f"Can not push results into the performance Dashboard! [{ex}]")
+
+        db.cleanup()

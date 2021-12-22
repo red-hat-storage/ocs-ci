@@ -1881,3 +1881,20 @@ def add_new_disk_for_vsphere(sc_name):
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
     add_disk_to_node(node_with_min_pvs)
+
+
+def get_odf_zone_count():
+    """
+    Get the number of Availability zones used by ODF cluster
+
+    Returns:
+         int : the number of availability zones
+    """
+    node_obj = OCP(kind="node")
+    az_count = node_obj.get(selector=constants.ZONE_LABEL)
+    az = set()
+    for node in az_count.get("items"):
+        node_lables = node.get("metadata")["labels"]
+        if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
+            az.add(node.get("metadata")["labels"][constants.ZONE_LABEL])
+    return len(az)
