@@ -222,6 +222,7 @@ Upgrade related configuration data.
 * `ocp_upgrade_path` - OCP image to upgrade with
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
+* `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
 
 #### AUTH
 
