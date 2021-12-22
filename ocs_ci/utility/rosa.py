@@ -45,12 +45,10 @@ def create_cluster(cluster_name, version):
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --compute-machine-type "
+        f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
         f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
     )
     utils.run_cmd(cmd)
-    create_operator_roles(cluster_name)
-    create_oidc_provider(cluster_name)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
         4000, 30, ocm.get_cluster_details, cluster_name
@@ -83,11 +81,20 @@ def get_latest_rosa_version(version):
     """
     cmd = "rosa list versions"
     output = utils.run_cmd(cmd)
+    logger.info(f"Looking for z-stream version of {version}")
+    rosa_version = None
     for line in output.splitlines():
         match = re.search(f"^{version}\\.(\\d) ", line)
         if match:
             rosa_version = match.group(0).rstrip()
             break
+    if rosa_version is None:
+        logger.error(f"Could not find any version of {version} available for ROSA")
+        logger.info(f"Try providing an older version of OCP with --ocp-version")
+        logger.info(f"Latest OCP versions available for ROSA are:")
+        for i in range(3):
+            logger.info(f"{output.splitlines()[i + 1]}")
+
     return rosa_version
 
 
@@ -101,7 +108,7 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
 
     """
     cmd = (
-        f"rosa create account-roles --version {version} --mode auto"
+        f"rosa create account-roles --mode auto"
         f' --permissions-boundary "" --prefix {prefix}  --yes'
     )
     utils.run_cmd(cmd)
@@ -229,3 +236,25 @@ def delete_odf_addon(cluster):
             raise ManagedServiceAddonDeploymentError(
                 f"Addon {addon_name} failed to be uninstalled"
             )
+
+
+def delete_operator_roles(cluster_id):
+    """
+    Delete operator roles of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete operator-roles -c {cluster_id}"
+    utils.run_cmd(cmd)
+
+
+def delete_oidc_provider(cluster_id):
+    """
+    Delete oidc provider of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete oidc-provider -c {cluster_id}"
+    utils.run_cmd(cmd)
