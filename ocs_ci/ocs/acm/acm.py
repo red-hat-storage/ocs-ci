@@ -44,17 +44,12 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         self.navigate_clusters_page()
-        time.sleep(3)
         self.do_click(self.page_nav["Import_cluster"])
-        time.sleep(3)
         self.do_send_keys(
             self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
         )
-        time.sleep(3)
         self.do_click(self.page_nav["Import_mode"])
-        time.sleep(3)
         self.do_click(self.page_nav["choose_kubeconfig"])
-        time.sleep(3)
         log.info(f"Coping Kubeconfig {kubeconfig_location}")
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
         log.info(kubeconfig_to_import)
@@ -62,9 +57,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_send_keys(
             self.page_nav["Kubeconfig_text"], text=f"{kubeconfig_to_import}"
         )
-        time.sleep(30)
         log.info(f"Submitting import of {cluster_name}")
-        time.sleep(3)
         self.do_click(self.page_nav["Submit_import"])
 
 
@@ -153,7 +146,7 @@ def import_clusters_with_acm():
         cluster_name=CLUSTER_NAME_1,
         kubeconfig_location=KUBECONFIG_A,
     )
-    time.sleep(300)
+    time.sleep(300)  # Will be replace with dynamic checker.
     acm_nav.import_cluster(
         cluster_name=CLUSTER_NAME_1,
         kubeconfig_location=KUBECONFIG_B,
