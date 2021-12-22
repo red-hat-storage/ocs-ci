@@ -147,7 +147,7 @@ def test_compare_versions(expression, expected):
 def test_compare_versions_wrong_expression(expression):
     """
     This test is suppose to test if the compare_versions raises
-    expected exception for wron expression.
+    expected exception for wrong expression.
     """
 
     with pytest.raises(WrongVersionExpression):
