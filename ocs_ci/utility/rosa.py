@@ -90,8 +90,8 @@ def get_latest_rosa_version(version):
             break
     if rosa_version is None:
         logger.error(f"Could not find any version of {version} available for ROSA")
-        logger.info(f"Try providing an older version of OCP with --ocp-version")
-        logger.info(f"Latest OCP versions available for ROSA are:")
+        logger.info("Try providing an older version of OCP with --ocp-version")
+        logger.info("Latest OCP versions available for ROSA are:")
         for i in range(3):
             logger.info(f"{output.splitlines()[i + 1]}")
 
