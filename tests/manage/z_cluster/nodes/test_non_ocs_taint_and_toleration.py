@@ -157,7 +157,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             exclude_selector=True,
         )
         for pod in pod_list:
-            pod.delete(wait=True)
+            pod.delete(wait=False)
 
-        assert wait_for_pods_to_be_running(timeout=400, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=500, sleep=15)
         self.sanity_helpers.health_check()
