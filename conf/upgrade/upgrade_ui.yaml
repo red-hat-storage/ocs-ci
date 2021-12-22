@@ -1,0 +1,5 @@
+---
+#Perform upgrade via UI (Not all the versions are supported, please look at the code)
+
+UPGRADE:
+  ui_upgrade: true

@@ -231,7 +231,10 @@ class ValidationUI(PageNavigator):
                         logger.info(
                             "Refresh web console option is now available, click on it to see the changes"
                         )
-                        self.do_click(self.validation_loc["refresh-web-console"])
+                        self.do_click(
+                            self.validation_loc["refresh-web-console"],
+                            enable_screenshot=True,
+                        )
 
     def odf_overview_ui(
         self,
@@ -242,8 +245,20 @@ class ValidationUI(PageNavigator):
         """
 
         self.odf_console_plugin_check()
-
         self.navigate_odf_overview_page()
+        system_capacity_check = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["system-capacity"],
+            expected_text="System Capacity",
+            timeout=5,
+        )
+        if system_capacity_check:
+            logger.info(
+                "System Capacity Card found on OpenShift Data Foundation Overview page"
+            )
+        else:
+            logger.critical(
+                "System Capacity Card not found on OpenShift Data Foundation Overview page"
+            )
         logger.info(
             "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
         )
@@ -256,7 +271,7 @@ class ValidationUI(PageNavigator):
                 "Successfully navigated to 'StorageSystem details' page from System Capacity Card"
             )
         else:
-            logger.error(
+            logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
             )
         logger.info("Click on StorageSystems breadcrumb")
@@ -275,13 +290,13 @@ class ValidationUI(PageNavigator):
                 "Successfully navigated to 'StorageSystem details' page from Performance Card"
             )
         else:
-            logger.error(
+            logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from Performance Card"
             )
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate again to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]))
+        self.do_click((self.validation_loc["overview"]), enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=5)
         logger.info(
             "Successfully navigated back to ODF tab under Storage, test successful!"
@@ -306,17 +321,21 @@ class ValidationUI(PageNavigator):
             enable_screenshot=True,
         )
         logger.info("Click on 'Object' tab")
-        self.do_click(self.validation_loc["object"])
-        logger.info("Click on 'Block and File' tab")
-        self.do_click(self.validation_loc["blockandfile"])
+        self.do_click(self.validation_loc["object"], enable_screenshot=True)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Click on 'Block and File' tab")
+            self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
         logger.info("Click on Overview tab")
         self.do_click(self.validation_loc["overview"])
         logger.info("Click on 'BlockPools' tab")
-        self.do_click(self.validation_loc["blockpools"])
+        self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         logger.info(
             "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
         )
-        self.do_click(self.validation_loc["ocs-storagecluster-cephblockpool"])
+        self.do_click(
+            self.validation_loc["ocs-storagecluster-cephblockpool"],
+            enable_screenshot=True,
+        )
         self.page_has_loaded(retries=15, sleep_time=2)
         logger.info("Verifying the status of 'ocs-storagecluster-cephblockpool'")
         cephblockpool_status = self.get_element_text(
@@ -326,9 +345,7 @@ class ValidationUI(PageNavigator):
             f"cephblockpool status error | expected status:Ready \n "
             f"actual status:{cephblockpool_status}"
         )
-        logger.info(
-            "Successfully verified the status of cephblockpool, test successful!"
-        )
+        logger.info("Verification of cephblockpool status is successful!")
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
