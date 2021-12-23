@@ -134,6 +134,7 @@ class MultiClusterConfig:
         self.multicluster = False
         # A list of lists which holds CLI args clusterwise
         self.multicluster_args = list()
+        self.multicluster_common_args = list()
         # Points to cluster config objects which holds ACM cluster conf
         # Applicable only if we are deploying ACM cluster
         self.acm_index = None

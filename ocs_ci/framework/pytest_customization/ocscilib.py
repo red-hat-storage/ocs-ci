@@ -63,9 +63,20 @@ def _pytest_addoption_cluster_specific(parser):
 
     """
 
+    add_common_ocsci_conf = False
+
     for i in range(ocsci_config.nclusters):
         # If it's not multicluster then no suffix will be added
         suffix = i + 1 if ocsci_config.multicluster else ""
+        if not add_common_ocsci_conf and ocsci_config.multicluster:
+            parser.addoption(
+                "--ocsci-conf",
+                dest="ocsci_conf",
+                action="append",
+                help="Path to config file of OCS CI",
+            )
+            add_common_ocsci_conf = True
+
         parser.addoption(
             f"--ocsci-conf{suffix}",
             dest=f"ocsci_conf{suffix}",
