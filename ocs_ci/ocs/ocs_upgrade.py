@@ -641,9 +641,6 @@ def ocs_odf_upgrade_ui():
     dep_obj = DeploymentUI(setup_ui)
     dep_obj.operator = ODF_OPERATOR
     dep_obj.install_ocs_operator()
-    logger.info(
-        "Click on Storage System under Provided APIs on Installed Operators Page"
-    )
     original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
     upgrade_ocs = OCSUpgrade(
@@ -651,6 +648,9 @@ def ocs_odf_upgrade_ui():
         version_before_upgrade=original_ocs_version,
         ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
         upgrade_in_current_source=upgrade_in_current_source,
+    )
+    logger.info(
+        "Click on Storage System under Provided APIs on Installed Operators Page"
     )
     val_obj.do_click(
         upgrade_ocs.validation_loc["storage-system-on-installed-operators"]
