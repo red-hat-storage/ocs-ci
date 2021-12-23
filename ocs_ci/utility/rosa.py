@@ -10,7 +10,10 @@ import os
 import re
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
+from ocs_ci.ocs.exceptions import (
+    ManagedServiceAddonDeploymentError,
+    UnsupportedPlatformVersionError,
+)
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -94,7 +97,7 @@ def get_latest_rosa_version(version):
         logger.info("Latest OCP versions available for ROSA are:")
         for i in range(3):
             logger.info(f"{output.splitlines()[i + 1]}")
-
+        raise UnsupportedPlatformVersionError
     return rosa_version
 
 
