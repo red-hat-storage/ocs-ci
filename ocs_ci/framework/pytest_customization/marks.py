@@ -206,8 +206,8 @@ managed_service_required = pytest.mark.skipif(
 )
 
 kms_config_required = pytest.mark.skipif(
-    config.ENV_DATA.get("vault") is not True,
-    reason="Vault config not found",
+    load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
+    reason="Vault config not found in auth.yaml",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
