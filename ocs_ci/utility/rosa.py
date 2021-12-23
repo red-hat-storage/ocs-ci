@@ -87,7 +87,7 @@ def get_latest_rosa_version(version):
     logger.info(f"Looking for z-stream version of {version}")
     rosa_version = None
     for line in output.splitlines():
-        match = re.search(f"^{version}\\.(\\d) ", line)
+        match = re.search(f"^{version}\\.(\\d+) ", line)
         if match:
             rosa_version = match.group(0).rstrip()
             break
