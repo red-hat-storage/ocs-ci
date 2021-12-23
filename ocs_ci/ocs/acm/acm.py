@@ -5,6 +5,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import MultiClusterConfig
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
@@ -13,9 +14,9 @@ from ocs_ci.ocs.ui.base_ui import login_ui
 log = logging.getLogger(__name__)
 
 # Lines below will be moved to config files
-CLUSTER_NAME_1 = "Cluster-a"
+CLUSTER_NAME_1 = "apolak-cluster-a"
 CLUSTER_NAME_2 = "Cluster-b"
-KUBECONFIG_A = "TBD"
+KUBECONFIG_A = "/home/apolak/async_setup/cluster-a/auth/kubeconfig"
 KUBECONFIG_B = "TBD"
 ###########################################
 
@@ -54,9 +55,13 @@ class AcmAddClusters(AcmPageNavigator):
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
         log.info(kubeconfig_to_import)
         self.do_click(self.page_nav["Kubeconfig_text"])
-        self.do_send_keys(
-            self.page_nav["Kubeconfig_text"], text=f"{kubeconfig_to_import}"
-        )
+        for line in kubeconfig_to_import:
+
+            if len(line) > 4000:
+                line = line[:3999]
+            log.info(f"{line}")
+            self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
+            time.sleep(2)
         log.info(f"Submitting import of {cluster_name}")
         self.do_click(self.page_nav["Submit_import"])
 
@@ -134,6 +139,22 @@ def verify_running_acm():
     log.info(f"ACM Version Detected: {acm_version}")
 
 
+def validate_cluster_import(cluster_name):
+    oc_obj = OCP()
+    log.debug({oc_obj.get(resource_name="managedclusters")})
+    conditions = oc_obj.exec_oc_cmd(
+        f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"
+    )
+    log.debug(conditions)
+
+    for dict_status in conditions:
+        log.info(f"Message: {dict_status.get('message')}")
+        log.info(f"Status: {dict_status.get('status')}")
+        assert dict_status.get(
+            "status"
+        ), f"Status is not True, but: {dict_status.get('status')}"
+
+
 def import_clusters_with_acm():
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
@@ -151,3 +172,18 @@ def import_clusters_with_acm():
         cluster_name=CLUSTER_NAME_1,
         kubeconfig_location=KUBECONFIG_B,
     )
+
+
+def get_clusters_env():
+    config = MultiClusterConfig()
+    clusters_env = dict()
+    config.switch_ctx(index=0)
+    clusters_env["kubeconfig_hub_location"] = config.ENV_DATA.get("kubeconfig_location")
+    log.info(f"FIRSTPRINT: {clusters_env }")
+    clusters_env["hub_cluster_name"] = config.ENV_DATA.get("cluster_name")
+    return clusters_env
+
+
+def test_import_clusters_with_acm():
+    cluster_env = get_clusters_env()
+    print(cluster_env["kubeconfig_hub_location"])
