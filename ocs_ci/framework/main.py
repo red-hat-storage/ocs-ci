@@ -153,6 +153,9 @@ def process_ocsci_conf(arguments):
             OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
         )
         load_config([ocp_version_config])
+        # As we may have overridden values specified in the original config,
+        # reload it to get them back
+        load_config(args.ocsci_conf)
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
 
