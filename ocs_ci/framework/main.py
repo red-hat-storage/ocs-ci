@@ -164,7 +164,9 @@ def process_ocsci_conf(arguments):
     if args.disable_components:
         framework.config.ENV_DATA["disable_components"] = args.disable_components
     framework.config.ENV_DATA["default_cluster_context_index"] = (
-        args.default_cluster_context_index if args.default_cluster_context_index else 0
+        int(args.default_cluster_context_index)
+        if args.default_cluster_context_index
+        else 0
     )
 
 
@@ -207,7 +209,6 @@ def init_multicluster_ocsci_conf(args, nclusters):
     for index in range(nclusters):
         framework.config.switch_ctx(index)
         process_ocsci_conf(common_argv + multicluster_conf[index][1:])
-        print(f"COMMON={common_argv}")
         for arg in range(len(multicluster_conf[index][1:])):
             if multicluster_conf[index][arg + 1].startswith("--"):
                 multicluster_conf[index][
