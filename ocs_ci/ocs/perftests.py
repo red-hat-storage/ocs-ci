@@ -613,7 +613,7 @@ class PASTest(BaseTest):
             kind="cephblockpool", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         for pool in my_obj.data.get("items"):
-            if pool["spec"]["compressionMode"] is not None:
+            if pool.get("spec").get("compressionMode", None) is not None:
                 platform = f"{platform}-CMP"
                 break
 
