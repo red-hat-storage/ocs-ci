@@ -200,9 +200,9 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
 
 def get_db_scc_and_sa():
     if version.get_semantic_ocs_version_from_config() < version.VERSION_4_9:
-        return constants.NOOBAA_RESOURCE_NAME, constants.NOOBAA_SERVICE_ACCOUNT
+        return constants.NOOBAA_SERVICE_ACCOUNT_NAME, constants.NOOBAA_SERVICE_ACCOUNT
     else:
-        return constants.NOOBAA_ENDPOINT_DEPLOYMENT, constants.NOOBAA_DB_SERVICE_ACCOUNT
+        return constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME, constants.NOOBAA_DB_SERVICE_ACCOUNT
 
 
 def get_rgw_restart_counts():
