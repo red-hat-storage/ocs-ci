@@ -3,6 +3,7 @@ Test to verify performance of attaching number of pods as a bulk, each pod attac
 The test results will be uploaded to the ES server
 """
 import logging
+import os
 import pytest
 import pathlib
 import time
@@ -216,6 +217,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         # Initialize the results doc file.
         full_log_path = get_full_test_logs_path(cname=self)
+        self.results_path = get_full_test_logs_path(cname=self)
         full_log_path += f"-{self.sc}"
         full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, full_log_path)
@@ -235,9 +237,30 @@ class TestBulkPodAttachPerformance(PASTest):
         )
 
         # Write the test results into the ES server
-        full_results.es_write()
-        # write the ES link to the test results in the test log.
-        log.info(f"The result can be found at : {full_results.results_link()}")
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            # write the ES link to the test results in the test log.
+            log.info(f"The result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_bulk_pod_attach_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        self.number_of_tests = 4
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_bulk_pod_attach_performance"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}")
+
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name=self.benchmark_name)
 
     def init_full_results(self, full_results):
         """
