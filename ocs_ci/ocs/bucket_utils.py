@@ -12,7 +12,7 @@ from botocore.handlers import disable_signing
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -196,6 +196,13 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
             mcg_obj.s3_internal_endpoint,
         ],
     )
+
+
+def get_db_scc_and_sa():
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_9:
+        return constants.NOOBAA_RESOURCE_NAME, constants.NOOBAA_SERVICE_ACCOUNT
+    else:
+        return constants.NOOBAA_ENDPOINT_DEPLOYMENT, constants.NOOBAA_DB_SERVICE_ACCOUNT
 
 
 def get_rgw_restart_counts():
