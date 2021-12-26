@@ -6,24 +6,13 @@ from selenium.webdriver.support import expected_conditions as ec
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import MultiClusterConfig
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
 
 
 log = logging.getLogger(__name__)
-
-# Lines below will be moved to config files
-CLUSTER_NAME_1 = "apolak-cluster-a"
-CLUSTER_NAME_2 = "Cluster-b"
-KUBECONFIG_A = "/home/apolak/async_setup/cluster-a/auth/kubeconfig"
-KUBECONFIG_B = "TBD"
-###########################################
-
-
-#####################################################
-# The Code below intended to run on ACM Hub cluster #
-#####################################################
 
 
 class AcmAddClusters(AcmPageNavigator):
@@ -36,7 +25,7 @@ class AcmAddClusters(AcmPageNavigator):
         super().__init__(driver)
         self.page_nav = locators[self.ocp_version]["acm_page"]
 
-    def import_cluster(self, cluster_name, kubeconfig_location):
+    def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
 
         Args:
@@ -56,17 +45,48 @@ class AcmAddClusters(AcmPageNavigator):
         log.info(kubeconfig_to_import)
         self.do_click(self.page_nav["Kubeconfig_text"])
         for line in kubeconfig_to_import:
-
-            if len(line) > 4000:
-                line = line[:3999]
-            log.info(f"{line}")
             self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
             time.sleep(2)
         log.info(f"Submitting import of {cluster_name}")
         self.do_click(self.page_nav["Submit_import"])
 
+    def import_cluster(self, cluster_name, kubeconfig_location):
+        """
+        Import cluster using UI
+
+        Args:
+            cluster_name:
+            kubeconfig_location:
+
+        Returns:
+
+        """
+
+        self.import_cluster_ui(
+            cluster_name=cluster_name, kubeconfig_location=kubeconfig_location
+        )
+        for sample in TimeoutSampler(
+            timeout=450,
+            sleep=60,
+            func=validate_cluster_import,
+            cluster_name=cluster_name,
+        ):
+            if sample:
+                log.info(f"Cluster: {cluster_name} successfully imported")
+            else:
+                log.error(f"import of cluster: {cluster_name} failed")
+
 
 def copy_kubeconfig(file):
+    """
+
+    Args:
+        file: (str): kubeconfig file location
+
+    Returns:
+        list: with kubeconfig lines
+
+    """
 
     try:
         with open(file, "r") as f:
@@ -155,35 +175,55 @@ def validate_cluster_import(cluster_name):
         ), f"Status is not True, but: {dict_status.get('status')}"
 
 
+def get_clusters_env():
+    """
+    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup
+
+    Returns:
+        dict: with clusters names, clusters kubeconfig locations
+
+    """
+    config = MultiClusterConfig()
+    clusters_env = dict()
+    config.switch_ctx(index=0)
+    clusters_env["kubeconfig_hub_location"] = config.ENV_DATA.get("kubeconfig_location")
+    clusters_env["hub_cluster_name"] = config.ENV_DATA.get("cluster_name")
+    config.switch_ctx(index=1)
+    clusters_env["kubeconfig_cl_a_location"] = config.ENV_DATA.get(
+        "kubeconfig_location"
+    )
+    clusters_env["cl_a_cluster_name"] = config.ENV_DATA.get("cluster_name")
+    config.switch_ctx(index=2)
+    clusters_env["kubeconfig_cl_b_location"] = config.ENV_DATA.get(
+        "kubeconfig_location"
+    )
+    clusters_env["cl_b_cluster_name"] = config.ENV_DATA.get("cluster_name")
+
+    config.switch_ctx(index=0)
+
+    return clusters_env
+
+
 def import_clusters_with_acm():
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
 
     """
+    clusters_env = get_clusters_env()
+    log.info(clusters_env)
+    kubeconfig_a = clusters_env.get("kubeconfig_cl_a_location")
+    kubeconfig_b = clusters_env.get("kubeconfig_cl_b_location")
+    cluster_name_a = clusters_env.get("cl_a_cluster_name")
+    cluster_name_b = clusters_env.get("cl_b_cluster_name")
     verify_running_acm()
     driver = login_to_acm()
     acm_nav = AcmAddClusters(driver)
     acm_nav.import_cluster(
-        cluster_name=CLUSTER_NAME_1,
-        kubeconfig_location=KUBECONFIG_A,
+        cluster_name=cluster_name_a,
+        kubeconfig_location=kubeconfig_a,
     )
-    time.sleep(300)  # Will be replace with dynamic checker.
+
     acm_nav.import_cluster(
-        cluster_name=CLUSTER_NAME_1,
-        kubeconfig_location=KUBECONFIG_B,
+        cluster_name=cluster_name_b,
+        kubeconfig_location=kubeconfig_b,
     )
-
-
-def get_clusters_env():
-    config = MultiClusterConfig()
-    clusters_env = dict()
-    config.switch_ctx(index=0)
-    clusters_env["kubeconfig_hub_location"] = config.ENV_DATA.get("kubeconfig_location")
-    log.info(f"FIRSTPRINT: {clusters_env }")
-    clusters_env["hub_cluster_name"] = config.ENV_DATA.get("cluster_name")
-    return clusters_env
-
-
-def test_import_clusters_with_acm():
-    cluster_env = get_clusters_env()
-    print(cluster_env["kubeconfig_hub_location"])
