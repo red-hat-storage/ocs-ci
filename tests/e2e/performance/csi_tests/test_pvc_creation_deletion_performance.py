@@ -4,6 +4,7 @@ for RBD, CephFS and RBD-Thick interfaces
 """
 import time
 import logging
+import os
 import datetime
 import pytest
 import ocs_ci.ocs.exceptions as ex
@@ -181,6 +182,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
+        self.results_path = get_full_test_logs_path(cname=self)
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
@@ -294,8 +296,34 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
-        self.full_results.es_write()
-        log.info(f"The Result can be found at : {self.full_results.results_link()}")
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_pvc_creation_deletion_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_pvc_creation_deletion_measurement_performance"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}")
+        self.number_of_tests = 3
+        log.into("Check results for 'performance_extended' marker (3 tests)")
+        try:
+            self.check_tests_results()
+        except ex.BenchmarkTestFailed:
+            log.info("Look like performance_extended was not triggered")
+            log.info("Check results for 'performance' marker (9 tests)")
+            self.number_of_tests = 9
+            self.check_tests_results()
+        self.push_to_dashboard(test_name=self.benchmark_name)
 
     def process_time_measurements(
         self, action_name, time_measures, accepted_deviation_percent, msg_prefix
