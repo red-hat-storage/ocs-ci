@@ -18,37 +18,11 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs.perfresult import PerfResult
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
-
-
-class ResultsAnalyse(PerfResult):
-    """
-    This class generates results for all tests as one unit
-    and saves them to an elastic search server on the cluster
-
-    """
-
-    def __init__(self, uuid, crd, full_log_path):
-        """
-        Initialize the object by reading some of the data from the CRD file and
-        by connecting to the ES server and read all results from it.
-
-        Args:
-            uuid (str): the unique uid of the test
-            crd (dict): dictionary with test parameters - the test yaml file
-                        that modify it in the test itself.
-            full_log_path (str): the path of the results files to be found
-
-        """
-        super(ResultsAnalyse, self).__init__(uuid, crd)
-        self.new_index = "pvc_create_delete_fullres"
-        self.full_log_path = full_log_path
-        # make sure we have connection to the elastic search server
-        self.es_connect()
 
 
 @performance
@@ -118,10 +92,10 @@ class TestPVCCreationDeletionPerformance(PASTest):
         Initialize the full results object which will send to the ES server
 
         Args:
-            full_results (obj): an empty FIOResultsAnalyse object
+            full_results (obj): an empty ResultsAnalyse object
 
         Returns:
-            FIOResultsAnalyse (obj): the input object fill with data
+            ResultsAnalyse (obj): the input object fill with data
 
         """
         for key in self.environment:
@@ -198,7 +172,12 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         # Initialize the results doc file.
         self.full_results = self.init_full_results(
-            ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "pvc_create_delete_fullres",
+            )
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
