@@ -236,7 +236,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         self.check_tests_results()
 
-        self.push_to_dashboard(test_name=self.benchmark_name)
+        self.push_to_dashboard(test_name="Bulk Pod Attach Time")
 
     def init_full_results(self, full_results):
         """
@@ -246,7 +246,7 @@ class TestBulkPodAttachPerformance(PASTest):
             full_results (obj): an empty ResultsAnalyse object
 
         Returns:
-            ResultsAnalyse (obj): the input object fill with data
+            ResultsAnalyse (obj): the input object filled with data
 
         """
         for key in self.environment:
