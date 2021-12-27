@@ -2476,14 +2476,11 @@ def skipif_ocp_version(expressions):
         'True' if test needs to be skipped else 'False'
 
     """
-    skip_this = True
     ocp_version = get_running_ocp_version()
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    for expr in expr_list:
-        comparision_str = ocp_version + expr
-        skip_this = skip_this and eval(comparision_str)
-    # skip_this will be either True or False after eval
-    return skip_this
+    return any(
+        version_module.compare_versions(ocp_version + expr) for expr in expr_list
+    )
 
 
 def skipif_ocs_version(expressions):
@@ -2500,7 +2497,10 @@ def skipif_ocs_version(expressions):
         'True' if test needs to be skipped else 'False'
     """
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
+    return any(
+        version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
+        for expr in expr_list
+    )
 
 
 def skipif_ui_not_support(ui_test):
