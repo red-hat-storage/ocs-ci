@@ -1898,3 +1898,20 @@ def get_odf_zone_count():
         if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
             az.add(node.get("metadata")["labels"][constants.ZONE_LABEL])
     return len(az)
+
+
+def get_node_status(node_obj):
+    """
+    Get the node status.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Return:
+        str: The node status. If the command failed, it returns None.
+
+    """
+    try:
+        return node_obj.ocp.get_resource_status(node_obj.name)
+    except CommandFailed:
+        return None

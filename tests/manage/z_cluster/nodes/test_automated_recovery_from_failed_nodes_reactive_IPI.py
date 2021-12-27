@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    aws_based_platform_required,
     ipi_deployment_required,
     ignore_leftovers,
 )
@@ -13,7 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
     label_worker_node,
@@ -28,8 +27,9 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     add_new_node_and_label_it,
     get_worker_nodes,
+    get_node_status,
 )
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
@@ -203,12 +203,38 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4
 @tier4a
-@aws_based_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
     extra_node = False
+    machineset_name = None
+    start_ready_replica_count = None
+
+    def wait_for_current_replica_count_equal_to_start_ready_replica_count(self):
+        """
+        Wait for the current ready replica count to be equal to the ready replica count
+        at the beginning of the test.
+        """
+        log.info(f"start ready replica count = {self.start_ready_replica_count}")
+        timeout = 180
+        log.info(
+            f"Wait {timeout} seconds for the current ready replica count to be equal "
+            f"to the start ready replica count"
+        )
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=machine.get_ready_replica_count,
+            machine_set=self.machineset_name,
+        )
+        try:
+            sample.wait_for_func_value(value=self.start_ready_replica_count)
+        except TimeoutExpiredError:
+            log.warning(
+                "The current ready replica count is not equal "
+                "to the start ready replica count"
+            )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -219,12 +245,23 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"Successfully terminated node : "
                     f"{self.osd_worker_node[0].name} instance"
                 )
-            else:
+            elif get_node_status(self.osd_worker_node[0]) == constants.NODE_NOT_READY:
                 nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
+                log.info(
+                    f"Successfully started node : "
+                    f"{self.osd_worker_node[0].name} instance"
+                )
+
+            ceph_health_check()
+
+            self.wait_for_current_replica_count_equal_to_start_ready_replica_count()
             log.info(
-                f"Successfully started node : "
-                f"{self.osd_worker_node[0].name} instance"
+                "Verify that the current replica count is equal to the ready replica count"
             )
+            machine.change_current_replica_count_to_ready_replica_count(
+                self.machineset_name
+            )
+            log.info("Check again that the Ceph Health is Health OK")
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -267,6 +304,13 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
              A - pods should start on the new node
              B - pods should start on the stopped node after starting it
         """
+        wnode_name = get_worker_nodes()[0]
+        machine_name = machine.get_machine_from_node_name(wnode_name)
+        self.machineset_name = machine.get_machineset_from_machine_name(machine_name)
+        self.start_ready_replica_count = machine.get_ready_replica_count(
+            self.machineset_name
+        )
+
         temp_osd = get_osd_pods()[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
         self.osd_worker_node = [get_pod_node(temp_osd)]
