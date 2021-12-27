@@ -4,6 +4,11 @@ import time
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 
+from ocs_ci.ocs.acm.acm_constants import (
+    ACM_NAMESPACE,
+    ACM_MANAGED_CLUSTERS,
+    ACM_PAGE_TITLE,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import MultiClusterConfig
 from ocs_ci.utility.utils import TimeoutSampler
@@ -93,8 +98,10 @@ def copy_kubeconfig(file):
             txt = f.readlines()
             return txt
 
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         log.error("file not found")
+        log.debug(f"expected file location {file}")
+        raise e
 
 
 def get_acm_url():
@@ -105,7 +112,7 @@ def get_acm_url():
         str: url of ACM console
 
     """
-    mch_cmd = OCP(namespace="open-cluster-management")
+    mch_cmd = OCP(namespace=ACM_NAMESPACE)
     url = mch_cmd.exec_oc_cmd(
         "get route -ojsonpath='{.items[].spec.host}'", out_yaml_format=False
     )
@@ -137,8 +144,7 @@ def login_to_acm():
     url = get_acm_url()
     log.info(f"URL: {url}, {type(url)}")
     driver = login_ui(url)
-    acm_title = "Red Hat Advanced Cluster Management for Kubernetes"
-    validate_page_title(driver, title=acm_title)
+    validate_page_title(driver, title=ACM_PAGE_TITLE)
 
     return driver
 
@@ -161,7 +167,7 @@ def verify_running_acm():
 
 def validate_cluster_import(cluster_name):
     oc_obj = OCP()
-    log.debug({oc_obj.get(resource_name="managedclusters")})
+    log.debug({oc_obj.get(resource_name=ACM_MANAGED_CLUSTERS)})
     conditions = oc_obj.exec_oc_cmd(
         f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"
     )
