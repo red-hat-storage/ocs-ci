@@ -60,10 +60,8 @@ class AcmAddClusters(AcmPageNavigator):
         Import cluster using UI
 
         Args:
-            cluster_name:
-            kubeconfig_location:
-
-        Returns:
+            cluster_name: (str): cluster name to import
+            kubeconfig_location: (str): kubeconfig location
 
         """
 
@@ -99,8 +97,7 @@ def copy_kubeconfig(file):
             return txt
 
     except FileNotFoundError as e:
-        log.error("file not found")
-        log.debug(f"expected file location {file}")
+        log.error(f"file {file} not found")
         raise e
 
 
@@ -166,6 +163,16 @@ def verify_running_acm():
 
 
 def validate_cluster_import(cluster_name):
+    """
+    Validate ACM status of managed cluster
+
+    Args:
+        cluster_name: (str): cluster name to validate
+
+    Assert:
+        All conditions of selected managed cluster should be "True", Failed otherwise
+
+    """
     oc_obj = OCP()
     log.debug({oc_obj.get(resource_name=ACM_MANAGED_CLUSTERS)})
     conditions = oc_obj.exec_oc_cmd(
@@ -176,8 +183,8 @@ def validate_cluster_import(cluster_name):
     for dict_status in conditions:
         log.info(f"Message: {dict_status.get('message')}")
         log.info(f"Status: {dict_status.get('status')}")
-        assert dict_status.get(
-            "status"
+        assert (
+            dict_status.get("status") == "True"
         ), f"Status is not True, but: {dict_status.get('status')}"
 
 
