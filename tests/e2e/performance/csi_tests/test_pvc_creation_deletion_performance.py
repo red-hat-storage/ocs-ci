@@ -302,7 +302,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             log.info("Check results for 'performance' marker (9 tests)")
             self.number_of_tests = 9
             self.check_tests_results()
-        self.push_to_dashboard(test_name=self.benchmark_name)
+        self.push_to_dashboard(test_name="PVC Create-Delete")
 
     def process_time_measurements(
         self, action_name, time_measures, accepted_deviation_percent, msg_prefix
