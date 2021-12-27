@@ -151,7 +151,7 @@ def verify_running_acm():
     Detect ACM and its version on Cluster
 
     """
-    mch_cmd = OCP(namespace="open-cluster-management")
+    mch_cmd = OCP(namespace=ACM_NAMESPACE)
     acm_status = mch_cmd.exec_oc_cmd(
         "get mch -o jsonpath='{.items[].status.phase}'", out_yaml_format=False
     )
