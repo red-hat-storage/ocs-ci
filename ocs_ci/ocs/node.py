@@ -1911,7 +1911,4 @@ def get_node_status(node_obj):
         str: The node status. If the command failed, it returns None.
 
     """
-    try:
-        return node_obj.ocp.get_resource_status(node_obj.name)
-    except CommandFailed:
-        return None
+    return node_obj.ocp.get_resource_status(node_obj.name)
