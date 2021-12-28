@@ -23,7 +23,6 @@ log = logging.getLogger(__name__)
 
 @performance
 class TestPVCCreationPerformance(PASTest):
-
     def setup(self):
         """
         Setting up test parameters
@@ -66,6 +65,7 @@ class TestPVCCreationPerformance(PASTest):
             full_results.add_key(key, self.environment[key])
         full_results.add_key("index", full_results.new_index)
         return full_results
+
     """
     Test to verify PVC creation and deletion performance
     """
@@ -92,7 +92,6 @@ class TestPVCCreationPerformance(PASTest):
 
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{sc}"
-
 
     @pytest.fixture()
     def namespace(self, project_factory):
@@ -132,6 +131,7 @@ class TestPVCCreationPerformance(PASTest):
 
         """
         Measuring PVC creation and deletion time of bulk_size PVCs
+        and sends results to the Elastic Search DB
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -252,7 +252,6 @@ class TestPVCCreationPerformance(PASTest):
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{sc}"
 
-
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
     @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1270")
@@ -260,7 +259,8 @@ class TestPVCCreationPerformance(PASTest):
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
         Measuring PVC creation time of bulk of 75% of initial PVC bulk (120) in the same
-        rate after deleting ( serial deletion) 75% of the initial PVCs.
+        rate after deleting ( serial deletion) 75% of the initial PVCs
+        and sends results to the Elastic Search DB
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -306,7 +306,9 @@ class TestPVCCreationPerformance(PASTest):
         end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
         total = end_time - start_time
         total_time = total.total_seconds()
-        logging.info(f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds.")
+        logging.info(
+            f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
+        )
 
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
@@ -334,7 +336,7 @@ class TestPVCCreationPerformance(PASTest):
                 self.uuid,
                 self.crd_data,
                 self.full_log_path,
-                "bulk_pvc_creation_after_deletion_fullres",
+                "bulk_pvc_creation_after_deletion_measurement",
             )
         )
 
@@ -345,4 +347,3 @@ class TestPVCCreationPerformance(PASTest):
 
         # Write the test results into the ES server
         full_results.es_write()
-
