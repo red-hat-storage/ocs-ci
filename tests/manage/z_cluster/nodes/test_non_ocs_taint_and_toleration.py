@@ -130,6 +130,19 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running()
 
+        # Respin all pods and check it if is still running
+        # Excluding tool-box pod because of https://bugzilla.redhat.com/show_bug.cgi?id=2012084
+        pod_list = get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            selector=["rook-ceph-tools"],
+            exclude_selector=True,
+        )
+        for pod in pod_list:
+            pod.delete(wait=False)
+
+        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        self.sanity_helpers.health_check()
+
         # Add capacity to check if new osds has toleration
         osd_size = storage_cluster.get_osd_size()
         count = storage_cluster.add_capacity(osd_size)
@@ -148,16 +161,3 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ), "New OSDs failed to reach running state"
 
         check_ceph_health_after_add_capacity()
-
-        # Respin all pods and check it if is still running
-        # Excluding tool-box pod because of https://bugzilla.redhat.com/show_bug.cgi?id=2012084
-        pod_list = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=["rook-ceph-tools"],
-            exclude_selector=True,
-        )
-        for pod in pod_list:
-            pod.delete(wait=False)
-
-        assert wait_for_pods_to_be_running(timeout=500, sleep=15)
-        self.sanity_helpers.health_check()
