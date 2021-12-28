@@ -294,7 +294,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.results_file = os.path.join(self.results_path, "all_results.txt")
         log.info(f"Check results in {self.results_file}")
         self.number_of_tests = 3
-        log.into("Check results for 'performance_extended' marker (3 tests)")
+        log.info("Check results for 'performance_extended' marker (3 tests)")
         try:
             self.check_tests_results()
         except ex.BenchmarkTestFailed:
