@@ -608,6 +608,15 @@ class PASTest(BaseTest):
         elif encrypt:
             platform = f"{platform}-Enc"
 
+        # Check if compression is enabled
+        my_obj = OCP(
+            kind="cephblockpool", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        for pool in my_obj.data.get("items"):
+            if pool.get("spec").get("compressionMode", None) is not None:
+                platform = f"{platform}-CMP"
+                break
+
         if self.dev_mode:
             port = "8181"
         else:
