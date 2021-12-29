@@ -211,6 +211,35 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     machineset_name = None
     start_ready_replica_count = None
 
+    def verify_osd_worker_node_in_ready_state(self, nodes):
+        """
+        Verify that the osd worker node is in ready state.
+        """
+        expected_statuses = [constants.NODE_NOT_READY, constants.NODE_READY]
+        node_status = get_node_status(self.osd_worker_node[0])
+        node_name = self.osd_worker_node[0].name
+
+        log.info(f"The status of the node {node_name} is {node_status} ")
+
+        if node_status not in expected_statuses:
+            log.warning(
+                f"The node {node_name} is not in the expected statuses: {expected_statuses}. "
+                f"Trying to restart the node..."
+            )
+            nodes.restart_nodes_by_stop_and_start(
+                nodes=self.osd_worker_node, force=True
+            )
+            return
+
+        if node_status == constants.NODE_NOT_READY:
+            log.info(f"Starting the node {node_name}...")
+            nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
+            log.info(f"Successfully started node {node_name} instance")
+        else:
+            log.info(
+                f"The node {node_name} is already in the expected status {constants.NODE_READY}"
+            )
+
     def wait_for_current_replica_count_equal_to_start_ready_replica_count(self):
         """
         Wait for the current ready replica count to be equal to the ready replica count
@@ -245,12 +274,8 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"Successfully terminated node : "
                     f"{self.osd_worker_node[0].name} instance"
                 )
-            elif get_node_status(self.osd_worker_node[0]) == constants.NODE_NOT_READY:
-                nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
-                log.info(
-                    f"Successfully started node : "
-                    f"{self.osd_worker_node[0].name} instance"
-                )
+            else:
+                self.verify_osd_worker_node_in_ready_state(nodes)
 
             ceph_health_check()
 
