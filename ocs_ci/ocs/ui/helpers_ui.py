@@ -2,7 +2,6 @@ import logging
 import os
 import time
 
-from pyautogui import write, press
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
@@ -204,34 +203,20 @@ def create_storage_class_ui(
         base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
         base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
         logger.info("Selecting CA Certificate")
-        # print(os.path.abspath(constants.VAULT_CA_CERT_PEM))
-        # logger.info(os.path.abspath(constants.VAULT_CA_CERT_PEM))
-        # element = base_ui_obj.driver.find_element_by_xpath("//*[@id='modal-container']/div/div/div/form/div/div[2]/div/div/div[4]/div[2]/div/input")
-        # base_ui_obj.driver.execute_script("arguments[0].value='typed';",element)
-        base_ui_obj.send_keys(pvc_loc["browse-ca-certificate"], text=os.path.abspath(constants.VAULT_CA_CERT_PEM))
-        # base_ui_obj.do_click(pvc_loc["browse-ca-certificate"])
-        # time.sleep(1)
-        # write(os.path.abspath(constants.VAULT_CA_CERT_PEM))
-        # time.sleep(1)
-        # press("enter")
-        # time.sleep(1)
+        ca_cert_pem = base_ui_obj.driver.find_element(
+            By.XPATH, "(//input[@type='file'])[1]"
+        )
+        ca_cert_pem.send_keys(os.path.abspath(constants.VAULT_CA_CERT_PEM))
         logger.info("Selecting Client Certificate")
-        base_ui_obj.send_keys(pvc_loc["browse-client-certificate"], text=os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
-        # base_ui_obj.do_click(pvc_loc["browse-client-certificate"])
-        # time.sleep(1)
-        # write(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
-        # time.sleep(1)
-        # press("enter")
-        # time.sleep(1)
+        client_cert_pem = base_ui_obj.driver.find_element(
+            By.XPATH, "(//input[@type='file'])[2]"
+        )
+        client_cert_pem.send_keys(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
         logger.info("Selecting Client Private Key")
-        base_ui_obj.send_keys(pvc_loc["browse-client-private-key"],
-                              text=os.path.abspath(constants.VAULT_PRIVKEY_PEM))
-        # base_ui_obj.do_click(pvc_loc["browse-client-private-key"])
-        # time.sleep(1)
-        # write(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
-        # time.sleep(1)
-        # press("enter")
-        # time.sleep(1)
+        client_private_key_pem = base_ui_obj.driver.find_element(
+            By.XPATH, "(//input[@type='file'])[3]"
+        )
+        client_private_key_pem.send_keys(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
         base_ui_obj.take_screenshot()
         logger.info("Saving Key Management Service Advanced Settings")
         base_ui_obj.do_click(pvc_loc["save-advanced-settings"], enable_screenshot=True)

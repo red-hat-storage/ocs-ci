@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
     argnames=["kv_version"],
     argvalues=[
         pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
-        # pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
 class TestPVEncryption(ManageTest):
@@ -293,8 +293,8 @@ class TestPVEncryption(ManageTest):
         sc_deletion_check = delete_storage_class_ui(setup_ui, sc_name)
 
         # If Storage Class Deletion failed via UI, Delete it using Teardown Factory
-        logger.info(
-            "If Storage Class Deletion failed via UI, Delete it using Teardown Factory"
-        )
         if sc_deletion_check:
             sc_obj._is_deleted = True
+            logger.info(
+                "Storage Class Deletion failed via UI, Deleted using Teardown Factory"
+            )
