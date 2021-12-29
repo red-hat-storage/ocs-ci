@@ -68,8 +68,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription and configmap
-        3. Add Capacity
-        4. Respin all ocs pods and check if it runs on ocs nodes with tolerations
+        3. Respin all ocs pods and check if it runs on ocs nodes with tolerations
+        4. Add Capacity
 
         """
 
@@ -160,4 +160,4 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             resource_count=count * replica_count,
         ), "New OSDs failed to reach running state"
 
-        check_ceph_health_after_add_capacity()
+        check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
