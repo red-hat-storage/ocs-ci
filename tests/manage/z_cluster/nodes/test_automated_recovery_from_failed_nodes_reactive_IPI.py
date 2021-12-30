@@ -29,7 +29,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     get_node_status,
 )
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -211,9 +211,9 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     machineset_name = None
     start_ready_replica_count = None
 
-    def verify_osd_worker_node_in_ready_state(self, nodes):
+    def change_osd_worker_node_to_ready_state(self, nodes):
         """
-        Verify that the osd worker node is in ready state.
+        Change the osd worker node to be in Ready state.
         """
         expected_statuses = [constants.NODE_NOT_READY, constants.NODE_READY]
         node_status = get_node_status(self.osd_worker_node[0])
@@ -240,12 +240,18 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                 f"The node {node_name} is already in the expected status {constants.NODE_READY}"
             )
 
-    def wait_for_current_replica_count_equal_to_start_ready_replica_count(self):
+    def wait_for_current_ready_replica_count_equal_to_start_ready_replica_count(self):
         """
         Wait for the current ready replica count to be equal to the ready replica count
         at the beginning of the test.
         """
-        log.info(f"start ready replica count = {self.start_ready_replica_count}")
+        current_ready_replica_count = machine.get_ready_replica_count(
+            self.machineset_name
+        )
+        log.info(
+            f"current ready replica count = {current_ready_replica_count}, "
+            f"start ready replica count = {self.start_ready_replica_count}"
+        )
         timeout = 180
         log.info(
             f"Wait {timeout} seconds for the current ready replica count to be equal "
@@ -257,13 +263,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             func=machine.get_ready_replica_count,
             machine_set=self.machineset_name,
         )
-        try:
-            sample.wait_for_func_value(value=self.start_ready_replica_count)
-        except TimeoutExpiredError:
-            log.warning(
-                "The current ready replica count is not equal "
-                "to the start ready replica count"
-            )
+        sample.wait_for_func_value(value=self.start_ready_replica_count)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -275,11 +275,11 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"{self.osd_worker_node[0].name} instance"
                 )
             else:
-                self.verify_osd_worker_node_in_ready_state(nodes)
+                self.change_osd_worker_node_to_ready_state(nodes)
 
             ceph_health_check()
 
-            self.wait_for_current_replica_count_equal_to_start_ready_replica_count()
+            self.wait_for_current_ready_replica_count_equal_to_start_ready_replica_count()
             log.info(
                 "Verify that the current replica count is equal to the ready replica count"
             )
