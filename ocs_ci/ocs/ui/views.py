@@ -375,6 +375,10 @@ acm_page_nav = {
     "Credentials": ("Credentials", By.LINK_TEXT),
     "Import_cluster": ("importCluster", By.ID),
     "Import_cluster_enter_name": ("clusterName", By.ID),
+    "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
+    "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
+    "Submit_import": ("//button[text()='Import']", By.XPATH),
 }
 
 add_capacity = {
