@@ -489,3 +489,30 @@ class TestPVCCreationDeletionPerformance(PASTest):
         logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
         for name, a_time in pvc_deletion_time.items():
             logging.info(f"{name} deletion time is: {a_time} seconds")
+
+        full_log_path = get_full_test_logs_path(cname=self) + f"-{self.sc}-{pvc_size}"
+        log.info(f"Logs file path name is : {full_log_path}")
+
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                full_log_path,
+                "pvc_bulk_deletion_fullres",
+            )
+        )
+
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("bulk_size", number_of_pvcs)
+        full_results.add_key("pvc_size", pvc_size)
+        full_results.all_results["bulk_deletion_time"] = pvc_deletion_time
+
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
