@@ -514,5 +514,5 @@ class TestPVCCreationDeletionPerformance(PASTest):
             res_link = self.full_results.results_link()
             log.info(f"The Result can be found at : {res_link}")
 
-            # Create text file with results of all subtest (4 - according to the parameters)
+            # Create text file with results of all subtest (3 - according to the parameters)
             self.write_result_to_file(res_link)
