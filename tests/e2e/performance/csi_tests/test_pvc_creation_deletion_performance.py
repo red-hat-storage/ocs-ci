@@ -490,7 +490,15 @@ class TestPVCCreationDeletionPerformance(PASTest):
         for name, a_time in pvc_deletion_time.items():
             logging.info(f"{name} deletion time is: {a_time} seconds")
 
-        full_log_path = get_full_test_logs_path(cname=self) + f"-{self.sc}-{pvc_size}"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            sc = "RBD"
+        elif self.interface == constants.CEPHFILESYSTEM:
+            sc = "CephFS"
+        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
+            sc = "RBD-Thick"
+
+        full_log_path = get_full_test_logs_path(cname=self) + f"-{sc}-{pvc_size}"
+        self.results_path = get_full_test_logs_path(cname=self)
         log.info(f"Logs file path name is : {full_log_path}")
 
         self.get_env_info()
@@ -516,3 +524,25 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
             # Create text file with results of all subtest (3 - according to the parameters)
             self.write_result_to_file(res_link)
+
+    def test_multiple_pvc_deletion_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (3)
+        """
+
+        results_path = get_full_test_logs_path(
+            cname=self, fname="test_multiple_pvc_deletion_measurement_performance"
+        )
+        results_file = os.path.join(results_path, "all_results.txt")
+        log.info(f"Check results in {results_file}")
+        self.number_of_tests = 3
+        log.info("Check results for 'performance_extended' marker (3 tests)")
+        try:
+            self.check_tests_results()
+        except ex.BenchmarkTestFailed:
+            log.info("Look like performance_extended was not triggered")
+            log.info("Check results for 'performance' marker (9 tests)")
+            self.number_of_tests = 9
+            self.check_tests_results()
+        self.push_to_dashboard(test_name="PVC Multiple-Delete")
