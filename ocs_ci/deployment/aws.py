@@ -14,7 +14,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
@@ -60,6 +60,20 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        super(AWSBase, self).deploy_ocp(log_cli_level)
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
+        if ocs_version >= version.VERSION_4_10 and ocp_version >= version.VERSION_4_9:
+            if config.DEPLOYMENT.get("gp2_csi"):
+                self.DEFAULT_STORAGECLASS = "gp2-csi"
+            elif config.DEPLOYMENT.get("gp2"):
+                self.DEFAULT_STORAGECLASS = "gp2"
+            # The default storage class is gp3-csi for OCS 4.10 and above
+            else:
+                self.DEFAULT_STORAGECLASS = "gp3-csi"
 
     def host_network_update(self):
         """
