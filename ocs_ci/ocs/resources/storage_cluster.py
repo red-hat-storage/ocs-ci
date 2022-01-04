@@ -457,7 +457,7 @@ def basic_verification(ocs_registry_image=None):
 
     """
     verify_ocs_csv(ocs_registry_image)
-    verify_storage_system()
+    # verify_storage_system()
     verify_storage_cluster()
     verify_noobaa_endpoint_count()
     verify_storage_cluster_images()
