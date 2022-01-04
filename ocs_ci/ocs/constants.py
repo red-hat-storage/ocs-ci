@@ -617,7 +617,7 @@ ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
-TOKEN_EXCHANGE_AGENT_LABEL = "token-exchange-agent "
+TOKEN_EXCHANGE_AGENT_LABEL = "token-exchange-agent"
 RBD_MIRRORING_STORAGECLUSTER_PATCH = (
     "oc get StorageCluster -n openshift-storage -o=jsonpath='{.items[0].metadata.name}')  "
     "-n openshift-storage --type json --patch  "

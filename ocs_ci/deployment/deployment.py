@@ -221,7 +221,7 @@ class Deployment(object):
                     raise
             config.reset_ctx()
 
-            # Run ocs_install_verification here only in case of multiclsuter.
+            # Run ocs_install_verification here only in case of multicluster.
             # For single cluster, test_deployment will take care.
             if config.multicluster:
                 for i in range(config.multicluster):
@@ -1404,9 +1404,21 @@ class RBDDRDeployOps(object):
         mirror_peer = ocp.OCP(
             kind="MirrorPeer", namespace=constants.DR_DEFAULT_NAMESPACE
         )
-        # Need to satisfy both the phases
-        mirror_peer.wait_for_phase(phase="ExchangingSecret")
-        mirror_peer.wait_for_phase(phase="ExchangedSecret")
+        # Wait for either of the phases
+        for phase in ["ExchangingSecret", "ExchangedSecret"]:
+            try:
+                mirror_peer.wait_for_phase(phase=phase)
+            except ResourceWrongStatusException:
+                if phase == "ExchagingSecret":
+                    logger.warning(
+                        f"Mirror peer is not in {phase} phase"
+                        " Trying other alternatives"
+                    )
+                    continue
+                else:
+                    logger.exception("Mirror peer couldn't attain expected phase")
+                    raise
+            logger.info(f"Mirror peer is in expected phase {phase}")
 
         # Check for token-exchange-agent pod and its status has to be running
         # on all participating clusters except HUB
@@ -1444,9 +1456,9 @@ class MultiClusterDROperatorsDeploy(object):
 
     def __init__(self, dr_conf):
         # DR use case could be RBD or CephFS or Both
-        self.rbd_dr = dr_conf.get("rbd_dr_scenario", False)
+        self.rbd = dr_conf.get("rbd_dr_scenario", False)
         # CephFS For future usecase
-        self.cephfs_dr = dr_conf.get("cephfs_dr_scenario", False)
+        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
         self.meta_map = {
             "awss3": self.s3_meta_obj_store,
             "mcg": self.mcg_meta_obj_store,
@@ -1474,7 +1486,7 @@ class MultiClusterDROperatorsDeploy(object):
         run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
 
         # RBD specific dr deployment
-        if self.rbd_dr:
+        if self.rbd:
             rbddops = RBDDRDeployOps()
             rbddops.deploy()
             self.meta_obj.deploy_and_configure()

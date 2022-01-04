@@ -8,5 +8,5 @@ spec:
   - name: PLACE_HOLDER_CLUSTER1 
     s3ProfileName: odr-s3-secret-east 
   - name: PLACE_HOLDER_CLUSTER2 
-    s3ProfileName: odr-s3-secert-west 
+    s3ProfileName: odr-s3-secret-west 
   schedulingInterval: 5m
