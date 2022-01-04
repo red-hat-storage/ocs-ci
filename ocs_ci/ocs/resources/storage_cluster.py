@@ -457,7 +457,7 @@ def basic_verification(ocs_registry_image=None):
 
     """
     verify_ocs_csv(ocs_registry_image)
-    # verify_storage_system()
+    verify_storage_system()
     verify_storage_cluster()
     verify_noobaa_endpoint_count()
     verify_storage_cluster_images()
@@ -526,10 +526,11 @@ def verify_storage_system():
         for condition in storage_system_data["items"][0]["status"]["conditions"]:
             storage_system_status[condition["type"]] = condition["status"]
         log.debug(f"storage system status: {storage_system_status}")
-        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
-            f" but found {storage_system_status}"
-        )
+        if storage_system_status != constants.STORAGE_SYSTEM_STATUS:
+            log.error(
+                f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+                f" but found {storage_system_status}"
+            )
 
 
 def verify_storage_cluster():
