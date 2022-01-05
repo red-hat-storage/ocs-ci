@@ -220,15 +220,16 @@ class VMWareNodes(NodesBase):
         vms_all = []
         vms = []
         logger.info(f"deployment type: {self.deployment_type}")
-        if self.deployment_type == "upi":
+        if self.deployment_type == constants.DEPLOYMENT_TYPE_UPI:
             vms_all = self.vsphere.get_all_vms_in_pool(
                 self.cluster_name, self.datacenter, self.cluster
             )
-        elif self.deployment_type == "ipi":
+        elif self.deployment_type == constants.DEPLOYMENT_TYPE_IPI:
             vms_all = self.vsphere.get_all_vms_in_dc(self.datacenter)
 
         else:
             logger.error("Deployment type not detected")
+            return None
 
         node_names = [node.get().get("metadata").get("name") for node in nodes]
 
