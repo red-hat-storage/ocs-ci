@@ -63,9 +63,20 @@ def _pytest_addoption_cluster_specific(parser):
 
     """
 
+    add_common_ocsci_conf = False
+
     for i in range(ocsci_config.nclusters):
         # If it's not multicluster then no suffix will be added
         suffix = i + 1 if ocsci_config.multicluster else ""
+        if not add_common_ocsci_conf and ocsci_config.multicluster:
+            parser.addoption(
+                "--ocsci-conf",
+                dest="ocsci_conf",
+                action="append",
+                help="Path to config file of OCS CI",
+            )
+            add_common_ocsci_conf = True
+
         parser.addoption(
             f"--ocsci-conf{suffix}",
             dest=f"ocsci_conf{suffix}",
@@ -282,6 +293,15 @@ def pytest_addoption(parser):
         If the file is provided, the execution will remove all the test cases
         which passed and will run only those test cases which were skipped /
         failed / or had error in the provided report.
+        """,
+    )
+    parser.addoption(
+        "--default-cluster-context-index",
+        dest="default_cluster_context_index",
+        default=0,
+        help="""
+        Sets the default index of the cluster whose context needs to be
+        loaded when run-ci starts
         """,
     )
 
