@@ -478,7 +478,7 @@ def run_cmd_interactive(cmd, prompts_answers, timeout=300):
         if child.expect(prompt, timeout=timeout):
             raise InteractivePromptException("Unexpected Prompt")
 
-        if not child.sendline("".join(answer, constants.ENTER_KEY)):
+        if not child.sendline("".join([answer, constants.ENTER_KEY])):
             raise InteractivePromptException("Failed to provide answer to the prompt")
 
 

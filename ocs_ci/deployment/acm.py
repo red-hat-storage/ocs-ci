@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
     InteractivePromptException,
 )
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
-from ocs_ci.ocs.node import get_typed_worker_nodes
+from ocs_ci.ocs.node import get_typed_worker_nodes, get_node_name
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def run_subctl_cmd(cmd=None):
         cmd: subctl command to be executed
 
     """
-    cmd = " ".join("subctl", cmd)
+    cmd = " ".join(["subctl", cmd])
     run_cmd(cmd)
 
 
@@ -48,7 +48,7 @@ def run_subctl_cmd_interactive(cmd, prompt, answer):
         InteractivePromptException: in case something goes wrong
 
     """
-    cmd = " ".join("subctl", cmd)
+    cmd = " ".join(["subctl", cmd])
     run_cmd_interactive(
         cmd, {prompt: answer}, timeout=config.ENV_DATA["submariner_prompt_timeout"]
     )
@@ -112,7 +112,8 @@ class Submariner(object):
             # Copy submariner from ~/.local/bin to ocs-ci/bin
             # ~/.local/bin is the default path selected by submariner script
             shutil.copyfile(
-                os.path.expanduser("~/.local/bin/subctl"), config.RUN["bin_dir"]
+                os.path.expanduser("~/.local/bin/subctl"),
+                os.path.join(config.RUN["bin_dir"], "subctl"),
             )
 
     def submariner_configure_upstream(self):
@@ -142,6 +143,7 @@ class Submariner(object):
 
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
+            print(len(config.clusters))
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
             if cluster_index != config.get_acm_index():
                 join_cmd = (
@@ -155,6 +157,9 @@ class Submariner(object):
                         SUBMARINER_GATEWAY_PROMPT,
                         gateway_node,
                     )
+                    logger.info(
+                        f"Subctl join succeded for {cluster.ENV_DATA['cluster_name']}"
+                    )
                 except InteractivePromptException:
                     logger.exception("Cluster failed to join")
                     raise
@@ -165,7 +170,9 @@ class Submariner(object):
         kubeconf_list = []
         for i in self.dr_only_list:
             kubeconf_list.append(config.clusters[i].RUN["kubeconfig"])
-        connct_check = f"verify {kubeconf_list} --only connectivity"
+        connct_check = (
+            f"verify --kubecontexts {','.join(kubeconf_list)} --only connectivity"
+        )
         run_subctl_cmd(connct_check)
 
     def get_primary_cluster_index(self):
@@ -178,7 +185,7 @@ class Submariner(object):
 
         """
         for i in range(len(config.clusters)):
-            if config.clusters[i].get("MULTICLUSTER").get("primary_cluster"):
+            if config.clusters[i].MULTICLUSTER.get("primary_cluster"):
                 return i
         return -1
 
@@ -191,4 +198,4 @@ class Submariner(object):
 
         """
         # Always return the first worker node
-        return get_typed_worker_nodes()[0]
+        return get_node_name(get_typed_worker_nodes()[0])
