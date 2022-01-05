@@ -282,7 +282,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
             # Create text file with results of all subtest (4 - according to the parameters)
             self.write_result_to_file(res_link)
 
-    @pytest.mark.skip(SKIP_REASON)
     def test_pvc_creation_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
@@ -537,7 +536,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.results_file = os.path.join(results_path, "all_results.txt")
         log.info(f"Check results in {self.results_file}.")
-        log.info("Check results for 'performance_extended' marker (3 tests)")
         self.check_tests_results()
 
         self.push_to_dashboard(test_name="PVC Multiple-Delete")
