@@ -131,7 +131,7 @@ class VSPHEREBASE(Deployment):
                 )
 
     def attach_disk_per_node(
-        self, size=100, disk_type=constants.VM_DISK_TYPE, node_names=[], extra_disks=1
+        self, size=100, disk_type=constants.VM_DISK_TYPE, node_names=None, extra_disks=1
     ):
         """
         Add disks to relevant worker nodes
@@ -143,6 +143,8 @@ class VSPHEREBASE(Deployment):
             extra_disks (int): The number of disks to be added for each worker node
 
         """
+        if node_names is None:
+            node_names = []
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
