@@ -232,11 +232,7 @@ class DeploymentUI(PageNavigator):
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
 
-        logger.info("Enable Infra Nodes")
-        if self.ocp_version == "4.10" and config.DEPLOYMENT.get("infra_nodes", False):
-            self.select_checkbox_status(
-                status=True, locator=self.dep_loc["enable_infra_node"]
-            )
+        self.enable_infra_nodes()
 
         self.configure_encryption()
 
@@ -269,11 +265,7 @@ class DeploymentUI(PageNavigator):
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
-        logger.info("Enable Infra Nodes")
-        if self.ocp_version == "4.10" and config.DEPLOYMENT.get("infra_nodes", False):
-            self.select_checkbox_status(
-                status=True, locator=self.dep_loc["enable_infra_node"]
-            )
+        self.enable_infra_nodes()
 
         if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
             self.do_click(
@@ -320,6 +312,17 @@ class DeploymentUI(PageNavigator):
                 status=True, locator=self.dep_loc["wide_encryption"]
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
+    def enable_infra_nodes(self):
+        """
+        Enable Infra Nodes
+
+        """
+        logger.info("Enable Infra Nodes")
+        if self.ocp_version == "4.10" and config.DEPLOYMENT.get("infra_nodes", False):
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_infra_node"]
+            )
 
     def configure_osd_size(self):
         """
