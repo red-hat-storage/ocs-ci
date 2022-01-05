@@ -1,3 +1,7 @@
+---
+# config file for minimal resources deployment
+# 8CPU per worker node
+# 24Gi memory per worker node
 DEPLOYMENT:
   allow_lower_instance_requirements: true
 ENV_DATA:
