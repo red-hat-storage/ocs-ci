@@ -398,8 +398,9 @@ class Deployment(object):
         time.sleep(90)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
-            logger.info("Sleeping for 60 seconds after approving install plan for OCS")
-            time.sleep(60)
+            csv_name = package_manifest.get_current_csv(channel=custom_channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            csv.wait_for_phase("Installing", timeout=60)
 
     def get_arbiter_location(self):
         """
