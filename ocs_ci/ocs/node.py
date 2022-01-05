@@ -1334,13 +1334,13 @@ def check_taint_on_nodes(taint=None):
         return bool(flag)
 
 
-def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None):
+def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
     Function to remove taints from nodes
 
     Args:
-        taint (str): taint to use
-        nodes_to_taint (list): list of nodes to untaint
+        taint_label (str): taint to use
+        nodes_to_untaint (list): list of node objs to untaint
 
     Return:
         bool: True if untainted, false otherwise
@@ -1349,8 +1349,9 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
-        nodes_to_taint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        for node in nodes_to_taint:
+        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+        for node in nodes_to_untaint:
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
             log.info(f"Untainted {node.name}")
