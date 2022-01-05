@@ -151,9 +151,10 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             f"The following nodes haven't reached status {status}: "
             f"{nodes_not_in_state}"
         )
-        raise exceptions.ResourceWrongStatusException(
-            node_names, [n.describe() for n in get_node_objs(node_names)]
+        error_message = (
+            f"{node_names}, {[n.describe() for n in get_node_objs(node_names)]}"
         )
+        raise exceptions.ResourceWrongStatusException(error_message)
 
 
 def unschedule_nodes(node_names):
@@ -1912,3 +1913,84 @@ def get_node_status(node_obj):
 
     """
     return node_obj.ocp.get_resource_status(node_obj.name)
+
+
+def recover_node_to_ready_state(node_obj):
+    """
+    Recover the node to be in Ready state.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Return:
+        bool: True if the node recovered to Ready state. False otherwise
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    node_status = get_node_status(node_obj)
+    node_name = node_obj.name
+    log.info(f"The status of the node {node_name} is {node_status} ")
+
+    if node_status == constants.NODE_READY:
+        log.info(
+            f"The node {node_name} is already in the expected status {constants.NODE_READY}"
+        )
+        return True
+
+    try:
+        if node_status == constants.NODE_NOT_READY:
+            log.info(f"Starting the node {node_name}...")
+            node_util.start_nodes(nodes=[node_obj], wait=True)
+            log.info(f"Successfully started the node {node_name}")
+        elif node_status == constants.NODE_READY_SCHEDULING_DISABLED:
+            log.info(f"Schedule the node {node_name}...")
+            schedule_nodes(node_names=[node_name])
+            log.info(f"Successfully schedule the node {node_name}")
+        elif node_status == constants.NODE_NOT_READY_SCHEDULING_DISABLED:
+            log.info(f"Schedule and start the node {node_name}...")
+            schedule_nodes(node_names=[node_name])
+            node_util.start_nodes(nodes=[node_obj], wait=True)
+            log.info(f"Successfully schedule and started the node {node_name}")
+        else:
+            log.warning(
+                f"The node {node_name} is not in the expected statuses. "
+                f"Trying to force stop and start the node..."
+            )
+            node_util.restart_nodes_by_stop_and_start(nodes=[node_obj], force=True)
+    except Exception as e:
+        log.warning(f"Operation failed due to exception: {str(e)}")
+
+    try:
+        wait_for_nodes_status(node_names=[node_name], timeout=60)
+        log.info(f"The node {node_name} reached status {constants.NODE_READY}")
+        res = True
+    except exceptions.ResourceWrongStatusException:
+        log.warning(
+            f"The node {node_name} failed to reach status {constants.NODE_READY}"
+        )
+        res = False
+
+    return res
+
+
+def add_new_nodes_and_label_after_node_failure_ipi(
+    machineset_name, num_nodes=1, mark_for_ocs_label=True
+):
+    """
+    Add new nodes for ipi and label them after node failure
+
+    Args:
+        machineset_name (str): Name of the machine set
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+
+    Returns:
+        list: new spun node names
+
+    """
+    machine.change_current_replica_count_to_ready_replica_count(machineset_name)
+    return add_new_node_and_label_it(machineset_name, num_nodes, mark_for_ocs_label)

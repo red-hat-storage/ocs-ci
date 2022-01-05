@@ -12,7 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
     label_worker_node,
@@ -27,7 +27,8 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     add_new_node_and_label_it,
     get_worker_nodes,
-    get_node_status,
+    recover_node_to_ready_state,
+    add_new_nodes_and_label_after_node_failure_ipi,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -211,60 +212,6 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     machineset_name = None
     start_ready_replica_count = None
 
-    def change_osd_worker_node_to_ready_state(self, nodes):
-        """
-        Change the osd worker node to be in Ready state.
-        """
-        expected_statuses = [constants.NODE_NOT_READY, constants.NODE_READY]
-        node_status = get_node_status(self.osd_worker_node[0])
-        node_name = self.osd_worker_node[0].name
-
-        log.info(f"The status of the node {node_name} is {node_status} ")
-
-        if node_status not in expected_statuses:
-            log.warning(
-                f"The node {node_name} is not in the expected statuses: {expected_statuses}. "
-                f"Trying to restart the node..."
-            )
-            nodes.restart_nodes_by_stop_and_start(
-                nodes=self.osd_worker_node, force=True
-            )
-            return
-
-        if node_status == constants.NODE_NOT_READY:
-            log.info(f"Starting the node {node_name}...")
-            nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
-            log.info(f"Successfully started node {node_name} instance")
-        else:
-            log.info(
-                f"The node {node_name} is already in the expected status {constants.NODE_READY}"
-            )
-
-    def wait_for_current_ready_replica_count_equal_to_start_ready_replica_count(self):
-        """
-        Wait for the current ready replica count to be equal to the ready replica count
-        at the beginning of the test.
-        """
-        current_ready_replica_count = machine.get_ready_replica_count(
-            self.machineset_name
-        )
-        log.info(
-            f"current ready replica count = {current_ready_replica_count}, "
-            f"start ready replica count = {self.start_ready_replica_count}"
-        )
-        timeout = 180
-        log.info(
-            f"Wait {timeout} seconds for the current ready replica count to be equal "
-            f"to the start ready replica count"
-        )
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=10,
-            func=machine.get_ready_replica_count,
-            machine_set=self.machineset_name,
-        )
-        sample.wait_for_func_value(value=self.start_ready_replica_count)
-
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         def finalizer():
@@ -275,11 +222,19 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"{self.osd_worker_node[0].name} instance"
                 )
             else:
-                self.change_osd_worker_node_to_ready_state(nodes)
+                is_recovered = recover_node_to_ready_state(self.osd_worker_node[0])
+                if not is_recovered:
+                    log.warning(
+                        f"The recovery of the osd worker node "
+                        f"{self.osd_worker_node[0].name} failed. Adding a new OCS worker node..."
+                    )
+                    add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
 
             ceph_health_check()
 
-            self.wait_for_current_ready_replica_count_equal_to_start_ready_replica_count()
+            machine.wait_for_ready_replica_count_to_reach_expected_value(
+                self.machineset_name, expected_value=self.start_ready_replica_count
+            )
             log.info(
                 "Verify that the current replica count is equal to the ready replica count"
             )
