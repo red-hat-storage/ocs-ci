@@ -377,10 +377,6 @@ class OCSUpgrade(object):
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
 
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        if subscription_plan_approval == "Manual":
-            wait_for_install_plan_and_approve(self.namespace)
-
     def check_if_upgrade_completed(self, channel, csv_name_pre_upgrade):
         """
         Checks if OCS operator finishes it's upgrade
@@ -575,6 +571,17 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             if original_ocs_version == "4.8" and upgrade_version == "4.9":
                 deployment = Deployment()
                 deployment.subscribe_ocs()
+            else:
+                # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
+                # we need to wait and approve install plan, otherwise it's approved in the
+                # subscribe_ocs method.
+                subscription_plan_approval = config.DEPLOYMENT.get(
+                    "subscription_plan_approval"
+                )
+                if subscription_plan_approval == "Manual":
+                    wait_for_install_plan_and_approve(
+                        config.ENV_DATA["cluster_namespace"]
+                    )
             if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
                 upgrade_in_current_source
             ):
