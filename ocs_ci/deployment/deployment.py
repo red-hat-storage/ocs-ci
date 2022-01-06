@@ -1156,7 +1156,7 @@ class Deployment(object):
         channel = config.ENV_DATA.get("acm_hub_channel")
         logger.info("Creating ACM HUB namespace")
         acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
-        acm_hub_namespace_yaml_data['metadata']['name'] = constants.ACM_HUB_NAMESPACE
+        acm_hub_namespace_yaml_data["metadata"]["name"] = constants.ACM_HUB_NAMESPACE
         acm_hub_namespace_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_hub_namespace_manifest", delete=False
         )
@@ -1170,13 +1170,19 @@ class Deployment(object):
             resource_name=constants.ACM_HUB_OPERATOR_NAME,
         )
 
-        run_cmd(f"oc create -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}")
+        run_cmd(
+            f"oc create -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+        )
 
         logger.info("Creating ACM HUB Subscription")
-        acm_hub_subscription_yaml_data = templating.load_yaml(constants.ACM_HUB_SUBSCRIPTION_YAML)
-        acm_hub_subscription_yaml_data['spec']['channel'] = channel
-        acm_hub_subscription_yaml_data['spec']['startingCSV'] = package_manifest.get_current_csv(
-                channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        acm_hub_subscription_yaml_data = templating.load_yaml(
+            constants.ACM_HUB_SUBSCRIPTION_YAML
+        )
+        acm_hub_subscription_yaml_data["spec"]["channel"] = channel
+        acm_hub_subscription_yaml_data["spec"][
+            "startingCSV"
+        ] = package_manifest.get_current_csv(
+            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
         )
 
         acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -1193,13 +1199,19 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("ACM HUB Operator Deployment Succeeded")
         logger.info("Creating MultiCluster Hub")
-        run_cmd(f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}")
+        run_cmd(
+            f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+        )
         acm_mch = ocp.OCP(
             kind=constants.ACM_MULTICLUSTER_HUB,
             namespace=constants.ACM_HUB_NAMESPACE,
         )
         acm_mch.wait_for_resource(
-            condition="Running", resource_name="multiclusterhub", column="STATUS", timeout=720, sleep=5
+            condition="Running",
+            resource_name="multiclusterhub",
+            column="STATUS",
+            timeout=720,
+            sleep=5,
         )
         logger.info("MultiClusterHub Deployment Succeeded")
 
