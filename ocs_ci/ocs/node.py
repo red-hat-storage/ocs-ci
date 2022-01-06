@@ -627,7 +627,7 @@ def get_osd_running_nodes():
         list: OSD node names
 
     """
-    return [pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()]
+    return list({pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()})
 
 
 def get_osds_per_node():
@@ -1334,13 +1334,13 @@ def check_taint_on_nodes(taint=None):
         return bool(flag)
 
 
-def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None):
+def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
     Function to remove taints from nodes
 
     Args:
-        taint (str): taint to use
-        nodes_to_taint (list): list of nodes to untaint
+        taint_label (str): taint to use
+        nodes_to_untaint (list): list of node objs to untaint
 
     Return:
         bool: True if untainted, false otherwise
@@ -1349,8 +1349,9 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
-        nodes_to_taint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        for node in nodes_to_taint:
+        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+        for node in nodes_to_untaint:
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
             log.info(f"Untainted {node.name}")
@@ -1881,3 +1882,20 @@ def add_new_disk_for_vsphere(sc_name):
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
     add_disk_to_node(node_with_min_pvs)
+
+
+def get_odf_zone_count():
+    """
+    Get the number of Availability zones used by ODF cluster
+
+    Returns:
+         int : the number of availability zones
+    """
+    node_obj = OCP(kind="node")
+    az_count = node_obj.get(selector=constants.ZONE_LABEL)
+    az = set()
+    for node in az_count.get("items"):
+        node_lables = node.get("metadata")["labels"]
+        if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
+            az.add(node.get("metadata")["labels"][constants.ZONE_LABEL])
+    return len(az)

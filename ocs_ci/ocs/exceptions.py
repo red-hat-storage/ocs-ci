@@ -442,3 +442,7 @@ class ConfigurationError(Exception):
 
 class BenchmarkTestFailed(Exception):
     pass
+
+
+class WrongVersionExpression(ValueError):
+    pass
