@@ -3,8 +3,8 @@ name=RHopenshift
 baseurl=https://mirror.openshift.com/enterprise/all/4.10/latest/x86_64/os/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
 
 
 [rhel-server]
@@ -12,8 +12,8 @@ name=RHserver
 baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-rpms/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
 
 
 [rhel-extras]
@@ -21,8 +21,8 @@ name=RHextra
 baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-extras-rpms/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
 
 
 [rhel-optional]
@@ -30,8 +30,8 @@ name=RHoptional
 baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-optional-rpms/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
 
 
 [rhel-fast]
@@ -39,8 +39,8 @@ name=RHfast
 baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-fast-datapath-rpms/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
 
 
 [ansible]
@@ -48,5 +48,5 @@ name=RHansible
 baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-7-server-ansible-2.9-rpms/
 enabled=1
 gpgcheck=0
-sslverify=0
-sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
+username=$mirror_openshift_user
+password=$mirror_openshift_password
