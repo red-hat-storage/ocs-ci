@@ -157,8 +157,8 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
             multi_pvc_clone_factory,
         )
 
-    @skipif_ocs_version("<4.8")
-    @skipif_ocp_version("<4.8")
+    @skipif_ocs_version("<4.9")
+    @skipif_ocp_version("<4.9")
     @pytest.mark.parametrize(
         argnames=["kv_version", "replica", "compression"],
         argvalues=[

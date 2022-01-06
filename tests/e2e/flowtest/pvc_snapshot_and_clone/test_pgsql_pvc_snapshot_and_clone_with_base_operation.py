@@ -116,8 +116,8 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         self.run_in_bg(nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory)
 
-    @skipif_ocs_version("<4.8")
-    @skipif_ocp_version("<4.8")
+    @skipif_ocs_version("<4.9")
+    @skipif_ocp_version("<4.9")
     @pytest.mark.parametrize(
         argnames=["kv_version"],
         argvalues=[
