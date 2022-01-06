@@ -1,4 +1,4 @@
 ---
 # This config is for AWS deployment with gp2 CSI storage class provisioning
 DEPLOYMENT:
-  gp2_csi: True
+  gp2-csi: True

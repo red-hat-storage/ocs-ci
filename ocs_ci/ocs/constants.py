@@ -597,14 +597,6 @@ CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
 
-GP2_CSI_STORAGECLASS_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "aws_gp2_csi_storage_class.yaml"
-)
-
-GP3_CSI_STORAGECLASS_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "aws_gp3_csi_storage_class.yaml"
-)
-
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
