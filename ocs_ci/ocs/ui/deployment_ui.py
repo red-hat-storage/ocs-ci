@@ -24,6 +24,7 @@ class DeploymentUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -54,7 +55,6 @@ class DeploymentUI(PageNavigator):
     def install_ocs_operator(self):
         """
         Install OCS/ODF Opeartor
-
         """
         self.navigate_operatorhub_page()
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
@@ -77,7 +77,6 @@ class DeploymentUI(PageNavigator):
     def refresh_popup(self):
         """
         Refresh PopUp
-
         """
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
@@ -364,9 +363,14 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            self.do_click(
-                self.dep_loc["enable_default_porjects"], enable_screenshot=True
-            )
+            default_projects_is_checked = self.driver.find_element_by_id(
+                "no-label-switch-on"
+            ).is_selected()
+            if not default_projects_is_checked:
+                logger.info("Show default projects")
+                self.do_click(
+                    self.dep_loc["enable_default_porjects"], enable_screenshot=True
+                )
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
@@ -380,4 +384,5 @@ class DeploymentUI(PageNavigator):
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
-        self.install_storage_cluster()
+        if not config.UPGRADE.get("ui_upgrade"):
+            self.install_storage_cluster()

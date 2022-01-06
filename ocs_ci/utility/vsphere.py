@@ -1429,3 +1429,40 @@ class VSPHERE(object):
             )
             else False
         )
+
+    def is_vm_obj_exist(self, vm):
+        """
+        Check if the vm object exists.
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            bool: True if the VM object exists, False otherwise.
+
+        """
+        vm_name = None
+        try:
+            logger.info("Trying to get the vm name to see if the vm object exists")
+            vm_name = vm.name
+        except vmodl.fault.ManagedObjectNotFound:
+            logger.info("The vm object is not exist")
+
+        return True if vm_name else False
+
+    def wait_for_vm_delete(self, vm, timeout=60):
+        """
+        Wait for the vm object to delete.
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            timeout (int): Time to wait for the VM object to delete.
+
+        Returns:
+            bool: True if the VM object is deleted in the given timeout, False otherwise.
+
+        """
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=10, func=self.is_vm_obj_exist, vm=vm
+        )
+        return sample.wait_for_func_status(result=False)

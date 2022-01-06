@@ -2080,7 +2080,7 @@ def validate_scc_policy(sa_name, namespace, scc_name=constants.PRIVILEGED):
 
 def add_scc_policy(sa_name, namespace):
     """
-    Adding ServiceAccount to scc privileged
+    Adding ServiceAccount to scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2088,17 +2088,18 @@ def add_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy add-scc-to-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def remove_scc_policy(sa_name, namespace):
     """
-    Removing ServiceAccount from scc privileged
+    Removing ServiceAccount from scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2106,12 +2107,13 @@ def remove_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy remove-scc-from-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def craft_s3_command(cmd, mcg_obj=None, api=False):

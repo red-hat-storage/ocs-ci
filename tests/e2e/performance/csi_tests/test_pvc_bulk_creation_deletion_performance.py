@@ -5,19 +5,67 @@ import logging
 import pytest
 import math
 import datetime
+from uuid import uuid4
+
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance, polarion_id, bugzilla
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 
 log = logging.getLogger(__name__)
 
 
 @performance
 class TestPVCCreationPerformance(PASTest):
+    def setup(self):
+        """
+        Setting up test parameters
+        """
+        logging.info("Starting the test setup")
+        super(TestPVCCreationPerformance, self).setup()
+        self.benchmark_name = "pvc_creation_permorance"
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an FIOResultsAnalyse object
+
+        Returns:
+            FIOResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("index", full_results.new_index)
+        return full_results
+
     """
     Test to verify PVC creation and deletion performance
     """
@@ -36,6 +84,14 @@ class TestPVCCreationPerformance(PASTest):
         """
         self.interface = interface_type
         self.sc_obj = storageclass_factory(self.interface)
+
+        if self.interface == constants.CEPHFILESYSTEM:
+            sc = "CephFS"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            sc = "RBD"
+
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{sc}"
 
     @pytest.fixture()
     def namespace(self, project_factory):
@@ -75,6 +131,7 @@ class TestPVCCreationPerformance(PASTest):
 
         """
         Measuring PVC creation and deletion time of bulk_size PVCs
+        and sends results to the Elastic Search DB
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -149,6 +206,29 @@ class TestPVCCreationPerformance(PASTest):
             f"{bulk_size} Bulk PVCs deletion time is {total_deletion_time} seconds."
         )
 
+        # Produce ES report
+        # Collecting environment information
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "bulk_creation_deletion_measurement",
+            )
+        )
+
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("bulk_size", bulk_size)
+        full_results.add_key("pvc_size", self.pvc_size)
+        full_results.add_key("bulk_pvc_creation_time", total_time)
+        full_results.add_key("bulk_pvc_deletion_time", total_deletion_time)
+
+        # Write the test results into the ES server
+        full_results.es_write()
+
     @pytest.fixture()
     def base_setup_creation_after_deletion(
         self, interface_iterate, storageclass_factory
@@ -164,6 +244,14 @@ class TestPVCCreationPerformance(PASTest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
 
+        if self.interface == constants.CEPHFILESYSTEM:
+            sc = "CephFS"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            sc = "RBD"
+
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{sc}"
+
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
     @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1270")
@@ -171,7 +259,8 @@ class TestPVCCreationPerformance(PASTest):
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
         Measuring PVC creation time of bulk of 75% of initial PVC bulk (120) in the same
-        rate after deleting ( serial deletion) 75% of the initial PVCs.
+        rate after deleting ( serial deletion) 75% of the initial PVCs
+        and sends results to the Elastic Search DB
 
         Args:
             teardown_factory: A fixture used when we want a new resource that was created during the tests
@@ -217,7 +306,9 @@ class TestPVCCreationPerformance(PASTest):
         end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
         total = end_time - start_time
         total_time = total.total_seconds()
-        logging.info(f"Deletion time of {number_of_pvcs} is {total_time} seconds.")
+        logging.info(
+            f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
+        )
 
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
@@ -234,3 +325,25 @@ class TestPVCCreationPerformance(PASTest):
                 f"75% of PVCs) time is {total_time} and greater than 50 seconds."
             )
         logging.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
+
+        # Produce ES report
+        # Collecting environment information
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "bulk_pvc_creation_after_deletion_measurement",
+            )
+        )
+
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("number_of_pvcs", number_of_pvcs)
+        full_results.add_key("pvc_size", self.pvc_size)
+        full_results.add_key("creation_after_deletion_time", total_time)
+
+        # Write the test results into the ES server
+        full_results.es_write()
