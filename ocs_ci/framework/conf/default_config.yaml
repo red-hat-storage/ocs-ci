@@ -196,6 +196,8 @@ ENV_DATA:
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
 
+  # ACM HUB deployment
+  deploy_acm_hub_cluster: false
 
 # This section is related to upgrade
 UPGRADE:
