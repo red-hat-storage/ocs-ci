@@ -3488,10 +3488,16 @@ def get_event_line_datetime(event_line):
          datetime object: The event line datetime
 
     """
-    if re.search(r"\d{4}-\d{2}-\d{2}", event_line):
-        return datetime.datetime.strptime(event_line[:26], "%Y-%m-%d %H:%M:%S.%f")
-    else:
-        return None
+    event_line_dt = None
+    regex = r"\d{4}-\d{2}-\d{2}"
+    if re.search(regex + "T", event_line):
+        dt_string = event_line[:23].replace("T", " ")
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+    elif re.search(regex, event_line):
+        dt_string = event_line[:26]
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+
+    return event_line_dt
 
 
 def get_rook_ceph_pod_events(pod_name):
