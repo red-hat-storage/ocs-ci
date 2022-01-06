@@ -8,8 +8,6 @@ from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
 
-from selenium.webdriver.common.by import By
-
 logger = logging.getLogger(__name__)
 
 
@@ -277,18 +275,16 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["pvc_actions"])
 
         logger.info("Click on Clone PVC from dropdown options")
-        self.do_click(self.pvc_loc["clone_pvc"])
+        self.do_click(self.pvc_loc["clone_pvc"], enable_screenshot=True)
 
         logger.info("Clear the default name of clone PVC")
-        self.do_clear(("//input[@aria-label='Clone PVC']", By.XPATH))
+        self.do_clear(self.pvc_loc["clone_name_input"])
 
         logger.info("Enter the name of clone PVC")
-        self.do_send_keys(
-            ("//input[@aria-label='Clone PVC']", By.XPATH), text=clone_name
-        )
+        self.do_send_keys(self.pvc_loc["clone_name_input"], text=clone_name)
 
         logger.info("Select Access Mode of clone PVC")
         self.do_click(self.pvc_loc[clone_access_mode])
 
         logger.info("Click on Clone button")
-        self.do_click(generic_locators["confirm_action"])
+        self.do_click(generic_locators["confirm_action"], enable_screenshot=True)

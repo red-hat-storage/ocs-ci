@@ -291,6 +291,7 @@ pvc = {
     "confirm_pvc_deletion": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
+    "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH)
 }
 
 pvc_4_7 = {
