@@ -249,18 +249,19 @@ class VMWareNodes(NodesBase):
             "get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes, force=True):
+    def stop_nodes(self, nodes, force=True, wait=True):
         """
         Stop vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for force VM stop, False otherwise
+            wait (bool): Wait for the VMs to stop
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.stop_vms(vms, force=force)
+        self.vsphere.stop_vms(vms, force=force, wait=wait)
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -268,11 +269,12 @@ class VMWareNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for the VMs to start
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.start_vms(vms)
+        self.vsphere.start_vms(vms, wait=wait)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
