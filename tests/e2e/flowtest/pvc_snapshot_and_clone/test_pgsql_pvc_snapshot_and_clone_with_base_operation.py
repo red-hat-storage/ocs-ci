@@ -37,7 +37,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             multiple_snapshot_and_clone_of_postgres_pvc_factory,
             pvc_size_new=25,
             pgsql=self.pgsql,
-            sc_name=self.sc_obj.name,
+            sc_name=sc_name,
             iterations=1,
         )
         log.info("Started creation of snapshots & clones in background")

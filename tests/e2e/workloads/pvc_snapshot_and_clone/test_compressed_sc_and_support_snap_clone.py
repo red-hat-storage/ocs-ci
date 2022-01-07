@@ -27,12 +27,12 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
 
     @pytest.fixture()
     def pgsql_teardown(self, request):
-        self.sset_list = []
+        self.pgsql_obj_list = []
 
         def teardown():
             # Delete created postgres and pgbench pods
             log.info("Deleting postgres pods which are attached to restored PVCs")
-            for pgsql_obj in self.sset_list:
+            for pgsql_obj in self.pgsql_obj_list:
                 pgsql_obj.delete()
 
         request.addfinalizer(teardown)
@@ -46,7 +46,6 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         multi_snapshot_restore_factory,
         multi_pvc_clone_factory,
     ):
-
         pvc_size_new = 25
 
         snapshots = multi_snapshot_factory(
@@ -131,6 +130,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         8. Resize cloned PVC
 
         """
+        pgsql_teardown
 
         interface_type = CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
@@ -193,6 +193,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         7. Clone pgsql PVC and attach a new pgsql pod to it
         8. Resize cloned PVC
         """
+        pgsql_teardown
 
         log.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
@@ -201,6 +202,9 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         # Create an encryption enabled storageclass for RBD
         sc_obj = storageclass_factory(
             interface=CEPHBLOCKPOOL,
+            new_rbd_pool=True,
+            replica=replica,
+            compression=compression,
             encrypted=True,
             encryption_kms_id=self.vault.kmsid,
         )
