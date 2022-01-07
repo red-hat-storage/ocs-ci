@@ -42,7 +42,6 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 import subprocess
-import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -954,7 +953,9 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
-    @retry(NoobaaCliChecksumFailedException, tries=10, delay=15, backoff=1)
+    @retry(
+        (NoobaaCliChecksumFailedException, CommandFailed), tries=5, delay=15, backoff=1
+    )
     def retrieve_noobaa_cli_binary(self):
         """
         Copy the NooBaa CLI binary from the operator pod
@@ -990,17 +991,24 @@ class MCG:
             not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             or not _compare_cli_hashes()
         ):
+            local_mcg_cli_dir = os.path.dirname(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            remote_mcg_cli_basename = os.path.basename(
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            # BZ: https://bugzilla.redhat.com/show_bug.cgi?id=2011845
+            # using rsync instead of cp is more reliable
             cmd = (
-                f"oc cp {self.namespace}/{self.operator_pod.name}:"
+                f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
                 f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                f" {local_mcg_cli_dir}"
             )
             subprocess.run(cmd, shell=True)
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
+            exec_cmd(cmd)
+            os.rename(
+                os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
                 constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC,
             )
             # Make sure the binary was copied properly and has the correct permissions
             assert os.path.isfile(
