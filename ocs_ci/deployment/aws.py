@@ -24,6 +24,7 @@ from ocs_ci.utility.aws import (
     terminate_rhel_workers,
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo,
@@ -539,6 +540,14 @@ class AWSUPI(AWSBase):
         )
         dst = "/etc/pki/ca-trust/source/anchors/"
         pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        # prepare credential files for mirror.openshift.com
+        (
+            mirror_user_file,
+            mirror_password_file,
+        ) = prepare_mirror_openshift_credential_files()
+        pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+        pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
+
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -580,6 +589,25 @@ class AWSUPI(AWSBase):
                 f"{dst}",
                 user=self.rhel_worker_user,
             )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=self.rhel_worker_user,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=self.rhel_worker_user,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")

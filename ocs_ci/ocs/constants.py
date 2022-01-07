@@ -799,6 +799,7 @@ RHEL_POD_PACKAGES = [
 # common locations
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
 YUM_REPOS_PATH = "/etc/yum.repos.d/"
+YUM_VARS_PATH = "/etc/yum/vars/"
 PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 FIPS_LOCATION = "/proc/sys/crypto/fips_enabled"
 
@@ -829,6 +830,8 @@ ODF_SUBSCRIPTION = "odf-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
+MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
+MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

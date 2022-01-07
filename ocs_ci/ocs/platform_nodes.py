@@ -20,6 +20,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
@@ -899,6 +900,13 @@ class AWSNodes(NodesBase):
         )
         dst = constants.PEM_PATH
         pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        # prepare credential files for mirror.openshift.com
+        (
+            mirror_user_file,
+            mirror_password_file,
+        ) = prepare_mirror_openshift_credential_files()
+        pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+        pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -940,6 +948,25 @@ class AWSNodes(NodesBase):
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path, cmd, user=constants.EC2_USER
             )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=constants.EC2_USER,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=constants.EC2_USER,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
