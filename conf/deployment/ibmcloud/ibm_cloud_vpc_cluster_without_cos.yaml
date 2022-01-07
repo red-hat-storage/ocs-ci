@@ -33,3 +33,4 @@ REPORTING:
   # conf/ocsci/live-must-gather.yaml
   ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
   ocs_must_gather_latest_tag: 'latest'
+  overwrite_must_gather_image: false

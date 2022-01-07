@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
+from ocs_ci.utility.reporting import update_live_must_gather_image
 
 __all__ = [
     "pytest_addoption",
@@ -483,12 +484,7 @@ def process_cluster_cli_params(config):
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
     if live_deployment:
-        ocsci_config.REPORTING[
-            "default_ocs_must_gather_latest_tag"
-        ] = f"v{ocsci_config.ENV_DATA['ocs_version']}"
-        ocsci_config.REPORTING["ocs_must_gather_image"] = ocsci_config.REPORTING[
-            "ocs_live_must_gather_image"
-        ]
+        update_live_must_gather_image()
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
