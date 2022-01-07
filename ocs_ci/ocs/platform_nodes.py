@@ -892,14 +892,6 @@ class AWSNodes(NodesBase):
         assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
         pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
-        # copy the .pem file for our internal repo on all nodes
-        # including ansible pod
-        # get it from URL
-        mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
-        )
-        dst = constants.PEM_PATH
-        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
         # prepare credential files for mirror.openshift.com
         (
             mirror_user_file,
@@ -932,21 +924,6 @@ class AWSNodes(NodesBase):
                 pem_dst_path,
                 f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
                 user=constants.EC2_USER,
-            )
-            rhel_pod_obj.copy_to_server(
-                host,
-                pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
-                user=constants.EC2_USER,
-            )
-            cmd = (
-                f"sudo mv "
-                f'{os.path.join("/tmp/", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f"{dst}"
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path, cmd, user=constants.EC2_USER
             )
             for file_name in (
                 constants.MIRROR_OPENSHIFT_USER_FILE,

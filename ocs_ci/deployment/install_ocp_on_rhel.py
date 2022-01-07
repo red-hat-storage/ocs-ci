@@ -52,7 +52,6 @@ class OCPINSTALLRHEL(object):
         self.pod_ssh_key_pem = os.path.join(
             constants.POD_UPLOADPATH, self.ssh_key_pem.split("/")[-1]
         )
-        self.ops_mirror_pem = os.path.join(f"{constants.DATA_DIR}", constants.OCP_PEM)
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.kubeconfig = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
@@ -94,7 +93,6 @@ class OCPINSTALLRHEL(object):
         """
         upload(self.pod_name, self.ssh_key_pem, constants.POD_UPLOADPATH)
         upload(self.pod_name, ocp_repo, constants.YUM_REPOS_PATH)
-        upload(self.pod_name, self.ops_mirror_pem, constants.PEM_PATH)
         # prepare and copy credential files for mirror.openshift.com
         (
             mirror_user_file,
@@ -222,19 +220,6 @@ class OCPINSTALLRHEL(object):
                 node, self.pod_ssh_key_pem, cmd, user=constants.VM_RHEL_USER
             )
 
-            # copy ops-mirror.pem
-            self.rhelpod.copy_to_server(
-                node,
-                self.pod_ssh_key_pem,
-                os.path.join(constants.PEM_PATH, constants.OCP_PEM),
-                constants.RHEL_TMP_PATH,
-                user=constants.VM_RHEL_USER,
-            )
-            pem_path_in_rhel = os.path.join(constants.RHEL_TMP_PATH, constants.OCP_PEM)
-            cmd = f"sudo cp {pem_path_in_rhel} {constants.PEM_PATH}"
-            self.rhelpod.exec_cmd_on_node(
-                node, self.pod_ssh_key_pem, cmd, user=constants.VM_RHEL_USER
-            )
             # prepare and copy credential files for mirror.openshift.com
             (
                 mirror_user_file,

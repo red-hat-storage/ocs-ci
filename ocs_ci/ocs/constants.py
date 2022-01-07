@@ -823,7 +823,6 @@ LATEST_TAGS = (
     "latest-stable",
     "-rc",
 )
-INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ODF_SUBSCRIPTION = "odf-operator"
@@ -853,9 +852,6 @@ INVENTORY_FILE_HAPROXY = "inventory_haproxy.yaml"
 
 # users
 VM_RHEL_USER = "test"
-
-# PEM
-OCP_PEM = "ops-mirror.pem"
 
 # playbooks
 SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
