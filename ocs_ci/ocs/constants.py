@@ -1071,7 +1071,14 @@ AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
 
 # Users
-NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
+NOOBAA_SERVICE_ACCOUNT_NAME = "noobaa"
+NOOBAA_DB_SERVICE_ACCOUNT_NAME = "noobaa-endpoint"
+NOOBAA_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(NOOBAA_SERVICE_ACCOUNT_NAME)
+NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
+    NOOBAA_DB_SERVICE_ACCOUNT_NAME
+)
+
 
 # Services
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
