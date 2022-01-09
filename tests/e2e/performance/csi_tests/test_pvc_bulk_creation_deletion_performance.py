@@ -239,7 +239,7 @@ class TestPVCCreationPerformance(PASTest):
     def test_bulk_pvc_creation_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (3)
+        and reporting the full results (links in the ES) of previous tests (4)
         """
         self.number_of_tests = 4
         results_path = get_full_test_logs_path(
@@ -380,7 +380,7 @@ class TestPVCCreationPerformance(PASTest):
     def test_bulk_pvc_creation_after_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (3)
+        and reporting the full results (links in the ES) of previous tests (2)
         """
         self.number_of_tests = 2
         results_path = get_full_test_logs_path(
