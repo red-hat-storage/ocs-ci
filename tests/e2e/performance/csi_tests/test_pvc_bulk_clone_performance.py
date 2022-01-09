@@ -5,6 +5,7 @@ The results are uploaded to the ES server
 """
 import logging
 import pytest
+import os
 from uuid import uuid4
 
 from ocs_ci.utility import utils
@@ -239,8 +240,12 @@ class TestBulkCloneCreation(PASTest):
 
             # Write the test results into the ES server
             full_results.es_write()
+            res_link = full_results.results_link()
             # write the ES link to the test results in the test log.
-            logging.info(f"The result can be found at : {full_results.results_link()}")
+            logging.info(f"The result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (3 - according to the parameters)
+            self.write_result_to_file(res_link)
 
         # Finally is used to clean-up the resources created
         # Irrespective of try block pass/fail finally will be executed.
@@ -282,3 +287,18 @@ class TestBulkCloneCreation(PASTest):
             performance_lib.write_fio_on_pod(objs, file_size_mb_str)
 
         return total_files_size
+
+    def test_multiple_pvc_deletion_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (3)
+        """
+        self.number_of_tests = 3
+        results_path = get_full_test_logs_path(
+            cname=self, fname="test_bulk_clone_performance"
+        )
+        self.results_file = os.path.join(results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}.")
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name="Bulk Clone Creation")
