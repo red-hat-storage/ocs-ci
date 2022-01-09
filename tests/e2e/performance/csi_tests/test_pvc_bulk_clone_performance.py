@@ -288,7 +288,7 @@ class TestBulkCloneCreation(PASTest):
 
         return total_files_size
 
-    def test_multiple_pvc_deletion_results(self):
+    def test_bulk_clone_performance_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
         and reporting the full results (links in the ES) of previous tests (3)
