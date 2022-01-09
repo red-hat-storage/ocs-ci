@@ -364,6 +364,11 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
+    "drop_down_projects": (
+        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
 }
 
 acm_page_nav = {
@@ -608,6 +613,7 @@ locators = {
             **deployment_4_9,
             **deployment_4_10,
         },
+        "add_capacity": add_capacity,
     },
     "4.9": {
         "login": login,

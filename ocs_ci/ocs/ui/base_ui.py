@@ -344,6 +344,7 @@ class PageNavigator(BaseUI):
             if self.ocs_version_semantic >= version.VERSION_4_9
             else OCS_OPERATOR
         )
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.generic_locators = locators[self.ocp_version]["generic"]
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
@@ -445,6 +446,14 @@ class PageNavigator(BaseUI):
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
         self.page_has_loaded(retries=25, sleep_time=10)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.do_click(
+                locator=(
+                    'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+                    By.CSS_SELECTOR,
+                )
+            )
+            self.do_click(locator=("//span[text()='All Projects']", By.XPATH))
 
     def navigate_to_ocs_operator_page(self):
         """
