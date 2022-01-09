@@ -231,7 +231,7 @@ class DeploymentUI(PageNavigator):
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
 
-        self.enable_infra_nodes()
+        self.enable_taint_nodes()
 
         self.configure_encryption()
 
@@ -264,14 +264,14 @@ class DeploymentUI(PageNavigator):
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
-        self.enable_infra_nodes()
+        self.enable_taint_nodes()
 
         if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
             self.do_click(
                 locator=self.dep_loc["enable_encryption"], enable_screenshot=True
             )
 
-        if self.ocp_version in ("4.7", "4.8", "4.9", "4.10"):
+        if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
             self.configure_encryption()
@@ -312,15 +312,18 @@ class DeploymentUI(PageNavigator):
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
-    def enable_infra_nodes(self):
+    def enable_taint_nodes(self):
         """
-        Enable Infra Nodes
+        Enable taint Nodes
 
         """
-        logger.info("Enable Infra Nodes")
-        if self.ocp_version == "4.10" and config.DEPLOYMENT.get("infra_nodes", False):
+        logger.info("Enable taint Nodes")
+        if (
+            self.ocp_version_semantic >= version.VERSION_4_10
+            and config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0
+        ):
             self.select_checkbox_status(
-                status=True, locator=self.dep_loc["enable_infra_node"]
+                status=True, locator=self.dep_loc["enable_taint_node"]
             )
 
     def configure_osd_size(self):
