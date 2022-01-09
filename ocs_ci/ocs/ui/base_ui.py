@@ -447,13 +447,8 @@ class PageNavigator(BaseUI):
         )
         self.page_has_loaded(retries=25, sleep_time=10)
         if self.ocp_version_full >= version.VERSION_4_9:
-            self.do_click(
-                locator=(
-                    'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
-                    By.CSS_SELECTOR,
-                )
-            )
-            self.do_click(locator=("//span[text()='All Projects']", By.XPATH))
+            self.do_click(self.page_nav["drop_down_projects"])
+            self.do_click(self.page_nav["choose_all_projects"])
 
     def navigate_to_ocs_operator_page(self):
         """
