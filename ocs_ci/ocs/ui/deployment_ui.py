@@ -25,8 +25,7 @@ class DeploymentUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        if ocp_version <= version.VERSION_4_9:
+        if self.ocp_version_semantic <= version.VERSION_4_9:
             self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
