@@ -67,9 +67,9 @@ class AWSBase(CloudDeploymentBase):
         ocs_version = version.get_semantic_ocs_version_from_config()
 
         if ocs_version >= version.VERSION_4_10 and ocp_version >= version.VERSION_4_9:
-            # The default storage class is gp3-csi for OCS 4.10 and above
+            # If we don't customize the storage class, we will use the default one
             self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
-                "customized_deployment_storage_class", "gp3-csi"
+                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
             )
 
     def host_network_update(self):
