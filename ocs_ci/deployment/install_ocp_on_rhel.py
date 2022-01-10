@@ -94,12 +94,12 @@ class OCPINSTALLRHEL(object):
         upload(self.pod_name, self.ssh_key_pem, constants.POD_UPLOADPATH)
         upload(self.pod_name, ocp_repo, constants.YUM_REPOS_PATH)
         # prepare and copy credential files for mirror.openshift.com
-        (
+        with prepare_mirror_openshift_credential_files() as (
             mirror_user_file,
             mirror_password_file,
-        ) = prepare_mirror_openshift_credential_files()
-        upload(self.pod_name, mirror_user_file, constants.YUM_VARS_PATH)
-        upload(self.pod_name, mirror_password_file, constants.YUM_VARS_PATH)
+        ):
+            upload(self.pod_name, mirror_user_file, constants.YUM_VARS_PATH)
+            upload(self.pod_name, mirror_password_file, constants.YUM_VARS_PATH)
         upload(self.pod_name, self.kubeconfig, constants.POD_UPLOADPATH)
         upload(self.pod_name, self.pull_secret_path, constants.POD_UPLOADPATH)
         if config.ENV_DATA["folder_structure"]:
@@ -220,11 +220,6 @@ class OCPINSTALLRHEL(object):
                 node, self.pod_ssh_key_pem, cmd, user=constants.VM_RHEL_USER
             )
 
-            # prepare and copy credential files for mirror.openshift.com
-            (
-                mirror_user_file,
-                mirror_password_file,
-            ) = prepare_mirror_openshift_credential_files()
             for file_name in (
                 constants.MIRROR_OPENSHIFT_USER_FILE,
                 constants.MIRROR_OPENSHIFT_PASSWORD_FILE,

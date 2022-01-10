@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import logging
 import os
 
@@ -8,11 +9,15 @@ from ocs_ci.ocs import constants, exceptions
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
 def prepare_mirror_openshift_credential_files():
     """
+    This function is a context manager.
+
     Prepare local files containing username and password for mirror.openshift.com:
         data/mirror_openshift_user,
         data/mirror_openshift_password.
+
     Those files are used as variable files for repo files (stored in /etc/yum/vars/
     on the target RHEL nodes or pods).
 
@@ -43,7 +48,11 @@ def prepare_mirror_openshift_credential_files():
         logger.debug(
             f"Credentials for mirror.openshift.com saved to files '{user_file}' and '{password_file}'"
         )
-        return user_file, password_file
+        try:
+            yield user_file, password_file
+        finally:
+            os.remove(user_file)
+            os.remove(password_file)
     else:
         raise exceptions.ConfigurationError(
             "Credentials for mirror.openshift.com are not provided in data/auth.yaml file."

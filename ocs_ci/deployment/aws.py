@@ -533,12 +533,12 @@ class AWSUPI(AWSBase):
         repo_file = os.path.basename(repo)
         pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
         # prepare credential files for mirror.openshift.com
-        (
+        with prepare_mirror_openshift_credential_files() as (
             mirror_user_file,
             mirror_password_file,
-        ) = prepare_mirror_openshift_credential_files()
-        pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
-        pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
+        ):
+            pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+            pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
 
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
