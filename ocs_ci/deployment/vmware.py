@@ -724,6 +724,13 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{each_file}.json.backup",
                 )
 
+        # change the keep_on_remove state to false
+        terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
+        str_to_modify = '"keep_on_remove": true,'
+        target_str = '"keep_on_remove": false,'
+        logger.debug(f"changing state from {str_to_modify} to {target_str}")
+        replace_content_in_file(terraform_tfstate, str_to_modify, target_str)
+
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
