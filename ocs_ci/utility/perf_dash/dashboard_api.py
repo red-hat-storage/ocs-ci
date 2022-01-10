@@ -467,7 +467,10 @@ class PerfDash(object):
             for sample in self.cursor:
                 results.append(sample[0])
 
-        return max(results) + 1
+        if len(results) == 0:
+            return 0
+        else:
+            return max(results) + 1
 
     def add_results(self, version, build, platform, topology, test, eslink, logfile):
         """

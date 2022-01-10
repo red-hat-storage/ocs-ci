@@ -441,7 +441,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=25, sleep_time=10)
 
     def navigate_to_ocs_operator_page(self):
         """

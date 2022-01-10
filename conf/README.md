@@ -121,7 +121,7 @@ anywhere else.
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
-
+* `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 #### REPORTING
 
 Reporting related config. (Do not store secret data in the repository!).
@@ -222,6 +222,7 @@ Upgrade related configuration data.
 * `ocp_upgrade_path` - OCP image to upgrade with
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
+* `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
 
 #### AUTH
 

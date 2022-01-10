@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import stat
 import tempfile
 from time import sleep
 
@@ -42,7 +43,6 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 import subprocess
-import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -954,7 +954,9 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
-    @retry(NoobaaCliChecksumFailedException, tries=10, delay=15, backoff=1)
+    @retry(
+        (NoobaaCliChecksumFailedException, CommandFailed), tries=5, delay=15, backoff=1
+    )
     def retrieve_noobaa_cli_binary(self):
         """
         Copy the NooBaa CLI binary from the operator pod
@@ -994,11 +996,21 @@ class MCG:
                 f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
                 " attempting to copy it from the MCG operator pod"
             )
+            local_mcg_cli_dir = os.path.dirname(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            remote_mcg_cli_basename = os.path.basename(
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            # The MCG CLI retrieval process is known to be flaky
+            # and there's an active BZ regardaing it -
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
+            # rsync should be more reliable than cp, thus the use of oc rsync.
             if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
                 cmd = (
-                    f"oc cp {self.namespace}/{self.operator_pod.name}:"
+                    f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
                     f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                    f" {local_mcg_cli_dir}"
                 )
                 exec_cmd(cmd)
             else:
@@ -1011,6 +1023,10 @@ class MCG:
                 logger.info(
                     f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
                 )
+            os.rename(
+                os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+            )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             os.chmod(

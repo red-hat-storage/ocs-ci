@@ -76,12 +76,16 @@ class PlatformNodesFactory:
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
+            "vsphere_ipi": VMWareIPINodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
-            platform += "_lso"
+        if platform == constants.VSPHERE_PLATFORM:
+            if cluster.is_lso_cluster():
+                platform += "_lso"
+            elif config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
         return self.cls_map[platform]()
 
 
@@ -179,6 +183,9 @@ class NodesBase(object):
 
         return default_config_dict
 
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
 
 class VMWareNodes(NodesBase):
     """
@@ -242,18 +249,19 @@ class VMWareNodes(NodesBase):
             "get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes, force=True):
+    def stop_nodes(self, nodes, force=True, wait=True):
         """
         Stop vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for force VM stop, False otherwise
+            wait (bool): Wait for the VMs to stop
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.stop_vms(vms, force=force)
+        self.vsphere.stop_vms(vms, force=force, wait=wait)
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -261,11 +269,12 @@ class VMWareNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for the VMs to start
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.start_vms(vms)
+        self.vsphere.start_vms(vms, wait=wait)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
@@ -2553,3 +2562,58 @@ class IBMCloud(NodesBase):
 
         """
         self.create_nodes(node_conf, node_type, num_nodes)
+
+
+class VMWareIPINodes(VMWareNodes):
+    """
+    VMWare IPI nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_vms(self, nodes):
+        """
+        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope).
+        Note: If one of the nodes failed with an exception, it will not return his
+        corresponding VM object.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: vSphere vm objects list in the Datacenter
+
+        """
+        vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
+        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        vms = []
+        for vm in vms_in_dc:
+            try:
+                vm_name = vm.name
+                if vm_name in node_names:
+                    vms.append(vm)
+            except Exception as e:
+                logger.info(f"Failed to get the vm name due to exception: {e}")
+
+        if len(vms) < len(nodes):
+            logger.warning("Didn't find all the VM objects for all the nodes")
+
+        return vms
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        self.vsphere.remove_vms_from_inventory(vms)
+        if wait:
+            for vm in vms:
+                self.vsphere.wait_for_vm_delete(vm)

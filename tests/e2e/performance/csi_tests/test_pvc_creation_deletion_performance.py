@@ -4,6 +4,7 @@ for RBD, CephFS and RBD-Thick interfaces
 """
 import time
 import logging
+import os
 import datetime
 import pytest
 import ocs_ci.ocs.exceptions as ex
@@ -17,37 +18,11 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs.perfresult import PerfResult
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
-
-
-class ResultsAnalyse(PerfResult):
-    """
-    This class generates results for all tests as one unit
-    and saves them to an elastic search server on the cluster
-
-    """
-
-    def __init__(self, uuid, crd, full_log_path):
-        """
-        Initialize the object by reading some of the data from the CRD file and
-        by connecting to the ES server and read all results from it.
-
-        Args:
-            uuid (str): the unique uid of the test
-            crd (dict): dictionary with test parameters - the test yaml file
-                        that modify it in the test itself.
-            full_log_path (str): the path of the results files to be found
-
-        """
-        super(ResultsAnalyse, self).__init__(uuid, crd)
-        self.new_index = "pvc_create_delete_fullres"
-        self.full_log_path = full_log_path
-        # make sure we have connection to the elastic search server
-        self.es_connect()
 
 
 @performance
@@ -117,10 +92,10 @@ class TestPVCCreationDeletionPerformance(PASTest):
         Initialize the full results object which will send to the ES server
 
         Args:
-            full_results (obj): an empty FIOResultsAnalyse object
+            full_results (obj): an empty ResultsAnalyse object
 
         Returns:
-            FIOResultsAnalyse (obj): the input object fill with data
+            ResultsAnalyse (obj): the input object fill with data
 
         """
         for key in self.environment:
@@ -181,6 +156,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
+        self.results_path = get_full_test_logs_path(cname=self)
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
@@ -196,7 +172,12 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         # Initialize the results doc file.
         self.full_results = self.init_full_results(
-            ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "pvc_create_delete_fullres",
+            )
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
@@ -294,8 +275,34 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
-        self.full_results.es_write()
-        log.info(f"The Result can be found at : {self.full_results.results_link()}")
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_pvc_creation_deletion_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_pvc_creation_deletion_measurement_performance"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}")
+        self.number_of_tests = 3
+        log.info("Check results for 'performance_extended' marker (3 tests)")
+        try:
+            self.check_tests_results()
+        except ex.BenchmarkTestFailed:
+            log.info("Look like performance_extended was not triggered")
+            log.info("Check results for 'performance' marker (9 tests)")
+            self.number_of_tests = 9
+            self.check_tests_results()
+        self.push_to_dashboard(test_name="PVC Create-Delete")
 
     def process_time_measurements(
         self, action_name, time_measures, accepted_deviation_percent, msg_prefix
@@ -403,7 +410,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         pvc_size = "1Gi"
         msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
 
-        log.info(f"{msg_prefix} Start creating new 120 PVCs")
+        log.info(f"{msg_prefix} Start creating new {number_of_pvcs} PVCs")
 
         pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
@@ -482,3 +489,53 @@ class TestPVCCreationDeletionPerformance(PASTest):
         logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
         for name, a_time in pvc_deletion_time.items():
             logging.info(f"{name} deletion time is: {a_time} seconds")
+
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.sc = "RBD"
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.sc = "CephFS"
+        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc = "RBD-Thick"
+
+        full_log_path = get_full_test_logs_path(cname=self) + f"-{self.sc}-{pvc_size}"
+        self.results_path = get_full_test_logs_path(cname=self)
+        log.info(f"Logs file path name is : {full_log_path}")
+
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                full_log_path,
+                "pvc_bulk_deletion_fullres",
+            )
+        )
+
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("bulk_size", number_of_pvcs)
+        full_results.add_key("pvc_size", pvc_size)
+        full_results.all_results["bulk_deletion_time"] = pvc_deletion_time
+
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (3 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_multiple_pvc_deletion_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (3)
+        """
+        self.number_of_tests = 3
+        results_path = get_full_test_logs_path(
+            cname=self, fname="test_multiple_pvc_deletion_measurement_performance"
+        )
+        self.results_file = os.path.join(results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}.")
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name="PVC Multiple-Delete")

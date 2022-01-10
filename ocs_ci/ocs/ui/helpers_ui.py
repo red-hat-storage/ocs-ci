@@ -40,7 +40,7 @@ def ui_deployment_conditions():
         logger.error(e)
         return False
 
-    if platform not in (
+    if platform.lower() not in (
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
