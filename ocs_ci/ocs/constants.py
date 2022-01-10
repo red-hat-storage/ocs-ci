@@ -1338,7 +1338,7 @@ SQUADS = {
     "Brown": ["/z_cluster/"],
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
-    "Red": ["/mcg/", "/rgw/"],
+    "Red": ["/mcg/", "/rgw/", "/system/"],
     "Purple": ["/ecosystem/"],
     "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/"],
     "Grey": ["/performance/"],
