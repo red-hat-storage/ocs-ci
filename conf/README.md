@@ -121,7 +121,7 @@ anywhere else.
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
-
+* `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 #### REPORTING
 
 Reporting related config. (Do not store secret data in the repository!).
