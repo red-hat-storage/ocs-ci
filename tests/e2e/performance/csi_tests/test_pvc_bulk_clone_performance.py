@@ -293,7 +293,7 @@ class TestBulkCloneCreation(PASTest):
         This is not a test - it is only check that previous test ran and finish as expected
         and reporting the full results (links in the ES) of previous tests (3)
         """
-        self.number_of_tests = 3
+        self.number_of_tests = 2
         results_path = get_full_test_logs_path(
             cname=self, fname="test_bulk_clone_performance"
         )
