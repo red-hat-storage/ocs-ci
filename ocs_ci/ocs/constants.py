@@ -25,7 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
-TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DIR, "multicluster")
+TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
@@ -600,6 +600,9 @@ CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
+)
+ODF_ORCHESTRATOR_OPERATOR_GROUP = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "odf_orchestrator_operatorgroup.yaml"
 )
 MIRROR_PEER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml")
 VOLUME_REPLICATION_CLASS = os.path.join(
@@ -1512,8 +1515,7 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 )
 
 # Submariner constants
-SUBMARINER_GATEWAY_PROMPT = "Which node should be used as the gateway?"
-ENTER_KEY = "\r"
+SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
 
 # Multicluster related
 

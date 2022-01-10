@@ -202,12 +202,12 @@ class Deployment(object):
             submariner.deploy()
 
         if not config.ENV_DATA["skip_ocs_deployment"]:
-            for i in range(config.clusters):
+            for i in range(config.nclusters):
                 if config.multicluster and config.get_acm_index() == i:
                     continue
                 config.switch_ctx(i)
                 try:
-                    self.deploy_ocs()
+                    # self.deploy_ocs()
 
                     if config.REPORTING["collect_logs_on_success_run"]:
                         collect_ocs_logs("deployment", ocp=False, status_failure=False)
@@ -253,7 +253,7 @@ class Deployment(object):
         """
         dr_conf = dict()
         dr_conf["rbd_dr_scenario"] = config.ENV_DATA.get("rbd_dr_scenario", False)
-        dr_conf["dr_metadata_store"] = config.ENV_DATA.get("dr_metadata_store", "s3")
+        dr_conf["dr_metadata_store"] = config.ENV_DATA.get("dr_metadata_store", "awss3")
         return dr_conf
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -1472,9 +1472,19 @@ class MultiClusterDROperatorsDeploy(object):
         """
         # current CTX: ACM
         config.switch_acm_ctx()
+        # create operator group
+        # run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
+        if config.ENV_DATA.get("multicluster_orchestrator_channel"):
+            odf_multicluster_orchestrator_data["spec"]["channel"] = config.ENV_DATA[
+                "multicluster_orchestrator_channel"
+            ]
+        if config.ENV_DATA.get("multicluster_orchestrator_current_csv"):
+            odf_multicluster_orchestrator_data["spec"]["currentCSV"] = config.ENV_DATA[
+                "multicluster_orchestrator_current_csv"
+            ]
         odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odf_multicluster_orchestrator", delete=False
         )
@@ -1498,7 +1508,9 @@ class MultiClusterDROperatorsDeploy(object):
         dr_hub_operator_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_hub_operator_", delete=False
         )
-        templating.dump_to_temp_yaml(dr_hub_operator_data, dr_hub_operator_yaml.name)
+        templating.dump_data_to_temp_yaml(
+            dr_hub_operator_data, dr_hub_operator_yaml.name
+        )
         run_cmd(f"oc create -f {dr_hub_operator_yaml.name}")
 
         # Create DR policy on ACM hub cluster
@@ -1537,14 +1549,13 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
 
-        def __init__(self, conf):
+        def __init__(self):
             self.dr_regions = self.get_participating_regions()
-            self.s3_conf = conf
 
         def deploy_and_configure(self):
             self.s3_configure()
 
-        def s3_configure(self):
+        def s3_configure(self, conf=None):
             # Configure s3secret
             # Same acm cluster name suffix will be used as secret name on all clusters
             s3_acm_secret_suffix = get_cluster_name(config.ENV_DATA["cluster_path"])
