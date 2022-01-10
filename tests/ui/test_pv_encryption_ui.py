@@ -19,7 +19,7 @@ from ocs_ci.ocs.ui.helpers_ui import (
 )
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility import kms
+from ocs_ci.utility import kms, version
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -278,7 +278,8 @@ class TestPVEncryption(ManageTest):
         logger.info(
             "Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244"
         )
-        if kv_version == "v1":
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_9:
             for vol_handle in vol_handles:
                 if not kms.is_key_present_in_path(
                     key=vol_handle, path=self.vault.vault_backend_path

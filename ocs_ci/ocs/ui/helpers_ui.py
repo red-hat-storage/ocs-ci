@@ -4,6 +4,7 @@ import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.ui.views import locators
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -105,6 +106,7 @@ def create_storage_class_ui(
     service_name=None,
     kms_address=None,
     tls_server_name=None,
+    existing_kms=False,
 ):
     """
     Test for creation of storage class with or without encryption via UI
@@ -146,7 +148,8 @@ def create_storage_class_ui(
     elif reclaim_policy == "Retain":
         base_ui_obj.do_click(pvc_loc["reclaim-policy-retain"])
 
-    if ocp_version >= "4.9":
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    if ocp_version >= version.VERSION_4_9:
         logger.info("Volume binding mode")
         base_ui_obj.do_click(pvc_loc["volume_binding_mode"])
         if vol_binding_mode == "WaitForFirstConsumer":
@@ -175,56 +178,66 @@ def create_storage_class_ui(
         if conn_details:
             logger.info("Click on Change Connection Details")
             base_ui_obj.do_click(pvc_loc["connections-details"])
-        if ocp_version >= "4.9":
+        if ocp_version >= version.VERSION_4_9:
             logger.info("Click on Create new KMS connection")
             base_ui_obj.do_click(pvc_loc["new_kms"])
-        logger.info("Storage Class Service Name")
+        logger.info("KMS Service Name")
         base_ui_obj.do_clear(pvc_loc["service-name"])
         base_ui_obj.do_send_keys(pvc_loc["service-name"], service_name)
-        logger.info("Storage Class Address")
+        logger.info("Vault Node Address")
         base_ui_obj.do_clear(pvc_loc["kms-address"])
         base_ui_obj.do_send_keys(pvc_loc["kms-address"], kms_address)
-        logger.info("Storage Class Port")
+        logger.info("Vault Port")
         base_ui_obj.do_clear(pvc_loc["kms-port"])
         base_ui_obj.do_send_keys(pvc_loc["kms-port"], "8200")
-        logger.info("Click on Advanced Settings")
-        base_ui_obj.do_click(pvc_loc["advanced-settings"])
-        logger.info("Enter Backend Path")
-        base_ui_obj.do_clear(pvc_loc["backend-path"])
-        base_ui_obj.do_send_keys(pvc_loc["backend-path"], backend_path)
-        logger.info("Enter TLS Server Name")
-        base_ui_obj.do_clear(pvc_loc["tls-server-name"])
-        base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], tls_server_name)
-        logger.info("Enter Vault Enterprise Namespace")
-        base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
-        base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
-        logger.info("Selecting CA Certificate")
-        ca_cert_pem = base_ui_obj.driver.find_element(
-            By.XPATH, "(//input[@type='file'])[1]"
-        )
-        ca_cert_pem.send_keys(os.path.abspath(constants.VAULT_CA_CERT_PEM))
-        logger.info("Selecting Client Certificate")
-        client_cert_pem = base_ui_obj.driver.find_element(
-            By.XPATH, "(//input[@type='file'])[2]"
-        )
-        client_cert_pem.send_keys(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
-        logger.info("Selecting Client Private Key")
-        client_private_key_pem = base_ui_obj.driver.find_element(
-            By.XPATH, "(//input[@type='file'])[3]"
-        )
-        client_private_key_pem.send_keys(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
-        base_ui_obj.take_screenshot()
-        logger.info("Saving Key Management Service Advanced Settings")
-        base_ui_obj.do_click(pvc_loc["save-advanced-settings"], enable_screenshot=True)
-        time.sleep(1)
-        logger.info("Save Key Management Service details")
-        base_ui_obj.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
-        time.sleep(1)
-        logger.info("Creating Storage Class with Encryption")
+        if ocp_version >= version.VERSION_4_9 and existing_kms:
+            base_ui_obj.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
+            logger.info("Choose existing KMS connection")
+            base_ui_obj.do_click(pvc_loc["existing-kms-connection"])
+            base_ui_obj.do_click(pvc_loc["kms-dropdown"])
+            base_ui_obj.driver.click(f"//div[normalize-space()='{service_name}']")
+            base_ui_obj.do_click(pvc_loc["create"])
+        else:
+            logger.info("Click on Advanced Settings")
+            base_ui_obj.do_click(pvc_loc["advanced-settings"])
+            logger.info("Enter Backend Path")
+            base_ui_obj.do_clear(pvc_loc["backend-path"])
+            base_ui_obj.do_send_keys(pvc_loc["backend-path"], backend_path)
+            logger.info("Enter TLS Server Name")
+            base_ui_obj.do_clear(pvc_loc["tls-server-name"])
+            base_ui_obj.do_send_keys(pvc_loc["tls-server-name"], tls_server_name)
+            logger.info("Enter Vault Enterprise Namespace")
+            base_ui_obj.do_clear(pvc_loc["vault-enterprise-namespace"])
+            base_ui_obj.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
+            logger.info("Selecting CA Certificate")
+            ca_cert_pem = base_ui_obj.driver.find_element(
+                By.XPATH, "(//input[@type='file'])[1]"
+            )
+            ca_cert_pem.send_keys(os.path.abspath(constants.VAULT_CA_CERT_PEM))
+            logger.info("Selecting Client Certificate")
+            client_cert_pem = base_ui_obj.driver.find_element(
+                By.XPATH, "(//input[@type='file'])[2]"
+            )
+            client_cert_pem.send_keys(os.path.abspath(constants.VAULT_CLIENT_CERT_PEM))
+            logger.info("Selecting Client Private Key")
+            client_private_key_pem = base_ui_obj.driver.find_element(
+                By.XPATH, "(//input[@type='file'])[3]"
+            )
+            client_private_key_pem.send_keys(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
+            base_ui_obj.take_screenshot()
+            logger.info("Saving Key Management Service Advanced Settings")
+            base_ui_obj.do_click(pvc_loc["save-advanced-settings"], enable_screenshot=True)
+            time.sleep(1)
+            logger.info("Save Key Management Service details")
+            base_ui_obj.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
+            time.sleep(1)
+            logger.info("Creating Storage Class with Encryption")
+            base_ui_obj.do_click(pvc_loc["create"])
+            time.sleep(1)
     else:
         logger.info("Creating storage class without Encryption")
-    base_ui_obj.do_click(pvc_loc["create"])
-    time.sleep(1)
+        base_ui_obj.do_click(pvc_loc["create"])
+        time.sleep(1)
     logger.info("Verifying if Storage Class is created or not")
     base_ui_obj.navigate_storageclasses_page()
     logger.info("Click on Dropdown and Select Name")

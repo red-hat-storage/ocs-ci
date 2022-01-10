@@ -350,6 +350,8 @@ pvc_4_8 = {
     ),
     "pvc_storage_class": ("//*[text()='{}']", By.XPATH),
     "test-pvc-for-sc": ("a[title='test-pvc-for-sc']", By.CSS_SELECTOR),
+    "existing-kms-connection": ("(//input[@name='kms-selection'])[1]", By.XPATH),
+    "kms-dropdown": ("//button[@data-test='kms-dropdown-toggle']", By.XPATH),
 }
 
 pvc_4_9 = {
