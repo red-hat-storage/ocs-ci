@@ -30,7 +30,7 @@ class TestPVCCreationPerformance(PASTest):
         """
         logging.info("Starting the test setup")
         super(TestPVCCreationPerformance, self).setup()
-        self.benchmark_name = "pvc_creation_permorance"
+        self.benchmark_name = "pvc_creation_performance"
         self.uuid = uuid4().hex
         self.crd_data = {
             "spec": {
@@ -236,21 +236,6 @@ class TestPVCCreationPerformance(PASTest):
             # Create text file with results of all subtest (4 - according to the parameters)
             self.write_result_to_file(res_link)
 
-    def test_bulk_pvc_creation_deletion_results(self):
-        """
-        This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (4)
-        """
-        self.number_of_tests = 4
-        results_path = get_full_test_logs_path(
-            cname=self, fname="test_bulk_pvc_creation_deletion_measurement_performance"
-        )
-        self.results_file = os.path.join(results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}.")
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="PVC Bulk Creation-Deletion")
-
     @pytest.fixture()
     def base_setup_creation_after_deletion(
         self, interface_iterate, storageclass_factory
@@ -377,17 +362,28 @@ class TestPVCCreationPerformance(PASTest):
             # Create text file with results of all subtest (2 - according to the parameters)
             self.write_result_to_file(res_link)
 
-    def test_bulk_pvc_creation_after_deletion_results(self):
+    def test_bulk_pvc_creation_deletion_performance_results(self):
         """
-        This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (2)
+        This is not a test - it is only check that previous tests ran and finished as expected
+        and reporting the full results (links in the ES) of previous tests (4 + 2)
         """
-        self.number_of_tests = 2
-        results_path = get_full_test_logs_path(
-            cname=self, fname="test_bulk_pvc_creation_after_deletion_performance"
-        )
-        self.results_file = os.path.join(results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}.")
-        self.check_tests_results()
 
-        self.push_to_dashboard(test_name="PVC Bulk Creation-After-Deletion")
+        workloads = [
+            {
+                "name": "test_bulk_pvc_creation_deletion_measurement_performance",
+                "tests": 4,
+                "test_name": "PVC Bulk Creation-Deletion",
+            },
+            {
+                "name": "test_bulk_pvc_creation_after_deletion_performance",
+                "tests": 2,
+                "test_name": "PVC Bulk Creation-After-Deletion",
+            },
+        ]
+        for wl in workloads:
+            self.number_of_tests = wl["tests"]
+            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
+            self.results_file = os.path.join(self.results_path, "all_results.txt")
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
