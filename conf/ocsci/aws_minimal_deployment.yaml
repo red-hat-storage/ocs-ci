@@ -1,0 +1,10 @@
+---
+# config file for minimal resources deployment
+# 8CPU per worker node
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  region: 'us-east-2'
+  worker_instance_type: 'm5.2xlarge'
