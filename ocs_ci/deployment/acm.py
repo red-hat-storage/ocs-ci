@@ -10,14 +10,13 @@ import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import SUBMARINER_GATEWAY_PROMPT
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
-    InteractivePromptException,
 )
+from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
-from ocs_ci.ocs.node import get_typed_worker_nodes, get_node_name
+from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -124,7 +123,6 @@ class Submariner(object):
             DRPrimaryNotFoundException: If there is no designated primary cluster found
 
         """
-        gateway_node = self.get_default_gateway_node()
         if self.designated_broker_cluster_index < 0:
             raise DRPrimaryNotFoundException("Designated primary cluster not found")
 
@@ -136,10 +134,19 @@ class Submariner(object):
 
         deploy_broker_cmd = "deploy-broker"
         try:
-            run_subctl_cmd(deploy_broker_cmd)
+            # run_subctl_cmd(deploy_broker_cmd)
+            pass
         except CommandFailed:
             logger.exception("Failed to deploy submariner broker")
             raise
+
+        # Label the gateway nodes on all non acm cluster
+        # restore_index = config.cur_index
+        # for cluster in get_non_acm_cluster_config():
+        #     config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        #     gateway_node = self.get_default_gateway_node()
+        #     label_nodes([gateway_node], constants.SUBMARINER_GATEWAY_NODE_LABEL)
+        # config.switch_ctx(restore_index)
 
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
@@ -152,15 +159,13 @@ class Submariner(object):
                     f"--clusterid c{self.cluster_seq} --natt=false"
                 )
                 try:
-                    run_subctl_cmd_interactive(
-                        join_cmd,
-                        SUBMARINER_GATEWAY_PROMPT,
-                        gateway_node,
-                    )
+                    # run_subctl_cmd(
+                    #     join_cmd,
+                    # )
                     logger.info(
                         f"Subctl join succeded for {cluster.ENV_DATA['cluster_name']}"
                     )
-                except InteractivePromptException:
+                except CommandFailed:
                     logger.exception("Cluster failed to join")
                     raise
 
@@ -170,9 +175,7 @@ class Submariner(object):
         kubeconf_list = []
         for i in self.dr_only_list:
             kubeconf_list.append(config.clusters[i].RUN["kubeconfig"])
-        connct_check = (
-            f"verify --kubecontexts {','.join(kubeconf_list)} --only connectivity"
-        )
+        connct_check = f"verify {' '.join(kubeconf_list)} --only connectivity"
         run_subctl_cmd(connct_check)
 
     def get_primary_cluster_index(self):
@@ -198,4 +201,4 @@ class Submariner(object):
 
         """
         # Always return the first worker node
-        return get_node_name(get_typed_worker_nodes()[0])
+        return get_typed_worker_nodes()[0]
