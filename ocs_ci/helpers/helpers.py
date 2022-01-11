@@ -3891,3 +3891,36 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         sleep=5,
     )
     logger.info("All mons are up and running")
+
+
+def create_reclaim_space_job(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+):
+    """
+    Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+
+    Returns:
+        OCS object
+    """
+    reclaim_space_job_name = (
+        reclaim_space_job_name or f"{pvc_name}-reclaim-space-job-{uuid4().hex}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_JOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_job_name
+    job_data["spec"]["target"]["persistentVolumeClaim"] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["retryDeadlineSeconds"] = retry_deadline_seconds
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj

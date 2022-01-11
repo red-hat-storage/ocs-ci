@@ -245,6 +245,20 @@ class PVC(OCS):
         snapshot_obj.parent_volume_mode = self.get()["spec"]["volumeMode"]
         return snapshot_obj
 
+    def create_reclaim_space_job(self):
+        """
+        Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
+
+        Returns:
+            OCS object
+
+        """
+        assert (
+            self.provisioner == "openshift-storage.rbd.csi.ceph.com"
+        ), "Only RBD PVC is supported"
+        reclaim_space_job = helpers.create_reclaim_space_job(self.name)
+        return reclaim_space_job
+
 
 def delete_pvcs(pvc_objs, concurrent=False):
     """

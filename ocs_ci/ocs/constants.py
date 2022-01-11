@@ -489,6 +489,10 @@ RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
 
 GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
+CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
 
