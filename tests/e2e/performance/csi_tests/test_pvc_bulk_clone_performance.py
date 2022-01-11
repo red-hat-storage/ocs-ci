@@ -240,6 +240,7 @@ class TestBulkCloneCreation(PASTest):
 
             # Write the test results into the ES server
             full_results.es_write()
+            self.results_path = get_full_test_logs_path(cname=self)
             res_link = full_results.results_link()
             # write the ES link to the test results in the test log.
             logging.info(f"The result can be found at : {res_link}")
