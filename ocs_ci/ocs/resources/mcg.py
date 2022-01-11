@@ -1013,6 +1013,10 @@ class MCG:
                     f" {local_mcg_cli_dir}"
                 )
                 exec_cmd(cmd)
+                os.rename(
+                    os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
+                    constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+                )
             else:
                 cmd = (
                     f"oc exec -n {self.namespace} {self.operator_pod.name}"
@@ -1023,10 +1027,6 @@ class MCG:
                 logger.info(
                     f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
                 )
-            os.rename(
-                os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-            )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             os.chmod(
