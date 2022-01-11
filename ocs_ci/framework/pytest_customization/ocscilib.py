@@ -390,13 +390,14 @@ def gather_version_info_for_report(config):
         config._metadata["Cluster Version"] = clusterversion
 
         # add ceph version
-        ceph_version = get_ceph_version()
-        config._metadata["Ceph Version"] = ceph_version
+        if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
+            ceph_version = get_ceph_version()
+            config._metadata["Ceph Version"] = ceph_version
 
-        # add csi versions
-        csi_versions = get_csi_versions()
-        config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
-        config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
+            config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
         config._metadata["OCS operator"] = get_ocs_build_number()
