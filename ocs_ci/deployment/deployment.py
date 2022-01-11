@@ -198,7 +198,8 @@ class Deployment(object):
             setup_netsplit(
                 tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
             )
-        if config.ENV_DATA["deploy_acm_hub_cluster"]:
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if config.ENV_DATA["deploy_acm_hub_cluster"] and ocp_version >= version.VERSION_4_9:
             try:
                 self.deploy_acm_hub()
             except Exception as e:
