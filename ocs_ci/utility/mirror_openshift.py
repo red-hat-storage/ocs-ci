@@ -24,7 +24,7 @@ def prepare_mirror_openshift_credential_files():
     Returns:
         (tuple): tuple containing two strings - file names for username file and password file
 
-    Raises
+    Raises:
         ConfigurationError: if mirror_openshift credentials are not provided in auth.yaml file
 
     """

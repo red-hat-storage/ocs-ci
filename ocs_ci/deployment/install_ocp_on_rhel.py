@@ -229,7 +229,7 @@ class OCPINSTALLRHEL(object):
                     self.pod_ssh_key_pem,
                     os.path.join(constants.YUM_VARS_PATH, file_name),
                     os.path.join(constants.RHEL_TMP_PATH, file_name),
-                    user=self.rhel_worker_user,
+                    user=constants.VM_RHEL_USER,
                 )
                 self.rhelpod.exec_cmd_on_node(
                     node,
@@ -237,7 +237,7 @@ class OCPINSTALLRHEL(object):
                     f"sudo mv "
                     f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
                     f"{constants.YUM_VARS_PATH}",
-                    user=self.rhel_worker_user,
+                    user=constants.VM_RHEL_USER,
                 )
 
     def execute_ansible_playbook(self):
