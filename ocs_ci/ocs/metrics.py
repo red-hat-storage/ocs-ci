@@ -5,6 +5,7 @@ OCS Metrics module.
 Code in this module Supports monitoring test cases dealing with OCS metrics.
 """
 
+from datetime import datetime
 import logging
 
 from ocs_ci.ocs import constants
@@ -300,15 +301,23 @@ ceph_rgw_metrics = tuple(
 ceph_metrics_all = tuple(ceph_metrics + ceph_rbd_metrics)
 
 
-def get_missing_metrics(prometheus, metrics, current_platform=None):
+def get_missing_metrics(
+    prometheus, metrics, current_platform=None, start=None, stop=None
+):
     """
     Using given prometheus instance, check that all given metrics which are
     expected to be available on current platform are there.
+
+    If start and stop timestamps are specified, the function will try to fetch
+    metric data from a middle of this time range (instead of fetching the
+    current value). Expected to be used with workload fixtures.
 
     Args:
         prometheus (ocs_ci.utility.prometheus.PrometheusAPI): prometheus instance
         metrics (list): list or tuple with metrics to be checked
         current_platform (str): name of current platform (optional)
+        start (float): start timestamp (unix time number)
+        stop (float): stop timestamp (unix time number)
 
     Returns:
         list: metrics which were not available but should be
@@ -316,7 +325,15 @@ def get_missing_metrics(prometheus, metrics, current_platform=None):
     """
     metrics_without_results = []
     for metric in metrics:
-        result = prometheus.query(metric)
+        if start is None or stop is None:
+            result = prometheus.query(metric)
+        else:
+            # to simplify the test case, we are going to query values for a
+            # moment in the middle between start and stop events
+            start_ts = datetime.fromtimestamp(start)
+            stop_ts = datetime.fromtimestamp(stop)
+            middle_ts = start_ts + (stop_ts - start_ts) / 2
+            result = prometheus.query(metric, timestamp=middle_ts.timestamp())
         # check that we actually received some values
         if len(result) == 0:
             # Ceph Object Gateway https://docs.ceph.com/docs/master/radosgw/ is
