@@ -15,7 +15,7 @@ from ocs_ci.deployment.deployment import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
-from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
+from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, ODF_OPERATOR_NAME
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -421,8 +421,12 @@ class OCSUpgrade(object):
 
         """
         operator_selector = get_selector_for_ocs_operator()
+        if self.version_before_upgrade == "4.9" and upgrade_version == "4.10":
+            resource_name = ODF_OPERATOR_NAME
+        else:
+            resource_name = OCS_OPERATOR_NAME
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
