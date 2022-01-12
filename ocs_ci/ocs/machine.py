@@ -216,7 +216,7 @@ def create_custom_machineset(
 
     """
     # check for aws and IPI platform
-    if config.ENV_DATA["platform"] == "aws":
+    if config.ENV_DATA["platform"].lower() == "aws":
         machinesets_obj = OCP(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
