@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
     wait_for_co,
+    get_infra_id,
     get_ocp_version,
     get_openshift_installer,
     get_terraform,
@@ -304,7 +305,8 @@ class VSPHEREBASE(Deployment):
             )
 
         # destroy the folder in templates
-        self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+        template_folder = get_infra_id(self.cluster_path)
+        self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
 
         # remove .terraform directory ( this is only to reclaim space )
         terraform_plugins_dir = os.path.join(
