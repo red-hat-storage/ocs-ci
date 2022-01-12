@@ -53,17 +53,10 @@ def ui_deployment_conditions():
             f" is different from the OCP version [{ocp_version}]"
         )
         return False
-    elif (
-        is_external
-        or is_disconnected
-        or is_proxy
-        or is_kms
-        or is_arbiter
-        or is_infra_nodes
-    ):
+    elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
         logger.info(
             "OCS deployment via UI is not supported on "
-            "external/disconnected/proxy/kms/arbiter/infra-nodes cluster"
+            "external/disconnected/proxy/kms/arbiter cluster"
         )
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
@@ -74,6 +67,9 @@ def ui_deployment_conditions():
         return False
     elif ocp_version == "4.6" and is_lso is True:
         logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
+        return False
+    elif is_infra_nodes and ocp_version != "4.10":
+        logger.info("Infra node checkbox exist only on OCP4.10")
         return False
     else:
         return True

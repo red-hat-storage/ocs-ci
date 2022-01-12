@@ -141,6 +141,11 @@ deployment_4_9 = {
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
 }
 
+deployment_4_10 = {
+    "mcg_only_option_4_10": ("//span[text()='MultiCloud Object Gateway']", By.XPATH),
+    "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
+}
+
 generic_locators = {
     "project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
@@ -593,6 +598,17 @@ validation_4_9 = {
 }
 
 locators = {
+    "4.10": {
+        "login": login,
+        "page": page_nav,
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+        },
+    },
     "4.9": {
         "login": login,
         "page": page_nav,
