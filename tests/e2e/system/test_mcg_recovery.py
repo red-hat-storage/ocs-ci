@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4,
     ignore_leftovers,
     polarion_id,
+    skipif_ocs_version,
 )
 from ocs_ci.framework.testlib import E2ETest
 
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @ignore_leftovers
 @polarion_id("OCS-2716")
+@skipif_ocs_version("<4.9")
 class TestMCGRecovery(E2ETest):
     """
     Test MCG system recovery
