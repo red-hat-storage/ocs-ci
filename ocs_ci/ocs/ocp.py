@@ -159,6 +159,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
+    @retry(CommandFailed, tries=3, delay=5, backoff=1)
     def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
