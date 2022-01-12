@@ -526,6 +526,7 @@ def create_storage_class(
     rbd_thick_provision=False,
     encrypted=False,
     encryption_kms_id=None,
+    fs_name=None,
 ):
     """
     Create a storage class
@@ -544,18 +545,20 @@ def create_storage_class(
             Applicable if interface_type is CephBlockPool
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
+        fs_name (str): the name of the filesystem for CephFS StorageClass
 
     Returns:
         OCS: An OCS instance for the storage class
     """
 
+    yamls = {
+        constants.CEPHBLOCKPOOL: constants.CSI_RBD_STORAGECLASS_YAML,
+        constants.CEPHFILESYSTEM: constants.CSI_CEPHFS_STORAGECLASS_YAML,
+    }
     sc_data = dict()
+    sc_data = templating.load_yaml(yamls[interface_type])
+
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -571,13 +574,8 @@ def create_storage_class(
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
-        sc_data["parameters"]["fsName"] = get_cephfs_name()
+        sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
@@ -589,16 +587,11 @@ def create_storage_class(
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
     sc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"]["csi.storage.k8s.io/provisioner-secret-name"] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/provisioner-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-name"
-    ] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    for key in ["node-stage", "provisioner", "controller-expand"]:
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
+        sc_data["parameters"][
+            f"csi.storage.k8s.io/{key}-secret-namespace"
+        ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
