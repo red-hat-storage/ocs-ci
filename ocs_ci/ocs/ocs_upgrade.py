@@ -564,6 +564,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
         else:
+            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+                upgrade_in_current_source
+            ):
+                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
             if upgrade_version != "4.9":
                 # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
                 # OCS automatically.
@@ -585,7 +589,6 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
                 upgrade_in_current_source
             ):
-                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 for attempt in range(2):
                     # We need to do it twice, because some of the SA are updated
                     # after the first load of OCS pod after upgrade. So we need to
