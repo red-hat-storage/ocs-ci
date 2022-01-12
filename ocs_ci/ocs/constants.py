@@ -1340,7 +1340,7 @@ SQUADS = {
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
     "Purple": ["/ecosystem/"],
-    "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/"],
+    "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/", "/system/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
     "Black": ["/ui/"],
