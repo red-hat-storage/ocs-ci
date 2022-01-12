@@ -263,4 +263,4 @@ class TestPodStartTime(PASTest):
 
         self.check_tests_results()
 
-        self.push_to_dashboard(test_name=self.benchmark_name)
+        self.push_to_dashboard(test_name="PVC Attach Time")
