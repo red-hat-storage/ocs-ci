@@ -2,6 +2,7 @@ import logging
 import pytest
 import statistics
 from uuid import uuid4
+import os.path
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
@@ -45,24 +46,6 @@ SKIP_REASON = "The test is unstable and so skipping it until it is fixed"
 
 
 @performance
-@pytest.mark.parametrize(
-    argnames=["interface", "samples_num", "pvc_size"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 5, 5], marks=pytest.mark.polarion_id("OCS-2044")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 5, 5], marks=pytest.mark.polarion_id("OCS-2043")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
-            marks=[
-                pytest.mark.skip(SKIP_REASON),
-                pytest.mark.polarion_id("OCS-2630"),
-            ],
-        ),
-    ],
-)
 class TestPodStartTime(PASTest):
     """
     Measure time to start pod with PVC attached
@@ -167,6 +150,26 @@ class TestPodStartTime(PASTest):
 
         return pod_result_list
 
+    @pytest.mark.parametrize(
+        argnames=["interface", "samples_num", "pvc_size"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, 5, 5],
+                marks=pytest.mark.polarion_id("OCS-2044"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, 5, 5],
+                marks=pytest.mark.polarion_id("OCS-2043"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
+                marks=[
+                    pytest.mark.skip(SKIP_REASON),
+                    pytest.mark.polarion_id("OCS-2630"),
+                ],
+            ),
+        ],
+    )
     def test_pod_start_time(self, pod_obj_list):
         """
         Test to log pod start times for all the sampled pods
@@ -189,6 +192,7 @@ class TestPodStartTime(PASTest):
             self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}"
         log.info(f"Logs file path name is : {self.full_log_path}")
+        self.results_path = get_full_test_logs_path(cname=self)
 
         # Collecting environment information
         self.get_env_info()
@@ -237,9 +241,26 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key("pvc_size", self.pvc_size)
 
         # Write the test results into the ES server
-        self.full_results.es_write()
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
 
-        # write the ES link to the test results in the test log.
-        log.info(
-            f"{self.msg_prefix} The Result can be found at : {self.full_results.results_link()}"
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_pod_start_time_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (2)
+        """
+
+        self.number_of_tests = 2
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_pod_start_time"
         )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}")
+
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name=self.benchmark_name)
