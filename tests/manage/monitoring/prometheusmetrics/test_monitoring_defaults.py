@@ -141,11 +141,14 @@ def test_ceph_metrics_available():
     deployed on on-prem platforms only (such as VMWare - see BZ 1763150),
     so this test case ignores failures for ceph_rgw_* and ceph_objecter_*
     metrics when running on cloud platforms (such as AWS).
+
+    Since ODF 4.9 only subset of all ceph metrics ``ceph_metrics_healthy`` will
+    be always available, as noted in BZ 2028649.
     """
     prometheus = PrometheusAPI()
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
-        metrics.ceph_metrics,
+        metrics.ceph_metrics_healthy,
         current_platform=config.ENV_DATA["platform"].lower(),
     )
     msg = (
