@@ -43,22 +43,56 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 @pytest.mark.polarion_id("OCS-900")
 def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """
-    Test that there is appropriate incident in PagerDuty when ceph osd
-    is unavailable and that this incident is cleared when the osd
+    Test that there are appropriate incidents in PagerDuty when ceph osd
+    is unavailable and that these incidents are cleared when the osd
     is back online.
     """
     api = pagerduty.PagerDutyAPI()
 
     # get incidents from time when manager deployment was scaled down
     incidents = measure_stop_ceph_osd.get("pagerduty_incidents")
-    target_label = constants.ALERT_OSDDISKNOTRESPONDING
 
-    # TODO(fbalak): check the whole string in summary and incident alerts
-    assert pagerduty.check_incident_list(
-        summary=target_label,
-        incidents=incidents,
-        urgency="high",
-    )
-    api.check_incident_cleared(
-        summary=target_label, measure_end_time=measure_stop_ceph_osd.get("stop")
-    )
+    # check that incidents CephOSDDisdNotResponding and CephClusterWarningState
+    # alert are correctly raised
+    for target_label in [
+        constants.ALERT_OSDDISKNOTRESPONDING,
+        constants.ALERT_CLUSTERWARNINGSTATE,
+    ]:
+        assert pagerduty.check_incident_list(
+            summary=target_label,
+            incidents=incidents,
+            urgency="high",
+        )
+        api.check_incident_cleared(
+            summary=target_label, measure_end_time=measure_stop_ceph_osd.get("stop")
+        )
+
+
+@tier4
+@tier4a
+@managed_service_required
+@pytest.mark.polarion_id("OCS-900")
+def test_stop_worker_node_pd(measure_stop_worker_node):
+    """
+    Test that there are appropriate incidents in PagerDuty when one of worker
+    nodes is unavailable and that these incidents are cleared when the node
+    is back online.
+    """
+    api = pagerduty.PagerDutyAPI()
+
+    # get incidents from time when manager deployment was scaled down
+    incidents = measure_stop_worker_node.get("pagerduty_incidents")
+
+    # check that incidents  and CephClusterErrorState
+    # alert are correctly raised
+    for target_label in [
+        constants.ALERT_CLUSTEERRORSTATE,
+    ]:
+        assert pagerduty.check_incident_list(
+            summary=target_label,
+            incidents=incidents,
+            urgency="high",
+        )
+        api.check_incident_cleared(
+            summary=target_label, measure_end_time=measure_stop_worker_node.get("stop")
+        )
