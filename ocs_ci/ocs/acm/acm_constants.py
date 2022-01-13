@@ -1,5 +1,5 @@
 # Namespaces
-ACM_NAMESPACE = "import_clusters_with_acm"
+ACM_NAMESPACE = "open-cluster-management"
 
 # Resources
 ACM_MANAGED_CLUSTERS = "managedclusters"
