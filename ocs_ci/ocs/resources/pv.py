@@ -261,6 +261,6 @@ def check_available_pvs(expected_available_pvs=1):
     pvs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
     cnt_avaible_pvs = 0
     for pv in pvs:
-        if pv["status"]["phase"] == constants.STATUS_AVAILABLE:
+        if get_pv_status(pv) == constants.STATUS_AVAILABLE:
             cnt_avaible_pvs += 1
     return cnt_avaible_pvs == expected_available_pvs
