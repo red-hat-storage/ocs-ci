@@ -24,6 +24,7 @@ from ocs_ci.utility.aws import (
     terminate_rhel_workers,
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo,
@@ -542,14 +543,14 @@ class AWSUPI(AWSBase):
         assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
         pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
-        # copy the .pem file for our internal repo on all nodes
-        # including ansible pod
-        # get it from URL
-        mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
-        )
-        dst = "/etc/pki/ca-trust/source/anchors/"
-        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        # prepare credential files for mirror.openshift.com
+        with prepare_mirror_openshift_credential_files() as (
+            mirror_user_file,
+            mirror_password_file,
+        ):
+            pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+            pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
+
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -576,21 +577,25 @@ class AWSUPI(AWSBase):
                 f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
                 user=self.rhel_worker_user,
             )
-            rhel_pod_obj.copy_to_server(
-                host,
-                pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
-                user=self.rhel_worker_user,
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host,
-                pem_dst_path,
-                f"sudo mv "
-                f'{os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f"{dst}",
-                user=self.rhel_worker_user,
-            )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=self.rhel_worker_user,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=self.rhel_worker_user,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")

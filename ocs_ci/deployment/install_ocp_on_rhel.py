@@ -7,6 +7,7 @@ import os
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import upload
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
     create_rhelpod,
@@ -51,7 +52,6 @@ class OCPINSTALLRHEL(object):
         self.pod_ssh_key_pem = os.path.join(
             constants.POD_UPLOADPATH, self.ssh_key_pem.split("/")[-1]
         )
-        self.ops_mirror_pem = os.path.join(f"{constants.DATA_DIR}", constants.OCP_PEM)
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.kubeconfig = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
@@ -93,7 +93,13 @@ class OCPINSTALLRHEL(object):
         """
         upload(self.pod_name, self.ssh_key_pem, constants.POD_UPLOADPATH)
         upload(self.pod_name, ocp_repo, constants.YUM_REPOS_PATH)
-        upload(self.pod_name, self.ops_mirror_pem, constants.PEM_PATH)
+        # prepare and copy credential files for mirror.openshift.com
+        with prepare_mirror_openshift_credential_files() as (
+            mirror_user_file,
+            mirror_password_file,
+        ):
+            upload(self.pod_name, mirror_user_file, constants.YUM_VARS_PATH)
+            upload(self.pod_name, mirror_password_file, constants.YUM_VARS_PATH)
         upload(self.pod_name, self.kubeconfig, constants.POD_UPLOADPATH)
         upload(self.pod_name, self.pull_secret_path, constants.POD_UPLOADPATH)
         if config.ENV_DATA["folder_structure"]:
@@ -214,19 +220,25 @@ class OCPINSTALLRHEL(object):
                 node, self.pod_ssh_key_pem, cmd, user=constants.VM_RHEL_USER
             )
 
-            # copy ops-mirror.pem
-            self.rhelpod.copy_to_server(
-                node,
-                self.pod_ssh_key_pem,
-                os.path.join(constants.PEM_PATH, constants.OCP_PEM),
-                constants.RHEL_TMP_PATH,
-                user=constants.VM_RHEL_USER,
-            )
-            pem_path_in_rhel = os.path.join(constants.RHEL_TMP_PATH, constants.OCP_PEM)
-            cmd = f"sudo cp {pem_path_in_rhel} {constants.PEM_PATH}"
-            self.rhelpod.exec_cmd_on_node(
-                node, self.pod_ssh_key_pem, cmd, user=constants.VM_RHEL_USER
-            )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                self.rhelpod.copy_to_server(
+                    node,
+                    self.pod_ssh_key_pem,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=constants.VM_RHEL_USER,
+                )
+                self.rhelpod.exec_cmd_on_node(
+                    node,
+                    self.pod_ssh_key_pem,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=constants.VM_RHEL_USER,
+                )
 
     def execute_ansible_playbook(self):
         """
