@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     vsphere_platform_required,
     skipif_ui_not_support,
     bugzilla,
+    ui,
 )
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -18,13 +19,14 @@ from ocs_ci.deployment.vmware import VSPHEREBASE
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.pv import get_pv_objs_in_sc
+from ocs_ci.ocs.resources.pv import check_available_pvs
 from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
 
 
 log = logging.getLogger(__name__)
 
 
+@ui
 @tier1
 @skipif_no_lso
 @bugzilla("1943280")
@@ -54,7 +56,7 @@ class TestFlexibleScalingUI(ManageTest):
 
         log.info(f"Add new disk to node {nodes}")
         vsphere_base = VSPHEREBASE()
-        vsphere_base.attach_disk_per_node(
+        vsphere_base.add_disks_per_node(
             size=config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
             disk_type=config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
             node_names=nodes,
@@ -65,7 +67,7 @@ class TestFlexibleScalingUI(ManageTest):
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=self.check_available_pvs,
+            func=check_available_pvs,
             expected_avaible_pvs=1,
         )
         if not sample.wait_for_func_status(True):
@@ -86,24 +88,3 @@ class TestFlexibleScalingUI(ManageTest):
             osd_encryption_verification()
 
         check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
-
-    def check_available_pvs(self, expected_available_pvs=1):
-        """
-        Verify the number of PVs on Available state is as expected
-
-        expected_available_pvs (int): expected number of PVs on Available state
-
-        Return:
-             bool: return True if the expected number of PVs equal to actual
-             number of PVs on Available state otherwise retun False
-
-        """
-        log.info(
-            f"Verify the number of PVs on Available state is {expected_available_pvs}"
-        )
-        pvs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
-        cnt_avaible_pvs = 0
-        for pv in pvs:
-            if pv["status"]["phase"] == constants.STATUS_AVAILABLE:
-                cnt_avaible_pvs += 1
-        return cnt_avaible_pvs == expected_available_pvs

@@ -130,7 +130,7 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type
                 )
 
-    def attach_disk_per_node(
+    def add_disks_per_node(
         self, size=100, disk_type=constants.VM_DISK_TYPE, node_names=None, extra_disks=1
     ):
         """
