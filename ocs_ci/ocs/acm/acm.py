@@ -16,7 +16,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import login_ui, PageNavigator
+from ocs_ci.ocs.ui.base_ui import login_ui
 
 log = logging.getLogger(__name__)
 
@@ -81,10 +81,17 @@ class AcmAddClusters(AcmPageNavigator):
                 log.error(f"import of cluster: {cluster_name} failed")
 
     def install_submariner_ui(self):
-        # self.navigate_clusters_page()
+        """
+        Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        """
+
+        self.navigate_clusters_page()
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
         log.info("Click on Cluster sets")
         self.do_click(self.page_nav["cluster-sets"])
+        self.page_has_loaded(retries=15, sleep_time=5)
         log.info("Click on Create cluster set")
         self.do_click(self.page_nav["create-cluster-set"])
         cluster_set_name = create_unique_resource_name("submariner", "clusterset")
@@ -92,21 +99,13 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
         log.info("Click on Create")
         self.do_click(self.page_nav["click-create"], enable_screenshot=True)
-        base_ui_obj = PageNavigator(self)
-        cluster_set_creation_status = base_ui_obj.get_element_text(self.page_nav["cluster-set-status"])
-        assert (
-            cluster_set_creation_status == "Cluster set successfully created"
-        ), f"Cluster set creation failed, status is '{cluster_set_creation_status}'"
+        time.sleep(1)
         log.info("Click on Manage resource assignments")
-        self.do_click(self.page_nav["click-manage-resource-assignments"])
+        self.do_click(
+            self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
+        )
         log.info("Select all Manage resource assignments")
         self.do_click(self.page_nav["select-all-assignments"])
-        # log.info("Click on local-cluster to deselect it")
-        # self.do_click(self.page_nav["click-local-cluster"], enable_screenshot=True)
-        # log.info("Select both the imported clusters for Manage resource assignments")
-        # self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name)
-        # self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        # self.do_clear(self.page_nav["search-cluster"])
         log.info("Search and deselect 'local-cluster'")
         self.do_send_keys(self.page_nav["search-cluster"], text="local-cluster")
         self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
@@ -116,8 +115,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
         log.info("Click on 'Save' to confirm the changes")
         self.do_click(self.page_nav["confirm-btn"], enable_screenshot=True)
-        base_ui_obj.refresh_page()
-        base_ui_obj.page_has_loaded(retries=15, sleep_time=5)
+        time.sleep(2)
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
@@ -125,58 +123,90 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
         log.info("Select 1st cluster")
-        self.do_click(format_locator(self.page_nav["cluster-name-selection"], cluster_name_a))
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-name-selection"],
+                string_to_insert=cluster_name_a,
+            )
+        )
         log.info("Select 2nd cluster")
-        self.do_click(format_locator(self.page_nav["cluster-name-selection"], cluster_name_b), enable_screenshot=True)
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-name-selection"],
+                string_to_insert=cluster_name_b,
+            ),
+            enable_screenshot=True,
+        )
+        log.info("Click on Next button")
+        self.do_click(self.page_nav["next-btn"])
+        log.info("Click on 'Enable NAT-T' to uncheck it")
+        self.do_click(self.page_nav["nat-t-checkbox"])
+        log.info(
+            "Increase the gateway count to 3 by clicking twice on the gateway count add button"
+        )
+        self.do_click(self.page_nav["gateway-count-btn"])
+        self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")
         self.do_click(self.page_nav["nat-t-checkbox"])
         log.info("Increase the gateway count to 3")
-        self.do_clear(self.page_nav["gateway-count"])
-        self.do_send_keys(self.page_nav["gateway-count"], text="3")
-        log.info("Click on Next button")
-        self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info("Increase the gateway count to 3")
-        self.do_clear(self.page_nav["gateway-count"])
-        self.do_send_keys(self.page_nav["gateway-count"], text="3")
+        self.do_click(self.page_nav["gateway-count-btn"])
+        self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
         log.info("Checking connection status of both the imported clusters")
-        connection_status_1 = base_ui_obj.wait_until_expected_text_is_found(locator=self.page_nav["connection-status-1"],
-                                                      expected_text="Healthy", timeout=600)
-        connection_status_2 = base_ui_obj.wait_until_expected_text_is_found(locator=self.page_nav["connection-status-2"],
-                                                      expected_text="Healthy", timeout=600)
-        assert connection_status_1, f"Connection status of cluster {cluster_name_a} is not Healthy"
-        assert connection_status_2, f"Connection status of cluster {cluster_name_b} is not Healthy"
+        connection_status_1 = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-1"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        connection_status_2 = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-2"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        assert (
+            connection_status_1
+        ), f"Connection status of cluster {cluster_name_a} is not Healthy"
+        assert (
+            connection_status_2
+        ), f"Connection status of cluster {cluster_name_b} is not Healthy"
 
         log.info("Checking agent status of both the imported clusters")
-        connection_status_1 = base_ui_obj.wait_until_expected_text_is_found(
+        connection_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
-            expected_text="Healthy", timeout=600)
-        connection_status_2 = base_ui_obj.wait_until_expected_text_is_found(
+            expected_text="Healthy",
+            timeout=600,
+        )
+        connection_status_2 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
-            expected_text="Healthy", timeout=600)
-        assert connection_status_1, f"Agent status of cluster {cluster_name_a} is not Healthy"
-        assert connection_status_2, f"Agent status of cluster {cluster_name_b} is not Healthy"
+            expected_text="Healthy",
+            timeout=600,
+        )
+        assert (
+            connection_status_1
+        ), f"Agent status of cluster {cluster_name_a} is not Healthy"
+        assert (
+            connection_status_2
+        ), f"Agent status of cluster {cluster_name_b} is not Healthy"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        connection_status_1 = base_ui_obj.wait_until_expected_text_is_found(
+        connection_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
-            expected_text="Nodes labeled", timeout=600)
-        connection_status_2 = base_ui_obj.wait_until_expected_text_is_found(
+            expected_text="Nodes labeled",
+            timeout=600,
+        )
+        connection_status_2 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
-            expected_text="Nodes labeled", timeout=600)
+            expected_text="Nodes labeled",
+            timeout=600,
+        )
         assert connection_status_1, f"Nodes of cluster {cluster_name_a} are not labeled"
         assert connection_status_2, f"Nodes of cluster {cluster_name_b} are not labeled"
-        log.info("Submariner add-ons is successful")
-
-
-global cluster_name_a
-global cluster_name_b
+        self.take_screenshot()
+        log.info("Submariner add-ons creation is successful")
 
 
 def copy_kubeconfig(file):
@@ -325,7 +355,9 @@ def import_clusters_with_acm():
     log.info(clusters_env)
     kubeconfig_a = clusters_env.get("kubeconfig_cl_a_location")
     kubeconfig_b = clusters_env.get("kubeconfig_cl_b_location")
+    global cluster_name_a
     cluster_name_a = clusters_env.get("cl_a_cluster_name")
+    global cluster_name_b
     cluster_name_b = clusters_env.get("cl_b_cluster_name")
     verify_running_acm()
     driver = login_to_acm()

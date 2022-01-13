@@ -119,7 +119,6 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase_new import CouchBase
-from ocs_ci.ocs.acm.acm import login_to_acm
 
 
 log = logging.getLogger(__name__)
@@ -266,7 +265,7 @@ def supported_configuration():
         pytest.xfail(err_msg)
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def auto_load_auth_config():
     try:
         auth_config = {"AUTH": load_auth_config()}
@@ -323,7 +322,7 @@ def secret_factory_fixture(request):
     return factory
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def log_ocs_version(cluster):
     """
     Fixture handling version reporting for OCS.
@@ -403,7 +402,7 @@ def pagerduty_service(request):
         return None
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def pagerduty_integration(request, pagerduty_service):
     """
     Create a new Pagerduty integration for service from pagerduty_service
@@ -1242,7 +1241,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
     return factory
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     """
     Configures polarion testsuite properties for junit xml
@@ -1258,7 +1257,7 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property("polarion-custom-isautomated", "True")
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     """
     Configures additional custom testsuite properties for junit xml
@@ -1303,7 +1302,7 @@ def tier_marks_name():
     return tier_marks_name
 
 
-@pytest.fixture(scope="function", autouse=False)
+@pytest.fixture(scope="function", autouse=True)
 def health_checker(request, tier_marks_name):
     skipped = False
     dev_mode = config.RUN["cli_params"].get("dev_mode")
@@ -1346,7 +1345,7 @@ def health_checker(request, tier_marks_name):
                 pytest.skip("Ceph health check failed at setup")
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def cluster(request, log_cli_level, record_testsuite_property):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
@@ -1433,7 +1432,7 @@ def log_cli_level(pytestconfig):
     return pytestconfig.getini("log_cli_level") or "DEBUG"
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def cluster_load(
     request,
     project_factory_session,
@@ -3154,7 +3153,7 @@ def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
 
 
-@pytest.fixture(autouse=False)
+@pytest.fixture(autouse=True)
 def log_alerts(request):
     """
     Log alerts at the beginning and end of each test case. At the end of test
@@ -3211,7 +3210,7 @@ def log_alerts(request):
     request.addfinalizer(_print_diff)
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def ceph_toolbox(request):
     """
     This fixture initiates ceph toolbox pod for manually created deployment
@@ -3683,7 +3682,7 @@ def multi_snapshot_restore_factory(snapshot_restore_factory):
     return factory
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def collect_logs_fixture(request):
     """
     This fixture collects ocs logs after tier execution and this will allow
@@ -3890,7 +3889,7 @@ def pvc_clone_factory(request):
     return factory
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def reportportal_customization(request):
     if config.REPORTING.get("rp_launch_url"):
         request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
@@ -4079,22 +4078,6 @@ def setup_ui(request):
     return setup_ui_fixture(request)
 
 
-@pytest.fixture(scope="function")
-def setup_ui_acm(request):
-    return setup_ui_acm_fixture(request)
-
-
-def setup_ui_acm_fixture(request):
-    driver = login_to_acm()
-
-    def finalizer():
-        close_browser(driver)
-
-    request.addfinalizer(finalizer)
-
-    return driver
-
-
 def setup_ui_fixture(request):
     driver = login_ui()
 
@@ -4106,7 +4089,7 @@ def setup_ui_fixture(request):
     return driver
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="session", autouse=True)
 def load_cluster_info_file(request):
     """
     This fixture tries to load cluster_info.json file if exists (on cluster

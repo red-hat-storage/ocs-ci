@@ -370,7 +370,7 @@ acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
-    "Infrastructure": ("Infrastructure", By.LINK_TEXT),
+    "Infrastructure": ("//button[normalize-space()='Infrastructure']", By.XPATH),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
     "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
     "Automation_page": ("Automation", By.LINK_TEXT),
@@ -386,47 +386,61 @@ acm_page_nav = {
     "Submit_import": ("//button[text()='Import']", By.XPATH),
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
     "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
-    "cluster-set-name": ("input[placeholder='Enter cluster set name']", By.CSS_SELECTOR),
+    "cluster-set-name": (
+        "input[placeholder='Enter cluster set name']",
+        By.CSS_SELECTOR,
+    ),
     "click-create": ("button[type='submit']", By.CSS_SELECTOR),
-    "click-manage-resource-assignments": ("//button[normalize-space()='Manage resource assignments']", By.XPATH),
+    "click-manage-resource-assignments": (
+        "//button[normalize-space()='Manage resource assignments']",
+        By.XPATH,
+    ),
     "select-all-assignments": ("input[aria-label='Select all']", By.CSS_SELECTOR),
-    "click-local-cluster": ("//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']", By.XPATH),
+    "click-local-cluster": (
+        "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
+        By.XPATH,
+    ),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
     "review-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
     "confirm-btn": ("button[type='submit']", By.CSS_SELECTOR),
-    "cluster-set-status": (".pf-c-modal-box__title-text", By.CSS_SELECTOR),
+    "cluster-set-status": ("//span[@class='pf-c-modal-box__title-text']", By.XPATH),
     "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
-    "install-submariner-btn": ("//button[normalize-space()='Install Submariner add-ons']", By.XPATH),
+    "install-submariner-btn": (
+        "//button[normalize-space()='Install Submariner add-ons']",
+        By.XPATH,
+    ),
     "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
-    "cluster-name-selection": ("//button[normalize-space()='{}']"),
+    "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
     "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
-    "gateway-count": ("input[value='1']", By.CSS_SELECTOR),
+    "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
     "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
-    "connection-status-1": ("(//button[@type='button'][normalize-space()='Healthy'])[1]", By.XPATH),
-    "connection-status-2": ("(//button[@type='button'][normalize-space()='Healthy'])[3]", By.XPATH),
-    "agent-status-1": ("(//button[@type='button'][normalize-space()='Healthy'])[2]", By.XPATH),
-    "agent-status-2": ("(//button[@type='button'][normalize-space()='Healthy'])[4]", By.XPATH),
-    "node-label-1": ("(//button[@type='button'][normalize-space()='Nodes labeled'])[1]", By.XPATH),
-    "node-label-2": ("(//button[@type='button'][normalize-space()='Nodes labeled'])[2]", By.XPATH),
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    "connection-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[1]",
+        By.XPATH,
+    ),
+    "connection-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[3]",
+        By.XPATH,
+    ),
+    "agent-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[2]",
+        By.XPATH,
+    ),
+    "agent-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[4]",
+        By.XPATH,
+    ),
+    "node-label-1": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[1]",
+        By.XPATH,
+    ),
+    "node-label-2": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[2]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {

@@ -121,22 +121,6 @@ class BaseUI:
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         return True if element.get_attribute("aria-expanded") == "true" else False
 
-    def is_expanded_for_acm(self, locator, timeout=30):
-        """
-        Check whether an element is in an expanded or collapsed state
-
-        Args:
-            locator (set): (GUI element needs to operate on (str), type (By))
-            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
-
-        return:
-            bool: True if element expended, False otherwise
-
-        """
-        wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
-        return True if element.get_attribute("aria-expanded") == "true" else False
-
     def choose_expanded_mode(self, mode, locator):
         """
         Select the element mode (expanded or collapsed)
@@ -717,7 +701,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 

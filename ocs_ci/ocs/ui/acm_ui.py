@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.ocs.ui.base_ui import BaseUI, PageNavigator
+from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 
@@ -42,7 +42,9 @@ class AcmPageNavigator(BaseUI):
 
         """
         log.info("Navigate into Clusters Page")
-        self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Infrastructure"])
+        self.choose_expanded_mode(
+            mode=True, locator=self.acm_page_nav["Infrastructure"]
+        )
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
 
     def navigate_bare_metal_assets_page(self):
