@@ -95,7 +95,7 @@ def measure_stop_ceph_mon(measurement_dir):
     logger.info(f"Monitors left to run: {mons[:split_index]}")
 
     # run_time of operation
-    run_time = 60 * 23
+    run_time = 60 * 14
 
     def stop_mon():
         """

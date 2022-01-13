@@ -62,7 +62,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
         (
             constants.ALERT_CLUSTERWARNINGSTATE,
             "Storage cluster is in degraded state",
-            ["pending", "firing"],
+            ["pending"],
             "warning",
         ),
     ]:
