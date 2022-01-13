@@ -127,7 +127,9 @@ def measure_stop_ceph_mon(measurement_dir, split_index):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, "measure_stop_ceph_mon.json")
+    test_file = os.path.join(
+        measurement_dir, f"measure_stop_ceph_mon_{split_index}.json"
+    )
     measured_op = measure_operation(stop_mon, test_file)
 
     # expected minimal downtime of a mon inflicted by this fixture
@@ -144,8 +146,9 @@ def measure_stop_ceph_mon(measurement_dir, split_index):
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
-        msg = f"Downscaled monitors {mons_to_stop} were not replaced"
-        assert check_old_mons_deleted, msg
+        if not split_index == 1:
+            msg = f"Downscaled monitors {mons_to_stop} were not replaced"
+            assert check_old_mons_deleted, msg
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal

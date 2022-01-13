@@ -97,7 +97,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
             constants.ALERT_MONQUORUMLOST,
             "Storage quorum is lost",
             ["pending", "firing"],
-            "error",
+            "critical",
         ),
         (
             constants.ALERT_CLUSTERERRORSTATE,
