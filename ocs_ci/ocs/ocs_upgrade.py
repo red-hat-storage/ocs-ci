@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility import version
+from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -276,17 +277,37 @@ class OCSUpgrade(object):
 
         """
 
+        live_deployment = config.DEPLOYMENT["live_deployment"]
+        upgrade_in_same_source = config.UPGRADE.get("upgrade_in_current_source", False)
         version_change = self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
-        if version_change:
+        # When upgrading to internal build of same version, we usually deploy from GAed (live) version.
+        # In this case, we need to reload config to get internal must-gather image back to default.
+        reload_config = (
+            not version_change and live_deployment and not upgrade_in_same_source
+        )
+        if version_change or reload_config:
             version_config_file = os.path.join(
                 constants.OCS_VERSION_CONF_DIR, f"ocs-{upgrade_version}.yaml"
             )
+            log.info(f"Reloading config file for OCS/ODF version: {upgrade_version}.")
             load_config_file(version_config_file)
         else:
             log.info(
                 f"Upgrade version {upgrade_version} is not higher than old version:"
                 f" {self.version_before_upgrade}, config file will not be loaded"
             )
+        overwrite_must_gather_image = config.REPORTING["overwrite_must_gather_image"]
+        if live_deployment and upgrade_in_same_source and overwrite_must_gather_image:
+            update_live_must_gather_image()
+        else:
+            if overwrite_must_gather_image:
+                must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
+                must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
+                log.info(
+                    f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
+                )
+                config.REPORTING["ocs_must_gather_image"] = must_gather_image
+                config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
     def get_csv_name_pre_upgrade(self):
         """

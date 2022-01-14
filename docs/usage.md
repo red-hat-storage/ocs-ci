@@ -83,7 +83,7 @@ to the pytest.
 ### Subcommand:
 * `multicluster <int>` - to be used if multiple clusters needs to be handled by ocs-ci, this subcommand is useful in the
    DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and `run-ci multicluster --help`.
-    
+
 
 ### Additional arguments:
 
@@ -114,7 +114,8 @@ to the pytest.
     adding multiple config files. (The last one overwrites previous config!)
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
-* `--live-deploy` - OCS-CI will use live content to deploy OCS.
+* `--live-deploy` - OCS-CI will use live content to deploy OCS and will also
+  update OCS/ODF must gather image to the GAed one.
 * `--teardown` - if this is given the testing cluster will be destroyed after
     the test have completed, regardless of if the tests passed or failed.
 * `--html` - to generate html reports of the test run
@@ -248,11 +249,11 @@ run-ci tests/
 
 #### Running tests on multicluster environment
 
-If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci. 
+If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci.
 ###### example 1:
 ```bash
 run-ci multicluster 2
-    tests/ -m tier1 
+    tests/ -m tier1
     --cluster1
     --cluster-name test_cluster1 --cluster-path test_cluster1_path
     --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
@@ -261,23 +262,23 @@ run-ci multicluster 2
     --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 `multicluster` cluster subcommand is slightly different from usual CLI used in run-ci.
-`multicluster` subcommand should be followed by an integer which indicates how many clusters we want to handle with this run, which 
+`multicluster` subcommand should be followed by an integer which indicates how many clusters we want to handle with this run, which
 will be followed by common arguments like pytest directory path, pytest markers, `deploy`, `teardown` etc. All the common options should appear before
-any cluster specific options in the CLI. 
+any cluster specific options in the CLI.
 Towards the end of CLI, user needs to pass individual cluster specific arguments with cluster sequence numbers like `--cluster1 <cluster1 options>`, `--cluster2 <cluster2 options>` so on.
-Cluster specific options will be passed within `--cluster<n>` argument boundary i.e. anything starting from `--cluster1` and before `--cluster2` will be considered 
+Cluster specific options will be passed within `--cluster<n>` argument boundary i.e. anything starting from `--cluster1` and before `--cluster2` will be considered
 as arguments of `cluster1`.
 
 ###### example 2:
 Passing common arguments to cluster:
 ```bash
-run-ci multicluster 2 
+run-ci multicluster 2
     tests/ -m tier1 --ocsci-conf common-conf.yaml
-    --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \ 
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 
+    --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
     --cluster2
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path 
-    --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2 
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path
+    --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 In the above example `common-conf.yaml` configuration will be applied on both the clusters.
 

@@ -3,6 +3,7 @@ from getpass import getuser
 
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
 
 log = logging.getLogger(__name__)
 
@@ -97,3 +98,16 @@ def get_rp_launch_description():
     if logs_url:
         description += f"Logs URL: {logs_url}\n"
     return description
+
+
+def update_live_must_gather_image():
+    """
+    Update live must gather image in the config.
+    """
+    odf_ocs = "odf" if get_semantic_ocs_version_from_config() >= VERSION_4_9 else "ocs"
+    must_gather_tag = f"v{config.ENV_DATA['ocs_version']}"
+    must_gather_image = config.REPORTING[f"{odf_ocs}_live_must_gather_image"]
+    live_must_gather_image = f"{must_gather_image}:{must_gather_tag}"
+    log.info(f"Setting live must gather image to: {live_must_gather_image}")
+    config.REPORTING["default_ocs_must_gather_latest_tag"] = must_gather_tag
+    config.REPORTING["ocs_must_gather_image"] = must_gather_image
