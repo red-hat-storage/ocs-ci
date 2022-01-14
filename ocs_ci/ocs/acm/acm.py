@@ -88,6 +88,7 @@ class AcmAddClusters(AcmPageNavigator):
         """
 
         self.navigate_clusters_page()
+        self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
         log.info("Click on Cluster sets")
         self.do_click(self.page_nav["cluster-sets"])
@@ -115,7 +116,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
         log.info("Click on 'Save' to confirm the changes")
         self.do_click(self.page_nav["confirm-btn"], enable_screenshot=True)
-        time.sleep(2)
+        time.sleep(3)
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
@@ -157,6 +158,13 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+    def submariner_validation_ui(self):
+        """
+        Checks available status of imported clusters after submariner creation
+
+        """
+
         log.info("Checking connection status of both the imported clusters")
         connection_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],

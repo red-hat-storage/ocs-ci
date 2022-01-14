@@ -1,6 +1,6 @@
 from ocs_ci.ocs.acm.acm import import_clusters_with_acm
 from ocs_ci.ocs.acm.acm import AcmAddClusters
-from ocs_ci.ocs.acm.acm import login_to_acm
+
 
 ####################################################################################################
 # This file is placeholder for calling import ACM as test, until full solution will be implimented #
@@ -9,6 +9,10 @@ from ocs_ci.ocs.acm.acm import login_to_acm
 
 def test_import_acm():
     import_clusters_with_acm()
-    driver = login_to_acm()
-    acm_obj = AcmAddClusters(driver)
+
+
+def test_submariner_acm_ui(setup_acm_ui):
+
+    acm_obj = AcmAddClusters(setup_acm_ui)
     acm_obj.install_submariner_ui()
+    acm_obj.submariner_validation_ui()

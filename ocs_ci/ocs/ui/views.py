@@ -384,6 +384,8 @@ acm_page_nav = {
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
     "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
+}
+acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
     "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
     "cluster-set-name": (
@@ -672,7 +674,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
-        "acm_page": acm_page_nav,
+        "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
