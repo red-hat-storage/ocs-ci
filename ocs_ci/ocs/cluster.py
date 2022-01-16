@@ -880,7 +880,16 @@ class CephCluster(object):
             return
 
         # Delete the RBD pool
-        self.RBD.delete(resource_name=pool_name)
+        try:
+            self.RBD.delete(resource_name=pool_name)
+        except Exception:
+            logger.warning(f"BlockPoool {pool_name} couldnt delete")
+            logger.info("Try to force delete it")
+            patch = (
+                f"cephblockpool {pool_name} --type=merge -p "
+                '\'{"metadata":{"finalizers":null}}\''
+            )
+            self.RBD.exec_oc_cmd(f"patch {patch}")
         self.RBD.wait_for_delete(resource_name=pool_name)
 
 

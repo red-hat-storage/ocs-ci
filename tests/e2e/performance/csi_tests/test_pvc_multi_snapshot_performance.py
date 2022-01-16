@@ -31,9 +31,9 @@ from ocs_ci.framework.testlib import ignore_leftovers
 
 log = logging.getLogger(__name__)
 
-# error message to look in a command output
+# Error message to look in a command output
 ERRMSG = "Error in command"
-# Time formattin in the csi-driver logs
+# Time formatting in the csi-driver logs
 time_format = "%H:%M:%S.%f"
 
 
@@ -49,7 +49,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     def setup(self):
         """
         Setting up the test environment :
-            Calculating the amount of storage which avaliable for the test
+            Calculating the amount of storage which available for the test
             Creating namespace (project) for the test
 
         """
@@ -75,10 +75,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             self.proj = helpers.create_project(project_name=self.nss_name)
         except CommandFailed as ex:
             if str(ex).find("(AlreadyExists)"):
-                log.warning("The Namespace is Already Exists, continue the test")
-            else:
-                log.error("Can not create new project")
-                raise CommandFailed(f"{self.nss_name} was not created")
+                log.warning("The Namespace is Already Exists !")
+            log.error("Can not create new project")
+            raise CommandFailed(f"{self.nss_name} was not created")
 
         # Initialize a general Snapshot object to use in the test
         self.snapshot = OCP(kind="volumesnapshot", namespace=self.nss_name)
@@ -88,7 +87,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         Cleaning up the environment :
             Delete all snapshot
             Delete the POD
-            Delete the PVC
+            Delete the PVC and the PV
             Delete the StorageClass
             Delete the VolumeSnapshotClass
             Delete the data pool
@@ -98,14 +97,22 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info("Cleanup the test environment")
 
-        # Deleting al snapshots from the cluster
-        """
+        # Getting the name of the PCV's backed PV
+        try:
+            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
+        except KeyError:
+            log.error(
+                f"Can not found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
+            )
+
+        # Getting the list of all snapshots
         try:
             snapshot_list = self.snapshot.get(all_namespaces=True)["items"]
         except Exception as err:
             log.error(f"Cannot get the list of snapshots : {err}")
             snapshot_list = []
 
+        # Deleting al snapshots from the cluster
         log.info(f"Trying to delete all ({len(snapshot_list)}) Snapshots")
         log.debug(
             f"The list of all snapshots is : {json.dumps(snapshot_list, indent=3)}"
@@ -117,7 +124,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                 self.snapshot.delete(resource_name=snap_name)
             except Exception as err:
                 log.error(f"Can not delete {snap_name} : {err}")
-        """
 
         # Deleting the pod which wrote data to the pvc
         log.info(f"Deleting the test POD : {self.pod_obj.name}")
@@ -129,7 +135,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(f"Can not delete the test pod : {ex}")
 
         # Deleting the PVC which used in the test.
-        pv = self.pvc_obj.get("spec")["volumeName"]
         log.info(f"Delete the PVC : {self.pvc_obj.name}")
         try:
             self.pvc_obj.delete()
@@ -165,7 +170,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(f"Can not delete the test vsc : {ex}")
 
         # Deleting the Data pool
-        log.info(f"Deleting the test stotrage pool : {self.sc_name}")
+        log.info(f"Deleting the test storage pool : {self.sc_name}")
         self.delete_ceph_pool(self.sc_name)
         # Verify deletion by checking the backend CEPH pools using the toolbox
         results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
@@ -179,7 +184,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         else:
             log.info(f"The pool {self.sc_name} was deleted successfully")
 
-        # Deleteing the namespace used by the test
+        # Deleting the namespace used by the test
         log.info(f"Deleting the test namespace : {self.nss_name}")
         switch_to_default_rook_cluster_project()
         try:
@@ -258,25 +263,26 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
     def create_snapshotclass(self, interface):
         """
-        Creates own volumesnapshotclass
+        Creates own VolumeSnapshotClass
 
         Args:
             interface (str): Interface type used
 
         Returns:
-            ocs_obj (obj): Snapshotclass obj instances
+            ocs_obj (obj): SnapshotClass obj instances
 
         """
         if interface == constants.CEPHFILESYSTEM:
-            snapshotclass_data = templating.load_yaml(
-                constants.CSI_CEPHFS_SNAPSHOTCLASS_YAML
-            )
             snapclass_name = "pas-test-cephfs-snapshot-class"
         else:
-            snapshotclass_data = templating.load_yaml(
-                constants.CSI_RBD_SNAPSHOTCLASS_YAML
-            )
             snapclass_name = "pas-test-rbd-snapshot-class"
+
+        yaml_files = {
+            constants.CEPHBLOCKPOOL: constants.CSI_RBD_SNAPSHOTCLASS_YAML,
+            constants.CEPHFILESYSTEM: constants.CSI_CEPHFS_SNAPSHOTCLASS_YAML,
+        }
+        snapshotclass_data = templating.load_yaml(yaml_files[interface])
+
         snapshotclass_data["metadata"]["name"] = snapclass_name
         ocs_obj = ocs.OCS(**snapshotclass_data)
         log.info(f"Creating new snapshot class : {snapclass_name}")
@@ -314,15 +320,14 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             yaml.dump(self.snap_templ, f, default_flow_style=False)
 
         res = run_oc_command(cmd=f"create -f {tmpfile}", namespace=self.nss_name)
-        # res = run_oc_command(cmd=f"create -f {tmpfile}")
         if ERRMSG in res[0]:
             err_msg = f"Failed to create snapshot : {res}"
             log.error(err_msg)
             raise Exception(err_msg)
 
         # wait until snapshot is ready
-        timeout = 600
-        sleep_time = 5
+        timeout = 720
+        sleep_time = 10
         snap_con_name = None
         while timeout > 0:
             res = run_oc_command(
@@ -359,8 +364,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         else:
             err_msg = "Snapshot did not created on time"
             log.error(err_msg)
-            log.info("Sleep for debugging.........")
-            time.sleep(7200)
             raise TimeoutError(err_msg)
 
     def read_logs(self, kind, namespace, start_time):
@@ -412,36 +415,30 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
 
         # Start and End snapshot creation time
-        st, et = (None, None)
+        times = {"start": None, "end": None}
+        logs_info = {
+            "start": {
+                "ns": "openshift-cluster-storage-operator",
+                "log_line": "Creating content for snapshot",
+            },
+            "end": {"ns": "openshift-storage", "log_line": "readyToUse true"},
+        }
 
-        logs = self.read_logs("start", "openshift-cluster-storage-operator", start_time)
-        for sublog in logs:
-            for line in sublog:
-                if snap_name in line and "Creating content for snapshot" in line:
-                    st = line.split(" ")[1]
-                    st = datetime.datetime.strptime(st, time_format)
+        for op in ["start", "end"]:
+            logs = self.read_logs(op, logs_info[op]["ns"])
+            for sublog in logs:
+                for line in sublog:
+                    if snap_name in line and logs_info[op]["log_line"] in line:
+                        times[op] = line.split(" ")[1]
+                        times[op] = datetime.datetime.strptime(times[op], time_format)
+            if times[op] is None:
+                err_msg = f"Can not find {op} time of {snap_name}"
+                log.error(err_msg)
+                raise Exception(err_msg)
 
-        if st is None:
-            err_msg = f"Can not find start time of {snap_name}"
-            log.error(err_msg)
-            raise Exception(err_msg)
-
-        # Getting end creation time
-        logs = self.read_logs("end", "openshift-storage", start_time)
-        for sublog in logs:
-            for line in sublog:
-                if content_name in line and "readyToUse true" in line:
-                    et = line.split(" ")[1]
-                    et = datetime.datetime.strptime(et, time_format)
-
-        if et is None:
-            err_msg = f"Can not find end time of {snap_name}"
-            log.error(err_msg)
-            raise Exception(err_msg)
-
-        results = (et - st).total_seconds()
+        results = (times["end"] - times["start"]).total_seconds()
         log.debug(
-            f"Start creation time is : {st}, End creation time is : {et}"
+            f"Start creation time is : {times['start']}, End creation time is : {times['end']}"
             f" and Total creation time is {results}"
         )
 
@@ -476,13 +473,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     @pytest.mark.parametrize(
         argnames=["interface_type", "snap_number"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL, 250]),
+            pytest.param(*[constants.CEPHBLOCKPOOL, 512]),
             pytest.param(*[constants.CEPHFILESYSTEM, 100]),
         ],
     )
     def test_pvc_multiple_snapshot_performance(
         self,
-        storageclass_factory,
         pvc_factory,
         pod_factory,
         secret_factory,
@@ -506,10 +502,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         """
 
-        # Number od snapshot for CephFS is 100 and for RBD is 512
         self.num_of_snaps = snap_number
         if self.dev_mode:
             self.num_of_snaps = 2
+
         log.info(f"Going to Create {self.num_of_snaps} {interface_type} snapshots")
 
         # since we do not want to use more then 65%, we add 35% to the needed
@@ -542,14 +538,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.create_new_pool(self.sc_name)
 
         # Creating new StorageClass (pool) for the test.
-        log.info(f"Creating SC : {self.sc_name}")
-        # self.sc_obj = storageclass_factory(
-        #    interface=self.interface,
-        #    sc_name=self.sc_name,
-        #    pool_name=self.sc_name,
-        #    # replica=3,
-        #    # new_rbd_pool=False,
-        # )
         secret = secret_factory(interface=self.interface)
         self.sc_obj = helpers.create_storage_class(
             interface_type=self.interface,
@@ -557,15 +545,14 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             secret_name=secret.name,
             sc_name=self.sc_name,
             fs_name=self.sc_name,
-            # reclaim_policy=reclaim_policy,
         )
-
         log.info(f"The new SC is : {self.sc_obj.name}")
         log.debug(f"All Sc data is {json.dumps(self.sc_obj.data, indent=3)}")
 
         # Create new VolumeSnapshotClass
         self.snap_class = self.create_snapshotclass(self.interface)
 
+        # Create new PVC
         log.info(f"Creating {self.pvc_size} GiB PVC of {interface_type}")
         self.pvc_obj = pvc_factory(
             interface=self.interface,
@@ -575,6 +562,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             project=self.proj,
         )
 
+        # Create POD which will attache to the new PVC
         log.info("Creating A POD")
         self.pod_obj = pod_factory(
             interface=self.interface,
