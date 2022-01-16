@@ -405,6 +405,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             snap_name (str): the snapshot name that create
             content_name (str): the content name of the snapshot, the end time
              lodged on the content name and not on the snap name.
+            start_time (time): time of test starting so, retrieving log will be short as possible
 
         Returns:
             int: creation time in seconds
@@ -425,10 +426,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         }
 
         for op in ["start", "end"]:
-            logs = self.read_logs(op, logs_info[op]["ns"])
+            logs = self.read_logs(op, logs_info[op]["ns"], start_time)
             for sublog in logs:
                 for line in sublog:
-                    if snap_name in line and logs_info[op]["log_line"] in line:
+                    if (snap_name in line or content_name in line) and logs_info[op][
+                        "log_line"
+                    ] in line:
                         times[op] = line.split(" ")[1]
                         times[op] = datetime.datetime.strptime(times[op], time_format)
             if times[op] is None:
