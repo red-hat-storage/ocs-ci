@@ -47,7 +47,7 @@ setup(
         "google-cloud-storage==1.29.0",
         "google-auth==1.35.0",
         "elasticsearch==7.14.0",
-        "numpy==1.19.5",
+        "numpy==1.21.0",
         "python-ipmi==0.4.2",
         "scipy==1.6.0",
         "PrettyTable==0.7.2",
