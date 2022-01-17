@@ -446,3 +446,7 @@ class BenchmarkTestFailed(Exception):
 
 class WrongVersionExpression(ValueError):
     pass
+
+
+class DebugPodCreateFailed(Exception):
+    pass

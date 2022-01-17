@@ -13,6 +13,7 @@ import copy
 
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    DebugPodCreateFailed,
     NotSupportedFunctionError,
     NonUpgradedImagesFoundError,
     ResourceWrongStatusException,
@@ -159,7 +160,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    @retry(CommandFailed, tries=3, delay=5, backoff=1)
+    @retry(DebugPodCreateFailed, tries=3, delay=5, backoff=1)
     def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
@@ -174,6 +175,8 @@ class OCP(object):
 
         Raises:
             CommandFailed: When failure in command execution
+            DebugPodCreateFailed: in case of debug pod creation fails
+
         """
         # Appending one empty value in list for string manipulation
         create_cmd_list = copy.deepcopy(cmd_list)
@@ -186,6 +189,8 @@ class OCP(object):
         )
         if err_msg in out:
             raise CommandFailed
+        elif "error:" in out:
+            raise DebugPodCreateFailed
         else:
             return out
 
