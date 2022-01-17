@@ -74,7 +74,7 @@ setup(
         "pyopenssl",
         "pyparsing ==2.4.7",
         "mysql-connector-python==8.0.27",
-        "pexpect>=4.8.0",
+        "pytest-repeat",
     ],
     entry_points={
         "console_scripts": [
