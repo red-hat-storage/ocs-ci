@@ -82,7 +82,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
 @tier4a
 @bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
-@pytest.mark.parametrize("split_index", [1])
+@pytest.mark.parametrize("stop_ceph_mon_num", [True])
 def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
     """
     Test to verify that CephMonQuorumLost alert is seen and
@@ -103,7 +103,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
             constants.ALERT_CLUSTERERRORSTATE,
             "Storage cluster is in error state",
             ["pending", "firing"],
-            "error",
+            "critical",
         ),
     ]:
         prometheus.check_alert_list(

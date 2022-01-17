@@ -76,15 +76,28 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def split_index(split_index=None):
-    return split_index
+def stop_ceph_mon_num(stop_ceph_mon_num=False):
+    """
+    Number of mon to go down in the cluster, so that accordingly
+    CephMonQuorumRisk or CephMonQuorumLost alerts are seen
+
+    Args:
+        stop_ceph_mon_num (bool): True, if mon quorum to be lost. False Otherwise.
+
+    Returns:
+        stop_ceph_mon_num (bool): True, if all mons down expect one mon
+            so that mon quorum lost. Otherwise False
+
+    """
+    return stop_ceph_mon_num
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir, split_index):
+def measure_stop_ceph_mon(measurement_dir, stop_ceph_mon_num):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
+
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
             Ceph Monitor pod
@@ -95,8 +108,10 @@ def measure_stop_ceph_mon(measurement_dir, split_index):
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
-    # get monitor deployments to stop, leave even number of monitors
-    split_index = split_index if split_index else len(mons) // 2 if len(mons) > 3 else 2
+    # get monitor deployments to stop,
+    # if mon quorum to be lost split_index will be 1
+    # else leave even number of monitors
+    split_index = 1 if stop_ceph_mon_num else len(mons) // 2 if len(mons) > 3 else 2
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
