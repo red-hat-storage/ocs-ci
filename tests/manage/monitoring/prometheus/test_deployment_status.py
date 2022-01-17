@@ -82,7 +82,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
 @tier4a
 @bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
-@pytest.mark.parametrize("stop_ceph_mon_num", [True])
+@pytest.mark.parametrize("create_mon_quorum_loss", [True])
 def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
     """
     Test to verify that CephMonQuorumLost alert is seen and

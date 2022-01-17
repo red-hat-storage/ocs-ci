@@ -76,24 +76,24 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def stop_ceph_mon_num(stop_ceph_mon_num=False):
+def create_mon_quorum_loss(create_mon_quorum_loss=False):
     """
     Number of mon to go down in the cluster, so that accordingly
     CephMonQuorumRisk or CephMonQuorumLost alerts are seen
 
     Args:
-        stop_ceph_mon_num (bool): True, if mon quorum to be lost. False Otherwise.
+        mon_quorum_lost (bool): True, if mon quorum to be lost. False Otherwise.
 
     Returns:
-        stop_ceph_mon_num (bool): True, if all mons down expect one mon
+        mon_quorum_lost (bool): True, if all mons down expect one mon
             so that mon quorum lost. Otherwise False
 
     """
-    return stop_ceph_mon_num
+    return create_mon_quorum_loss
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir, stop_ceph_mon_num):
+def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -111,7 +111,9 @@ def measure_stop_ceph_mon(measurement_dir, stop_ceph_mon_num):
     # get monitor deployments to stop,
     # if mon quorum to be lost split_index will be 1
     # else leave even number of monitors
-    split_index = 1 if stop_ceph_mon_num else len(mons) // 2 if len(mons) > 3 else 2
+    split_index = (
+        1 if create_mon_quorum_loss else len(mons) // 2 if len(mons) > 3 else 2
+    )
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
