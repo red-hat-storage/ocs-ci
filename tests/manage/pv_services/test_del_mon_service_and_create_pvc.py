@@ -33,7 +33,6 @@ POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPAC
 @tier4a
 @ignore_leftovers
 @skipif_external_mode
-@skipif_ocs_version("<4.6")
 class TestPvcCreationAfterDelMonService(E2ETest):
     """
     Tests to verify PVC creation after deleting
@@ -41,6 +40,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     """
 
     @bugzilla("1858195")
+    @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
@@ -305,6 +305,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         request.addfinalizer(finalizer)
 
     @bugzilla("1969733")
+    @skipif_ocs_version("<4.7")
     @pytest.mark.polarion_id("OCS-2611")
     def test_del_mon_svc(
         self, multi_pvc_factory, validate_all_mon_svc_are_up_at_teardown
