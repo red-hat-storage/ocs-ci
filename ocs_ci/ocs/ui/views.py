@@ -141,6 +141,11 @@ deployment_4_9 = {
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
 }
 
+deployment_4_10 = {
+    "mcg_only_option_4_10": ("//span[text()='MultiCloud Object Gateway']", By.XPATH),
+    "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
+}
+
 generic_locators = {
     "project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
@@ -322,6 +327,12 @@ pvc_4_8 = {
     "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 
+pvc_4_9 = {
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+}
+
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -369,6 +380,10 @@ acm_page_nav = {
     "Credentials": ("Credentials", By.LINK_TEXT),
     "Import_cluster": ("importCluster", By.ID),
     "Import_cluster_enter_name": ("clusterName", By.ID),
+    "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
+    "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
+    "Submit_import": ("//button[text()='Import']", By.XPATH),
 }
 
 add_capacity = {
@@ -519,7 +534,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-storagesystem-status": (
-        "//*[@data-test='status-text']",
+        "//*[text()= 'Ready']",
         By.XPATH,
     ),
     "ocs-storagecluster-storagesystem": (
@@ -537,7 +552,7 @@ validation_4_9 = {
     "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
     "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
     "ocs-storagecluster-cephblockpool-status": (
-        "//*[@data-test='status-text']",
+        "//*[text()= 'Ready']",
         By.XPATH,
     ),
     "ocs-storagecluster-cephblockpool": (
@@ -548,7 +563,7 @@ validation_4_9 = {
         "//*[@data-test='OpenShift Data Foundation-health-item-icon']//*[@aria-labelledby='icon-title-403']",
         By.XPATH,
     ),
-    "odf-capacityCardLink": ("//a[@class='odf-capacityCardLink--ellipsis']", By.XPATH),
+    "odf-capacityCardLink": (".odf-capacityCardLink--ellipsis", By.CSS_SELECTOR),
     "odf-performanceCardLink": (
         "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
@@ -568,10 +583,32 @@ validation_4_9 = {
     "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "storage-system-on-installed-operators": (
+        "a[title='storagesystems.odf.openshift.io']",
+        By.CSS_SELECTOR,
+    ),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    "ocs-storagecluster-storgesystem": (
+        ".co-resource-item__resource-name[data-test-operand-link='ocs-storagecluster-storagesystem']",
+        By.CSS_SELECTOR,
+    ),
+    "resources-tab": ("a[data-test-id='horizontal-link-Resources']", By.CSS_SELECTOR),
+    "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
+    "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
 }
 
 locators = {
+    "4.10": {
+        "login": login,
+        "page": page_nav,
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+        },
+    },
     "4.9": {
         "login": login,
         "page": page_nav,
@@ -580,6 +617,7 @@ locators = {
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "acm_page": acm_page_nav,
         "add_capacity": add_capacity,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.8": {
         "login": login,

@@ -337,9 +337,12 @@ class PageNavigator(BaseUI):
         super().__init__(driver)
         self.ocp_version = get_ocp_version()
         self.page_nav = locators[self.ocp_version]["page"]
-        ocs_version = version.get_semantic_ocs_version_from_config()
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.operator_name = (
-            ODF_OPERATOR if ocs_version >= version.VERSION_4_9 else OCS_OPERATOR
+            ODF_OPERATOR
+            if self.ocs_version_semantic >= version.VERSION_4_9
+            else OCS_OPERATOR
         )
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.generic_locators = locators[self.ocp_version]["generic"]
@@ -441,7 +444,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=25, sleep_time=10)
 
     def navigate_to_ocs_operator_page(self):
         """

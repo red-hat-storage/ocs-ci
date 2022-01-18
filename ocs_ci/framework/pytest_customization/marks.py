@@ -205,6 +205,10 @@ managed_service_required = pytest.mark.skipif(
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
+kms_config_required = pytest.mark.skipif(
+    load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
+    reason="Vault config not found in auth.yaml",
+)
 
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"

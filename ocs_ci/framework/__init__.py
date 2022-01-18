@@ -134,6 +134,7 @@ class MultiClusterConfig:
         self.multicluster = False
         # A list of lists which holds CLI args clusterwise
         self.multicluster_args = list()
+        self.multicluster_common_args = list()
         # Points to cluster config objects which holds ACM cluster conf
         # Applicable only if we are deploying ACM cluster
         self.acm_index = None
@@ -190,6 +191,11 @@ class MultiClusterConfig:
 
     def switch_acm_ctx(self):
         self.switch_ctx(self.acm_index)
+
+    def switch_default_cluster_ctx(self):
+        # We can check any conf for default_cluster_context_index
+        # because its a common arg
+        self.switch_ctx(self.cluster_ctx.ENV_DATA["default_cluster_context_index"])
 
 
 config = MultiClusterConfig()

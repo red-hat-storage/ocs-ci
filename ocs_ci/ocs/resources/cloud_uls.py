@@ -106,14 +106,15 @@ def cloud_uls_factory(request, cld_mgr):
     def uls_cleanup():
         for cloud, uls_set in all_created_uls.items():
             client = ulsMap.get(cloud)
-            if client is not None:
-                all_existing_uls = client.get_all_uls_names()
-                for uls in uls_set:
-                    if uls in all_existing_uls:
-                        log.info(f"Cleaning up uls {uls}")
-                        client.delete_uls(uls)
-                    else:
-                        log.warning(f"Underlying Storage {uls} not found.")
+            if len(uls_set) == 0 or client is None:
+                continue
+            all_existing_uls = client.get_all_uls_names()
+            for uls in uls_set:
+                if uls in all_existing_uls:
+                    log.info(f"Cleaning up uls {uls}")
+                    client.delete_uls(uls)
+                else:
+                    log.warning(f"Underlying Storage {uls} not found.")
 
     request.addfinalizer(uls_cleanup)
 

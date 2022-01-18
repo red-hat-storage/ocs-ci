@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import stat
 import tempfile
 from time import sleep
 
@@ -43,7 +44,6 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 import subprocess
-import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -185,7 +185,10 @@ class MCG:
                     not pods
                 ), "RGW pods should not exist in the current platform/cluster"
 
-        elif config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
+        elif (
+            config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
+            and not config.ENV_DATA["mcg_only_deployment"]
+        ):
             rgw_count = get_rgw_count(
                 config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
             )
@@ -956,7 +959,9 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
-    @retry(NoobaaCliChecksumFailedException, tries=10, delay=15, backoff=1)
+    @retry(
+        (NoobaaCliChecksumFailedException, CommandFailed), tries=5, delay=15, backoff=1
+    )
     def retrieve_noobaa_cli_binary(self):
         """
         Copy the NooBaa CLI binary from the operator pod
@@ -992,12 +997,41 @@ class MCG:
             not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             or not _compare_cli_hashes()
         ):
-            cmd = (
-                f"oc cp {self.namespace}/{self.operator_pod.name}:"
-                f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f" {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            logger.info(
+                f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
+                " attempting to copy it from the MCG operator pod"
             )
-            subprocess.run(cmd, shell=True)
+            local_mcg_cli_dir = os.path.dirname(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            remote_mcg_cli_basename = os.path.basename(
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            # The MCG CLI retrieval process is known to be flaky
+            # and there's an active BZ regardaing it -
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
+            # rsync should be more reliable than cp, thus the use of oc rsync.
+            if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
+                cmd = (
+                    f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
+                    f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                    f" {local_mcg_cli_dir}"
+                )
+                exec_cmd(cmd)
+                os.rename(
+                    os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
+                    constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+                )
+            else:
+                cmd = (
+                    f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                    f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                    f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+                )
+                proc = subprocess.run(cmd, shell=True, capture_output=True)
+                logger.info(
+                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
+                )
             # Add an executable bit in order to allow usage of the binary
             current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             os.chmod(

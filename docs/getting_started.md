@@ -28,7 +28,13 @@ There are additional prerequisites if you plan to execute AWS UPI deployments
 Along with AWS UPI prerequisites we need following
 
 1. openshift-dev.pem needs to be available to ocs-ci
-2. provide ops-mirror.pem in data/ directory [ops-mirror](https://github.com/openshift/shared-secrets/blob/master/mirror/ops-mirror.pem).
+2. provide authentication credentials for mirror.openshift.com in `auth.yaml`:
+
+```yaml
+mirror_openshift:
+  user: "USERNAME"
+  password: "PASSWORD"
+```
 
 #### vSphere IPI
 Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
@@ -99,6 +105,7 @@ an ES server need to be deployed in the LAB, and the IP/Port need to be configur
 
 All elasticsearch configuration done in the `ocs_ci/framework/conf/default_config.yaml` at the `PERF:` section.
 
+For creating a new performance test, pleas use the template from : `template_test/Performance_template.py`
 ### Pull Secret
 
 In order to deploy a cluster to AWS with the Openshift Installer,

@@ -1251,26 +1251,27 @@ def add_squad_analysis_to_email(session, soup):
     # sort out failed and skipped test cases to failed and skipped dicts
     for result in session.results.values():
         if result.failed or result.skipped:
-            unassigned = True
-            for squad, res in constants.SQUADS.items():
-                for item in res:
-                    if item in result.nodeid:
-                        if result.failed:
-                            if squad not in failed:
-                                failed[squad] = []
-                            failed[squad].append(result.nodeid)
-                            unassigned = False
+            squad_marks = [
+                key[:-6].capitalize() for key in result.keywords if "_squad" in key
+            ]
+            if squad_marks:
+                for squad in squad_marks:
+                    if result.failed:
+                        if squad not in failed:
+                            failed[squad] = []
+                        failed[squad].append(result.nodeid)
 
-                        if result.skipped:
-                            if squad not in skipped:
-                                skipped[squad] = []
-                            try:
-                                skipped_message = result.longrepr[2][8:]
-                            except TypeError:
-                                skipped_message = "--unknown--"
-                            skipped[squad].append((result.nodeid, skipped_message))
-                            unassigned = False
-            if unassigned:
+                    if result.skipped:
+                        if squad not in skipped:
+                            skipped[squad] = []
+                        try:
+                            skipped_message = result.longrepr[2][8:]
+                        except TypeError:
+                            skipped_message = "--unknown--"
+                        skipped[squad].append((result.nodeid, skipped_message))
+
+            else:
+                # unassigned
                 if result.failed:
                     if "UNASSIGNED" not in failed:
                         failed["UNASSIGNED"] = []
@@ -2122,8 +2123,8 @@ def get_ocs_olm_operator_tags(limit=100):
     headers = {"Authorization": f"Bearer {quay_access_token}"}
     image = "ocs-registry"
     try:
-        ocs_version = float(config.ENV_DATA.get("ocs_version"))
-        if ocs_version < 4.5:
+        ocs_version = version_module.get_semantic_ocs_version_from_config()
+        if ocs_version < version_module.VERSION_4_5:
             image = "ocs-olm-operator"
     except (ValueError, TypeError):
         log.warning("Invalid ocs_version given, defaulting to ocs-registry image")
@@ -2475,14 +2476,11 @@ def skipif_ocp_version(expressions):
         'True' if test needs to be skipped else 'False'
 
     """
-    skip_this = True
     ocp_version = get_running_ocp_version()
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    for expr in expr_list:
-        comparision_str = ocp_version + expr
-        skip_this = skip_this and eval(comparision_str)
-    # skip_this will be either True or False after eval
-    return skip_this
+    return any(
+        version_module.compare_versions(ocp_version + expr) for expr in expr_list
+    )
 
 
 def skipif_ocs_version(expressions):
@@ -2499,7 +2497,10 @@ def skipif_ocs_version(expressions):
         'True' if test needs to be skipped else 'False'
     """
     expr_list = [expressions] if isinstance(expressions, str) else expressions
-    return any(eval(config.ENV_DATA["ocs_version"] + expr) for expr in expr_list)
+    return any(
+        version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
+        for expr in expr_list
+    )
 
 
 def skipif_ui_not_support(ui_test):

@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
     wait_for_co,
+    get_infra_id,
     get_ocp_version,
     get_openshift_installer,
     get_terraform,
@@ -304,7 +305,8 @@ class VSPHEREBASE(Deployment):
             )
 
         # destroy the folder in templates
-        self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+        template_folder = get_infra_id(self.cluster_path)
+        self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
 
         # remove .terraform directory ( this is only to reclaim space )
         terraform_plugins_dir = os.path.join(
@@ -723,6 +725,13 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{each_file}.json",
                     f"{each_file}.json.backup",
                 )
+
+        # change the keep_on_remove state to false
+        terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
+        str_to_modify = '"keep_on_remove": true,'
+        target_str = '"keep_on_remove": false,'
+        logger.debug(f"changing state from {str_to_modify} to {target_str}")
+        replace_content_in_file(terraform_tfstate, str_to_modify, target_str)
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))

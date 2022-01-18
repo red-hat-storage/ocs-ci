@@ -121,7 +121,7 @@ anywhere else.
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
-
+* `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 #### REPORTING
 
 Reporting related config. (Do not store secret data in the repository!).
@@ -133,12 +133,14 @@ Reporting related config. (Do not store secret data in the repository!).
     * `project_id` - Polarion project ID
 * `us_ds` - 'DS' or 'US', specify downstream or upstream OCS deployment
 * `ocp_must_gather_image` - Image used for OCP must-gather (e.g. "quay.io/openshift/origin-must-gather")
+* `default_ocs_must_gather_image` - Default OCS must gather image used for OCS must-gather, can be overwritten by ocs_must_gather_image
 * `ocs_must_gather_image` - Image used for OCS must-gather (e.g. "quay.io/ocs-dev/origin-must-gather")
-* `default_ocs_must_gather_latest_tag` - Latest tag to use by default for OCS must-gather
+* `default_ocs_must_gather_latest_tag` - Latest tag to use by default for OCS must-gather, can be ovewritten by ocs_must_gather_latest_tag
 * `ocs_must_gather_latest_tag` - Latest tag to use for OCS must-gather
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
+* `overwrite_must_gather_image` - If true, it allows overwrite must gather image when reloading config during upgrade to the default value.
 
 #### ENV_DATA
 
@@ -222,6 +224,7 @@ Upgrade related configuration data.
 * `ocp_upgrade_path` - OCP image to upgrade with
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
+* `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
 
 #### AUTH
 

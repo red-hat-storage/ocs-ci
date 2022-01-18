@@ -526,6 +526,7 @@ def create_storage_class(
     rbd_thick_provision=False,
     encrypted=False,
     encryption_kms_id=None,
+    fs_name=None,
 ):
     """
     Create a storage class
@@ -544,18 +545,20 @@ def create_storage_class(
             Applicable if interface_type is CephBlockPool
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
+        fs_name (str): the name of the filesystem for CephFS StorageClass
 
     Returns:
         OCS: An OCS instance for the storage class
     """
 
+    yamls = {
+        constants.CEPHBLOCKPOOL: constants.CSI_RBD_STORAGECLASS_YAML,
+        constants.CEPHFILESYSTEM: constants.CSI_CEPHFS_STORAGECLASS_YAML,
+    }
     sc_data = dict()
+    sc_data = templating.load_yaml(yamls[interface_type])
+
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -571,13 +574,8 @@ def create_storage_class(
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
-        sc_data["parameters"]["fsName"] = get_cephfs_name()
+        sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
@@ -589,16 +587,11 @@ def create_storage_class(
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
     sc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"]["csi.storage.k8s.io/provisioner-secret-name"] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/provisioner-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-name"
-    ] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    for key in ["node-stage", "provisioner", "controller-expand"]:
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
+        sc_data["parameters"][
+            f"csi.storage.k8s.io/{key}-secret-namespace"
+        ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2080,7 +2073,7 @@ def validate_scc_policy(sa_name, namespace, scc_name=constants.PRIVILEGED):
 
 def add_scc_policy(sa_name, namespace):
     """
-    Adding ServiceAccount to scc privileged
+    Adding ServiceAccount to scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2088,17 +2081,18 @@ def add_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy add-scc-to-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def remove_scc_policy(sa_name, namespace):
     """
-    Removing ServiceAccount from scc privileged
+    Removing ServiceAccount from scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2106,12 +2100,13 @@ def remove_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy remove-scc-from-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def craft_s3_command(cmd, mcg_obj=None, api=False):
@@ -3486,10 +3481,16 @@ def get_event_line_datetime(event_line):
          datetime object: The event line datetime
 
     """
-    if re.search(r"\d{4}-\d{2}-\d{2}", event_line):
-        return datetime.datetime.strptime(event_line[:26], "%Y-%m-%d %H:%M:%S.%f")
-    else:
-        return None
+    event_line_dt = None
+    regex = r"\d{4}-\d{2}-\d{2}"
+    if re.search(regex + "T", event_line):
+        dt_string = event_line[:23].replace("T", " ")
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+    elif re.search(regex, event_line):
+        dt_string = event_line[:26]
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+
+    return event_line_dt
 
 
 def get_rook_ceph_pod_events(pod_name):
@@ -3603,3 +3604,53 @@ def get_secret_names(namespace=defaults.ROOK_CLUSTER_NAMESPACE, resource_name=""
     secret_obj = ocp.OCP(kind=constants.SECRET, namespace=namespace)
     secrets_objs = secret_obj.get(resource_name=resource_name)
     return [secret_obj["metadata"]["name"] for secret_obj in secrets_objs["items"]]
+
+
+def check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running():
+    """
+    check rook-ceph-crashcollector pods running on worker nodes
+    where rook-ceph pods are running.
+
+    Returns:
+        bool: True if the rook-ceph-crashcollector pods running on worker nodes
+            where rook-ceph pods are running. False otherwise.
+
+    """
+    logger.info(
+        "check rook-ceph-crashcollector pods running on worker nodes "
+        "where rook-ceph pods are running."
+    )
+    logger.info(
+        f"crashcollector nodes: {node.get_crashcollector_nodes()}, "
+        f"nodes where ocs pods running: {node.get_nodes_where_ocs_pods_running()}"
+    )
+    res = sorted(node.get_crashcollector_nodes()) == sorted(
+        node.get_nodes_where_ocs_pods_running()
+    )
+    if not res:
+        logger.warning(
+            "rook-ceph-crashcollector pods are not running on worker nodes "
+            "where rook-ceph pods are running."
+        )
+    return res
+
+
+def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(timeout=90):
+    """
+    Verify rook-ceph-crashcollector pods running on worker nodes
+    where rook-ceph pods are running.
+
+    Args:
+        timeout (int): time to wait for verifying
+
+    Returns:
+        bool: True if rook-ceph-crashcollector pods running on worker nodes
+            where rook-ceph pods are running in the given timeout. False otherwise.
+
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
+    )
+    return sample.wait_for_func_status(result=True)

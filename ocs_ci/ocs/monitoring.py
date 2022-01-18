@@ -246,7 +246,7 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
 
 def check_ceph_metrics_available():
     """
-    Check ceph metrics available
+    Check that all healthy ceph metrics are available.
 
     Returns:
         bool: True on success, false otherwise
@@ -257,7 +257,7 @@ def check_ceph_metrics_available():
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
-        metrics.ceph_metrics,
+        metrics.ceph_metrics_healthy,
         current_platform=config.ENV_DATA["platform"].lower(),
     )
     return list_of_metrics_without_results == []

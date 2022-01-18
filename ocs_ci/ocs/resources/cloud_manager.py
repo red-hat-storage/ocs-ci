@@ -201,6 +201,13 @@ class S3Client(CloudClient):
         )
         self.secret = self.create_s3_secret(secret_prefix, data_prefix)
 
+        self.nss_creds = {
+            "access_key_id": self.access_key,
+            "access_key": self.secret_key,
+            "endpoint": endpoint,
+            "region": self.region,
+        }
+
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the S3 API
