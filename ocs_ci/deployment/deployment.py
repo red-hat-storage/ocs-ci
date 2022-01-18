@@ -199,13 +199,11 @@ class Deployment(object):
                 tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
             )
         ocp_version = version.get_semantic_ocp_version_from_config()
-        if config.ENV_DATA["deploy_acm_hub_cluster"] and ocp_version >= version.VERSION_4_9:
+        if config.ENV_DATA.get("deploy_acm_hub_cluster") and ocp_version >= version.VERSION_4_9:
             try:
                 self.deploy_acm_hub()
             except Exception as e:
                 logger.error(e)
-        else:
-            logger.warning("ACM HUB deployment is skipped")
 
         # Multicluster operations
         if config.multicluster:
@@ -1208,8 +1206,8 @@ class Deployment(object):
             namespace=constants.ACM_HUB_NAMESPACE,
         )
         acm_mch.wait_for_resource(
-            condition="Running",
-            resource_name="multiclusterhub",
+            condition=constants.STATUS_RUNNING,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
             column="STATUS",
             timeout=720,
             sleep=5,
