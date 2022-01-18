@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 import time
 
 from selenium.webdriver.common.by import By
+from semantic_version import Version
 from ocs_ci.framework import config
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
@@ -15,7 +16,7 @@ from ocs_ci.deployment.deployment import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
-from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, ODF_OPERATOR_NAME
+from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, ODF_OPERATOR_NAME, MCG_OPERATOR
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -421,20 +422,31 @@ class OCSUpgrade(object):
 
         """
         operator_selector = get_selector_for_ocs_operator()
-        if self.version_before_upgrade == "4.9" and upgrade_version == "4.10":
-            resource_name = ODF_OPERATOR_NAME
+        if (
+            Version.coerce(self.version_before_upgrade) >= version.VERSION_4_8
+            and Version.coerce(upgrade_version) >= version.VERSION_4_9
+        ):
+            resource_names = [
+                ODF_OPERATOR_NAME,
+                OCS_OPERATOR_NAME,
+                MCG_OPERATOR,
+            ]
         else:
-            resource_name = OCS_OPERATOR_NAME
-        package_manifest = PackageManifest(
-            resource_name=resource_name,
-            selector=operator_selector,
-            subscription_plan_approval=self.subscription_plan_approval,
-        )
-        csv_name_post_upgrade = package_manifest.get_current_csv(channel)
-        csv_post_upgrade = CSV(
-            resource_name=csv_name_post_upgrade, namespace=self.namespace
-        )
-        log.info(f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state")
+            resource_names = OCS_OPERATOR_NAME
+
+        for resource_name in resource_names:
+            package_manifest = PackageManifest(
+                resource_name=resource_name,
+                selector=operator_selector,
+                subscription_plan_approval=self.subscription_plan_approval,
+            )
+            csv_name_post_upgrade = package_manifest.get_current_csv(channel)
+            csv_post_upgrade = CSV(
+                resource_name=csv_name_post_upgrade, namespace=self.namespace
+            )
+            log.info(
+                f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
+            )
 
         # Workaround for patching missing ceph-rook-tools pod after upgrade
         if self.version_before_upgrade == "4.2" and upgrade_version == "4.3":
