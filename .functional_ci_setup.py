@@ -3,10 +3,12 @@ import argparse
 import base64
 import binascii
 import os
+import re
 import yaml
 
 from os import environ as env
 from configparser import ConfigParser
+from semantic_version import Version
 
 
 def parse_args():
@@ -66,7 +68,7 @@ def write_aws_creds():
 
 
 def write_pull_secret():
-    secret_dir = os.path.join(env["WORKSPACE"], "data")
+    secret_dir = os.path.abspath(os.path.join(".", "data"))
     os.makedirs(secret_dir, exist_ok=True)
     secret = env["PULL_SECRET"]
     # In Jenkins, this is a JSON string. In GitLab CI, the JSON will be
@@ -77,9 +79,14 @@ def write_pull_secret():
         pass
     with open(os.path.join(secret_dir, "pull-secret"), "w") as secret_file:
         secret_file.write(secret)
+    with open(os.path.join(secret_dir, "auth.yaml"), "w") as auth_file:
+        auth = dict(quay=dict(access_token=env["QUAY_TOKEN"]))
+        auth_file.write(yaml.safe_dump(auth))
 
 
-def get_ocsci_conf():
+def get_ocsci_conf(upgrade_run=False, pre_upgrade=False):
+    if pre_upgrade and not upgrade_run:
+        raise ValueError("pre_upgrade implies upgrade_run")
     cluster_user = env["CLUSTER_USER"]
     pipeline_id = env["BUILD_ID"]
     conf_obj = dict(
@@ -94,6 +101,7 @@ def get_ocsci_conf():
             worker_instance_type="m5.4xlarge",
             cluster_namespace="openshift-storage",
         ),
+        DEPLOYMENT=dict(),
         REPORTING=dict(
             gather_on_deploy_failure=True,
         ),
@@ -102,26 +110,56 @@ def get_ocsci_conf():
         conf_obj["REPORTING"]["us_ds"] = "DS"
     if env.get("SMTP_SERVER"):
         conf_obj["REPORTING"]["email"] = dict(smtp_server=env["SMTP_SERVER"])
-    conf_obj["DEPLOYMENT"] = dict(
-        ocs_registry_image=env["OCS_REGISTRY_IMAGE"],
-    )
+    if upgrade_run:
+        version = Version.coerce(env["OCS_REGISTRY_IMAGE"].split(":")[1]).truncate(
+            "minor"
+        )
+        preup_version = f"{version.major}.{version.minor - 1}"
+        # ocs-ci needs ENV_DATA.ocs_version to be equal to the *pre-upgrade*
+        # version even during the upgrade phase.
+        conf_obj["ENV_DATA"]["ocs_version"] = preup_version
+        if pre_upgrade:
+            ocp_version = ocp_version = f"{version.major}.{version.minor}-ga"
+            conf_obj["DEPLOYMENT"]["ocp_version"] = ocp_version
+            conf_obj["DEPLOYMENT"]["installer_version"] = ocp_version
+            conf_obj["RUN"]["client_version"] = ocp_version
+        else:
+            conf_obj["UPGRADE"] = dict(
+                upgrade_ocs_registry_image=env["OCS_REGISTRY_IMAGE"],
+                upgrade_to_latest=False,
+            )
+    else:
+        conf_obj["DEPLOYMENT"] = dict(ocs_registry_image=env["OCS_REGISTRY_IMAGE"])
     if env.get("OCP_VERSION"):
         conf_obj["DEPLOYMENT"]["ocp_version"] = env["OCP_VERSION"]
     return conf_obj
 
 
 def write_ocsci_conf():
-    ocp_conf = get_ocsci_conf()
+    upgrade = bool(env.get("UPGRADE"))
+    ocp_conf = get_ocsci_conf(upgrade_run=upgrade, pre_upgrade=upgrade)
     ocp_conf["ENV_DATA"]["skip_ocs_deployment"] = True
     ocp_conf_path = os.path.join(env["WORKSPACE"], "ocs-ci-ocp.yaml")
     with open(ocp_conf_path, "w") as ocp_conf_file:
         ocp_conf_file.write(yaml.safe_dump(ocp_conf))
 
-    ocs_conf = get_ocsci_conf()
+    if upgrade:
+        ocs_pre_conf = get_ocsci_conf(upgrade_run=True, pre_upgrade=True)
+        ocs_pre_conf["ENV_DATA"]["skip_ocp_deployment"] = True
+        ocs_pre_conf_path = os.path.join(env["WORKSPACE"], "ocs-ci-pre-ocs.yaml")
+        with open(ocs_pre_conf_path, "w") as ocs_pre_conf_file:
+            ocs_pre_conf_file.write(yaml.safe_dump(ocs_pre_conf))
+
+    ocs_conf = get_ocsci_conf(upgrade_run=upgrade, pre_upgrade=False)
     ocs_conf["ENV_DATA"]["skip_ocp_deployment"] = True
     ocs_conf_path = os.path.join(env["WORKSPACE"], "ocs-ci-ocs.yaml")
     with open(ocs_conf_path, "w") as ocs_conf_file:
         ocs_conf_file.write(yaml.safe_dump(ocs_conf))
+
+    test_conf = get_ocsci_conf(upgrade_run=False)
+    test_conf_path = os.path.join(env["WORKSPACE"], "ocs-ci-test.yaml")
+    with open(test_conf_path, "w") as test_conf_file:
+        test_conf_file.write(yaml.safe_dump(test_conf))
 
 
 def write_bugzilla_conf():
