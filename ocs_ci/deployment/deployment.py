@@ -199,7 +199,10 @@ class Deployment(object):
                 tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
             )
         ocp_version = version.get_semantic_ocp_version_from_config()
-        if config.ENV_DATA.get("deploy_acm_hub_cluster") and ocp_version >= version.VERSION_4_9:
+        if (
+            config.ENV_DATA.get("deploy_acm_hub_cluster")
+            and ocp_version >= version.VERSION_4_9
+        ):
             try:
                 self.deploy_acm_hub()
             except Exception as e:

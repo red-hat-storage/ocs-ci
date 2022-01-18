@@ -1591,4 +1591,3 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
-
