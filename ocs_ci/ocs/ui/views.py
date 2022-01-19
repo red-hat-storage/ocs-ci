@@ -443,6 +443,7 @@ acm_configuration = {
         "(//button[@type='button'][normalize-space()='Nodes labeled'])[2]",
         By.XPATH,
     ),
+    "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
 }
 
 add_capacity = {

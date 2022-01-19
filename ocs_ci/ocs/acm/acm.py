@@ -95,6 +95,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.page_has_loaded(retries=15, sleep_time=5)
         log.info("Click on Create cluster set")
         self.do_click(self.page_nav["create-cluster-set"])
+        global cluster_set_name
         cluster_set_name = create_unique_resource_name("submariner", "clusterset")
         log.info("Send Cluster set name")
         self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
@@ -165,6 +166,22 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
 
+        self.navigate_clusters_page()
+        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        log.info("Click on Cluster sets")
+        self.do_click(self.page_nav["cluster-sets"])
+        self.page_has_loaded(retries=15, sleep_time=5)
+        log.info("Click on the cluster set created")
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-set-selection"],
+                string_to_insert=cluster_set_name,
+            ),
+            enable_screenshot=True,
+        )
+        log.info("Click on 'Submariner add-ons' tab")
+        self.do_click(self.page_nav["submariner-tab"])
         log.info("Checking connection status of both the imported clusters")
         connection_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
