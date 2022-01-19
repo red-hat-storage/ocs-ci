@@ -20,6 +20,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
@@ -249,18 +250,19 @@ class VMWareNodes(NodesBase):
             "get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes, force=True):
+    def stop_nodes(self, nodes, force=True, wait=True):
         """
         Stop vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for force VM stop, False otherwise
+            wait (bool): Wait for the VMs to stop
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.stop_vms(vms, force=force)
+        self.vsphere.stop_vms(vms, force=force, wait=wait)
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -268,11 +270,12 @@ class VMWareNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for the VMs to start
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.start_vms(vms)
+        self.vsphere.start_vms(vms, wait=wait)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
@@ -889,14 +892,13 @@ class AWSNodes(NodesBase):
         assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
         pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
-        # copy the .pem file for our internal repo on all nodes
-        # including ansible pod
-        # get it from URL
-        mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
-        )
-        dst = constants.PEM_PATH
-        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        # prepare credential files for mirror.openshift.com
+        with prepare_mirror_openshift_credential_files() as (
+            mirror_user_file,
+            mirror_password_file,
+        ):
+            pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+            pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -923,21 +925,25 @@ class AWSNodes(NodesBase):
                 f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
                 user=constants.EC2_USER,
             )
-            rhel_pod_obj.copy_to_server(
-                host,
-                pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
-                user=constants.EC2_USER,
-            )
-            cmd = (
-                f"sudo mv "
-                f'{os.path.join("/tmp/", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f"{dst}"
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path, cmd, user=constants.EC2_USER
-            )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=constants.EC2_USER,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=constants.EC2_USER,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")

@@ -799,6 +799,7 @@ RHEL_POD_PACKAGES = [
 # common locations
 POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
 YUM_REPOS_PATH = "/etc/yum.repos.d/"
+YUM_VARS_PATH = "/etc/yum/vars/"
 PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 FIPS_LOCATION = "/proc/sys/crypto/fips_enabled"
 
@@ -822,13 +823,14 @@ LATEST_TAGS = (
     "latest-stable",
     "-rc",
 )
-INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ODF_SUBSCRIPTION = "odf-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
+MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
+MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -850,9 +852,6 @@ INVENTORY_FILE_HAPROXY = "inventory_haproxy.yaml"
 
 # users
 VM_RHEL_USER = "test"
-
-# PEM
-OCP_PEM = "ops-mirror.pem"
 
 # playbooks
 SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
@@ -1071,7 +1070,14 @@ AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
 
 # Users
-NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
+NOOBAA_SERVICE_ACCOUNT_NAME = "noobaa"
+NOOBAA_DB_SERVICE_ACCOUNT_NAME = "noobaa-endpoint"
+NOOBAA_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(NOOBAA_SERVICE_ACCOUNT_NAME)
+NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
+    NOOBAA_DB_SERVICE_ACCOUNT_NAME
+)
+
 
 # Services
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
@@ -1333,7 +1339,7 @@ SQUADS = {
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
     "Purple": ["/ecosystem/"],
-    "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/"],
+    "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/", "/system/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
     "Black": ["/ui/"],

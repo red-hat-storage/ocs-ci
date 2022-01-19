@@ -748,6 +748,9 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    if ocsci_config.ENV_DATA["mcg_only_deployment"]:
+        log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
+        return
     namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
     # setup toolbox for external mode
@@ -866,9 +869,14 @@ def run_must_gather(log_dir_path, image, command=None):
         log_dir_path (str): directory for dumped must-gather logs
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
+
+    Returns:
+        mg_output (str): must-gather cli output
+
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
     timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
@@ -882,14 +890,21 @@ def run_must_gather(log_dir_path, image, command=None):
     log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
-        occli.exec_oc_cmd(cmd, out_yaml_format=False, timeout=must_gather_timeout)
+        mg_output = occli.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=must_gather_timeout
+        )
     except CommandFailed as ex:
-        log.error(f"Failed during must gather logs! Error: {ex}")
+        log.error(
+            f"Failed during must gather logs! Error: {ex}"
+            f"Must-Gather Output: {mg_output}"
+        )
     except TimeoutExpired as ex:
         log.error(
             f"Timeout {must_gather_timeout}s for must-gather reached, command"
             f" exited with error: {ex}"
+            f"Must-Gather Output: {mg_output}"
         )
+    return mg_output
 
 
 def collect_noobaa_db_dump(log_dir_path):
@@ -985,12 +1000,21 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             ),
         )
         ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
-        ocs_must_gather_image = ocsci_config.REPORTING["ocs_must_gather_image"]
+        ocs_must_gather_image = ocsci_config.REPORTING.get(
+            "ocs_must_gather_image",
+            ocsci_config.REPORTING["default_ocs_must_gather_image"],
+        )
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
         if ocsci_config.DEPLOYMENT.get("disconnected"):
             ocs_must_gather_image_and_tag = mirror_image(ocs_must_gather_image_and_tag)
-        run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
-
+        mg_output = run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
+        if (
+            ocsci_config.DEPLOYMENT.get("disconnected")
+            and "cannot stat 'jq'" in mg_output
+        ):
+            raise ValueError(
+                f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
+            )
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]

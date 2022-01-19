@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility import version
+from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -276,17 +277,37 @@ class OCSUpgrade(object):
 
         """
 
+        live_deployment = config.DEPLOYMENT["live_deployment"]
+        upgrade_in_same_source = config.UPGRADE.get("upgrade_in_current_source", False)
         version_change = self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
-        if version_change:
+        # When upgrading to internal build of same version, we usually deploy from GAed (live) version.
+        # In this case, we need to reload config to get internal must-gather image back to default.
+        reload_config = (
+            not version_change and live_deployment and not upgrade_in_same_source
+        )
+        if version_change or reload_config:
             version_config_file = os.path.join(
                 constants.OCS_VERSION_CONF_DIR, f"ocs-{upgrade_version}.yaml"
             )
+            log.info(f"Reloading config file for OCS/ODF version: {upgrade_version}.")
             load_config_file(version_config_file)
         else:
             log.info(
                 f"Upgrade version {upgrade_version} is not higher than old version:"
                 f" {self.version_before_upgrade}, config file will not be loaded"
             )
+        overwrite_must_gather_image = config.REPORTING["overwrite_must_gather_image"]
+        if live_deployment and upgrade_in_same_source and overwrite_must_gather_image:
+            update_live_must_gather_image()
+        else:
+            if overwrite_must_gather_image:
+                must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
+                must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
+                log.info(
+                    f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
+                )
+                config.REPORTING["ocs_must_gather_image"] = must_gather_image
+                config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
     def get_csv_name_pre_upgrade(self):
         """
@@ -376,10 +397,6 @@ class OCSUpgrade(object):
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
-
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        if subscription_plan_approval == "Manual":
-            wait_for_install_plan_and_approve(self.namespace)
 
     def check_if_upgrade_completed(self, channel, csv_name_pre_upgrade):
         """
@@ -544,7 +561,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
-    if config.DEPLOYMENT.get("disconnected"):
+    if config.DEPLOYMENT.get("disconnected") and not config.DEPLOYMENT.get(
+        "disconnected_env_skip_image_mirroring"
+    ):
         upgrade_ocs.ocs_registry_image = prepare_disconnected_ocs_deployment(
             upgrade=True
         )
@@ -568,6 +587,10 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
         else:
+            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
+                upgrade_in_current_source
+            ):
+                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
             if upgrade_version != "4.9":
                 # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
                 # OCS automatically.
@@ -575,10 +598,20 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             if original_ocs_version == "4.8" and upgrade_version == "4.9":
                 deployment = Deployment()
                 deployment.subscribe_ocs()
+            else:
+                # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
+                # we need to wait and approve install plan, otherwise it's approved in the
+                # subscribe_ocs method.
+                subscription_plan_approval = config.DEPLOYMENT.get(
+                    "subscription_plan_approval"
+                )
+                if subscription_plan_approval == "Manual":
+                    wait_for_install_plan_and_approve(
+                        config.ENV_DATA["cluster_namespace"]
+                    )
             if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
                 upgrade_in_current_source
             ):
-                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 for attempt in range(2):
                     # We need to do it twice, because some of the SA are updated
                     # after the first load of OCS pod after upgrade. So we need to

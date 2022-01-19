@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    aws_based_platform_required,
     ipi_deployment_required,
     ignore_leftovers,
 )
@@ -28,6 +27,8 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     add_new_node_and_label_it,
     get_worker_nodes,
+    recover_node_to_ready_state,
+    add_new_nodes_and_label_after_node_failure_ipi,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -203,12 +204,13 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4
 @tier4a
-@aws_based_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
     extra_node = False
+    machineset_name = None
+    start_ready_replica_count = None
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -220,11 +222,26 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"{self.osd_worker_node[0].name} instance"
                 )
             else:
-                nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
-            log.info(
-                f"Successfully started node : "
-                f"{self.osd_worker_node[0].name} instance"
+                is_recovered = recover_node_to_ready_state(self.osd_worker_node[0])
+                if not is_recovered:
+                    log.warning(
+                        f"The recovery of the osd worker node "
+                        f"{self.osd_worker_node[0].name} failed. Adding a new OCS worker node..."
+                    )
+                    add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
+
+            ceph_health_check()
+
+            machine.wait_for_ready_replica_count_to_reach_expected_value(
+                self.machineset_name, expected_value=self.start_ready_replica_count
             )
+            log.info(
+                "Verify that the current replica count is equal to the ready replica count"
+            )
+            machine.change_current_replica_count_to_ready_replica_count(
+                self.machineset_name
+            )
+            log.info("Check again that the Ceph Health is Health OK")
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -267,6 +284,13 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
              A - pods should start on the new node
              B - pods should start on the stopped node after starting it
         """
+        wnode_name = get_worker_nodes()[0]
+        machine_name = machine.get_machine_from_node_name(wnode_name)
+        self.machineset_name = machine.get_machineset_from_machine_name(machine_name)
+        self.start_ready_replica_count = machine.get_ready_replica_count(
+            self.machineset_name
+        )
+
         temp_osd = get_osd_pods()[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
         self.osd_worker_node = [get_pod_node(temp_osd)]

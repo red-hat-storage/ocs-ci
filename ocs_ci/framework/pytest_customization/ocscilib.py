@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
+from ocs_ci.utility.reporting import update_live_must_gather_image
 
 __all__ = [
     "pytest_addoption",
@@ -63,9 +64,20 @@ def _pytest_addoption_cluster_specific(parser):
 
     """
 
+    add_common_ocsci_conf = False
+
     for i in range(ocsci_config.nclusters):
         # If it's not multicluster then no suffix will be added
         suffix = i + 1 if ocsci_config.multicluster else ""
+        if not add_common_ocsci_conf and ocsci_config.multicluster:
+            parser.addoption(
+                "--ocsci-conf",
+                dest="ocsci_conf",
+                action="append",
+                help="Path to config file of OCS CI",
+            )
+            add_common_ocsci_conf = True
+
         parser.addoption(
             f"--ocsci-conf{suffix}",
             dest=f"ocsci_conf{suffix}",
@@ -284,6 +296,15 @@ def pytest_addoption(parser):
         failed / or had error in the provided report.
         """,
     )
+    parser.addoption(
+        "--default-cluster-context-index",
+        dest="default_cluster_context_index",
+        default=0,
+        help="""
+        Sets the default index of the cluster whose context needs to be
+        loaded when run-ci starts
+        """,
+    )
 
 
 def pytest_configure(config):
@@ -369,13 +390,14 @@ def gather_version_info_for_report(config):
         config._metadata["Cluster Version"] = clusterversion
 
         # add ceph version
-        ceph_version = get_ceph_version()
-        config._metadata["Ceph Version"] = ceph_version
+        if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
+            ceph_version = get_ceph_version()
+            config._metadata["Ceph Version"] = ceph_version
 
-        # add csi versions
-        csi_versions = get_csi_versions()
-        config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
-        config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
+            config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
         config._metadata["OCS operator"] = get_ocs_build_number()
@@ -462,12 +484,7 @@ def process_cluster_cli_params(config):
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
     if live_deployment:
-        ocsci_config.REPORTING[
-            "default_ocs_must_gather_latest_tag"
-        ] = f"v{ocsci_config.ENV_DATA['ocs_version']}"
-        ocsci_config.REPORTING["ocs_must_gather_image"] = ocsci_config.REPORTING[
-            "ocs_live_must_gather_image"
-        ]
+        update_live_must_gather_image()
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True

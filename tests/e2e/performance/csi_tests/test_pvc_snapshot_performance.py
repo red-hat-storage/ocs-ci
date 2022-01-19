@@ -70,6 +70,13 @@ class TestPvcSnapshotPerformance(PASTest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
 
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.sc = "RBD"
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.sc = "CephFS"
+        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
+            self.sc = "RBD-Thick"
+
         self.pvc_obj = pvc_factory(
             interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
         )
@@ -104,6 +111,22 @@ class TestPvcSnapshotPerformance(PASTest):
                 "port": config.PERF.get("dev_es_port"),
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an empty ResultsAnalyse object
+
+        Returns:
+            ResultsAnalyse (obj): the input object filled with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("index", full_results.new_index)
+        return full_results
 
     def measure_create_snapshot_time(self, pvc_name, snap_name, namespace, interface):
         """
@@ -200,7 +223,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.results_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"--PVC-SIZE-{pvc_size}"
+        self.full_log_path += f"-{self.interface}-{pvc_size}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
@@ -216,7 +239,8 @@ class TestPvcSnapshotPerformance(PASTest):
                 "pvc_snapshot_perf",
             )
         )
-        self.full_results.add_key("pvc_size", pvc_size + "GiB")
+        self.full_results.add_key("pvc_size", pvc_size + " GiB")
+        self.full_results.add_key("interface", self.sc)
         self.full_results.all_results["creation_time"] = []
         self.full_results.all_results["creation_speed"] = []
         self.full_results.all_results["restore_time"] = []
@@ -400,30 +424,14 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.add_key("avg_snap_restore_speed", avg_snap_r_speed)
 
         # Write the test results into the ES server
-        log.info("writing results to elastic search")
-        self.full_results.es_write()
-        res_link = self.full_results.results_link()
-        # write the ES link to the test results in the test log.
-        log.info(f"The result can be found at : {res_link}")
+        log.info("writing results to elastic search server")
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
 
-        self.write_result_to_file(res_link)
+            # write the ES link to the test results in the test log.
+            log.info(f"The result can be found at : {res_link}")
 
-    def test_pvc_snapshot_performance_results(self):
-        """
-        This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (6)
-        """
-
-        self.number_of_tests = 6
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_pvc_snapshot_performance"
-        )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="pvc snapshot performance")
+            self.write_result_to_file(res_link)
 
     @pytest.mark.parametrize(
         argnames=["file_size", "files", "threads", "interface"],
@@ -522,13 +530,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.results_path = get_full_test_logs_path(cname=self)
-        if interface == constants.CEPHBLOCKPOOL:
-            self.sc = "RBD"
-        elif interface == constants.CEPHFILESYSTEM:
-            self.sc = "CephFS"
-        elif interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
-        self.full_log_path += f"-{self.sc}-{interface}"
+        self.full_log_path += f"-{file_size}-{files}-{threads}-{interface}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
@@ -536,7 +538,7 @@ class TestPvcSnapshotPerformance(PASTest):
         self.get_env_info()
 
         # Initialize the results doc file.
-        full_results = self.init_full_results(
+        self.full_results = self.init_full_results(
             ResultsAnalyse(
                 self.uuid,
                 self.crd_data,
@@ -544,9 +546,9 @@ class TestPvcSnapshotPerformance(PASTest):
                 "pvc_snapshot_perf_multiple_files",
             )
         )
-        full_results.add_key("storageclass", self.sc)
-        full_results.add_key("file_size", str(file_size) + "Kb")
-        full_results.add_key("threads", threads)
+        self.full_results.add_key("file_size_inKB", file_size)
+        self.full_results.add_key("threads", threads)
+        self.full_results.add_key("interface", interface)
         for test_num in range(self.tests_numbers):
 
             # deploy the smallfile workload
@@ -643,50 +645,43 @@ class TestPvcSnapshotPerformance(PASTest):
             f"Total dataset : {t_dateset} GiB"
         )
 
-        full_results.add_key("avg_snapshot_creation_time_insecs", avg_c_time)
-        full_results.all_results["total_files"] = total_files
-        full_results.all_results["total_dataset"] = t_dateset
-        full_results.all_results["creation_time"] = all_results
+        self.full_results.add_key("avg_snapshot_creation_time_insecs", avg_c_time)
+        self.full_results.all_results["total_files"] = total_files
+        self.full_results.all_results["total_dataset"] = t_dateset
+        self.full_results.all_results["creation_time"] = all_results
 
         # Write the test results into the ES server
-        log.info("writing to elastic search")
-        full_results.es_write()
-        res_link = full_results.results_link()
-        # write the ES link to the test results in the test log.
-        logging.info(f"The result can be found at : {res_link}")
+        log.info("writing results to elastic search server")
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            # write the ES link to the test results in the test log.
+            logging.info(f"The result can be found at : {res_link}")
 
-        # Create text file with results of all subtest
-        self.write_result_to_file(res_link)
+            # Create text file with results of all subtest
+            self.write_result_to_file(res_link)
 
-    def test_pvc_snapshot_performance_multiple_file_results(self):
+    def test_pvc_snapshot_performance_results(self):
         """
-        This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (2)
+        This is not a test - it is only check that previous tests ran and finished as expected
+        and reporting the full results (links in the ES) of previous tests (6 + 2)
         """
 
-        self.number_of_tests = 2
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_pvc_snapshot_performance_multiple_files"
-        )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="PVC Snapshot - Multiple Files")
-
-    def init_full_results(self, full_results):
-        """
-        Initialize the full results object which will send to the ES server
-
-        Args:
-            full_results (obj): an empty ResultsAnalyse object
-
-        Returns:
-            ResultsAnalyse (obj): the input object filled with data
-
-        """
-        for key in self.environment:
-            full_results.add_key(key, self.environment[key])
-        full_results.add_key("index", full_results.new_index)
-        return full_results
+        workloads = [
+            {
+                "name": "test_pvc_snapshot_performance",
+                "tests": 6,
+                "test_name": "PVC Snapshot",
+            },
+            {
+                "name": "test_pvc_snapshot_performance_multiple_files",
+                "tests": 2,
+                "test_name": "PVC Snapshot - Multiple Files",
+            },
+        ]
+        for wl in workloads:
+            self.number_of_tests = wl["tests"]
+            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
+            self.results_file = os.path.join(self.results_path, "all_results.txt")
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
