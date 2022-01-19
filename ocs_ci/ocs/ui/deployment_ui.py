@@ -273,7 +273,9 @@ class DeploymentUI(PageNavigator):
 
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
-            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.do_click(
+                locator=self.dep_loc["next"], timeout=90, enable_screenshot=True
+            )
             self.configure_encryption()
 
         self.create_storage_cluster()
