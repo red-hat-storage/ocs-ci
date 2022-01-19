@@ -633,8 +633,8 @@ def taint_node_verification():
     """
     from ocs_ci.ocs.node import get_nodes
 
-    log.info("Verify worker nodes are tainted")
     if config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0) > 0:
+        log.info("Verify worker nodes are tainted")
         node_objs = get_nodes()
         for node_obj in node_objs:
             if node_obj.get("data").get("spec").get("taints")[0]["value"] != "true":
