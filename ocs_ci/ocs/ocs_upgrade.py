@@ -561,7 +561,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
-    if config.DEPLOYMENT.get("disconnected"):
+    if config.DEPLOYMENT.get("disconnected") and not config.DEPLOYMENT.get(
+        "disconnected_env_skip_image_mirroring"
+    ):
         upgrade_ocs.ocs_registry_image = prepare_disconnected_ocs_deployment(
             upgrade=True
         )
