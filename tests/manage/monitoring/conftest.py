@@ -186,7 +186,7 @@ def measure_stop_ceph_osd(measurement_dir):
             str: Names of downscaled deployments
         """
         # run_time of operation
-        run_time = 60 * 11
+        run_time = 60 * 16
         nonlocal oc
         nonlocal osd_to_stop
         logger.info(f"Downscaling deployment {osd_to_stop} to 0")
