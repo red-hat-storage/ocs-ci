@@ -295,6 +295,6 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         and config.DEPLOYMENT.get("live_deployment")
         and config.UPGRADE.get("upgrade_in_current_source", False)
     ):
-        return mirrored_index_image
-    else:
         return None
+    else:
+        return mirrored_index_image
