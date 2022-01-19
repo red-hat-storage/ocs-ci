@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier1, skipif_ui_not_support
+from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -21,6 +21,7 @@ class TestPvcUserInterface(object):
 
     """
 
+    @ui
     @tier1
     @skipif_ocs_version("<4.6")
     @skipif_ui_not_support("pvc")
