@@ -146,8 +146,7 @@ class ObjectConfFile:
             self.project.namespace value (in a similar way how you can specify
             any value to ``-n`` option of ``oc describe``.
         """
-        out = self._run_command("describe", namespace, out_yaml_format=False)
-        return yaml.safe_load(out)
+        return self._run_command("describe", namespace, out_yaml_format=False)
 
     def wait_for_delete(self, resource_name="", timeout=60, sleep=3, namespace=None):
         """
