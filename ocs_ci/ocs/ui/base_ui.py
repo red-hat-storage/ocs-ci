@@ -350,7 +350,13 @@ class PageNavigator(BaseUI):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            self.storage_class = "gp2_sc"
+            aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
+            if aws_sc == "gp3-csi":
+                self.storage_class = "gp3-csi_sc"
+            elif aws_sc == "gp2-csi":
+                self.storage_class = "gp2-csi_sc"
+            else:
+                self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
             self.storage_class = "managed-premium_sc"
 

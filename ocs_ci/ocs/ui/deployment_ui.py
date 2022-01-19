@@ -377,7 +377,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version in ("4.7", "4.8", "4.9", "4.10"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,

@@ -144,6 +144,8 @@ deployment_4_9 = {
 deployment_4_10 = {
     "mcg_only_option_4_10": ("//span[text()='MultiCloud Object Gateway']", By.XPATH),
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
+    "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
+    "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -416,6 +418,8 @@ add_capacity = {
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
+    "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
