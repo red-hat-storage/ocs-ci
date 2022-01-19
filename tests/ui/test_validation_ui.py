@@ -1,6 +1,11 @@
 import logging
 
-from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    tier1,
+    skipif_ui_not_support,
+    skipif_ocs_version,
+    ui,
+)
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
 
@@ -13,6 +18,7 @@ class TestUserInterfaceValidation(object):
 
     """
 
+    @ui
     @tier1
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui):
@@ -30,6 +36,7 @@ class TestUserInterfaceValidation(object):
         else:
             validation_ui_obj.verification_ui()
 
+    @ui
     @tier1
     @skipif_ui_not_support("validation")
     @skipif_ocs_version("<4.9")
