@@ -104,7 +104,7 @@ class TestPvcMultiClonePerformance(PASTest):
             StorageNotSufficientException: in case of not enough capacity on the cluster
 
         """
-        num_of_clones = 4
+        num_of_clones = 512
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
