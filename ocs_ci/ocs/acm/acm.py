@@ -222,21 +222,26 @@ def import_clusters_with_acm():
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
 
     """
+    log.info("GETTING CLUSTERS ENV")
     clusters_env = get_clusters_env()
-    log.info(clusters_env)
+    log.info(f"CLUSTER_ENV: {clusters_env}")
     kubeconfig_a = clusters_env.get("kubeconfig_cl_a_location")
+    log.info(f"KUBECONFIG_A: {kubeconfig_a}")
     kubeconfig_b = clusters_env.get("kubeconfig_cl_b_location")
+    log.info(f"KUBECONFIG_B: {kubeconfig_b}")
     cluster_name_a = clusters_env.get("cl_a_cluster_name")
+    log.info(f"CLUSTER_NAME_A:{cluster_name_a}")
     cluster_name_b = clusters_env.get("cl_b_cluster_name")
+    log.info(f"CLUSTER_NAME_B:{cluster_name_b}")
     verify_running_acm()
-    driver = login_to_acm()
-    acm_nav = AcmAddClusters(driver)
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_a,
-        kubeconfig_location=kubeconfig_a,
-    )
-
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_b,
-        kubeconfig_location=kubeconfig_b,
-    )
+    # driver = login_to_acm()
+    # acm_nav = AcmAddClusters(driver)
+    # acm_nav.import_cluster(
+    #     cluster_name=cluster_name_a,
+    #     kubeconfig_location=kubeconfig_a,
+    # )
+    #
+    # acm_nav.import_cluster(
+    #     cluster_name=cluster_name_b,
+    #     kubeconfig_location=kubeconfig_b,
+    # )
