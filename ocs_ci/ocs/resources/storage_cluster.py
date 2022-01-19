@@ -433,6 +433,8 @@ def ocs_install_verification(
     if managed_service:
         verify_managed_service_resources()
 
+    taint_node_verification()
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
@@ -622,6 +624,23 @@ def osd_encryption_verification():
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
+
+
+def taint_node_verification():
+    """
+    Verify worker nodes are tainted
+
+    """
+    from ocs_ci.ocs.node import get_nodes
+
+    log.info("Verify worker nodes are tainted")
+    if config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0) > 0:
+        node_objs = get_nodes()
+        for node_obj in node_objs:
+            if node_obj.get("data").get("spec").get("taints")[0]["value"] != "true":
+                error_msg = f"The worker node {node_obj.name} is not tainted"
+                logging.error(error_msg)
+                raise ValueError(error_msg)
 
 
 def verify_kms_ca_only():

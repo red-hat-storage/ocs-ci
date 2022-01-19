@@ -320,7 +320,7 @@ class DeploymentUI(PageNavigator):
         logger.info("Enable taint Nodes")
         if (
             self.ocp_version_semantic >= version.VERSION_4_10
-            and config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0
+            and config.DEPLOYMENT.get("ocs_operator_nodes_to_taint", 0) > 0
         ):
             self.select_checkbox_status(
                 status=True, locator=self.dep_loc["enable_taint_node"]

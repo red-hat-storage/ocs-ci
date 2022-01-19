@@ -1,0 +1,3 @@
+---
+DEPLOYMENT:
+    ocs_operator_nodes_to_taint: 3
