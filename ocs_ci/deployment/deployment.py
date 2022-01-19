@@ -914,7 +914,9 @@ class Deployment(object):
 
         # disconnected installation?
         load_cluster_info()
-        if config.DEPLOYMENT.get("disconnected"):
+        if config.DEPLOYMENT.get("disconnected") and not config.DEPLOYMENT.get(
+            "disconnected_env_skip_image_mirroring"
+        ):
             image = prepare_disconnected_ocs_deployment()
 
         if config.DEPLOYMENT["external_mode"]:
