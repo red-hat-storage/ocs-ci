@@ -422,6 +422,11 @@ class OCSUpgrade(object):
 
         """
         operator_selector = get_selector_for_ocs_operator()
+        if config.DEPLOYMENT.get("external_mode"):
+            timeout = 200
+        else:
+            timeout = 200 * get_osd_count()
+
         if (
             Version.coerce(self.version_before_upgrade) >= version.VERSION_4_8
             and Version.coerce(upgrade_version) >= version.VERSION_4_9
@@ -447,18 +452,13 @@ class OCSUpgrade(object):
             log.info(
                 f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
             )
+            csv_post_upgrade.wait_for_phase("Succeeded", timeout=timeout)
 
         # Workaround for patching missing ceph-rook-tools pod after upgrade
         if self.version_before_upgrade == "4.2" and upgrade_version == "4.3":
             log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
-
-        if config.DEPLOYMENT.get("external_mode"):
-            timeout = 200
-        else:
-            timeout = 200 * get_osd_count()
-        csv_post_upgrade.wait_for_phase("Succeeded", timeout=timeout)
 
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
