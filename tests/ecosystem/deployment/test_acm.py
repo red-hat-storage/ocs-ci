@@ -7,12 +7,8 @@ from ocs_ci.ocs.acm.acm import AcmAddClusters
 ####################################################################################################
 
 
-def test_import_acm():
-    import_clusters_with_acm()
-
-
-def test_submariner_acm_ui(setup_acm_ui):
-
+def test_import_acm(setup_acm_ui):
     acm_obj = AcmAddClusters(setup_acm_ui)
+    import_clusters_with_acm()
     acm_obj.install_submariner_ui()
     acm_obj.submariner_validation_ui()

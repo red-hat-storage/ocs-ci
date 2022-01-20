@@ -97,7 +97,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["create-cluster-set"])
         global cluster_set_name
         cluster_set_name = create_unique_resource_name("submariner", "clusterset")
-        log.info("Send Cluster set name")
+        log.info(f"Send Cluster set name '{cluster_set_name}'")
         self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
         log.info("Click on Create")
         self.do_click(self.page_nav["click-create"], enable_screenshot=True)
@@ -106,12 +106,16 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(
             self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
         )
-        log.info("Select all Manage resource assignments")
-        self.do_click(self.page_nav["select-all-assignments"])
-        log.info("Search and deselect 'local-cluster'")
-        self.do_send_keys(self.page_nav["search-cluster"], text="local-cluster")
+
+        log.info(f"Search and select cluster '{cluster_name_a}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
         self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        log.info("Clear search")
+        log.info("Clear search by clicking on cross mark")
+        self.do_click(self.page_nav["clear-search"])
+        log.info(f"Search and select cluster '{cluster_name_b}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_b)
+        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
+        log.info("Clear search by clicking on cross mark [2]")
         self.do_click(self.page_nav["clear-search"])
         log.info("Click on 'Review'")
         self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
@@ -124,14 +128,14 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["install-submariner-btn"])
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
-        log.info("Select 1st cluster")
+        log.info(f"Select 1st cluster which is {cluster_name_a}")
         self.do_click(
             format_locator(
                 locator=self.page_nav["cluster-name-selection"],
                 string_to_insert=cluster_name_a,
             )
         )
-        log.info("Select 2nd cluster")
+        log.info(f"Select 2nd cluster which is {cluster_name_b}")
         self.do_click(
             format_locator(
                 locator=self.page_nav["cluster-name-selection"],
@@ -150,13 +154,16 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it")
+        log.info("Click on 'Enable NAT-T' to uncheck it [2]")
         self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info("Increase the gateway count to 3")
+        log.info(
+            "Increase the gateway count to 3 by clicking twice on the gateway count add button [2]"
+        )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
-        log.info("Click on Next button")
+        log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
+        self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
 
@@ -177,8 +184,7 @@ class AcmAddClusters(AcmPageNavigator):
             format_locator(
                 locator=self.page_nav["cluster-set-selection"],
                 string_to_insert=cluster_set_name,
-            ),
-            enable_screenshot=True,
+            )
         )
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
@@ -201,35 +207,35 @@ class AcmAddClusters(AcmPageNavigator):
         ), f"Connection status of cluster {cluster_name_b} is not Healthy"
 
         log.info("Checking agent status of both the imported clusters")
-        connection_status_1 = self.wait_until_expected_text_is_found(
+        agent_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
             timeout=600,
         )
-        connection_status_2 = self.wait_until_expected_text_is_found(
+        agent_status_2 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
             timeout=600,
         )
         assert (
-            connection_status_1
+            agent_status_1
         ), f"Agent status of cluster {cluster_name_a} is not Healthy"
         assert (
-            connection_status_2
+            agent_status_2
         ), f"Agent status of cluster {cluster_name_b} is not Healthy"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        connection_status_1 = self.wait_until_expected_text_is_found(
+        node_status_1 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
             timeout=600,
         )
-        connection_status_2 = self.wait_until_expected_text_is_found(
+        node_status_2 = self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
             timeout=600,
         )
-        assert connection_status_1, f"Nodes of cluster {cluster_name_a} are not labeled"
-        assert connection_status_2, f"Nodes of cluster {cluster_name_b} are not labeled"
+        assert node_status_1, f"Nodes of cluster {cluster_name_a} are not labeled"
+        assert node_status_2, f"Nodes of cluster {cluster_name_b} are not labeled"
         self.take_screenshot()
         log.info("Submariner add-ons creation is successful")
 
