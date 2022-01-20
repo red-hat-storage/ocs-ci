@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: kafdrop
-          image: obsidiandynamics/kafdrop:latest
+          image: quay.io/guimou/kafdrop:latest
           ports:
             - containerPort: 9000
           env:
