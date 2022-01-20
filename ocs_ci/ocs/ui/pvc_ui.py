@@ -244,8 +244,8 @@ class PvcUI(PageNavigator):
         self,
         project_name,
         pvc_name,
-        clone_access_mode=constants.ACCESS_MODE_RWO,
-        clone_name=None,
+        cloned_pvc_access_mode=constants.ACCESS_MODE_RWO,
+        cloned_pvc_name=None,
     ):
         """
         Clone PVC via UI
@@ -253,11 +253,11 @@ class PvcUI(PageNavigator):
         Args:
             project_name (str): The name of project
             pvc_name (str): The name of PVC
-            clone_name (str): The name for clone PVC
-            clone_access_mode (str): Access mode for clone PVC
+            cloned_pvc_access_mode (str): Access mode for cloned PVC
+            cloned_pvc_name (str): The name for cloned PVC
 
         """
-        clone_name = clone_name or f"{pvc_name}-clone"
+        clone_name = cloned_pvc_name or f"{pvc_name}-clone"
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search and select the project {project_name}")
@@ -284,7 +284,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["clone_name_input"], text=clone_name)
 
         logger.info("Select Access Mode of clone PVC")
-        self.do_click(self.pvc_loc[clone_access_mode])
+        self.do_click(self.pvc_loc[cloned_pvc_access_mode])
 
         logger.info("Click on Clone button")
         self.do_click(generic_locators["confirm_action"], enable_screenshot=True)
