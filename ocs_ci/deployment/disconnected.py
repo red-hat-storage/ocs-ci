@@ -222,7 +222,11 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
 
     # prepare main index image (redhat-operators-index for live deployment or
     # ocs-registry image for unreleased version)
-    if config.DEPLOYMENT.get("live_deployment"):
+    if (not upgrade and config.DEPLOYMENT.get("live_deployment")) or (
+        upgrade
+        and config.DEPLOYMENT.get("live_deployment")
+        and config.UPGRADE.get("upgrade_in_current_source", False)
+    ):
         index_image = (
             f"{config.DEPLOYMENT['cs_redhat_operators_image']}:v{get_ocp_version()}"
         )
@@ -286,4 +290,11 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
 
-    return mirrored_index_image
+    if (not upgrade and config.DEPLOYMENT.get("live_deployment")) or (
+        upgrade
+        and config.DEPLOYMENT.get("live_deployment")
+        and config.UPGRADE.get("upgrade_in_current_source", False)
+    ):
+        return None
+    else:
+        return mirrored_index_image
