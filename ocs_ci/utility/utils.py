@@ -505,7 +505,7 @@ def run_cmd_multicluster(
     Returns:
         list : of CompletedProcess objects as per cluster's index in config.clusters
             i.e. [cluster1_completedprocess, None, cluster2_completedprocess]
-            if command execution skipped on a particular cluster then corresponding entry will have null
+            if command execution skipped on a particular cluster then corresponding entry will have None
 
     """
     # Skip indexed cluster while running commands
@@ -514,10 +514,14 @@ def run_cmd_multicluster(
     completed_process = [None] * len(config.clusters)
     index = 0
     for cluster in config.clusters:
-        if skip_index and (config.clusters.index(cluster) in skip_index):
+        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+            log.warning(f"skipping index = {skip_index}")
             continue
         else:
-            config.switch_ctx(index)
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(
+                f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
+            )
             try:
                 completed_process[index] = exec_cmd(
                     cmd,
@@ -1254,6 +1258,15 @@ def run_async(command):
 def is_cluster_running(cluster_path):
     from ocs_ci.ocs.openshift_ops import OCP
 
+    def _multicluster_is_cluster_running(cluster_path):
+        return config.RUN["cli_params"].get(
+            f"cluster_path{config.cluster_ctx.MULTICLUSTER['multicluster_index'] + 1}"
+        ) and OCP.set_kubeconfig(
+            os.path.join(cluster_path, config.RUN.get("kubeconfig_location"))
+        )
+
+    if config.multicluster:
+        return _multicluster_is_cluster_running(cluster_path)
     return config.RUN["cli_params"].get("cluster_path") and OCP.set_kubeconfig(
         os.path.join(cluster_path, config.RUN.get("kubeconfig_location"))
     )

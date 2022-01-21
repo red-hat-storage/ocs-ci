@@ -356,7 +356,6 @@ def pytest_configure(config):
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
                 )
-                # return
                 continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
                 log.info(

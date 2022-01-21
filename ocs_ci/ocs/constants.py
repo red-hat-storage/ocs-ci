@@ -614,15 +614,26 @@ OPENSHIFT_DR_CLUSTER_OPERATOR = os.path.join(
 OPENSHIFT_DR_HUB_OPERATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_hub_operator.yaml"
 )
+OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system.yaml"
+)
+OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system_operatorgroup.yaml"
+)
 DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
+OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
+DR_AWS_S3_PROFILE_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "dr_aws_s3_profile.yaml"
+)
+DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
+DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
-TOKEN_EXCHANGE_AGENT_LABEL = "token-exchange-agent"
+TOKEN_EXCHANGE_AGENT_LABEL = "app=token-exchange-agent"
 RBD_MIRRORING_STORAGECLUSTER_PATCH = (
-    "oc get StorageCluster -n openshift-storage -o=jsonpath='{.items[0].metadata.name}')  "
     "-n openshift-storage --type json --patch  "
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
 )
@@ -631,12 +642,13 @@ RBD_MIRRORING_ENABLED_QUERY = (
     "(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
 )
 RBD_SIDECAR_PATCH_CMD = (
-    " '[{ 'op': 'add', 'path': '/data/CSI_ENABLE_OMAP_GENERATOR', 'value': 'true' },"
-    "'{ 'op': 'add', 'path': '/data/CSI_ENABLE_VOLUME_REPLICATION', 'value': 'true' }]'"
+    ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
+    '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
 RBD_SIDECAR_COUNT = 16
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
+DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 
 # constants
 RBD_INTERFACE = "rbd"

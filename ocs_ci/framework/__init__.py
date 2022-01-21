@@ -154,10 +154,8 @@ class MultiClusterConfig:
             # reset if any single cluster object is present from init
             self.clusters.clear()
             for i in range(self.nclusters):
-                print(f"inserting at: {i}")
                 self.clusters.insert(i, Config())
                 self.clusters[i].MULTICLUSTER["multicluster_index"] = i
-                print(f"LEN: {len(self.clusters)}")
             self.cluster_ctx = self.clusters[0]
             self.attr_init()
             self._refresh_ctx()

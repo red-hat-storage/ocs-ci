@@ -1255,6 +1255,6 @@ def get_primary_cluster_config():
         framework.config: primary cluster config obhect from config.clusters
 
     """
-    for cluster in range(ocsci_config.clusters):
+    for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster

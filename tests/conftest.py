@@ -1314,6 +1314,13 @@ def health_checker(request, tier_marks_name):
         log.info("Skipping health checks for development mode")
         return
 
+    if config.multicluster:
+        if (
+            config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            == config.get_acm_index()
+        ):
+            return
+
     def finalizer():
         if not skipped:
             try:

@@ -134,19 +134,18 @@ class Submariner(object):
 
         deploy_broker_cmd = "deploy-broker"
         try:
-            # run_subctl_cmd(deploy_broker_cmd)
-            pass
+            run_subctl_cmd(deploy_broker_cmd)
         except CommandFailed:
             logger.exception("Failed to deploy submariner broker")
             raise
 
         # Label the gateway nodes on all non acm cluster
-        # restore_index = config.cur_index
-        # for cluster in get_non_acm_cluster_config():
-        #     config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        #     gateway_node = self.get_default_gateway_node()
-        #     label_nodes([gateway_node], constants.SUBMARINER_GATEWAY_NODE_LABEL)
-        # config.switch_ctx(restore_index)
+        restore_index = config.cur_index
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            gateway_node = self.get_default_gateway_node()
+            label_nodes([gateway_node], constants.SUBMARINER_GATEWAY_NODE_LABEL)
+        config.switch_ctx(restore_index)
 
         # Join all the clusters (except ACM cluster in case of hub deployment)
         for cluster in config.clusters:
@@ -159,9 +158,9 @@ class Submariner(object):
                     f"--clusterid c{self.cluster_seq} --natt=false"
                 )
                 try:
-                    # run_subctl_cmd(
-                    #     join_cmd,
-                    # )
+                    run_subctl_cmd(
+                        join_cmd,
+                    )
                     logger.info(
                         f"Subctl join succeded for {cluster.ENV_DATA['cluster_name']}"
                     )

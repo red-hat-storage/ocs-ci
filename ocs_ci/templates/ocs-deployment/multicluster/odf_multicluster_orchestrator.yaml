@@ -1,12 +1,14 @@
----
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: odf-orchestrator-hub
+  labels:
+    operators.coreos.com/odf-multicluster-orchestrator.openshift-operators: ""
+  name: odf-multicluster-orchestrator
   namespace: openshift-operators
 spec:
   channel: stable-4.9
+  installPlanApproval: Automatic
   name: odf-multicluster-orchestrator
-  source:  ocs-catalogsource
+  source: redhat-operators
   sourceNamespace: openshift-marketplace
-  currentCSV: odf-multicluster-orchestrator.v4.9.1
+  startingCSV: odf-multicluster-orchestrator.v4.9.1

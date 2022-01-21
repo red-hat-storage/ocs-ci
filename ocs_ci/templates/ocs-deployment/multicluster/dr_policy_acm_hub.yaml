@@ -6,7 +6,7 @@ metadata:
 spec:
   drClusterSet:
   - name: PLACE_HOLDER_CLUSTER1 
-    s3ProfileName: odr-s3-secret-east 
+    s3ProfileName: odr-s3secret-east 
   - name: PLACE_HOLDER_CLUSTER2 
-    s3ProfileName: odr-s3-secret-west 
+    s3ProfileName: odr-s3secret-west 
   schedulingInterval: 5m
