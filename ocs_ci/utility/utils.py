@@ -2348,7 +2348,7 @@ def check_timeout_reached(start_time, timeout, err_msg=None):
     """
     msg = f"Timeout {timeout} reached!"
     if err_msg:
-        msg += " Error: {err_msg}"
+        msg += f" Error: {err_msg}"
 
     if timeout < (time.time() - start_time):
         raise TimeoutException(msg)
