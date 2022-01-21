@@ -2,8 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier4a,
-    tier4,
+    system_test,
     ignore_leftovers,
     polarion_id,
     skipif_ocs_version,
@@ -13,8 +12,7 @@ from ocs_ci.framework.testlib import E2ETest
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
+@system_test
 @ignore_leftovers
 @polarion_id("OCS-2716")
 @skipif_ocs_version("<4.9")
