@@ -15,6 +15,7 @@ from ocs_ci.ocs import ocp
 from ocs_ci.ocs.fio_artefacts import get_pvc_dict
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import job
+from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
 from ocs_ci.utility.utils import run_cmd
 
@@ -46,6 +47,10 @@ def test_log_reader_writer_parallel(project, tmp_path):
         deploy_dict = yaml.safe_load(deployment_file.read())
     # we need to match deployment replicas with number of worker nodes
     deploy_dict["spec"]["replicas"] = len(get_worker_nodes())
+    # drop topology spread constraints related to zones
+    topology.drop_topology_constraint(
+        deploy_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
+    )
     # and link the deployment with the pvc
     try:
         link_spec_volume(
@@ -133,6 +138,10 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # wrong with the IO or the data)
     with open(constants.LOGWRITER_CEPHFS_READER, "r") as job_file:
         job_dict = yaml.safe_load(job_file.read())
+    # drop topology spread constraints related to zones
+    topology.drop_topology_constraint(
+        job_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
+    )
     # we need to match number of jobs with the number used in the workload
     job_dict["spec"]["completions"] = deploy_dict["spec"]["replicas"]
     job_dict["spec"]["parallelism"] = deploy_dict["spec"]["replicas"]

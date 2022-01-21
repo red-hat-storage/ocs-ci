@@ -13,3 +13,7 @@ The goal of this workload is to test:
   (as evidence whether IO was affected)
 - data consistency of the written data
 - read/write IO stress such workload can create
+
+Assumptions:
+
+- all nodes have `topology.kubernetes.io/zone` label defined
