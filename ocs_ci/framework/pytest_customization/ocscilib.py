@@ -306,7 +306,7 @@ def pytest_addoption(parser):
         """,
     )
     parser.addoption(
-        "--regional_dr",
+        "--regional-dr",
         dest="regional_dr",
         help="Run on regional DR setup, and skip ODF related checks",
     )
