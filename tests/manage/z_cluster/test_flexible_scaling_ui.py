@@ -68,7 +68,7 @@ class TestFlexibleScalingUI(ManageTest):
             timeout=600,
             sleep=10,
             func=check_available_pvs,
-            expected_avaible_pvs=1,
+            expected_available_pvs=1,
         )
         if not sample.wait_for_func_status(True):
             raise Exception("The number of PVs on Available state is not as expected")
