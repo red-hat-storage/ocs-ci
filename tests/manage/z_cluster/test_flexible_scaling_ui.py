@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ui_not_support,
     bugzilla,
     ui,
+    ignore_leftovers,
 )
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 @ui
 @tier1
 @skipif_no_lso
+@ignore_leftovers
 @bugzilla("1943280")
 @vsphere_platform_required
 @skipif_ui_not_support("add_capacity")
