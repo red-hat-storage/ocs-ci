@@ -345,6 +345,7 @@ def log_ocs_version(cluster):
     deploy = config.RUN["cli_params"].get("deploy")
     dev_mode = config.RUN["cli_params"].get("dev_mode")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    regional_dr = config.RUN["regional_dr"]
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
         return
@@ -352,8 +353,10 @@ def log_ocs_version(cluster):
         log.info("Skipping version reporting for development mode.")
         return
     elif skip_ocs_deployment:
-        log.info("Skipping version reporting since OCS deployment is skipped.")
+        log.info("Skipping version reporting since OCS/ODF deployment is skipped.")
         return
+    elif regional_dr:
+        log.info("Skipping ODF version reporting since it is Regional DR clusters")
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
@@ -1319,7 +1322,13 @@ def health_checker(request, tier_marks_name):
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                if not (teardown or skip_ocs_deployment or mcg_only_deployment):
+                regional_dr = config.RUN["regional_dr"]
+                if not (
+                    teardown
+                    or skip_ocs_deployment
+                    or mcg_only_deployment
+                    or regional_dr
+                ):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
             except CephHealthException:
@@ -1397,7 +1406,7 @@ def cluster(request, log_cli_level, record_testsuite_property):
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
-    if not config.ENV_DATA["skip_ocs_deployment"]:
+    if not (config.ENV_DATA["skip_ocs_deployment"] or config.RUN["regional_dr"]):
         record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
@@ -3219,12 +3228,15 @@ def ceph_toolbox(request):
     deploy = config.RUN["cli_params"]["deploy"]
     teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
+    regional_dr = config.RUN["regional_dr"]
     deploy_teardown = deploy or teardown
     managed_platform = (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     )
-    if not (deploy_teardown or skip_ocs) or (managed_platform and not deploy_teardown):
+    if not (deploy_teardown or skip_ocs or regional_dr) or (
+        managed_platform and not deploy_teardown
+    ):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
