@@ -252,7 +252,7 @@ def check_available_pvs(expected_available_pvs=1):
 
     Return:
          bool: return True if the expected number of PVs equal to actual
-         number of PVs on Available state otherwise retun False
+               number of PVs on Available state otherwise retun False
 
     """
     logger.info(
