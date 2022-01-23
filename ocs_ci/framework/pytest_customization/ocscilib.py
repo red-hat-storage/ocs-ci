@@ -576,7 +576,7 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
-    regional_dr = get_cli_param(config, "--regional_dr", default=False)
+    regional_dr = get_cli_param(config, "--regional-dr", default=False)
     if regional_dr:
         ocsci_config.RUN["regional_dr"] = True
 

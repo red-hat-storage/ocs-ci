@@ -170,12 +170,7 @@ def pytest_collection_modifyitems(session, items):
                     item.user_properties.append(("squad", squad))
                     break
 
-    if not (
-        teardown
-        or deploy
-        or (deploy and skip_ocs_deployment)
-        or (deploy and regional_dr)
-    ):
+    if not (teardown or deploy or (deploy and skip_ocs_deployment) or (regional_dr)):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
