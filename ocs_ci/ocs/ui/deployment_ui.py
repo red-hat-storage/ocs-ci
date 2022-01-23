@@ -120,6 +120,7 @@ class DeploymentUI(PageNavigator):
             self.search_operator_installed_operators_page(operator=self.operator_name)
 
         logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
+        self.refresh_popup()
         if self.operator_name == ODF_OPERATOR:
             logger.info("Click on Create StorageSystem")
             self.do_click(
@@ -274,7 +275,7 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(
-                locator=self.dep_loc["next"], timeout=90, enable_screenshot=True
+                locator=self.dep_loc["next"], timeout=300, enable_screenshot=True
             )
             self.configure_encryption()
 
@@ -352,6 +353,7 @@ class DeploymentUI(PageNavigator):
         """
         self.search_operator_installed_operators_page(operator=operator)
         time.sleep(5)
+        self.refresh_popup()
         sample = TimeoutSampler(
             timeout=timeout_install,
             sleep=sleep,
