@@ -154,6 +154,7 @@ def pytest_collection_modifyitems(session, items):
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    regional_dr = config.RUN["regional_dr"]
 
     # Add squad markers to each test item based on filepath
     for item in items:
@@ -169,7 +170,12 @@ def pytest_collection_modifyitems(session, items):
                     item.user_properties.append(("squad", squad))
                     break
 
-    if not (teardown or deploy or (deploy and skip_ocs_deployment)):
+    if not (
+        teardown
+        or deploy
+        or (deploy and skip_ocs_deployment)
+        or (deploy and regional_dr)
+    ):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
