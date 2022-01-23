@@ -25,8 +25,6 @@ from ocs_ci.helpers import performance_lib
 
 log = logging.getLogger(__name__)
 
-# SKIP_REASON = "Skipping multiple clone tests until github issue 5198 is addressed"
-
 
 @performance
 @skipif_ocp_version("<4.6")
@@ -81,7 +79,6 @@ class TestPvcMultiClonePerformance(PASTest):
     """
 
     @pytest.mark.polarion_id("OCS-2622")
-    # @pytest.mark.skip(SKIP_REASON)
     def test_pvc_multiple_clone_performance(
         self,
         interface_iterate,
