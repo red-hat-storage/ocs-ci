@@ -1,0 +1,19 @@
+##############################################################################################################
+# ReclaimSpaceJob is a namespaced custom resource designed to invoke reclaim space operation on target volume
+##############################################################################################################
+
+apiVersion: csiaddons.openshift.io/v1alpha1
+kind: ReclaimSpaceJob
+metadata:
+  name: sample-1
+spec:
+  # target represents volume target on which the operation will be performed
+  target:
+    # persistentVolumeClaim contains a string indicating the name of PersistentVolumeClaim
+    persistentVolumeClaim: pvc-1
+  # backOfflimit specifies the number of retries before marking reclaim space operation as failed.
+  # If not specified, defaults to 6. Maximum allowed value is 60 and minimum allowed value is 0.
+  backOffLimit: 10
+  # retryDeadlineSeconds specifies the duration in seconds relative to the start time that the operation may be retried;
+  # value must be positive integer. If not specified, defaults to 600 seconds. Maximum allowed value is 1800.
+  retryDeadlineSeconds: 900
