@@ -105,17 +105,13 @@ class TestRbdSpaceReclaim(ManageTest):
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
 
         # Wait for the Succeeded result of ReclaimSpaceJob
-        try:
-            reclaim_space_job.ocp.wait_for_resource(
-                condition="Succeeded",
-                resource_name=reclaim_space_job.name,
-                column="RESULT",
-                timeout=30,
-                sleep=3,
-            )
-        except Exception as ex:
-            log.error(str(ex))
-            raise
+        reclaim_space_job.ocp.wait_for_resource(
+            condition="Succeeded",
+            resource_name=reclaim_space_job.name,
+            column="RESULT",
+            timeout=30,
+            sleep=3,
+        )
 
         # Verify space is reclaimed by checking the used size
         used_after_reclaiming_space = fetch_used_size(
