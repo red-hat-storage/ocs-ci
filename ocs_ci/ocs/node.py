@@ -21,10 +21,11 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions
+from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pvs_available_in_sc,
@@ -203,9 +204,14 @@ def drain_nodes(node_names):
     node_names_str = " ".join(node_names)
     log.info(f"Draining nodes {node_names_str}")
     try:
+        drain_deletion_flag = (
+            "--delete-emptydir-data"
+            if get_ocp_version() >= version.VERSION_4_7
+            else "--delete-local-data"
+        )
         ocp.exec_oc_cmd(
             f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-            f"--delete-local-data",
+            f"{drain_deletion_flag}",
             timeout=1800,
         )
     except TimeoutExpired:
