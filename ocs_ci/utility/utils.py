@@ -1659,7 +1659,7 @@ def get_running_ocp_version(separator=None):
     char = separator if separator else "."
     try:
         # if the cluster exist, this part will be run
-        results = run_cmd(f"oc get clusterversion -o yaml")
+        results = run_cmd("oc get clusterversion -o yaml")
         build = yaml.safe_load(results)["items"][0]["status"]["desired"]["version"]
         return char.join(build.split(".")[0:2])
     except Exception:
