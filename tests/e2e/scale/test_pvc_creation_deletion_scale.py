@@ -136,7 +136,13 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Delete kube_job
         job_file1.delete(namespace=self.namespace)
+        job_file1.wait_for_delete(
+            resource_name=job_file1.name, namespace=self.namespace
+        )
         job_file2.delete(namespace=self.namespace)
+        job_file2.wait_for_delete(
+            resource_name=job_file2.name, namespace=self.namespace
+        )
 
         # Adding 1min wait time for PVC deletion logs to be updated
         # Observed failure when we immediately check the logs for pvc delete time
@@ -260,7 +266,13 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # Delete kube_job
         job_file_rbd.delete(namespace=self.namespace)
+        job_file_rbd.wait_for_delete(
+            resource_name=job_file_rbd.name, namespace=self.namespace
+        )
         job_file_cephfs.delete(namespace=self.namespace)
+        job_file_cephfs.wait_for_delete(
+            resource_name=job_file_cephfs.name, namespace=self.namespace
+        )
 
         # Adding 1min wait time for PVC deletion logs to be updated
         # Observed failure when we immediately check the logs for pvc delete time

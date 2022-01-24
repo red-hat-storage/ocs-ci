@@ -1546,6 +1546,12 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             start = [i for i in logs if re.search(f"provision.*{name}.*started", i)]
             end = [i for i in logs if re.search(f"provision.*{name}.*succeeded", i)]
             if not start or not end:
+                logging.info(f"PVC {name} missing start or end time")
+                try:
+                    logging.info(f"PVC {name} creation start {start}")
+                    logging.info(f"PVC {name} creation complete {end}")
+                except UnexpectedBehaviour:
+                    logging.warning(f"PVC {name} creation data missing")
                 no_data_list.append(name)
 
         if no_data_list:
@@ -1622,6 +1628,12 @@ def measure_pv_deletion_time_bulk(
             start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
             end = [i for i in logs if re.search(f'delete "{pv}": succeeded', i)]
             if not start or not end:
+                logging.info(f"PVC {pv} missing start or end time")
+                try:
+                    logging.info(f"PVC {pv} deletion start {start}")
+                    logging.info(f"PVC {pv} deletion complete {end}")
+                except UnexpectedBehaviour:
+                    logging.warning(f"PVC {pv} deletion data missing")
                 no_data_list.append(pv)
 
         if no_data_list:
