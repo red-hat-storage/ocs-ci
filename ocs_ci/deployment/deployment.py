@@ -502,6 +502,10 @@ class Deployment(object):
                 ocs_operator_names.append(defaults.NOOBAA_OPERATOR)
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
+
+        if ocs_version >= version.VERSION_4_10:
+            ocs_operator_names.append(defaults.ODF_CSI_ADDONS_OPERATOR)
+
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         is_ibm_sa_linked = False
 

@@ -38,6 +38,7 @@ OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
+ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
