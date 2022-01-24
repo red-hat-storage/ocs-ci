@@ -17,18 +17,27 @@ logger = logging.getLogger(__name__)
 @skipif_openshift_dedicated
 def test_hpa_noobaa_endpoint_metric():
     """
-    Test to verify HPA noobaa-endpoint cpu metrics is available
+    Test to verify HPA noobaa-endpoint cpu metrics is available.
+    Since 4.10, it uses horizontal-pod-autoscaler-v2 API.
     """
-    metric_key = "currentCPUUtilizationPercentage"
-
     ocp_obj = ocp.OCP(
         kind=constants.HPA,
         resource_name="noobaa-endpoint",
         namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     )
 
-    hpa = ocp_obj.get()["status"]
+    status = ocp_obj.get()["status"]
+    assert "currentMetrics" in status, "Failed: metrics not provided in noobaa-endpoint"
 
-    assert metric_key in hpa, "Failed: noobaa-endpoint cpu metrics is unavailable"
-    assert hpa[metric_key] >= 0, "Failed: noobaa-endpoint cpu metrics is unknown"
-    logger.info(f"Current resource cpu utilized: {hpa[metric_key]}%")
+    cpu_utilization = None
+    for metric in status["currentMetrics"]:
+        if metric["type"] != "Resource":
+            continue
+        if metric["resource"]["name"] != "cpu":
+            continue
+        cpu_utilization = metric["resource"]["current"]["averageUtilization"]
+    assert (
+        cpu_utilization is not None
+    ), "Failed: noobaa-endpoint cpu metrics not available"
+    assert cpu_utilization >= 0
+    logger.info("Current resource cpu utilized: %d%%", cpu_utilization)
