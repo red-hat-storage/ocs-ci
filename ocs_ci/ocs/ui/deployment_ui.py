@@ -262,6 +262,19 @@ class DeploymentUI(PageNavigator):
 
         self.configure_osd_size()
 
+        if self.ocp_version == "4.10":
+            sample = TimeoutSampler(
+                timeout=900,
+                sleep=10,
+                func=self.get_number_rows,
+                expected_rows=3,
+            )
+            if not sample.wait_for_func_status(result=True):
+                error_msg = "Worker Nodes not found after 900 seconds"
+                logger.error(error_msg)
+                self.take_screenshot()
+                raise TimeoutExpiredError(custom_message=error_msg)
+
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
@@ -280,6 +293,22 @@ class DeploymentUI(PageNavigator):
             self.configure_encryption()
 
         self.create_storage_cluster()
+
+    def get_number_rows(self, expected_rows=3):
+        """
+        Verify the number of rows in node table is greater or
+        equal to expected_rows
+
+        Args:
+            expected_rows (int): the expected rows in node table
+
+        Returns:
+            bool: return true if the number of rows in node table is
+                  greater or equal to expected_rows, otherwise return false
+
+        """
+        row_web_elements = self.get_element_by_xpath(xpath="//table/tbody/tr")
+        return len(row_web_elements) >= expected_rows
 
     def create_storage_cluster(self):
         """

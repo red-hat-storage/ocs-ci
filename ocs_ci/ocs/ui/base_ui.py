@@ -189,6 +189,18 @@ class BaseUI:
         """
         return self.driver.find_element(by=locator[1], value=locator[0]).text
 
+    def get_element_by_xpath(self, xpath=""):
+        """
+        Get elements by xpath
+
+        Args:
+            xpath (string): GUI xpath
+
+        Return:
+            list: list of webelements
+        """
+        return self.driver.find_elements_by_xpath(xpath)
+
     def page_has_loaded(self, retries=5, sleep_time=1):
         """
         Waits for page to completely load by comparing current page hash values.
