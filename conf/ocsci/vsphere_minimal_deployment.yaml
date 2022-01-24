@@ -4,6 +4,7 @@
 # 24Gi memory per worker node
 DEPLOYMENT:
   allow_lower_instance_requirements: true
+  ui_deployment: True
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
