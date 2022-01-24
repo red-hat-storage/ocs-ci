@@ -176,7 +176,7 @@ class TestFIOBenchmark(PASTest):
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 500:
-            self.filesize = int(ceph_capacity * 0.008)
+            self.filesize = int(ceph_capacity * 0.0415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
@@ -199,7 +199,6 @@ class TestFIOBenchmark(PASTest):
         """
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-            self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
         if io_pattern == "random":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = [
                 "randwrite",
