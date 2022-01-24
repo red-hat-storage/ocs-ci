@@ -3727,6 +3727,8 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         ceph_mon_daemon_id (list): List of crashed ceph mon id
 
     """
+    from ocs_ci.ocs.cluster import is_lso_cluster
+
     # Scale down rook-ceph-operator
     logger.info("Scale down rook-ceph-operator")
     if not modify_deployment_replica_count(
@@ -3739,9 +3741,13 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     dep_obj = OCP(
         kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
-    mon_deployment_name = (
-        mon_pod_running.get().get("metadata").get("labels").get("pvc_name")
-    )
+    if is_lso_cluster():
+        mon = mon_pod_running.get().get("metadata").get("labels").get("mon")
+        mon_deployment_name = f"rook-ceph-mon-{mon}"
+    else:
+        mon_deployment_name = (
+            mon_pod_running.get().get("metadata").get("labels").get("pvc_name")
+        )
     running_mon_pod_yaml = dep_obj.get(resource_name=mon_deployment_name)
 
     # Patch the mon Deployment to run a sleep
@@ -3777,13 +3783,17 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     # set a few simple variables
     time.sleep(60)
     mon_pod_obj = pod.get_mon_pods()
-    mon_pod_running = [
-        pod_obj
-        for pod_obj in mon_pod_obj
-        if pod_obj.get().get("metadata").get("labels").get("pvc_name")
-        == mon_deployment_name
-    ]
-    mon_pod_running = mon_pod_running[0]
+    for pod_obj in mon_pod_obj:
+        if (
+            is_lso_cluster()
+            and pod_obj.get().get("metadata").get("labels").get("mon") == mon
+        ):
+            mon_pod_running = pod_obj
+        elif (
+            pod_obj.get().get("metadata").get("labels").get("pvc_name")
+            == mon_deployment_name
+        ):
+            mon_pod_running = pod_obj
     monmap_path = "/tmp/monmap"
     args_from_mon_containers = (
         running_mon_pod_yaml.get("spec")

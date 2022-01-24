@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     skipif_ocs_version,
     ignore_leftovers,
+    skipif_external_mode,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
@@ -31,6 +32,7 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @system_test
 @skipif_ocs_version("<4.9")
+@skipif_external_mode
 @polarion_id("OCS-2720")
 class TestRestoreCephMonQuorum(E2ETest):
     """
@@ -63,7 +65,6 @@ class TestRestoreCephMonQuorum(E2ETest):
         f) there are snapshots and clones for few PVCs
         g) Background IOs (fio pods) running
         """
-        # ToDo:Validate FIPS, hugepages enabled in cluster
 
         # ToDo: Create objects and write data's to it
 
