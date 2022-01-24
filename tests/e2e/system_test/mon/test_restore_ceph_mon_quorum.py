@@ -2,10 +2,21 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, ignore_leftovers, systemtests
+from ocs_ci.framework.pytest_customization.marks import (
+    system_test,
+    polarion_id,
+    skipif_ocs_version,
+    ignore_leftovers,
+)
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    wait_for_storage_pods,
+    get_ceph_tools_pod,
+    get_mon_pods,
+)
 from ocs_ci.helpers.helpers import (
     induce_mon_quorum_loss,
     recover_mon_quorum,
@@ -18,8 +29,9 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@systemtests
-@pytest.mark.polarion_id("OCS-2720")
+@system_test
+@skipif_ocs_version("<4.9")
+@polarion_id("OCS-2720")
 class TestRestoreCephMonQuorum(E2ETest):
     """
     The objective of this test case is to verify that
@@ -75,21 +87,34 @@ class TestRestoreCephMonQuorum(E2ETest):
             pod_obj = OCP(
                 kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
-            op_obj = op_obj.get(resource_name=constants.ROOK_CEPH_OPERATOR)
-            if op_obj.get("spec").get("replicas") != 1:
+            operator_obj = op_obj.get(resource_name=constants.ROOK_CEPH_OPERATOR)
+            if operator_obj.get("spec").get("replicas") != 1:
                 modify_deployment_replica_count(
                     deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
                 ), "Failed to scale up rook-ceph-operator to 1"
 
-                log.info("Validate all mons are up and running")
+            log.info("Validate all mons are up and running")
+            try:
                 pod_obj.wait_for_resource(
                     condition=constants.STATUS_RUNNING,
                     selector=constants.MON_APP_LABEL,
                     resource_count=3,
-                    timeout=1800,
+                    timeout=60,
                     sleep=5,
                 )
-                log.info("All mons are up and running")
+            except (TimeoutExpiredError, ResourceWrongStatusException) as ex:
+                log.warning(ex)
+                op_obj.delete(resource_name=constants.ROOK_CEPH_OPERATOR)
+                for pod in get_mon_pods():
+                    pod.delete()
+                pod_obj.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.MON_APP_LABEL,
+                    resource_count=3,
+                    timeout=360,
+                    sleep=5,
+                )
+            log.info("All mons are up and running")
 
         request.addfinalizer(finalizer)
 
@@ -118,14 +143,14 @@ class TestRestoreCephMonQuorum(E2ETest):
         # Recover mon quorum
         recover_mon_quorum(self.mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id)
 
+        # Validate storage pods are running
+        wait_for_storage_pods()
+
         # Remove crash list from ceph health
         log.info("Silence the ceph warnings by “archiving” the crash")
         tool_pod = get_ceph_tools_pod()
         tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
         log.info("Removed ceph crash warnings. Check for ceph and cluster health")
-
-        # Validate storage pods are running
-        wait_for_storage_pods()
 
         # Validate cluster health
         self.sanity_helpers.health_check(tries=40)
