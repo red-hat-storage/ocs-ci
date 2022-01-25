@@ -310,6 +310,32 @@ class DeploymentUI(PageNavigator):
                   greater or equal to expected_rows, otherwise return false
 
         """
+        try:
+            logger.info("Click Internal")
+            if self.operator_name == ODF_OPERATOR:
+                self.do_click(
+                    locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
+                )
+            else:
+                self.do_click(
+                    locator=self.dep_loc["internal_mode"], enable_screenshot=True
+                )
+
+            logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+            self.do_click(
+                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc[self.storage_class], enable_screenshot=True
+            )
+
+            if self.operator_name == ODF_OPERATOR:
+                self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
+            self.configure_osd_size()
+        except Exception as e:
+            logger.error(e)
+        self.refresh_page()
         row_web_elements = self.get_element_by_xpath(xpath="//table/tbody/tr")
         return len(row_web_elements) >= expected_rows
 
