@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -4080,6 +4081,22 @@ def setup_ui(request):
 
 def setup_ui_fixture(request):
     driver = login_ui()
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
+
+
+@pytest.fixture(scope="function")
+def setup_acm_ui(request):
+    return setup_acm_ui_fixture(request)
+
+
+def setup_acm_ui_fixture(request):
+    driver = login_to_acm()
 
     def finalizer():
         close_browser(driver)
