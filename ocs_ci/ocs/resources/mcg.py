@@ -590,66 +590,6 @@ class MCG:
         logger.info(f"result from RPC call: {result}")
         return target_bucket_name
 
-    def create_namespace_store(
-        self, nss_name, region, cld_mgr, cloud_uls_factory, platform
-    ):
-        """
-        Creates a new namespace store
-
-        Args:
-            nss_name (str): The name to be given to the new namespace store
-            region (str): The region name to be used
-            cld_mgr: A cloud manager instance
-            cloud_uls_factory: The cloud uls factory
-            platform (str): The platform resource name
-
-        Returns:
-            str: The name of the created target_bucket_name (cloud uls)
-        """
-        # Create the actual target bucket on AWS
-        uls_dict = cloud_uls_factory({platform: [(1, region)]})
-        target_bucket_name = list(uls_dict[platform])[0]
-
-        nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
-        nss_data["metadata"]["name"] = nss_name
-        nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-
-        NSS_MAPPING = {
-            constants.AWS_PLATFORM: {
-                "type": "aws-s3",
-                "awsS3": {
-                    "targetBucket": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "aws_client.secret.name")
-                    },
-                },
-            },
-            constants.AZURE_PLATFORM: {
-                "type": "azure-blob",
-                "azureBlob": {
-                    "targetBlobContainer": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "azure_client.secret.name")
-                    },
-                },
-            },
-            constants.RGW_PLATFORM: {
-                "type": "s3-compatible",
-                "s3Compatible": {
-                    "targetBucket": target_bucket_name,
-                    "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
-                    "signatureVersion": "v2",
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "rgw_client.secret.name")
-                    },
-                },
-            },
-        }
-
-        nss_data["spec"] = NSS_MAPPING[platform]
-        create_resource(**nss_data)
-        return target_bucket_name
-
     def check_ns_resource_validity(
         self, ns_resource_name, target_bucket_name, endpoint
     ):
@@ -1074,3 +1014,52 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    def create_nsfs_mcg_account(
+        self,
+        email,
+        name,
+        has_login,
+        s3_access,
+        allowed_buckets,
+        default_resource,
+        uid,
+        gid,
+        new_buckets_path,
+        nsfs_only,
+    ):
+        """
+        Create a new MCG account with the given parameters
+
+        Args:
+            email (str): Email address of the user
+            name (str): Name of the user
+            has_login (bool): Whether the user has a login
+            s3_access (bool): Whether the user has access to S3
+            allowed_buckets (str): Comma separated list of allowed buckets
+            default_resource (str): Default resource for the user
+            uid (str): UID of the user
+            gid (str): GID of the user
+            new_buckets_path (str): Path to the new buckets
+            nsfs_only (bool): Whether the user has access to NSFS only
+
+        Returns:
+            str: The name of the account created
+
+        """
+        params = {
+            "email": email,
+            "name": name,
+            "has_login": has_login,
+            "s3_access": s3_access,
+            "allowed_buckets": allowed_buckets,
+            "default_resource": default_resource,
+            "nsfs_account_config": {
+                "uid": uid,
+                "gid": gid,
+                "new_buckets_path": new_buckets_path,
+                "nsfs_only": nsfs_only,
+            },
+        }
+        logger.info(f"Creating MCG account with params: {params}")
+        return self.send_rpc_query("account_api", "create_account", params)

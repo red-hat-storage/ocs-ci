@@ -38,6 +38,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
 
     """
     api = "api" if api else ""
+    no_ssl = "--no-verify-ssl" if signed_request_creds.get("ssl") is False else ""
     if mcg_obj:
         if mcg_obj.region:
             region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
@@ -63,6 +64,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f"{region}"
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
+            f"{no_ssl} "
         )
         string_wrapper = '"'
     else:
@@ -72,7 +74,9 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
-def verify_s3_object_integrity(original_object_path, result_object_path, awscli_pod):
+def verify_s3_object_integrity(
+    original_object_path, result_object_path, awscli_pod, result_pod=None
+):
     """
     Verifies checksum between original object and result object on an awscli pod
 
@@ -85,11 +89,20 @@ def verify_s3_object_integrity(original_object_path, result_object_path, awscli_
         bool: True if checksum matches, False otherwise
 
     """
-    md5sum = shlex.split(
-        awscli_pod.exec_cmd_on_pod(
-            command=f"md5sum {original_object_path} {result_object_path}"
+    if result_pod:
+        origin_md5 = shlex.split(
+            awscli_pod.exec_cmd_on_pod(command=f"md5sum {original_object_path}")
         )
-    )
+        result_md5 = shlex.split(
+            result_pod.exec_cmd_on_pod(command=f"md5sum {result_object_path}")
+        )
+        md5sum = origin_md5 + result_md5
+    else:
+        md5sum = shlex.split(
+            awscli_pod.exec_cmd_on_pod(
+                command=f"md5sum {original_object_path} {result_object_path}"
+            )
+        )
     logger.info(f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}")
     if md5sum[0] == md5sum[2]:
         logger.info(
@@ -1127,7 +1140,7 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
 
 
 def compare_directory(
-    awscli_pod, original_dir, result_dir, amount=2, pattern="ObjKey-"
+    awscli_pod, original_dir, result_dir, amount=2, pattern="ObjKey-", result_pod=None
 ):
     """
     Compares object checksums on original and result directories
@@ -1147,6 +1160,7 @@ def compare_directory(
                 original_object_path=f"{original_dir}/{file_name}",
                 result_object_path=f"{result_dir}/{file_name}",
                 awscli_pod=awscli_pod,
+                result_pod=result_pod,
             ),
         )
     return all(comparisons)
@@ -1483,6 +1497,8 @@ def random_object_round_trip_verification(
     mcg_obj=None,
     s3_creds=None,
     cleanup=False,
+    result_pod=None,
+    result_pod_path=None,
 ):
     """
     Writes random objects in a pod, uploads them to a bucket,
@@ -1507,6 +1523,9 @@ def random_object_round_trip_verification(
         for writing objects directly to buckets outside of the MCG. Defaults to None.
         cleanup (bool, optional): A boolean defining whether the files should be cleaned up
         after the verification.
+        result_pod (ocs_ci.ocs.ocp.OCP, optional): A second pod contianing files for comparison
+        result_pod_path (str, optional):
+            A string containing the path to the directory where the files reside in on the result pod
 
     """
     # Verify that all needed directories exist
@@ -1542,6 +1561,15 @@ def random_object_round_trip_verification(
         amount=amount,
         pattern=pattern,
     )
+    if result_pod:
+        compare_directory(
+            awscli_pod=io_pod,
+            original_dir=upload_dir,
+            result_dir=result_pod_path,
+            amount=amount,
+            pattern=pattern,
+            result_pod=result_pod,
+        )
     if cleanup:
         io_pod.exec_cmd_on_pod(f"rm -rf {upload_dir} {download_dir}")
 

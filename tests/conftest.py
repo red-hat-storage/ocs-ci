@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -10,6 +11,7 @@ from math import floor
 from shutil import copyfile
 from functools import partial
 
+import boto3
 from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
@@ -63,6 +65,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     get_deployments_having_label,
     Pod,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
@@ -3388,7 +3391,7 @@ def ns_resource_factory(
 
 
 @pytest.fixture()
-def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory, pvc_factory):
     """
     Create a Namespace Store factory.
     Calling this fixture creates a new Namespace Store(s).
@@ -3399,13 +3402,13 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
 
     """
     return namespacestore_factory_implementation(
-        request, cld_mgr, mcg_obj, cloud_uls_factory
+        request, cld_mgr, mcg_obj, cloud_uls_factory, pvc_factory
     )
 
 
 @pytest.fixture(scope="session")
 def namespace_store_factory_session(
-    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session, pvc_factory_session
 ):
     """
     Create a Namespace Store factory.
@@ -3417,7 +3420,11 @@ def namespace_store_factory_session(
 
     """
     return namespacestore_factory_implementation(
-        request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
+        request,
+        cld_mgr,
+        mcg_obj_session,
+        cloud_uls_factory_session,
+        pvc_factory_session,
     )
 
 
@@ -4361,3 +4368,186 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session")
+def nsfs_interface_session(request):
+    return nsfs_interface_fixture(request)
+
+
+@pytest.fixture(scope="function")
+def nsfs_interface(request):
+    return nsfs_interface_fixture(request)
+
+
+def nsfs_interface_fixture(request):
+    created_deployments = []
+
+    def nsfs_interface_deployment_factory(pvc_name, pvc_mount_path="/nsfs"):
+        """
+        A factory for creating an NSFS deployment whose pods can be used as a filesystem interface
+        for the NSFS PVC and bucket.
+
+        Args:
+            pvc_name (str): The name of the PVC to mount
+            pvc_mount_path (str, optional): The filesystem path in which the PVC should be mounted. Defaults to '/nsfs'.
+
+        Returns:
+            (OCS): The OCS object of the NSFS deployment
+
+        """
+        nsfs_deployment_data = templating.load_yaml(constants.NSFS_INTERFACE_YAML)
+        nsfs_deployment_data["metadata"]["name"] = create_unique_resource_name(
+            "nsfs-interface", "deployment"
+        )
+        uid = nsfs_deployment_data["metadata"]["name"].split("-")[-1]
+        nsfs_deployment_data["spec"]["selector"]["matchLabels"]["app"] += f"-{uid}"
+        nsfs_deployment_data["spec"]["template"]["metadata"]["labels"][
+            "app"
+        ] += f"-{uid}"
+        vol_mnt = nsfs_deployment_data["spec"]["template"]["spec"]["containers"][0][
+            "volumeMounts"
+        ][0]
+        vol_mnt["name"] = pvc_name
+        vol_mnt["mountPath"] = pvc_mount_path
+        volumes = nsfs_deployment_data["spec"]["template"]["spec"]["volumes"][0]
+        volumes["name"] = pvc_name
+        volumes["persistentVolumeClaim"]["claimName"] = pvc_name
+        deployment_obj = helpers.create_resource(**nsfs_deployment_data)
+        created_deployments.append(deployment_obj)
+        return deployment_obj
+
+    def nsfs_interface_deployment_cleanup():
+        """
+        Delete the deployment that was created for the test
+
+        """
+        for deploy in created_deployments:
+            deploy.delete()
+            deploy.ocp.wait_for_delete(deploy.name)
+
+    request.addfinalizer(nsfs_interface_deployment_cleanup)
+    return nsfs_interface_deployment_factory
+
+
+@pytest.fixture(scope="function")
+def nsfs_bucket_factory(
+    request, namespace_store_factory, nsfs_interface, mcg_obj_session, bucket_factory
+):
+    return nsfs_bucket_factory_fixture(
+        request,
+        namespace_store_factory,
+        nsfs_interface,
+        mcg_obj_session,
+        bucket_factory,
+    )
+
+
+def nsfs_bucket_factory_fixture(
+    request, namespace_store_factory, nsfs_interface, mcg_obj_session, bucket_factory
+):
+    created_accounts = []
+
+    def nsfs_bucket_factory_implementation(nsfs_obj):
+        """
+        A factory for creating an NSFS bucket and setting up all required components.
+
+        Args:
+            nsfs_obj (NSFS): An NSFS parametrization object (please see `mcg_params.py`)
+
+        """
+        # Create a PVC and namespacestore for the bucket
+        nsfs_nss = namespace_store_factory(
+            nsfs_obj.method,
+            {
+                "nsfs": [
+                    (
+                        nsfs_obj.pvc_name,
+                        nsfs_obj.pvc_size,
+                        nsfs_obj.sub_path,
+                        nsfs_obj.fs_backend,
+                    )
+                ]
+            },
+        )[0]
+        # Create a deployment for mounting the PVC and accessing its filesystem
+        nsfs_deploy = nsfs_interface(nsfs_nss.uls_name, nsfs_obj.mount_path)
+        deployment_app_label = nsfs_deploy.data["spec"]["selector"]["matchLabels"][
+            "app"
+        ]
+        nsfs_interface_pod = Pod(
+            **get_pods_having_label(
+                f"app={deployment_app_label}", config.ENV_DATA["cluster_namespace"]
+            )[0]
+        )
+        wait_for_pods_to_be_running(pod_names=[nsfs_interface_pod.name])
+        # Apply the necessary permissions on the filesystem
+        nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
+        nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
+        nsfs_interface_pod.exec_cmd_on_pod(
+            f"useradd -g {nsfs_obj.gid} -u {nsfs_obj.uid} nsfs-user"
+        )
+        nsfs_obj.interface_pod = nsfs_interface_pod
+        # Create a new MCG account
+        acc_email = (
+            create_unique_resource_name("account", "mcg").replace("-", "")
+            + "@redhat.qe"
+        )
+        created_accounts.append(acc_email)
+        acc_creation_resp = mcg_obj_session.create_nsfs_mcg_account(
+            acc_email,
+            "NSFS IntegrityTest",
+            False,
+            True,
+            {"full_permission": True},
+            nsfs_nss.name,
+            nsfs_obj.uid,
+            nsfs_obj.gid,
+            "/",
+            False,
+        )
+        # Verify that the account was created successfuly and that the response contains the needed data
+        assert (
+            "access_key" in acc_creation_resp.text
+        ), f"Did not find access_key in account creation response. Response: {acc_creation_resp.text}"
+        # Let the account propagate through the system
+        time.sleep(5)
+        access_keys = json.loads(acc_creation_resp.text)["reply"]["access_keys"][0]
+        s3_creds = {
+            "access_key_id": access_keys["access_key"],
+            "access_key": access_keys["secret_key"],
+            "endpoint": mcg_obj_session.s3_endpoint,
+            "ssl": False,
+        }
+        nsfs_obj.s3_creds = s3_creds
+        # Create a boto3 S3 resource for commmunication with the NSFS bucket
+        nsfs_s3_client = boto3.resource(
+            "s3",
+            verify=False,
+            endpoint_url=s3_creds["endpoint"],
+            aws_access_key_id=s3_creds["access_key_id"],
+            aws_secret_access_key=s3_creds["access_key"],
+        )
+        # Create a new NSFS bucket
+        nsfs_bucket = bucket_factory(s3resource=nsfs_s3_client)[0]
+        nsfs_obj.bucket_name = nsfs_bucket.name
+        nsfs_obj.mounted_bucket_path = (
+            nsfs_deploy.data["spec"]["template"]["spec"]["containers"][0][
+                "volumeMounts"
+            ][0]["mountPath"]
+            + "/"
+            + nsfs_bucket.name
+        )
+
+    def nsfs_bucket_factory_cleanup():
+        """
+        Delete the Pod or the DeploymentConfig
+
+        """
+        for account_email in created_accounts:
+            mcg_obj_session.send_rpc_query(
+                "account_api", "delete_account", {"email": account_email}
+            )
+
+    request.addfinalizer(nsfs_bucket_factory_cleanup)
+    return nsfs_bucket_factory_implementation

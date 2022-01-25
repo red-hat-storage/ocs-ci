@@ -1,12 +1,12 @@
 import logging
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.ocp import OCP
+
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler, get_attr_chain
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class NamespaceStore:
                 else:
                     raise
         elif self.method == "cli":
-            if self.name not in self.mcg_obj.exec_mcg_cmd("namespacestore list"):
+            if self.name not in self.mcg_obj.exec_mcg_cmd("namespacestore list").stdout:
                 ns_deleted_successfully = True
 
         assert (
@@ -163,7 +163,171 @@ class NamespaceStore:
             ), f"{self.name} did not reach a healthy state within {timeout} seconds."
 
 
-def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+def cli_create_namespacestore(
+    nss_name,
+    platform,
+    mcg_obj,
+    uls_name=None,
+    cld_mgr=None,
+    nss_tup=None,
+):
+    """
+    Create a namespace filesystem namespacestore using YAMLs
+
+    Args:
+        nss_name (str): Name of the namespacestore
+        platform (str): Platform to create the namespacestore on
+        mcg_obj (MCG): An MCG object used for executing the MCG CLI commands
+        uls_name (str): Name of the ULS bucket / PVC to use for the namespacestore
+        cld_mgr (CloudManager): CloudManager object used for supplying the needed connection credentials
+        nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
+            pvc_name (str): Name of the PVC that will host the namespace filesystem
+            pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
+            sub_path (str): The path to a sub directory inside the PVC file system
+                            which the NSS will use as the root directory.
+            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4.
+                              Defaults to None.
+
+    """
+    nss_creation_cmd = f"namespacestore create "
+    NSS_MAPPING = {
+        constants.AWS_PLATFORM: lambda: (
+            f"aws-s3 {nss_name} "
+            f"--access-key {get_attr_chain(cld_mgr, 'aws_client.access_key')} "
+            f"--secret-key {get_attr_chain(cld_mgr, 'aws_client.secret_key')} "
+            f"--target-bucket {uls_name}"
+        ),
+        constants.AZURE_PLATFORM: lambda: (
+            f"azure-blob {nss_name} "
+            f"--account-key {get_attr_chain(cld_mgr, 'azure_client.credential')} "
+            f"--account-name {get_attr_chain(cld_mgr, 'azure_client.account_name')} "
+            f"--target-blob-container {uls_name}"
+        ),
+        constants.RGW_PLATFORM: lambda: (
+            f"s3-compatible {nss_name} "
+            f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.endpoint')} "
+            f"--access-key {get_attr_chain(cld_mgr, 'rgw_client.access_key')} "
+            f"--secret-key {get_attr_chain(cld_mgr, 'rgw_client.secret_key')} "
+            f"--target-bucket {uls_name}"
+        ),
+        constants.IBM_COS_PLATFORM: lambda: (
+            f"s3-compatible {nss_name} "
+            f"--endpoint {get_attr_chain(cld_mgr, 'ibmcos_client.endpoint')} "
+            f"--access-key {get_attr_chain(cld_mgr, 'ibmcos_client.access_key')} "
+            f"--secret-key {get_attr_chain(cld_mgr, 'ibmcos_client.secret_key')} "
+            f"--target-bucket {uls_name}"
+        ),
+        constants.NAMESPACE_FILESYSTEM: lambda: (
+            f"nsfs {nss_name} "
+            f"--pvc-name {uls_name} "
+            + (f"--sub-path {nss_tup[2]}" if nss_tup[2] else "")
+            + (f"--fs-backend {nss_tup[3]} " if nss_tup[3] else "")
+        ),
+    }
+    nss_creation_cmd += NSS_MAPPING[platform.lower()]()
+    mcg_obj.exec_mcg_cmd(nss_creation_cmd)
+
+
+def oc_create_namespacestore(
+    nss_name,
+    platform,
+    mcg_obj,
+    uls_name=None,
+    cld_mgr=None,
+    nss_tup=None,
+    nsfs_pvc_name=None,
+):
+    """
+    Create a namespacestore using the MCG CLI
+
+    Args:
+        nss_name (str): Name of the namespacestore
+        platform (str): Platform to create the namespacestore on
+        mcg_obj (MCG): A redundant MCG object, used for uniformity between OC and CLI calls
+        uls_name (str): Name of the ULS bucket to use for the namespacestore
+        cld_mgr (CloudManager): CloudManager object used for supplying the needed connection credentials
+        nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
+            pvc_name (str): Name of the PVC that will host the namespace filesystem
+            pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
+            sub_path (str): The path to a sub directory inside the PVC file system
+                            which the NSS will use as the root directory.
+            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4.
+                            Defaults to None.
+
+    """
+    nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
+    nss_data["metadata"]["name"] = nss_name
+    nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+
+    NSS_MAPPING = {
+        constants.AWS_PLATFORM: lambda: {
+            "type": "aws-s3",
+            "awsS3": {
+                "targetBucket": uls_name,
+                "secret": {"name": get_attr_chain(cld_mgr, "aws_client.secret.name")},
+            },
+        },
+        constants.AZURE_PLATFORM: lambda: {
+            "type": "azure-blob",
+            "azureBlob": {
+                "targetBlobContainer": uls_name,
+                "secret": {"name": get_attr_chain(cld_mgr, "azure_client.secret.name")},
+            },
+        },
+        constants.RGW_PLATFORM: lambda: {
+            "type": "s3-compatible",
+            "s3Compatible": {
+                "targetBucket": uls_name,
+                "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
+                "signatureVersion": "v2",
+                "secret": {"name": get_attr_chain(cld_mgr, "rgw_client.secret.name")},
+            },
+        },
+        constants.NAMESPACE_FILESYSTEM: lambda: {
+            "type": "nsfs",
+            "nsfs": {
+                "pvcName": uls_name,
+                "subPath": nss_tup[2] if nss_tup[2] else "",
+            },
+        },
+    }
+
+    if nss_tup[3] and platform.lower() == constants.NAMESPACE_FILESYSTEM:
+        NSS_MAPPING[platform.lower()]["nsfs"]["fsBackend"] = nss_tup[3]
+
+    nss_data["spec"] = NSS_MAPPING[platform.lower()]()
+    create_resource(**nss_data)
+
+
+def template_pvc(
+    name,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    storageclass=constants.CEPHFILESYSTEM_SC,
+    access_mode=constants.ACCESS_MODE_RWX,
+    size="20Gi",
+):
+    """
+    Create a PVC using the MCG CLI
+
+    Args:
+        name (str): Name of the PVC
+        namespace (str): Namespace to create the PVC in
+        access_mode (str): Access mode for the PVC
+        size (str): Size of the PVC in GiB
+
+    """
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
+    pvc_data["metadata"]["name"] = name
+    pvc_data["metadata"]["namespace"] = namespace
+    pvc_data["spec"]["accessModes"] = [access_mode]
+    pvc_data["spec"]["resources"]["requests"]["storage"] = size
+    pvc_data["spec"]["storageClassName"] = storageclass
+    return pvc_data
+
+
+def namespace_store_factory(
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session, pvc_factory_session
+):
     """
     Create a Backing Store factory.
     Calling this fixture lets the user create namespace stores.
@@ -182,16 +346,9 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
     created_nss = []
 
-    cmdMap = {"oc": mcg_obj.create_namespace_store, "cli": ""}  # TODO
-
-    try:
-        rgw_endpoint = RGW().get_credentials()[0]
-    except CommandFailed:
-        rgw_endpoint = None
-    endpointMap = {
-        constants.AWS_PLATFORM: constants.MCG_NS_AWS_ENDPOINT,
-        constants.AZURE_PLATFORM: constants.MCG_NS_AZURE_ENDPOINT,
-        constants.RGW_PLATFORM: rgw_endpoint,
+    cmdMap = {
+        "cli": cli_create_namespacestore,
+        "oc": oc_create_namespacestore,
     }
 
     def _create_nss(method, nss_dict):
@@ -212,40 +369,32 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         current_call_created_nss = []
         for platform, nss_lst in nss_dict.items():
             for nss_tup in nss_lst:
-                # Create the actual namespace resource
+                if platform.lower() == "nsfs":
+                    uls_name = nss_tup[0] or create_unique_resource_name(
+                        constants.PVC.lower(), platform
+                    )
+                    pvc_factory_session(
+                        custom_data=template_pvc(uls_name, size=nss_tup[1])
+                    )
+                else:
+                    # Create the actual target bucket on the request service
+                    uls_dict = cloud_uls_factory_session({platform: [(1, nss_tup[1])]})
+                    uls_name = list(uls_dict[platform])[0]
+
                 nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
-
-                target_bucket_name = cmdMap[method.lower()](
-                    nss_name, nss_tup[1], cld_mgr, cloud_uls_factory, platform
+                # Create the actual namespace resource
+                cmdMap[method.lower()](
+                    nss_name, platform, mcg_obj_session, uls_name, cld_mgr, nss_tup
                 )
-
-                # TODO: Check platform exists in endpointMap
-
-                sample = TimeoutSampler(
-                    timeout=60,
-                    sleep=5,
-                    func=mcg_obj.check_ns_resource_validity,
-                    ns_resource_name=nss_name,
-                    target_bucket_name=target_bucket_name,
-                    endpoint=endpointMap[platform],
-                )
-                if not sample.wait_for_func_status(result=True):
-                    err_msg = f"{nss_name} failed its verification check"
-                    log.error(err_msg)
-                    raise TimeoutExpiredError(err_msg)
-
                 nss_obj = NamespaceStore(
                     name=nss_name,
                     method=method.lower(),
-                    mcg_obj=mcg_obj,
-                    uls_name=target_bucket_name,
+                    mcg_obj=mcg_obj_session,
+                    uls_name=uls_name,
                 )
-
-                nss_obj.verify_health()
-
                 created_nss.append(nss_obj)
                 current_call_created_nss.append(nss_obj)
-
+                nss_obj.verify_health()
         return current_call_created_nss
 
     def nss_cleanup():
