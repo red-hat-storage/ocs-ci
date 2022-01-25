@@ -189,53 +189,38 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Checking connection status of both the imported clusters")
-        connection_status_1 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
             timeout=600,
         )
-        connection_status_2 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
             timeout=600,
         )
-        assert (
-            connection_status_1
-        ), f"Connection status of cluster {cluster_name_a} is not Healthy"
-        assert (
-            connection_status_2
-        ), f"Connection status of cluster {cluster_name_b} is not Healthy"
-
         log.info("Checking agent status of both the imported clusters")
-        agent_status_1 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
             timeout=600,
         )
-        agent_status_2 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
             timeout=600,
         )
-        assert (
-            agent_status_1
-        ), f"Agent status of cluster {cluster_name_a} is not Healthy"
-        assert (
-            agent_status_2
-        ), f"Agent status of cluster {cluster_name_b} is not Healthy"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        node_status_1 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
             timeout=600,
         )
-        node_status_2 = self.wait_until_expected_text_is_found(
+        self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
             timeout=600,
         )
-        assert node_status_1, f"Nodes of cluster {cluster_name_a} are not labeled"
-        assert node_status_2, f"Nodes of cluster {cluster_name_b} are not labeled"
         self.take_screenshot()
         log.info("Submariner add-ons creation is successful")
 
