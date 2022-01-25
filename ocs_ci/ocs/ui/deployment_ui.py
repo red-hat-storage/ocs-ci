@@ -75,6 +75,7 @@ class DeploymentUI(PageNavigator):
             self.refresh_popup()
         self.verify_operator_succeeded(operator=self.operator_name)
         self.refresh_popup()
+        self.refresh_page()
 
     def refresh_popup(self):
         """
@@ -111,6 +112,7 @@ class DeploymentUI(PageNavigator):
 
         """
         if self.operator_name == ODF_OPERATOR:
+            self.refresh_page()
             self.navigate_installed_operators_page()
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
@@ -243,6 +245,7 @@ class DeploymentUI(PageNavigator):
         Install Internal Cluster
 
         """
+        self.refresh_popup()
         logger.info("Click Internal")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(
@@ -398,6 +401,7 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
         self.take_screenshot()
+        self.refresh_page()
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """
