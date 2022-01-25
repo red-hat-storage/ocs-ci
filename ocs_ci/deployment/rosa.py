@@ -75,7 +75,13 @@ class ROSAOCP(BaseOCPDeployment):
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
+        # cluster_details = ocm.get_cluster_details(self.cluster_name)
+        # cluster_id = cluster_details.get("id")
         ocm.destroy_cluster(self.cluster_name)
+        # TODO: investigate why steps below fail despite being in accordance with
+        # https://docs.openshift.com/rosa/rosa_getting_started_sts/rosa-sts-deleting-cluster.html
+        # rosa.delete_operator_roles(cluster_id)
+        # rosa.delete_oidc_provider(cluster_id)
 
 
 class ROSA(CloudDeploymentBase):
@@ -153,7 +159,7 @@ class ROSA(CloudDeploymentBase):
         )
 
         # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
     def destroy_ocs(self):
         """
