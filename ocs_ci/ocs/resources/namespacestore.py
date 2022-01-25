@@ -189,7 +189,7 @@ def cli_create_namespacestore(
                               Defaults to None.
 
     """
-    nss_creation_cmd = f"namespacestore create "
+    nss_creation_cmd = "namespacestore create "
     NSS_MAPPING = {
         constants.AWS_PLATFORM: lambda: (
             f"aws-s3 {nss_name} "
