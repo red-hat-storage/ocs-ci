@@ -183,10 +183,8 @@ def cli_create_namespacestore(
         nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
             pvc_name (str): Name of the PVC that will host the namespace filesystem
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
-            sub_path (str): The path to a sub directory inside the PVC file system
-                            which the NSS will use as the root directory.
-            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4.
-                              Defaults to None.
+            sub_path (str): The path to a sub directory inside the PVC FS which the NSS will use as the root directory
+            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
 
     """
     nss_creation_cmd = "namespacestore create "
@@ -249,10 +247,8 @@ def oc_create_namespacestore(
         nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
             pvc_name (str): Name of the PVC that will host the namespace filesystem
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
-            sub_path (str): The path to a sub directory inside the PVC file system
-                            which the NSS will use as the root directory.
-            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4.
-                            Defaults to None.
+            sub_path (str): The path to a sub directory inside the PVC FS which the NSS will use as the root directory
+            fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
 
     """
     nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
