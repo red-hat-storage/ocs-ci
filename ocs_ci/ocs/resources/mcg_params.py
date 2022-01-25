@@ -13,10 +13,8 @@ class NSFS:
         method (str): The method to use for NSFS management. OC | CLI
         pvc_name (str): Name of the PVC that will host the namespace filesystem
         pvc_size (int): Size of the PVC in Gi
-        sub_path (str): The path to a sub directory inside the PVC file system
-                        which the NSS will use as the root directory.
-        fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4.
-                        Defaults to None.
+        sub_path (str): The path to a sub directory inside the PVC FS which the NSS will use as its root directory
+        fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
         mount_path (str): The path to the mount point of the NSFS
         uid (int): The UID of the user that will be used to create the NSFS
         gid (int): The GID of the user that will be used to create the NSFS
