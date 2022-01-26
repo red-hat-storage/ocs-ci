@@ -3175,7 +3175,7 @@ def log_alerts(request):
     """
     teardown = config.RUN["cli_params"].get("teardown")
     dev_mode = config.RUN["cli_params"].get("dev_mode")
-    import_without_odf = config.RUN["cli_params"].get("import-without-odf")
+    import_without_odf = config.RUN["import_without_odf"]
     if teardown:
         return
     elif dev_mode:
