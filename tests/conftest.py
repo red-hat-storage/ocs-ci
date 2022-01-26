@@ -3175,11 +3175,14 @@ def log_alerts(request):
     """
     teardown = config.RUN["cli_params"].get("teardown")
     dev_mode = config.RUN["cli_params"].get("dev_mode")
+    import_without_odf = config.RUN["cli_params"].get("import-without-odf")
     if teardown:
         return
     elif dev_mode:
         log.info("Skipping alert check for development mode")
         return
+    elif import_without_odf:
+        log.info("Skipping alert check for ACM import without ODF usecase")
 
     alerts_before = []
     prometheus = None

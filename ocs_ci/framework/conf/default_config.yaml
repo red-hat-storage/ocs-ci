@@ -17,7 +17,7 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
-  regional_dr: False # avoid some checks and fixtures related to ODF
+  import_without_odf: False # avoid some checks and fixtures related to ODF
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
   client_version: '4.10.0-0.nightly'
