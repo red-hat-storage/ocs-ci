@@ -15,9 +15,8 @@ from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
-from ocs_ci.ocs.node import get_node_names
-from ocs_ci.deployment.vmware import VSPHEREBASE
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.node import get_nodes, add_disk_to_node
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pv import check_available_pvs
@@ -53,17 +52,11 @@ class TestFlexibleScalingUI(ManageTest):
         num_osd_pods = len(get_osd_pods())
 
         log.info("Choose one worker node")
-        nodes = get_node_names()
-        nodes = [nodes[0]]
+        node_objs = get_nodes()
+        node_obj = node_objs[0]
 
-        log.info(f"Add new disk to node {nodes}")
-        vsphere_base = VSPHEREBASE()
-        vsphere_base.add_disks_per_node(
-            size=config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-            disk_type=config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-            node_names=nodes,
-            extra_disks=1,
-        )
+        log.info(f"Add a new disk to node {node_obj.name}")
+        add_disk_to_node(node_obj=node_obj)
 
         log.info("Verify the number of PVs in Available state.")
         sample = TimeoutSampler(

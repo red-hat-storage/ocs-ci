@@ -130,29 +130,6 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type
                 )
 
-    def add_disks_per_node(
-        self, size=100, disk_type=constants.VM_DISK_TYPE, node_names=None, extra_disks=1
-    ):
-        """
-        Add disks to relevant worker nodes
-
-        Args:
-            size (int): Size of disk in GB (default: 100)
-            disk_type (str): Type of disk (default: thin)
-            node_names (list): List of worker node name.
-            extra_disks (int): The number of disks to be added for each worker node
-
-        """
-        if node_names is None:
-            node_names = []
-        vms = self.vsphere.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
-        )
-        # Add disks to relevant worker nodes
-        for vm in vms:
-            if vm.name in node_names:
-                self.vsphere.add_disks(extra_disks, vm, size, disk_type)
-
     def add_nodes(self):
         """
         Add new nodes to the cluster
