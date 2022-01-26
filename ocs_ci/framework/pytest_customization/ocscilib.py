@@ -306,9 +306,9 @@ def pytest_addoption(parser):
         """,
     )
     parser.addoption(
-        "--regional-dr",
-        dest="regional_dr",
-        help="Run on regional DR setup, and skip ODF related checks",
+        "--import-without-odf",
+        dest="import_without_odf",
+        help="Run on ACM hub to import managed clusters, and skip ODF related checks",
     )
 
 
@@ -368,7 +368,7 @@ def pytest_configure(config):
                     "the OCS deployment"
                 )
                 return
-            elif ocsci_config.RUN["regional_dr"]:
+            elif ocsci_config.RUN["import_without_odf"]:
                 log.info("Skipping version collection in regional DR cluster")
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
@@ -576,9 +576,9 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
-    regional_dr = get_cli_param(config, "--regional-dr", default=False)
-    if regional_dr:
-        ocsci_config.RUN["regional_dr"] = True
+    import_without_odf = get_cli_param(config, "--import-without-odf", default=False)
+    if import_without_odf:
+        ocsci_config.RUN["import_without_odf"] = True
 
 
 def pytest_collection_modifyitems(session, config, items):
