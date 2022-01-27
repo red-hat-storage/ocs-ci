@@ -159,7 +159,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
         config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
         config_data = config_data.split("\n")
-        config_data = config_data[slice(5, len(config_data))]
+        config_data = config_data[5:]
         log.info(
             "Validating that the values configured in noobaa-postgres configmap "
             "match the ones stored in ocs-ci"

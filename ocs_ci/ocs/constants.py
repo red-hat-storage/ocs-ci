@@ -1424,6 +1424,7 @@ debug_crush = 20
 """
 
 
+# Values from configmap noobaa-postgres-config
 NOOBAA_POSTGRES_TUNING_VALUES = """
 max_connections = 300
 shared_buffers = 1GB
