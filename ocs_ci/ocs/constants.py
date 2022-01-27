@@ -1218,6 +1218,8 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "mcg-operator",
     "noobaa-operator",
     "ocs-operator",
+    "odf-csi-addons-operator",
+    "odf-lvm-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
