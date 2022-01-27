@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -3970,7 +3971,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
     """
     instances = []
 
-    def factory(pvc_size_new, pgsql):
+    def factory(pvc_size_new, pgsql, sc_name=None):
         """
         Args:
             pvc_size_new (int): Resize/Expand the pvc size
@@ -3987,11 +3988,15 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         snapshots = multi_snapshot_factory(pvc_obj=postgres_pvcs_obj)
         log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
-        restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=snapshots)
+        restored_pvc_objs = multi_snapshot_restore_factory(
+            snapshot_obj=snapshots, storageclass=sc_name
+        )
         log.info("Created new PVCs from all the snapshots")
 
         cloned_pvcs = multi_pvc_clone_factory(
-            pvc_obj=restored_pvc_objs, volume_mode=constants.VOLUME_MODE_FILESYSTEM
+            pvc_obj=restored_pvc_objs,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+            storageclass=sc_name,
         )
         log.info("Created new PVCs from all restored volumes")
 
@@ -4013,7 +4018,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         )
 
         new_restored_pvc_objs = multi_snapshot_restore_factory(
-            snapshot_obj=new_snapshots
+            snapshot_obj=new_snapshots, storageclass=sc_name
         )
         log.info("Created new PVCs from all the snapshots and in Bound state")
         # Attach a new pgsql pod restored pvcs
@@ -4080,6 +4085,22 @@ def setup_ui(request):
 
 def setup_ui_fixture(request):
     driver = login_ui()
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
+
+
+@pytest.fixture(scope="function")
+def setup_acm_ui(request):
+    return setup_acm_ui_fixture(request)
+
+
+def setup_acm_ui_fixture(request):
+    driver = login_to_acm()
 
     def finalizer():
         close_browser(driver)

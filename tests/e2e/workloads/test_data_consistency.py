@@ -1,0 +1,197 @@
+# -*- coding: utf8 -*-
+
+import logging
+import os
+import time
+
+import pytest
+import yaml
+
+from ocs_ci.framework.pytest_customization import marks
+from ocs_ci.framework.testlib import tier1
+from ocs_ci.ocs import constants
+from ocs_ci.ocs import exceptions
+from ocs_ci.ocs import ocp
+from ocs_ci.ocs.fio_artefacts import get_pvc_dict
+from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.resources import job
+from ocs_ci.ocs.resources import topology
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
+from ocs_ci.utility.utils import run_cmd
+
+
+logger = logging.getLogger(__name__)
+
+
+@tier1
+@marks.bugzilla("1989301")
+@pytest.mark.polarion_id("OCS-2735")
+def test_log_reader_writer_parallel(project, tmp_path):
+    """
+    Write and read logfile stored on cephfs volume, from all worker nodes of a
+    cluster via k8s Deployment, while fetching content of the stored data via
+    oc rsync to check the data locally.
+
+    Reproduces BZ 1989301. Test failure means new blocker high priority bug.
+    """
+    pvc_dict = get_pvc_dict()
+    # we need to mount the volume on every worker node, so RWX/cephfs
+    pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
+    pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
+    pvc_dict["spec"]["storageClassName"] = constants.CEPHFILESYSTEM_SC
+    # there is no need for lot of storage capacity for this test
+    pvc_dict["spec"]["resources"]["requests"]["storage"] = "1Gi"
+
+    # get deployment dict for the reproducer logwriter workload
+    with open(constants.LOGWRITER_CEPHFS_REPRODUCER, "r") as deployment_file:
+        deploy_dict = yaml.safe_load(deployment_file.read())
+    # we need to match deployment replicas with number of worker nodes
+    deploy_dict["spec"]["replicas"] = len(get_worker_nodes())
+    # drop topology spread constraints related to zones
+    topology.drop_topology_constraint(
+        deploy_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
+    )
+    # and link the deployment with the pvc
+    try:
+        link_spec_volume(
+            deploy_dict["spec"]["template"]["spec"],
+            "logwriter-cephfs-volume",
+            pvc_dict["metadata"]["name"],
+        )
+    except Exception as ex:
+        error_msg = "LOGWRITER_CEPHFS_REPRODUCER no longer matches code of this test"
+        raise Exception(error_msg) from ex
+
+    # prepare k8s yaml file for deployment
+    workload_file = ObjectConfFile(
+        "log_reader_writer_parallel", [pvc_dict, deploy_dict], project, tmp_path
+    )
+    # deploy the workload, starting the log reader/writer pods
+    logger.info(
+        "starting log reader/writer workload via Deployment, one pod per worker"
+    )
+    workload_file.create()
+
+    logger.info("waiting for all pods of the workload Deployment to run")
+    ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
+    try:
+        ocp_pod.wait_for_resource(
+            resource_count=deploy_dict["spec"]["replicas"],
+            condition=constants.STATUS_RUNNING,
+            error_condition=constants.STATUS_ERROR,
+            timeout=300,
+            sleep=30,
+        )
+    except Exception as ex:
+        # this is not a problem with feature under test, but with infra,
+        # cluster configuration or unrelated bug which must have happened
+        # before this test case
+        error_msg = "unexpected problem with start of the workload, cluster is either misconfigured or broken"
+        logger.exception(error_msg)
+        logger.debug(workload_file.describe())
+        raise exceptions.UnexpectedBehaviour(error_msg) from ex
+
+    # while the workload is running, we will try to fetch and validate data
+    # from the cephfs volume of the workload 120 times (this number of retries
+    # is a bit larger than usual number required to reproduce bug from
+    # BZ 1989301, but we need to be sure here)
+    number_of_fetches = 120
+    is_local_data_ok = True
+    local_dir = tmp_path / "logwriter"
+    local_dir.mkdir()
+    workload_pods = ocp_pod.get()
+    workload_pod_name = workload_pods["items"][0]["metadata"]["name"]
+    logger.info(
+        "while the workload is running, we will fetch and check data from the cephfs volume %d times",
+        number_of_fetches,
+    )
+    for _ in range(number_of_fetches):
+        # fetch data from cephfs volume into the local dir
+        oc_cmd = [
+            "oc",
+            "rsync",
+            "-n",
+            project.namespace,
+            f"pod/{workload_pod_name}:/mnt/target",
+            local_dir,
+        ]
+        run_cmd(cmd=oc_cmd, timeout=300)
+        # look for null bytes in the just fetched local files in target dir,
+        # and if these binary bytes are found, the test failed (the bug
+        # was reproduced)
+        target_dir = os.path.join(local_dir, "target")
+        for file_name in os.listdir(target_dir):
+            with open(os.path.join(target_dir, file_name), "r") as fo:
+                data = fo.read()
+                if "\0" in data:
+                    is_local_data_ok = False
+                    logger.error(
+                        "file %s is corrupted: null byte found in a text file",
+                        file_name,
+                    )
+        # is_local_data_ok = False
+        assert is_local_data_ok, "data corruption detected"
+        time.sleep(2)
+
+    # if no obvious problem was detected, run the logreader job to validate
+    # checksums in the log files (so that we are 100% sure that nothing went
+    # wrong with the IO or the data)
+    with open(constants.LOGWRITER_CEPHFS_READER, "r") as job_file:
+        job_dict = yaml.safe_load(job_file.read())
+    # drop topology spread constraints related to zones
+    topology.drop_topology_constraint(
+        job_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
+    )
+    # we need to match number of jobs with the number used in the workload
+    job_dict["spec"]["completions"] = deploy_dict["spec"]["replicas"]
+    job_dict["spec"]["parallelism"] = deploy_dict["spec"]["replicas"]
+    # and reffer to the correct pvc name
+    try:
+        link_spec_volume(
+            job_dict["spec"]["template"]["spec"],
+            "logwriter-cephfs-volume",
+            pvc_dict["metadata"]["name"],
+        )
+    except Exception as ex:
+        error_msg = "LOGWRITER_CEPHFS_READER no longer matches code of this test"
+        raise Exception(error_msg) from ex
+    # prepare k8s yaml file for the job
+    job_file = ObjectConfFile("log_reader", [job_dict], project, tmp_path)
+    # deploy the job, starting the log reader pods
+    logger.info(
+        "starting log reader data validation job to fully check the log data",
+    )
+    job_file.create()
+    # wait for the logreader job to complete (this should be rather quick)
+    try:
+        job.wait_for_job_completion(
+            job_name=job_dict["metadata"]["name"],
+            namespace=project.namespace,
+            timeout=300,
+            sleep_time=30,
+        )
+    except exceptions.TimeoutExpiredError:
+        error_msg = (
+            "verification failed to complete in time: data loss or broken cluster?"
+        )
+        logger.exception(error_msg)
+    # and then check that the job completed with success
+    logger.info("checking the result of data validation job")
+    logger.debug(job_file.describe())
+    ocp_job = ocp.OCP(
+        kind="Job",
+        namespace=project.namespace,
+        resource_name=job_dict["metadata"]["name"],
+    )
+    job_status = ocp_job.get()["status"]
+    logger.info("last status of data verification job: %s", job_status)
+    if (
+        "failed" in job_status
+        or job_status["succeeded"] != deploy_dict["spec"]["replicas"]
+    ):
+        error_msg = "possible data corruption: data verification job failed!"
+        logger.error(error_msg)
+        job.log_output_of_job_pods(
+            job_name=job_dict["metadata"]["name"], namespace=project.namespace
+        )
+        raise Exception(error_msg)

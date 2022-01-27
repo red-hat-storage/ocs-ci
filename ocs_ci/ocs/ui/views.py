@@ -370,7 +370,7 @@ acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
-    "Infrastructure": ("//button[text()='Infrastructure']", By.XPATH),
+    "Infrastructure": ("//button[normalize-space()='Infrastructure']", By.XPATH),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
     "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
     "Automation_page": ("Automation", By.LINK_TEXT),
@@ -384,6 +384,66 @@ acm_page_nav = {
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
     "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
+}
+acm_configuration = {
+    "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
+    "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "cluster-set-name": (
+        "input[placeholder='Enter cluster set name']",
+        By.CSS_SELECTOR,
+    ),
+    "click-create": ("button[type='submit']", By.CSS_SELECTOR),
+    "click-manage-resource-assignments": (
+        "//button[normalize-space()='Manage resource assignments']",
+        By.XPATH,
+    ),
+    "select-all-assignments": ("input[aria-label='Select all']", By.CSS_SELECTOR),
+    "click-local-cluster": (
+        "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
+        By.XPATH,
+    ),
+    "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
+    "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
+    "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
+    "review-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "confirm-btn": ("button[type='submit']", By.CSS_SELECTOR),
+    "cluster-set-status": ("//span[@class='pf-c-modal-box__title-text']", By.XPATH),
+    "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
+    "install-submariner-btn": (
+        "//button[normalize-space()='Install Submariner add-ons']",
+        By.XPATH,
+    ),
+    "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
+    "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
+    "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
+    "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
+    "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
+    "connection-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[1]",
+        By.XPATH,
+    ),
+    "connection-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[3]",
+        By.XPATH,
+    ),
+    "agent-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[2]",
+        By.XPATH,
+    ),
+    "agent-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[4]",
+        By.XPATH,
+    ),
+    "node-label-1": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[1]",
+        By.XPATH,
+    ),
+    "node-label-2": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[2]",
+        By.XPATH,
+    ),
+    "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
 }
 
 add_capacity = {
@@ -615,7 +675,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
-        "acm_page": acm_page_nav,
+        "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
