@@ -1453,6 +1453,7 @@ class RBDDRDeployOps(object):
                     logger.exception("Mirror peer couldn't attain expected phase")
                     raise
             logger.info(f"Mirror peer is in expected phase {phase}")
+            break
 
         # Check for token-exchange-agent pod and its status has to be running
         # on all participating clusters except HUB
@@ -1509,15 +1510,9 @@ class MultiClusterDROperatorsDeploy(object):
         """
         # current CTX: ACM
         config.switch_acm_ctx()
-        # create ODF orchestrator operator group
-        run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
-        # Create prereq namespace and DR operator group
         # Create openshift-dr-system namespace
         run_cmd_multicluster(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} "
-        )
-        run_cmd_multicluster(
-            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}"
         )
 
         odf_multicluster_orchestrator_data = templating.load_yaml(
@@ -1538,11 +1533,20 @@ class MultiClusterDROperatorsDeploy(object):
             odf_multicluster_orchestrator_data, odf_multicluster_orchestrator.name
         )
         run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
-        orchestrator_csv = CSV(
-            resource_name=odf_multicluster_orchestrator_data["spec"]["startingCSV"],
-            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        orchestrator_controller = ocp.OCP(
+            kind="Deployment",
+            resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+            namespace=constants.OPENSHIFT_OPERATORS,
         )
-        orchestrator_csv.wait_for_phase("Succeeded")
+        orchestrator_controller.wait_for_resource(
+            condition="1", column="AVAILABLE", resource_count=1
+        )
+        # create ODF orchestrator operator group
+        run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
+        # Create prereq namespace and DR operator group
+        run_cmd_multicluster(
+            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}"
+        )
 
         # RBD specific dr deployment
         if self.rbd:
