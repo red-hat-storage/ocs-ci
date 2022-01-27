@@ -1699,8 +1699,8 @@ class MultiClusterDROperatorsDeploy(object):
             )
             dr_policy_resource.get()
             sample = TimeoutSampler(
-                timeout=300,
-                sleep=1,
+                timeout=600,
+                sleep=3,
                 func=self._get_status,
                 resource_data=dr_policy_resource,
             )
