@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     polarion_id,
-    acceptance,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
@@ -16,10 +15,7 @@ from ocs_ci.helpers.helpers import fetch_used_size
 log = logging.getLogger(__name__)
 
 
-@tier1
-@acceptance
 @skipif_ocs_version("<4.10")
-@polarion_id("")
 class TestRbdSpaceReclaim(ManageTest):
     """
     Tests to verify RBD space reclamation
@@ -47,18 +43,20 @@ class TestRbdSpaceReclaim(ManageTest):
             sc_rbd=self.sc_obj,
         )
 
-    def test_rbd_space_reclaim(self, pvc_clone_factory, pod_factory):
+    @polarion_id("OCS-2741")
+    @tier1
+    def test_rbd_space_reclaim(self):
         """
         Test to verify RBD space reclamation
 
         Steps:
-        1. Create and attach RBD PVC of size 25GiB to an app pod.
-        2. Verify the used size and objects using 'ceph df' command
+        1. Create and attach RBD PVC of size 25 GiB to an app pod.
+        2. Get the used size using 'ceph df' command
         3. Create two files of size 10GiB
-        4. Verify the increased used size and objects using 'ceph df' command
-        5. Delete the file
+        4. Verify the increased used size using 'ceph df' command
+        5. Delete one file
         6. Create ReclaimSpaceJob
-        7. Verify the decreased used size and objects using 'ceph df' command.
+        7. Verify the decreased used size using 'ceph df' command.
 
         """
         pvc_obj = self.pvc[0]
