@@ -18,6 +18,14 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture()
+def setup_fixture(install_logging):
+    """
+    Installs openshift-logging
+    """
+    logging.info("Testcases execution post deployment of openshift-logging")
+
+
 @scale
 class TestPVCCreationDeletionScale(E2ETest):
     """
