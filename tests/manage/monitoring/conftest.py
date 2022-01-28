@@ -837,7 +837,7 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
         # run_time of operation
         run_time = 60 * 13
         nonlocal test_nodes
-        node_name = [node.name for node in test_nodes]
+        node_names = [node.name for node in test_nodes]
         logger.info(f"Turning off nodes {node_names}")
         nodes.stop_nodes(nodes=[test_nodes])
         # Validate node reached NotReady state
@@ -848,7 +848,7 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
 
     test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
     measured_op = measure_operation(stop_nodes, test_file)
-    logger.info(f"Turning on nodes")
+    logger.info("Turning on nodes")
     nodes.start_nodes(nodes=test_nodes)
     # Validate all nodes are in READY state and up
     retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
