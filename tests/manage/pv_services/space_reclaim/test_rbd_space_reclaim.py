@@ -8,9 +8,14 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
 )
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
 from ocs_ci.helpers.helpers import fetch_used_size
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -51,12 +56,12 @@ class TestRbdSpaceReclaim(ManageTest):
 
         Steps:
         1. Create and attach RBD PVC of size 25 GiB to an app pod.
-        2. Get the used size using 'ceph df' command
+        2. Get the used size of the RBD pool
         3. Create two files of size 10GiB
-        4. Verify the increased used size using 'ceph df' command
+        4. Verify the increased used size of the RBD pool
         5. Delete one file
         6. Create ReclaimSpaceJob
-        7. Verify the decreased used size using 'ceph df' command.
+        7. Verify the decreased used size of the RBD pool
 
         """
         pvc_obj = self.pvc[0]
@@ -67,7 +72,6 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Fetch the used size of pool
         cbp_name = self.sc_obj.get().get("parameters").get("pool")
-
         used_size_before_io = fetch_used_size(cbp_name)
         log.info(f"Used size before IO is {used_size_before_io}")
 
@@ -103,15 +107,24 @@ class TestRbdSpaceReclaim(ManageTest):
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
 
         # Wait for the Succeeded result of ReclaimSpaceJob
-        reclaim_space_job.ocp.wait_for_resource(
-            condition="Succeeded",
-            resource_name=reclaim_space_job.name,
-            column="RESULT",
-            timeout=30,
-            sleep=3,
-        )
+        try:
+            for reclaim_space_job_yaml in TimeoutSampler(
+                timeout=120, sleep=5, func=reclaim_space_job.get
+            ):
+                result = reclaim_space_job_yaml.get("status").get("result")
+                if result == "Succeeded":
+                    log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                    break
+                else:
+                    log.info(
+                        f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. Present value of result is {result}"
+                    )
+        except TimeoutExpiredError:
+            raise UnexpectedBehaviour(
+                f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output:{reclaim_space_job.get()}"
+            )
 
-        # Verify space is reclaimed by checking the used size
+        # Verify space is reclaimed by checking the used size of the RBD pool
         used_after_reclaiming_space = fetch_used_size(
             cbp_name, used_size_after_io - (10 * self.pool_replica)
         )
