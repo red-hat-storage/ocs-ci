@@ -136,7 +136,7 @@ class TestScaleNamespace(E2ETest):
         For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_s3_obj = 10000
+        num_s3_obj = 1000
         ns_bucket_list = []
         for _ in range(50):
             ns_bucket_list.append(
