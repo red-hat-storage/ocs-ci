@@ -173,6 +173,12 @@ def prune_and_mirror_index_image(
         f"{mirroring_manifests_dir}",
         "imageContentSourcePolicy.yaml",
     )
+    # make icsp name unique - append run_id
+    with open(icsp_file) as f:
+        icsp_content = yaml.safe_load(f)
+    icsp_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
+    with open(icsp_file, "w") as f:
+        yaml.dump(icsp_content, f)
     exec_cmd(f"oc apply -f {icsp_file}")
     logger.info("Sleeping for 60 sec to start update machineconfigpool status")
     time.sleep(60)
