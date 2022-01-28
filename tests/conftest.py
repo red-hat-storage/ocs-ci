@@ -4447,6 +4447,7 @@ def nsfs_bucket_factory_fixture(
     request, namespace_store_factory, nsfs_interface, mcg_obj_session, bucket_factory
 ):
     created_accounts = []
+    created_rpc_buckets = []
 
     def nsfs_bucket_factory_implementation(nsfs_obj):
         """
@@ -4457,7 +4458,7 @@ def nsfs_bucket_factory_fixture(
 
         """
         # Create a PVC and namespacestore for the bucket
-        nsfs_nss = namespace_store_factory(
+        nsfs_obj.nss = namespace_store_factory(
             nsfs_obj.method,
             {
                 "nsfs": [
@@ -4471,7 +4472,7 @@ def nsfs_bucket_factory_fixture(
             },
         )[0]
         # Create a deployment for mounting the PVC and accessing its filesystem
-        nsfs_deploy = nsfs_interface(nsfs_nss.uls_name, nsfs_obj.mount_path)
+        nsfs_deploy = nsfs_interface(nsfs_obj.nss.uls_name, nsfs_obj.mount_path)
         deployment_app_label = nsfs_deploy.data["spec"]["selector"]["matchLabels"][
             "app"
         ]
@@ -4500,7 +4501,7 @@ def nsfs_bucket_factory_fixture(
             False,
             True,
             {"full_permission": True},
-            nsfs_nss.name,
+            nsfs_obj.nss.name,
             nsfs_obj.uid,
             nsfs_obj.gid,
             "/",
@@ -4529,15 +4530,42 @@ def nsfs_bucket_factory_fixture(
             aws_secret_access_key=s3_creds["access_key"],
         )
         # Create a new NSFS bucket
-        nsfs_bucket = bucket_factory(s3resource=nsfs_s3_client)[0]
-        nsfs_obj.bucket_name = nsfs_bucket.name
-        nsfs_obj.mounted_bucket_path = (
-            nsfs_deploy.data["spec"]["template"]["spec"]["containers"][0][
-                "volumeMounts"
-            ][0]["mountPath"]
-            + "/"
-            + nsfs_bucket.name
-        )
+        # Follow this flow if the bucket should be created on top of an existing directory
+        if nsfs_obj.mount_existing_dir:
+            nsfs_obj.bucket_name = helpers.create_unique_resource_name(
+                resource_description="nsfs-bucket", resource_type="rpc"
+            )
+            new_dir_path = f"/{nsfs_obj.bucket_name}"
+            nsfs_interface_pod.exec_cmd_on_pod(
+                f"mkdir -m {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
+            )
+            rpc_bucket_creation_response = mcg_obj_session.send_rpc_query(
+                "bucket_api",
+                "create_bucket",
+                {
+                    "name": nsfs_obj.bucket_name,
+                    "namespace": {
+                        "write_resource": {
+                            "resource": nsfs_obj.nss.name,
+                            "path": new_dir_path,
+                        },
+                        "read_resources": [
+                            {"resource": nsfs_obj.nss.name, "path": new_dir_path}
+                        ],
+                    },
+                },
+            )
+            if nsfs_obj.verify_health:
+                assert (
+                    "optimal" in rpc_bucket_creation_response.text.lower()
+                ), f"RPC bucket isn't in optimal state; Full response: {rpc_bucket_creation_response.text}"
+            created_rpc_buckets.append(nsfs_obj.bucket_name)
+        # Otherwise, the new bucket will create a directory for itself
+        else:
+            nsfs_obj.bucket_name = bucket_factory(
+                s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health
+            )[0]
+        nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
 
     def nsfs_bucket_factory_cleanup():
         """
@@ -4547,6 +4575,10 @@ def nsfs_bucket_factory_fixture(
         for account_email in created_accounts:
             mcg_obj_session.send_rpc_query(
                 "account_api", "delete_account", {"email": account_email}
+            )
+        for rpc_bucket_name in created_rpc_buckets:
+            mcg_obj_session.send_rpc_query(
+                "bucket_api", "delete_bucket", {"name": rpc_bucket_name}
             )
 
     request.addfinalizer(nsfs_bucket_factory_cleanup)

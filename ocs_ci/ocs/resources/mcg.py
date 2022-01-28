@@ -365,6 +365,7 @@ class MCG:
             The server's response
 
         """
+        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
         payload = {
             "api": api,
             "method": method,

@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import MCGTest, tier1
+from ocs_ci.framework.testlib import MCGTest, tier1, tier3
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
@@ -27,9 +27,18 @@ class TestNSFSObjectIntegrity(MCGTest):
                 ),
                 marks=[tier1],
             ),
+            pytest.param(
+                NSFS(
+                    method="OC",
+                    pvc_size=20,
+                    mount_existing_dir=True,
+                ),
+                marks=[tier1],
+            ),
         ],
         ids=[
             "CLI-25Gi",
+            "OC-20Gi-Export",
         ],
     )
     def test_nsfs_object_integrity(
@@ -55,3 +64,49 @@ class TestNSFSObjectIntegrity(MCGTest):
             result_pod=nsfs_obj.interface_pod,
             result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
         )
+
+    # TODO: Limit the test to run only when CephFS is available
+    @pytest.mark.polarion_id("")  # TODO
+    @pytest.mark.parametrize(
+        argnames="nsfs_obj",
+        argvalues=[
+            pytest.param(
+                NSFS(
+                    method="CLI",
+                    pvc_size=20,
+                    mount_existing_dir=True,
+                    existing_dir_mode=000,
+                ),
+                marks=[tier3],
+            ),
+        ],
+        ids=[
+            "CLI-20Gi",
+        ],
+    )
+    def test_nsfs_object_integrity_with_wrong_permissions(
+        self, nsfs_bucket_factory, awscli_pod_session, test_directory_setup, nsfs_obj
+    ):
+        """
+        Test NSFS object integrity -
+        1. Create an NSFS bucket on top of an existing directory with wrong permissions
+        2. Verify that writing fails
+
+        """
+        nsfs_bucket_factory(nsfs_obj)
+        try:
+            random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=nsfs_obj.bucket_name,
+                upload_dir=test_directory_setup.origin_dir,
+                download_dir=test_directory_setup.result_dir,
+                amount=10,
+                pattern="nsfs-test-obj-",
+                s3_creds=nsfs_obj.s3_creds,
+                result_pod=nsfs_obj.interface_pod,
+                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            )
+        except Exception as e:
+            assert "AccessDenied" in str(
+                e
+            ), f"Test failed unexpectedly; Exception data: {str(e)}"
