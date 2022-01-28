@@ -1300,7 +1300,11 @@ class AWSUPINode(AWSNodes):
         config
 
         """
-        conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
+        # Expand RHEL Version in the file name below!
+        rhel_version = Version.coerce(config.ENV_DATA["rhel_version"])
+        conf = self.read_default_config(
+            constants.RHEL_WORKERS_CONF.format(version=rhel_version.major)
+        )
         default_conf = conf.get("ENV_DATA")
         merge_dict(default_conf, self.node_conf)
         logger.info(f"Merged dict is {default_conf}")
@@ -1319,6 +1323,8 @@ class AWSUPINode(AWSNodes):
         zone = node_conf.get("zone")
         logger.info("Creating RHEL worker node")
         self.gather_worker_data(f"no{zone}")
+        rhel_version = config.ENV_DATA["rhel_version"]
+        rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         response = self.client.run_instances(
             BlockDeviceMappings=[
                 {
@@ -1330,7 +1336,7 @@ class AWSUPINode(AWSNodes):
                     },
                 },
             ],
-            ImageId=node_conf["rhel_worker_ami"],
+            ImageId=rhel_worker_ami,
             SubnetId=self.worker_subnet,
             InstanceType=node_conf["rhel_worker_instance_type"],
             MaxCount=1,

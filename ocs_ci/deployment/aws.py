@@ -474,6 +474,8 @@ class AWSUPI(AWSBase):
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get("num_workers", 3))
         logging.info(f"Creating {num_workers} RHEL workers")
+        rhel_version = config.ENV_DATA["rhel_version"]
+        rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         for i in range(num_workers):
             self.gather_worker_data(f"no{i}")
             logging.info(f"Creating {i + 1}/{num_workers} worker")
@@ -488,7 +490,7 @@ class AWSUPI(AWSBase):
                         },
                     },
                 ],
-                ImageId=config.ENV_DATA["rhel_worker_ami"],
+                ImageId=rhel_worker_ami,
                 SubnetId=self.worker_subnet,
                 InstanceType=config.ENV_DATA["rhel_worker_instance_type"],
                 MaxCount=1,
