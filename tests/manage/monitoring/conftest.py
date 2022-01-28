@@ -814,9 +814,9 @@ def measure_noobaa_ns_target_bucket_deleted(
 
 
 @pytest.fixture
-def measure_stop_worker_node(measurement_dir, nodes):
+def measure_stop_worker_nodes(measurement_dir, nodes):
     """
-    Stop one worker node, measure the time when it was stopped and monitors
+    Stop two worker nodes, measure the time when it was stopped and monitors
     alerts that were triggered during this event.
 
     Returns:
@@ -824,31 +824,32 @@ def measure_stop_worker_node(measurement_dir, nodes):
             worker node
 
     """
-    node = get_nodes(node_type="worker")[0]
+    test_nodes = get_nodes(node_type="worker")[0:2]
 
-    def stop_node():
+    def stop_nodes():
         """
-        Turn off one worker node for 6 minutes.
+        Turn off two worker nodes for 13 minutes.
 
         Returns:
-            str: Node that was turned down
+            list: Names of nodes that was turned down
 
         """
         # run_time of operation
-        run_time = 60 * 6
-        nonlocal node
-        logger.info(f"Turning off node {node.name}")
-        nodes.stop_nodes(nodes=[node])
+        run_time = 60 * 13
+        nonlocal test_nodes
+        node_name = [node.name for node in test_nodes]
+        logger.info(f"Turning off nodes {node_names}")
+        nodes.stop_nodes(nodes=[test_nodes])
         # Validate node reached NotReady state
-        wait_for_nodes_status(node_names=[node.name], status=constants.NODE_NOT_READY)
+        wait_for_nodes_status(node_names=node_names, status=constants.NODE_NOT_READY)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return node.name
+        return node_names
 
-    test_file = os.path.join(measurement_dir, "measure_stop_node.json")
-    measured_op = measure_operation(stop_node, test_file)
-    logger.info(f"Turning on node {node.name}")
-    nodes.start_nodes(nodes=[node])
+    test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
+    measured_op = measure_operation(stop_nodes, test_file)
+    logger.info(f"Turning on nodes")
+    nodes.start_nodes(nodes=test_nodes)
     # Validate all nodes are in READY state and up
     retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
         wait_for_nodes_status

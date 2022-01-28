@@ -72,21 +72,22 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
 @tier4a
 @managed_service_required
 @pytest.mark.polarion_id("OCS-900")
-def test_stop_worker_node_pd(measure_stop_worker_node):
+def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     """
-    Test that there are appropriate incidents in PagerDuty when one of worker
-    nodes is unavailable and that these incidents are cleared when the node
-    is back online.
+    Test that there are appropriate incidents in PagerDuty when two worker
+    nodes are unavailable and that these incidents are cleared when those nodes
+    are back online.
     """
     api = pagerduty.PagerDutyAPI()
 
     # get incidents from time when manager deployment was scaled down
-    incidents = measure_stop_worker_node.get("pagerduty_incidents")
+    incidents = measure_stop_worker_nodes.get("pagerduty_incidents")
 
     # check that incidents  and CephClusterErrorState
     # alert are correctly raised
     for target_label in [
-        constants.ALERT_CLUSTEERRORSTATE,
+        constants.ALERT_CLUSTERERRORSTATE,
+        constants.ALERT_NODEDOWN,
     ]:
         assert pagerduty.check_incident_list(
             summary=target_label,
@@ -94,5 +95,5 @@ def test_stop_worker_node_pd(measure_stop_worker_node):
             urgency="high",
         )
         api.check_incident_cleared(
-            summary=target_label, measure_end_time=measure_stop_worker_node.get("stop")
+            summary=target_label, measure_end_time=measure_stop_worker_nodes.get("stop")
         )
