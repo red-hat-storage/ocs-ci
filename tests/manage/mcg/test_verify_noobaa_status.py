@@ -2,7 +2,7 @@ import logging
 import re
 
 from ocs_ci.framework.pytest_customization.marks import tier1
-from ocs_ci.framework.testlib import polarion_id, bugzilla, config, version
+from ocs_ci.framework.testlib import polarion_id, bugzilla, version
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
