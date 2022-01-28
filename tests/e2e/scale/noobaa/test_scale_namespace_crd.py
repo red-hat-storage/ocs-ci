@@ -86,12 +86,41 @@ class TestScaleNamespace(E2ETest):
                 },
                 marks=[pytest.mark.polarion_id("OCS-2560")],
             ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Multi",
+                        "namespacestore_dict": {
+                            "aws": [(2, "us-east-2")],
+                        },
+                    },
+                },
+                marks=[pytest.mark.polarion_id("OCS-2743")],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Multi",
+                        "namespacestore_dict": {
+                            "rgw": [(2, None)],
+                        },
+                    },
+                },
+                marks=[
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-2744"),
+                ],
+            ),
         ],
         ids=[
             "Scale-AWS-Single",
             "Scale-Azure-Single",
             "Scale-RGW-Single",
             "Scale-AWS-Cache",
+            "Scale-AWS-AWS-Multi",
+            "Scale-RWG-RGW-Multi",
         ],
     )
     def test_scale_namespace_bucket_creation_crd(
@@ -107,7 +136,7 @@ class TestScaleNamespace(E2ETest):
         For each namespace resource, create namespace bucket and start hsbench benchmark
 
         """
-        num_s3_obj = 1000
+        num_s3_obj = 10000
         ns_bucket_list = []
         for _ in range(50):
             ns_bucket_list.append(
@@ -118,12 +147,12 @@ class TestScaleNamespace(E2ETest):
                 )[0]
             )
 
-        for ns_bucket in ns_bucket_list:
+        for _ in ns_bucket_list:
             s3bench.run_benchmark(
                 num_obj=num_s3_obj,
                 timeout=7200,
                 access_key=mcg_obj.access_key_id,
                 secret_key=mcg_obj.access_key,
-                end_point=f"http://s3.openshift-storage.svc/{ns_bucket.name}",
+                end_point=f"http://s3.openshift-storage.svc/",
                 run_mode="ipg",
             )
