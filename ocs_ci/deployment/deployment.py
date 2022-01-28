@@ -1539,7 +1539,7 @@ class MultiClusterDROperatorsDeploy(object):
             namespace=constants.OPENSHIFT_OPERATORS,
         )
         orchestrator_controller.wait_for_resource(
-            condition="1", column="AVAILABLE", resource_count=1
+            condition="1", column="AVAILABLE", resource_count=1, timeout=600
         )
         # create ODF orchestrator operator group
         run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
@@ -1769,7 +1769,7 @@ class MultiClusterDROperatorsDeploy(object):
             run_cmd(f"oc apply -f {dr_ramen_configmap_yaml.name}")
 
         def _get_status(self, resource_data):
-            resource_data.get()
+            resource_data.reload_data()
             reason = resource_data.data.get("status").get("conditions")[0].get("reason")
             if reason == "Succeeded":
                 return True
