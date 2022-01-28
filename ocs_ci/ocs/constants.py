@@ -1072,7 +1072,7 @@ RHCOS_WORKER_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhcos_workers.yaml")
 AWS_WORKER_NODE_TEMPLATE = "06_cluster_worker_node.yaml"
 AWS_S3_UPI_BUCKET = "ocs-qe-upi"
 AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
-RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
+RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel{version}_workers.yaml")
 
 # Users
 NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
