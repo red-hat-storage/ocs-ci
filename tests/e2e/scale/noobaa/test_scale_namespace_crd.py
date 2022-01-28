@@ -153,6 +153,6 @@ class TestScaleNamespace(E2ETest):
                 timeout=7200,
                 access_key=mcg_obj.access_key_id,
                 secret_key=mcg_obj.access_key,
-                end_point=f"http://s3.openshift-storage.svc/",
+                end_point="http://s3.openshift-storage.svc/",
                 run_mode="ipg",
             )
