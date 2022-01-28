@@ -839,7 +839,7 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
         nonlocal test_nodes
         node_names = [node.name for node in test_nodes]
         logger.info(f"Turning off nodes {node_names}")
-        nodes.stop_nodes(nodes=[test_nodes])
+        nodes.stop_nodes(nodes=test_nodes)
         # Validate node reached NotReady state
         wait_for_nodes_status(node_names=node_names, status=constants.NODE_NOT_READY)
         logger.info(f"Waiting for {run_time} seconds")
