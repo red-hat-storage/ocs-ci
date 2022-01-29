@@ -1787,7 +1787,9 @@ def get_testrun_name():
         us_ds = "Upstream"
     elif us_ds.upper() == "DS":
         us_ds = "Downstream"
-    ocp_version = ".".join(config.DEPLOYMENT.get("installer_version").split(".")[:-2])
+    ocp_version = version_module.get_semantic_version(
+        config.DEPLOYMENT.get("installer_version"), only_major_minor=True
+    )
     ocp_version_string = f"OCP{ocp_version}" if ocp_version else ""
     ocs_version = config.ENV_DATA.get("ocs_version")
     ocs_version_string = f"OCS{ocs_version}" if ocs_version else ""
