@@ -39,9 +39,9 @@ def run_subctl_cmd_interactive(cmd, prompt, answer):
     Handle interactive prompts with answers during subctl command
 
     Args:
-        cmd(str): Command to be executed
-        prompt(str): Expected question during command run which needs to be provided
-        answer(str): Answer for the prompt
+        cmd (str): Command to be executed
+        prompt (str): Expected question during command run which needs to be provided
+        answer (str): Answer for the prompt
 
     Raises:
         InteractivePromptException: in case something goes wrong

@@ -366,7 +366,6 @@ def pytest_configure(config):
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
                 return
-            print("Collecting Cluster versions")
             # remove extraneous metadata
             for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
                 if config._metadata.get(extra_meta):
@@ -469,7 +468,6 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
-    print(f"Setting KUBECONFIG on {ocsci_config.ENV_DATA['cluster_name']}")
     ocsci_config.RUN.update(
         {
             "kubeconfig": os.path.join(
