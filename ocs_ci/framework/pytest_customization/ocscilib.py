@@ -308,6 +308,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--import-without-odf",
         dest="import_without_odf",
+        default=False,
         help="Run on ACM hub to import managed clusters, and skip ODF related checks",
     )
 
