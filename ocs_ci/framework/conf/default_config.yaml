@@ -245,7 +245,7 @@ PERF:
   # There is a Lab ES for development testing - combine with --dev-mode argument
   dev_lab_es: true
   # The Dev. Lab ES information:  IP / Port
-  dev_es_server: "10.0.144.152"
+  dev_es_server: "10.0.144.103"
   dev_es_port: 9200
   dashboard_cred: "data/perfdash"
 
