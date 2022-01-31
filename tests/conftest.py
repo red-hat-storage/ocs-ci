@@ -364,43 +364,43 @@ def log_ocs_version(cluster):
     log.info("human readable ocs version info written into %s", file_name)
 
 
-@pytest.fixture(scope="session")
-def pagerduty_service(request):
-    """
-    Create a Service in PagerDuty service. The service represents a cluster instance.
-    The service is deleted at the end of the test run.
-
-    Returns:
-        str: PagerDuty service json
-
-    """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        pagerduty_api = pagerduty.PagerDutyAPI()
-        payload = pagerduty_api.get_service_dict()
-        service_response = pagerduty_api.create("services", payload=payload)
-        msg = f"Request {service_response.request.url} failed"
-        assert service_response.ok, msg
-        service = service_response.json().get("service")
-
-        def teardown():
-            """
-            Delete the service at the end of test run
-            """
-            service_id = service["id"]
-            log.info(f"Deleting service with id {service_id}")
-            delete_response = pagerduty_api.delete(f"services/{service_id}")
-            msg = f"Deletion of service {service_id} failed"
-            assert delete_response.ok, msg
-
-        request.addfinalizer(teardown)
-        return service
-    else:
-        log.info(
-            "PagerDuty service is not created because "
-            f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
-            "is not used"
-        )
-        return None
+# @pytest.fixture(scope="session")
+# def pagerduty_service(request):
+#     """
+#     Create a Service in PagerDuty service. The service represents a cluster instance.
+#     The service is deleted at the end of the test run.
+#
+#     Returns:
+#         str: PagerDuty service json
+#
+#     """
+#     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+#         pagerduty_api = pagerduty.PagerDutyAPI()
+#         payload = pagerduty_api.get_service_dict()
+#         service_response = pagerduty_api.create("services", payload=payload)
+#         msg = f"Request {service_response.request.url} failed"
+#         assert service_response.ok, msg
+#         service = service_response.json().get("service")
+#
+#         def teardown():
+#             """
+#             Delete the service at the end of test run
+#             """
+#             service_id = service["id"]
+#             log.info(f"Deleting service with id {service_id}")
+#             delete_response = pagerduty_api.delete(f"services/{service_id}")
+#             msg = f"Deletion of service {service_id} failed"
+#             assert delete_response.ok, msg
+#
+#         request.addfinalizer(teardown)
+#         return service
+#     else:
+#         log.info(
+#             "PagerDuty service is not created because "
+#             f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
+#             "is not used"
+#         )
+#         return None
 
 
 @pytest.fixture(scope="session", autouse=True)
