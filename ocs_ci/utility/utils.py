@@ -18,6 +18,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
+import pexpect
 
 import hcl2
 import requests
@@ -41,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnexpectedImage,
     UnsupportedOSType,
+    InteractivePromptException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -456,6 +458,88 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     return mask_secrets(completed_process.stdout.decode(), secrets)
+
+
+def run_cmd_interactive(cmd, prompts_answers, timeout=300):
+    """
+    Handle interactive prompts with answers during subctl command
+
+    Args:
+        cmd(str): Command to be executed
+        prompts_answers(dict): Prompts as keys and answers as values
+        timeout(int): Timeout in seconds, for pexpect to wait for prompt
+
+    Raises:
+        InteractivePromptException: in case something goes wrong
+
+    """
+    child = pexpect.spawn(cmd)
+    for prompt, answer in prompts_answers.items():
+        if child.expect(prompt, timeout=timeout):
+            raise InteractivePromptException("Unexpected Prompt")
+
+        if not child.sendline("".join([answer, constants.ENTER_KEY])):
+            raise InteractivePromptException("Failed to provide answer to the prompt")
+
+
+def run_cmd_multicluster(
+    cmd, secrets=None, timeout=600, ignore_error=False, skip_index=None, **kwargs
+):
+    """
+    Run command on multiple clusters. Useful in multicluster scenarios
+    This is wrapper around exec_cmd
+
+    Args:
+        cmd (str): command to be run
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(``**kwargs``)
+        timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
+        skip_index (list of int): List of indexes that needs to be skipped from executing the command
+
+    Raises:
+        CommandFailed: In case the command execution fails
+
+    Returns:
+        list : of CompletedProcess objects as per cluster's index in config.clusters
+            i.e. [cluster1_completedprocess, None, cluster2_completedprocess]
+            if command execution skipped on a particular cluster then corresponding entry will have None
+
+    """
+    # Skip indexed cluster while running commands
+    # Useful to skip operations on ACM cluster
+    restore_ctx_index = config.cur_index
+    completed_process = [None] * len(config.clusters)
+    index = 0
+    for cluster in config.clusters:
+        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+            log.warning(f"skipping index = {skip_index}")
+            continue
+        else:
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(
+                f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
+            )
+            try:
+                completed_process[index] = exec_cmd(
+                    cmd,
+                    secrets=secrets,
+                    timeout=timeout,
+                    ignore_error=ignore_error,
+                    **kwargs,
+                )
+            except CommandFailed:
+                # In case of failure, restore the cluster context to where we started
+                config.switch_ctx(restore_ctx_index)
+                log.error(
+                    f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
+                )
+                raise
+            index = +1
+    config.switch_ctx(restore_ctx_index)
+    return completed_process
 
 
 def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
@@ -1174,6 +1258,15 @@ def run_async(command):
 def is_cluster_running(cluster_path):
     from ocs_ci.ocs.openshift_ops import OCP
 
+    def _multicluster_is_cluster_running(cluster_path):
+        return config.RUN["cli_params"].get(
+            f"cluster_path{config.cluster_ctx.MULTICLUSTER['multicluster_index'] + 1}"
+        ) and OCP.set_kubeconfig(
+            os.path.join(cluster_path, config.RUN.get("kubeconfig_location"))
+        )
+
+    if config.multicluster:
+        return _multicluster_is_cluster_running(cluster_path)
     return config.RUN["cli_params"].get("cluster_path") and OCP.set_kubeconfig(
         os.path.join(cluster_path, config.RUN.get("kubeconfig_location"))
     )

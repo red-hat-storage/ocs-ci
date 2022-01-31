@@ -322,7 +322,7 @@ def pytest_configure(config):
     if ocscilib_module not in config.getoption("-p"):
         return
     for i in range(ocsci_config.nclusters):
-        log.debug(f"Pytest configure switching to: cluster={i}")
+        log.info(f"Pytest configure switching to: cluster={i}")
         ocsci_config.switch_ctx(i)
 
         if not (config.getoption("--help") or config.getoption("collectonly")):
@@ -356,7 +356,7 @@ def pytest_configure(config):
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
                 )
-                return
+                continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
                 log.info(
                     "Skipping version collection because we skipped "
@@ -366,7 +366,6 @@ def pytest_configure(config):
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
                 return
-            print("Collecting Cluster versions")
             # remove extraneous metadata
             for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
                 if config._metadata.get(extra_meta):
@@ -469,9 +468,14 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
-    ocsci_config.RUN["kubeconfig"] = os.path.join(
-        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    ocsci_config.RUN.update(
+        {
+            "kubeconfig": os.path.join(
+                cluster_path, ocsci_config.RUN["kubeconfig_location"]
+            )
+        }
     )
+
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
