@@ -835,7 +835,7 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
 
         """
         # run_time of operation
-        run_time = 60 * 13
+        run_time = 60 * 14
         nonlocal test_nodes
         node_names = [node.name for node in test_nodes]
         logger.info(f"Turning off nodes {node_names}")
