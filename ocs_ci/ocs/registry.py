@@ -382,7 +382,8 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
         if wait:
             if template == "redis-ephemeral":
                 wait_time = 180
-                logger.info(f"Wait for {wait_time} seconds for deplpyment to come up")
+                logger.info(f"Wait for {wait_time} seconds for deployment to come up")
+                time.sleep(180)
                 ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
                 deploy_pod_name = get_pod_name_by_pattern(
                     pattern="deploy", namespace=project_name
