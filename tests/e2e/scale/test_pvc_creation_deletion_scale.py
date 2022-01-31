@@ -23,10 +23,11 @@ def setup_fixture(install_logging):
     """
     Installs openshift-logging
     """
-    logging.info("Testcases execution post deployment of openshift-logging")
+    logging.info("Installing openshift-logging to keep CSI logs persistent")
 
 
 @scale
+@pytest.mark.usefixtures(setup_fixture.__name__)
 class TestPVCCreationDeletionScale(E2ETest):
     """
     Base class for PVC scale creation and deletion
