@@ -100,6 +100,7 @@ DEPLOYMENT:
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -256,3 +257,10 @@ COMPONENTS:
   disable_noobaa: False
   disable_cephfs: False
   disable_blockpools: False
+
+# All Multicluster stuff here
+MULTICLUSTER:
+  # Index of this cluster Config in a list of cluster Configs
+  multicluster_index: 0
+  acm_cluster: False
+  primary_cluster: False
