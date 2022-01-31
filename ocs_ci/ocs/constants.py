@@ -832,6 +832,7 @@ ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
+NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 
 # UI Deployment constants
@@ -1431,6 +1432,24 @@ debug_mon = 20
 debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
+"""
+
+
+# Values from configmap noobaa-postgres-config
+NOOBAA_POSTGRES_TUNING_VALUES = """
+max_connections = 300
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 300
+work_mem = 1747kB
+min_wal_size = 2GB
+max_wal_size = 8GB
+shared_preload_libraries = 'pg_stat_statements'
 """
 
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
