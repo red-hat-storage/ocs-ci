@@ -373,7 +373,7 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
     if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
     else:
-        cmd = f"new-app --template={template} -n {project_name}"
+        cmd = f"new-app --template={template} -n {project_name} --name=build1"
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
