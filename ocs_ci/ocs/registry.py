@@ -367,6 +367,7 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
         if f'"{template}" not found' in str(cfe):
             logger.warn(f"Template {template} not found")
             template = "redis-ephemeral"
+            image = "registry.redhat.io/rhel8/redis"
         else:
             raise
 
@@ -380,6 +381,8 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
         # Validate it completed
         if wait:
             if template == "redis-ephemeral":
+                wait_time = 180
+                logger.info(f"Wait for {wait_time} seconds for deplpyment to come up")
                 ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
                 deploy_pod_name = get_pod_name_by_pattern(
                     pattern="deploy", namespace=project_name
@@ -453,6 +456,7 @@ def validate_image_exists(namespace=None):
                     name=pod_name,
                     namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
                 )
+
                 return pod_obj.exec_cmd_on_pod(
                     command=f"find /registry/docker/registry/v2/repositories/{namespace}"
                 )
