@@ -362,10 +362,10 @@ def pytest_configure(config):
                     "Skipping version collection because we skipped "
                     "the OCS deployment"
                 )
-                return
+                continue
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
-                return
+                continue
             # remove extraneous metadata
             for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
                 if config._metadata.get(extra_meta):
@@ -373,6 +373,8 @@ def pytest_configure(config):
 
             config._metadata["Test Run Name"] = get_testrun_name()
             gather_version_info_for_report(config)
+    # switch the configuration context back to the first cluster
+    ocsci_config.switch_ctx(0)
 
 
 def gather_version_info_for_report(config):
