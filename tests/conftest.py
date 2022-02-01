@@ -134,6 +134,15 @@ class OCSLogFormatter(logging.Formatter):
         super(OCSLogFormatter, self).__init__(fmt)
 
 
+def pytest_assertrepr_compare(config, op, left, right):
+    """
+    Log error message for a failed assert, so that it's possible to locate a
+    moment of the failure in test logs. Returns None so that it won't actually
+    change assert explanation.
+    """
+    log.error("'assert %s %s %s' failed", left, op, right)
+
+
 def pytest_logger_config(logger_config):
     logger_config.add_loggers([""], stdout_level="info")
     logger_config.set_log_option_default("")
