@@ -117,7 +117,8 @@ class TestRbdSpaceReclaim(ManageTest):
                     break
                 else:
                     log.info(
-                        f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. Present value of result is {result}"
+                        f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
+                        f"Present value of result is {result}"
                     )
         except TimeoutExpiredError:
             raise UnexpectedBehaviour(
