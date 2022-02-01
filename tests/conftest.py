@@ -73,7 +73,6 @@ from ocs_ci.utility import (
     deployment_openshift_logging as ocp_logging_obj,
     ibmcloud,
     kms as KMS,
-    pagerduty,
     reporting,
     templating,
     users,
@@ -403,74 +402,74 @@ def log_ocs_version(cluster):
 #         return None
 
 
-@pytest.fixture(scope="session", autouse=True)
-def pagerduty_integration(request, pagerduty_service):
-    """
-    Create a new Pagerduty integration for service from pagerduty_service
-    fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
-    correct integration key. This is currently applicable only for ODF
-    Managed Service.
-
-    """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        service_id = pagerduty_service["id"]
-        pagerduty_api = pagerduty.PagerDutyAPI()
-
-        log.info(
-            "Looking if Prometheus integration for pagerduty service with id "
-            f"{service_id} exists"
-        )
-        integration_key = None
-        for integration in pagerduty_service.get("integrations"):
-            if integration["summary"] == "Prometheus":
-                log.info(
-                    "Prometheus integration already exists. "
-                    "Skipping creation of new one."
-                )
-                integration_key = integration["integration_key"]
-                break
-
-        if not integration_key:
-            payload = pagerduty_api.get_integration_dict("Prometheus")
-            integration_response = pagerduty_api.create(
-                f"services/{service_id}/integrations", payload=payload
-            )
-            msg = f"Request {integration_response.request.url} failed"
-            assert integration_response.ok, msg
-            integration = integration_response.json().get("integration")
-            integration_key = integration["integration_key"]
-        pagerduty.set_pagerduty_integration_secret(integration_key)
-
-    def update_pagerduty_integration_secret():
-        """
-        Make sure that pagerduty secret is updated with correct integration
-        token. Check value of config.RUN['thread_pagerduty_secret_update']:
-            * required - secret is periodically updated to correct value
-            * not required - secret is not updated
-            * finished - thread is terminated
-
-        """
-        while config.RUN["thread_pagerduty_secret_update"] != "finished":
-            if config.RUN["thread_pagerduty_secret_update"] == "required":
-                pagerduty.set_pagerduty_integration_secret(integration_key)
-            time.sleep(60)
-
-    config.RUN["thread_pagerduty_secret_update"] = "not required"
-    thread = threading.Thread(
-        target=update_pagerduty_integration_secret,
-        name="thread_pagerduty_secret_update",
-    )
-
-    def finalizer():
-        """
-        Stop the thread that executed update_pagerduty_integration_secret()
-        """
-        config.RUN["thread_pagerduty_secret_update"] = "finished"
-        if thread:
-            thread.join()
-
-    request.addfinalizer(finalizer)
-    thread.start()
+# @pytest.fixture(scope="session", autouse=True)
+# def pagerduty_integration(request, pagerduty_service):
+#     """
+#     Create a new Pagerduty integration for service from pagerduty_service
+#     fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
+#     correct integration key. This is currently applicable only for ODF
+#     Managed Service.
+#
+#     """
+#     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+#         service_id = pagerduty_service["id"]
+#         pagerduty_api = pagerduty.PagerDutyAPI()
+#
+#         log.info(
+#             "Looking if Prometheus integration for pagerduty service with id "
+#             f"{service_id} exists"
+#         )
+#         integration_key = None
+#         for integration in pagerduty_service.get("integrations"):
+#             if integration["summary"] == "Prometheus":
+#                 log.info(
+#                     "Prometheus integration already exists. "
+#                     "Skipping creation of new one."
+#                 )
+#                 integration_key = integration["integration_key"]
+#                 break
+#
+#         if not integration_key:
+#             payload = pagerduty_api.get_integration_dict("Prometheus")
+#             integration_response = pagerduty_api.create(
+#                 f"services/{service_id}/integrations", payload=payload
+#             )
+#             msg = f"Request {integration_response.request.url} failed"
+#             assert integration_response.ok, msg
+#             integration = integration_response.json().get("integration")
+#             integration_key = integration["integration_key"]
+#         pagerduty.set_pagerduty_integration_secret(integration_key)
+#
+#     def update_pagerduty_integration_secret():
+#         """
+#         Make sure that pagerduty secret is updated with correct integration
+#         token. Check value of config.RUN['thread_pagerduty_secret_update']:
+#             * required - secret is periodically updated to correct value
+#             * not required - secret is not updated
+#             * finished - thread is terminated
+#
+#         """
+#         while config.RUN["thread_pagerduty_secret_update"] != "finished":
+#             if config.RUN["thread_pagerduty_secret_update"] == "required":
+#                 pagerduty.set_pagerduty_integration_secret(integration_key)
+#             time.sleep(60)
+#
+#     config.RUN["thread_pagerduty_secret_update"] = "not required"
+#     thread = threading.Thread(
+#         target=update_pagerduty_integration_secret,
+#         name="thread_pagerduty_secret_update",
+#     )
+#
+#     def finalizer():
+#         """
+#         Stop the thread that executed update_pagerduty_integration_secret()
+#         """
+#         config.RUN["thread_pagerduty_secret_update"] = "finished"
+#         if thread:
+#             thread.join()
+#
+#     request.addfinalizer(finalizer)
+#     thread.start()
 
 
 @pytest.fixture(scope="class")
