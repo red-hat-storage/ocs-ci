@@ -350,7 +350,13 @@ def check_image_exists_in_registry(image_url):
     return return_value
 
 
-def image_pull_and_push(project_name, template, image="", pattern="", wait=True):
+def image_pull_and_push(
+    project_name,
+    template="redis-ephemeral",
+    image="registry.redhat.io/rhel8/redis",
+    pattern="",
+    wait=True,
+):
     """
     Pull and push images running oc new-app command
     Args:
@@ -434,11 +440,11 @@ def get_build_name_by_pattern(pattern="", namespace=None):
     return build_list
 
 
-def validate_image_exists(namespace=None):
+def validate_image_exists(app="redis"):
     """
     Validate image exists on registries path
     Args:
-        namespace (str): Namespace where the images/builds are created
+        app (str): Label or application name
 
     Returns:
         image_list (str): Dir/Files/Images are listed in string format
@@ -459,7 +465,7 @@ def validate_image_exists(namespace=None):
                 )
 
                 return pod_obj.exec_cmd_on_pod(
-                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                    command=f"find /registry/docker/registry/v2/repositories/openshift/{app}"
                 )
 
 
