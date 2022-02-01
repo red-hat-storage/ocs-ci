@@ -111,7 +111,7 @@ class TestRbdSpaceReclaim(ManageTest):
             for reclaim_space_job_yaml in TimeoutSampler(
                 timeout=120, sleep=5, func=reclaim_space_job.get
             ):
-                result = reclaim_space_job_yaml.get("status").get("result")
+                result = reclaim_space_job_yaml.get("status", {}).get("result")
                 if result == "Succeeded":
                     log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
                     break
