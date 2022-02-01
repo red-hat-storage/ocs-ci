@@ -3065,7 +3065,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
     """
     Prepare multiple dc pods for the test
     Returns:
-        list: Pod instances
+        any: Pod instances
     """
 
     def factory(

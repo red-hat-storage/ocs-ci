@@ -13,7 +13,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_external_mode,
 )
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.testlib import E2ETest, config
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -32,6 +33,7 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.ocp import OCP
 
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +52,43 @@ class TestMonitorRecovery(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, project_factory, multi_dc_pod, mcg_obj, bucket_factory):
         """
         Initialize Sanity instance
 
         """
-        pass
+        self.sanity_helpers = Sanity()
+        project = project_factory()
+
+        rbd_pods = multi_dc_pod(
+            num_of_pvcs=1,
+            pvc_size=5,
+            project=project,
+            access_mode="RWX",
+            pool_type="rbd",
+        )
+
+        cephfs_pods = multi_dc_pod(
+            num_of_pvcs=1,
+            pvc_size=5,
+            project=project,
+            access_mode="RWX",
+            pool_type="cephfs",
+        )
+        curl_cmd = "dd if=/dev/urandom of=/tmp/sample_file.txt bs=4M count=3"
+
+        pods = rbd_pods + cephfs_pods
+        run_cmd(cmd=curl_cmd)
+        for po in pods:
+            pod.upload(
+                po.name,
+                "/tmp/sample_file.txt",
+                "/mnt/",
+                namespace=project.namespace,
+            )
+
+        logger.info("Running ios on OBCs")
+        self.sanity_helpers.obc_put_obj_create_delete(mcg_obj, bucket_factory)
 
     def test_monitor_recovery(self):
         mon_recovery = MonitorRecovery()
@@ -66,7 +99,7 @@ class TestMonitorRecovery(E2ETest):
         mds_revert = mon_recovery.mds_deployments_to_revert()
 
         logger.info("Corrupting ceph monitors by deleting store db")
-        mon_recovery.corrupt_ceph_monitors()
+        corrupt_ceph_monitors()
 
         logger.info("Starting the monitor recovery procedure")
         logger.info("Scaling down rook and ocs operators")
@@ -84,7 +117,7 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.patch_sleep_on_mon()
 
         logger.info("Updating initial delay on all monitors")
-        mon_recovery.update_mon_initial_delay()
+        update_mon_initial_delay()
 
         logger.info("Rebuilding Monitors to recover store db")
         mon_recovery.monitor_rebuild()
@@ -98,10 +131,10 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Recovering cephfs")
         mon_recovery.scale_rook_ocs_operators(replica=0)
         mon_recovery.patch_sleep_on_mds()
-        mon_recovery.ceph_fs_recovery()
+        ceph_fs_recovery()
         mon_recovery.revert_patches(mds_revert)
         mon_recovery.scale_rook_ocs_operators(replica=1)
-        mon_recovery.mute_ceph_warn()
+        archive_and_mute_ceph_warn()
 
 
 class MonitorRecovery(object):
@@ -115,28 +148,6 @@ class MonitorRecovery(object):
             kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         self.ocp_obj = ocp.OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-
-    def mute_ceph_warn(self):
-        toolbox = pod.get_ceph_tools_pod()
-        toolbox.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-        toolbox.exec_ceph_cmd(
-            ceph_cmd="ceph config set mon auth_allow_insecure_global_id_reclaim false"
-        )
-
-    def ceph_fs_recovery(self):
-        toolbox = pod.get_ceph_tools_pod()
-        try:
-            toolbox.exec_cmd_on_pod(
-                "ceph fs reset ocs-storagecluster-cephfilesystem  --yes-i-really-mean-it"
-            )
-        except CommandFailed:
-            toolbox.exec_cmd_on_pod(
-                "ceph fs new ocs-storagecluster-cephfilesystem"
-                " ocs-storagecluster-cephfilesystem-metadata ocs-storagecluster-cephfilesystem-data0 --force"
-            )
-            toolbox.exec_cmd_on_pod(
-                "ceph fs reset ocs-storagecluster-cephfilesystem  --yes-i-really-mean-it"
-            )
 
     def scale_rook_ocs_operators(self, replica=1):
         """
@@ -201,15 +212,17 @@ class MonitorRecovery(object):
         mkdir $ms
         for osd_pod in $(oc get po -l app=rook-ceph-osd -oname -n openshift-storage); do
             echo "Starting with pod: $osd_pod"
-            podname=$(echo $osd_pod|sed 's/pod\///g')
+            podname=$(echo $osd_pod| cut -c5-)
             oc exec $osd_pod -- rm -rf $ms
             oc cp $ms $podname:$ms
             rm -rf $ms
             mkdir $ms
             echo "pod in loop: $osd_pod ; done deleting local dirs"
-            oc exec $osd_pod -- ceph-objectstore-tool --type bluestore --data-path /var/lib/ceph/osd/ceph-$(oc get $osd_pod -ojsonpath='{ .metadata.labels.ceph_daemon_id }') --op update-mon-db --no-mon-config --mon-store-path $ms
+            oc exec $osd_pod -- ceph-objectstore-tool --type bluestore \
+             --data-path /var/lib/ceph/osd/ceph-$(oc get $osd_pod -ojsonpath='{ .metadata.labels.ceph_daemon_id }') \
+              --op update-mon-db --no-mon-config --mon-store-path $ms
             echo "Done with COT on pod: $osd_pod"
-            oc cp $podname:$ms $ms                   
+            oc cp $podname:$ms $ms
             echo "Finished pulling COT data from pod: $osd_pod"
         done
     """
@@ -240,27 +253,6 @@ class MonitorRecovery(object):
                 params=params,
             )
 
-    def update_mon_initial_delay(self):
-        """
-        Inserts delay on all monitors
-
-        """
-        mon_dep = get_deployments_having_label(
-            label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
-        mon_deployments = [OCS(**mon) for mon in mon_dep]
-        for mon in mon_deployments:
-            logger.info(f"Updating initialDelaySeconds on {mon.name} deployment")
-            self.insert_delay(mon_dep=mon.name)
-
-        logger.info("Sleeping for mons to get initialized")
-        time.sleep(60)
-        logger.info("Validating whether all mons reached running state")
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        for mon in mon_pods:
-            wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
-
     def monitor_rebuild(self):
         """
         Rebuilds the monitor
@@ -277,20 +269,21 @@ class MonitorRecovery(object):
         mon_a.exec_cmd_on_pod(command="chown -R ceph:ceph /tmp/monstore")
 
         logger.info("Generating monitor map command using the IPs")
-        mon_map_cmd = self.generate_monmap_cmd()
+        mon_map_cmd = generate_monmap_cmd()
 
         logger.info("Creating monitor map")
         mon_a.exec_cmd_on_pod(command=mon_map_cmd)
 
         logger.info("Getting ceph keyring from ocs secrets")
         keyring_files = self.get_ceph_keyrings()
-        #
+
+        logger.info(f"Copy keyring files to monitor: {mon_a.name}")
         for k_file in keyring_files:
             cmd = f"oc cp {k_file} {mon_a.name}:/tmp/"
             logger.info(f"Copying keyring: {k_file} into mon {mon_a.name}")
             os.system(cmd)
 
-        logger.info("Importing keyring")
+        logger.info(f"Importing ceph keyrings to a temporary file on: {mon_a.name}")
         mon_a.exec_cmd_on_pod(command="cp /etc/ceph/keyring-store/keyring /tmp/keyring")
         for k_file in keyring_files:
             k_file = k_file.split("/")
@@ -298,15 +291,17 @@ class MonitorRecovery(object):
             mon_a.exec_cmd_on_pod(
                 command=f"ceph-authtool  /tmp/keyring  --import-keyring /tmp/{k_file[-1]}"
             )
+
         rebuild_mon_cmd = "ceph-monstore-tool /tmp/monstore rebuild -- --keyring /tmp/keyring --monmap /tmp/monmap"
         logger.info("Running command to rebuild monitor")
         mon_a.exec_cmd_on_pod(command=rebuild_mon_cmd, out_yaml_format=False)
 
-        logger.info("Copying store.db dir to local")
+        logger.info(f"Copying store.db directory on monitor: {mon_a.name} locally")
         self.ocp_obj.exec_oc_cmd(
             f"cp {mon_a.name}:/tmp/monstore/store.db {self.backup_dir}/store.db"
         )
 
+        logger.info("Copying store.db to rest of the monitors")
         for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
             cmd = (
                 f"cp {self.backup_dir}/store.db {mon.name}:/var/lib/ceph/mon/ceph-"
@@ -320,20 +315,6 @@ class MonitorRecovery(object):
                 command=f"chown -R ceph:ceph /var/lib/ceph/mon/ceph-"
                 f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/store.db"
             )
-
-    def insert_delay(self, mon_dep):
-        """
-        Inserts delay on a monitor
-
-        Args:
-            mon_dep (str): Name of a monitor deployment
-
-        """
-        logger.info(f"Updating initialDelaySeconds on deployment: {mon_dep}")
-        cmd = f"""oc get deployment {mon_dep} -o yaml |
-         sed "s/initialDelaySeconds: 10/initialDelaySeconds: 10000/g" | oc replace -f - """
-        logger.info(f"Executing {cmd}")
-        os.system(cmd)
 
     def revert_patches(self, deployment_paths):
         """
@@ -413,37 +394,27 @@ class MonitorRecovery(object):
         Gets all ceph and csi related keyring from OCS secrets
 
         """
-        secret_resources = {
-            "mons": {"rook-ceph-mons-keyring"},
-            "rgws": {
-                "rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a-keyring",
-            },
-            "mgrs": {"rook-ceph-mgr-a-keyring"},
-            "crash": {"rook-ceph-crash-collector-keyring"},
-            "fs_node": {"rook-csi-cephfs-node"},
-            "rbd_node": {"rook-csi-rbd-node"},
-            "fs_provisinor": {"rook-csi-cephfs-provisioner"},
-            "rbd_provisinor": {"rook-csi-rbd-provisioner"},
-            "mdss": {
+        mon_k = get_ceph_caps(["rook-ceph-mons-keyring"])
+        if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+            rgw_k = get_ceph_caps(
+                ["rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a-keyring"]
+            )
+        else:
+            rgw_k = None
+        mgr_k = get_ceph_caps(["rook-ceph-mgr-a-keyring"])
+        mds_k = get_ceph_caps(
+            [
                 "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a-keyring",
                 "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b-keyring",
-            },
-        }
-        mon_k = self.get_secrets(secret_resource=secret_resources.get("mons"))
+            ]
+        )
+        crash_k = get_ceph_caps(["rook-ceph-crash-collector-keyring"])
+        fs_node_k = get_ceph_caps(["rook-csi-cephfs-node"])
+        rbd_node_k = get_ceph_caps(["rook-csi-rbd-node"])
+        fs_provisinor_k = get_ceph_caps(["rook-csi-cephfs-provisioner"])
+        rbd_provisinor_k = get_ceph_caps(["rook-csi-rbd-provisioner"])
 
-        rgw_k = self.get_secrets(secret_resource=secret_resources.get("rgws"))
-        mgr_k = self.get_secrets(secret_resource=secret_resources.get("mgrs"))
-        mds_k = self.get_secrets(secret_resource=secret_resources.get("mdss"))
-        crash_k = self.get_secrets(secret_resource=secret_resources.get("crash"))
-        fs_node_k = self.get_secrets(secret_resource=secret_resources.get("fs_node"))
-        rbd_node_k = self.get_secrets(secret_resource=secret_resources.get("rbd_node"))
-        fs_provisinor_k = self.get_secrets(
-            secret_resource=secret_resources.get("fs_provisinor")
-        )
-        rbd_provisinor_k = self.get_secrets(
-            secret_resource=secret_resources.get("rbd_provisinor")
-        )
-        keyrings = {
+        keyring_caps = {
             "mons": mon_k,
             "rgws": rgw_k,
             "mgrs": mgr_k,
@@ -458,62 +429,12 @@ class MonitorRecovery(object):
         mon_a = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)[0]
         logger.info(f"Working on monitor: {mon_a.name}")
 
-        for k, v in keyrings.items():
-            with open(f"{self.keyring_dir}/{k}.keyring", "w") as fd:
-                fd.write(v)
-                keyring_files.append(f"{self.keyring_dir}/{k}.keyring")
-
-        for k_file in keyring_files:
-            cmd = f"cp {k_file} {mon_a.name}:/tmp/"
-            logger.info(f"Copying keyring into mon: {mon_a.name}")
-            self.ocp_obj.exec_oc_cmd(cmd)
-
+        for secret, caps in keyring_caps.items():
+            if caps:
+                with open(f"{self.keyring_dir}/{secret}.keyring", "w") as fd:
+                    fd.write(caps)
+                    keyring_files.append(f"{self.keyring_dir}/{secret}.keyring")
         return keyring_files
-
-    def generate_monmap_cmd(self):
-        """
-        Generates monmap-tool command used to rebuild monitors
-
-        """
-        mon_ips_dict = {}
-        mon_ids = []
-        mon_ips = []
-
-        logger.info("Getting monitor pods public IP")
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        for mon in mon_pods:
-            mon_ids.append(
-                mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-            )
-            logger.info(f"getting public ip of {mon.name}")
-            logger.info(mon_ids)
-            mon_ips.append(
-                re.findall(
-                    r"[0-9]+(?:\.[0-9]+){3}",
-                    mon.get().get("spec").get("initContainers")[1].get("args")[-2],
-                )
-            )
-
-        mon_a = mon_pods[0]
-        logger.info(f"Working on monitor: {mon_a.name} to get FSID")
-        fsid = (
-            mon_a.get()
-            .get("spec")
-            .get("initContainers")[1]
-            .get("args")[0]
-            .replace("--fsid=", "")
-        )
-
-        for ids, ip in zip(mon_ids, mon_ips):
-            mon_ips_dict.update({ids: f"{ip}"})
-
-        mon_ip_ids = ""
-        for key, val in mon_ips_dict.items():
-            mon_ip_ids = mon_ip_ids + f"--add {key} {val}" + " "
-
-        mon_map_cmd = f"monmaptool --create {mon_ip_ids} --enable-all-features --clobber /tmp/monmap --fsid {fsid}"
-        logger.info(f"Generated monitor map creation command: {mon_map_cmd}")
-        return mon_map_cmd
 
     def mds_deployments_to_revert(self):
         """"""
@@ -528,104 +449,6 @@ class MonitorRecovery(object):
                 join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
             )
         return to_revert_mds_path
-
-    def get_secrets(self, secret_resource):
-        """
-        Gets ocs secrets and decodes it to get ceph keyring
-
-        Args:
-            secret_resource (any): secret resource name
-
-        """
-        keyring = ""
-
-        fs_node_caps = """
-            caps mds = "allow rw"
-            caps mgr = "allow rw"
-            caps mon = "allow r"
-            caps osd = "allow rw tag cephfs *=*"
-    """
-        rbd_node_caps = """
-            caps mgr = "allow rw"
-            caps mon = "profile rbd"
-            caps osd = "profile rbd"
-    """
-        fs_provisinor_caps = """
-            caps mgr = "allow rw"
-            caps mon = "allow r"
-            caps osd = "allow rw tag cephfs metadata=*"
-    """
-        rbd_provisinor_caps = """
-            caps mgr = "allow rw"
-            caps mon = "profile rbd"
-            caps osd = "profile rbd"
-    """
-
-        for resource in secret_resource:
-            resource_obj = ocp.OCP(
-                resource_name=resource, kind="Secret", namespace="openshift-storage"
-            )
-            if "rook-csi-cephfs-node" in resource:
-                keyring = (
-                    keyring
-                    + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
-                    .decode()
-                    .rstrip("\n")
-                    + "\n"
-                )
-                keyring = (
-                    "[client.csi-cephfs-node]" + "\n" + "\t" + "key = "
-                    f"{keyring}" + fs_node_caps
-                )
-
-            elif "rook-csi-rbd-node" in resource:
-                keyring = (
-                    keyring
-                    + base64.b64decode(resource_obj.get().get("data").get("userKey"))
-                    .decode()
-                    .rstrip("\n")
-                    + "\n"
-                )
-                keyring = (
-                    "[client.csi-rbd-node]" + "\n" + "\t" + "key = "
-                    f"{keyring}" + rbd_node_caps
-                )
-
-            elif "rook-csi-cephfs-provisioner" in resource:
-                keyring = (
-                    keyring
-                    + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
-                    .decode()
-                    .rstrip("\n")
-                    + "\n"
-                )
-                keyring = (
-                    "[client.csi-cephfs-provisioner]" + "\n" + "\t" + "key = "
-                    f"{keyring}" + fs_provisinor_caps
-                )
-
-            elif "rook-csi-rbd-provisioner" in resource:
-                keyring = (
-                    keyring
-                    + base64.b64decode(resource_obj.get().get("data").get("userKey"))
-                    .decode()
-                    .rstrip("\n")
-                    + "\n"
-                )
-                keyring = (
-                    "[client.csi-rbd-provisioner]" + "\n" + "\t" + "key = "
-                    f"{keyring}" + rbd_provisinor_caps
-                )
-
-            else:
-                keyring = (
-                    keyring
-                    + base64.b64decode(resource_obj.get().get("data").get("keyring"))
-                    .decode()
-                    .rstrip("\n")
-                    + "\n"
-                )
-        return keyring
 
     def patch_sleep_on_mds(self):
         """
@@ -660,31 +483,236 @@ class MonitorRecovery(object):
         for mds in get_mds_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
             wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
 
-    def corrupt_ceph_monitors(self):
-        """
-        Corrupts ceph monitors by deleting store.db file
 
-        """
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        for mon in mon_pods:
-            logger.info(f"Corrupting monitor: {mon.name}")
-            mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-            logger.info(
-                mon.exec_cmd_on_pod(
-                    command=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db"
-                )
+def corrupt_ceph_monitors():
+    """
+    Corrupts ceph monitors by deleting store.db file
+
+    """
+    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for mon in mon_pods:
+        logger.info(f"Corrupting monitor: {mon.name}")
+        mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
+        logger.info(
+            mon.exec_cmd_on_pod(
+                command=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db"
             )
-            try:
-                wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
-            except ResourceWrongStatusException:
-                if (
-                    mon.ocp.get_resource(resource_name=mon.name, column="STATUS")
-                    != constants.STATUS_CLBO
-                ):
-                    logger.info(
-                        f"Re-spinning monitor: {mon.name} since it did not reach CLBO state"
-                    )
-                    mon.delete()
-        logging.info("Validating all the monitors are in CLBO state")
-        for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        )
+        try:
             wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
+        except ResourceWrongStatusException:
+            if (
+                mon.ocp.get_resource(resource_name=mon.name, column="STATUS")
+                != constants.STATUS_CLBO
+            ):
+                logger.info(
+                    f"Re-spinning monitor: {mon.name} since it did not reach CLBO state"
+                )
+                mon.delete()
+    logging.info("Validating all the monitors are in CLBO state")
+    for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
+
+
+def archive_and_mute_ceph_warn():
+    toolbox = pod.get_ceph_tools_pod()
+    toolbox.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+    toolbox.exec_ceph_cmd(
+        ceph_cmd="ceph config set mon auth_allow_insecure_global_id_reclaim false"
+    )
+
+
+def ceph_fs_recovery():
+    toolbox = pod.get_ceph_tools_pod()
+    try:
+        toolbox.exec_cmd_on_pod(
+            "ceph fs reset ocs-storagecluster-cephfilesystem  --yes-i-really-mean-it"
+        )
+    except CommandFailed:
+        toolbox.exec_cmd_on_pod(
+            "ceph fs new ocs-storagecluster-cephfilesystem"
+            " ocs-storagecluster-cephfilesystem-metadata ocs-storagecluster-cephfilesystem-data0 --force"
+        )
+        toolbox.exec_cmd_on_pod(
+            "ceph fs reset ocs-storagecluster-cephfilesystem  --yes-i-really-mean-it"
+        )
+
+
+def insert_delay(mon_dep):
+    """
+    Inserts delay on a monitor
+
+    Args:
+        mon_dep (str): Name of a monitor deployment
+
+    """
+    logger.info(f"Updating initialDelaySeconds on deployment: {mon_dep}")
+    cmd = f"""oc get deployment {mon_dep} -o yaml |
+     sed "s/initialDelaySeconds: 10/initialDelaySeconds: 10000/g" | oc replace -f - """
+    logger.info(f"Executing {cmd}")
+    os.system(cmd)
+
+
+def get_ceph_caps(secret_resource):
+    """
+    Gets ocs secrets and decodes it to get ceph keyring
+
+    Args:
+        secret_resource (any): secret resource name
+
+    """
+    keyring = ""
+
+    fs_node_caps = """
+        caps mds = "allow rw"
+        caps mgr = "allow rw"
+        caps mon = "allow r"
+        caps osd = "allow rw tag cephfs *=*"
+"""
+    rbd_node_caps = """
+        caps mgr = "allow rw"
+        caps mon = "profile rbd"
+        caps osd = "profile rbd"
+"""
+    fs_provisinor_caps = """
+        caps mgr = "allow rw"
+        caps mon = "allow r"
+        caps osd = "allow rw tag cephfs metadata=*"
+"""
+    rbd_provisinor_caps = """
+        caps mgr = "allow rw"
+        caps mon = "profile rbd"
+        caps osd = "profile rbd"
+"""
+
+    for resource in secret_resource:
+        resource_obj = ocp.OCP(
+            resource_name=resource, kind="Secret", namespace="openshift-storage"
+        )
+        if "rook-csi-cephfs-node" in resource:
+            keyring = (
+                keyring
+                + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
+                .decode()
+                .rstrip("\n")
+                + "\n"
+            )
+            keyring = (
+                "[client.csi-cephfs-node]" + "\n" + "\t" + "key = "
+                f"{keyring}" + fs_node_caps
+            )
+
+        elif "rook-csi-rbd-node" in resource:
+            keyring = (
+                keyring
+                + base64.b64decode(resource_obj.get().get("data").get("userKey"))
+                .decode()
+                .rstrip("\n")
+                + "\n"
+            )
+            keyring = (
+                "[client.csi-rbd-node]" + "\n" + "\t" + "key = "
+                f"{keyring}" + rbd_node_caps
+            )
+
+        elif "rook-csi-cephfs-provisioner" in resource:
+            keyring = (
+                keyring
+                + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
+                .decode()
+                .rstrip("\n")
+                + "\n"
+            )
+            keyring = (
+                "[client.csi-cephfs-provisioner]" + "\n" + "\t" + "key = "
+                f"{keyring}" + fs_provisinor_caps
+            )
+
+        elif "rook-csi-rbd-provisioner" in resource:
+            keyring = (
+                keyring
+                + base64.b64decode(resource_obj.get().get("data").get("userKey"))
+                .decode()
+                .rstrip("\n")
+                + "\n"
+            )
+            keyring = (
+                "[client.csi-rbd-provisioner]" + "\n" + "\t" + "key = "
+                f"{keyring}" + rbd_provisinor_caps
+            )
+
+        else:
+            keyring = (
+                keyring
+                + base64.b64decode(resource_obj.get().get("data").get("keyring"))
+                .decode()
+                .rstrip("\n")
+                + "\n"
+            )
+    return keyring
+
+
+def update_mon_initial_delay():
+    """
+    Inserts delay on all monitors
+
+    """
+    mon_dep = get_deployments_having_label(
+        label=constants.MON_APP_LABEL,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    mon_deployments = [OCS(**mon) for mon in mon_dep]
+    for mon in mon_deployments:
+        logger.info(f"Updating initialDelaySeconds on {mon.name} deployment")
+        insert_delay(mon_dep=mon.name)
+
+    logger.info("Sleeping for mons to get initialized")
+    time.sleep(60)
+    logger.info("Validating whether all mons reached running state")
+    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for mon in mon_pods:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
+
+
+def generate_monmap_cmd():
+    """
+    Generates monmap-tool command used to rebuild monitors
+
+    """
+    mon_ips_dict = {}
+    mon_ids = []
+    mon_ips = []
+
+    logger.info("Getting monitor pods public IP")
+    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for mon in mon_pods:
+        mon_ids.append(mon.get().get("metadata").get("labels").get("ceph_daemon_id"))
+        logger.info(f"getting public ip of {mon.name}")
+        logger.info(mon_ids)
+        mon_ips.append(
+            re.findall(
+                r"[0-9]+(?:\.[0-9]+){3}",
+                mon.get().get("spec").get("initContainers")[1].get("args")[-2],
+            )
+        )
+
+    mon_a = mon_pods[0]
+    logger.info(f"Working on monitor: {mon_a.name} to get FSID")
+    fsid = (
+        mon_a.get()
+        .get("spec")
+        .get("initContainers")[1]
+        .get("args")[0]
+        .replace("--fsid=", "")
+    )
+
+    for ids, ip in zip(mon_ids, mon_ips):
+        mon_ips_dict.update({ids: f"{ip}"})
+
+    mon_ip_ids = ""
+    for key, val in mon_ips_dict.items():
+        mon_ip_ids = mon_ip_ids + f"--add {key} {val}" + " "
+
+    mon_map_cmd = f"monmaptool --create {mon_ip_ids} --enable-all-features --clobber /tmp/monmap --fsid {fsid}"
+    logger.info(f"Generated monitor map creation command: {mon_map_cmd}")
+    return mon_map_cmd
