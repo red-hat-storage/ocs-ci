@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -11,7 +12,7 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_PAGE_TITLE,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import MultiClusterConfig
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
@@ -48,8 +49,6 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["choose_kubeconfig"])
         log.info(f"Coping Kubeconfig {kubeconfig_location}")
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
-        log.info(kubeconfig_to_import)
-        self.do_click(self.page_nav["Kubeconfig_text"])
         for line in kubeconfig_to_import:
             self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
             time.sleep(2)
@@ -63,6 +62,8 @@ class AcmAddClusters(AcmPageNavigator):
         Args:
             cluster_name: (str): cluster name to import
             kubeconfig_location: (str): kubeconfig location
+        Returns:
+            None, but exits if sample object is not None using TimeoutSampler
 
         """
 
@@ -77,6 +78,7 @@ class AcmAddClusters(AcmPageNavigator):
         ):
             if sample:
                 log.info(f"Cluster: {cluster_name} successfully imported")
+                return
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
 
@@ -317,9 +319,11 @@ def validate_cluster_import(cluster_name):
     Assert:
         All conditions of selected managed cluster should be "True", Failed otherwise
 
+    Return:
+        True, if not AssertionError
     """
-    oc_obj = OCP()
-    log.debug({oc_obj.get(resource_name=ACM_MANAGED_CLUSTERS)})
+    config.switch_ctx(0)
+    oc_obj = OCP(kind=ACM_MANAGED_CLUSTERS)
     conditions = oc_obj.exec_oc_cmd(
         f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"
     )
@@ -332,30 +336,25 @@ def validate_cluster_import(cluster_name):
             dict_status.get("status") == "True"
         ), f"Status is not True, but: {dict_status.get('status')}"
 
+    # Return true if Assertion error was not raised:
+    return True
+
 
 def get_clusters_env():
     """
     Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup
-
+        Returns after execution with cluster index zero as default context
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
     """
-    config = MultiClusterConfig()
-    clusters_env = dict()
-    config.switch_ctx(index=0)
-    clusters_env["kubeconfig_hub_location"] = config.ENV_DATA.get("kubeconfig_location")
-    clusters_env["hub_cluster_name"] = config.ENV_DATA.get("cluster_name")
-    config.switch_ctx(index=1)
-    clusters_env["kubeconfig_cl_a_location"] = config.ENV_DATA.get(
-        "kubeconfig_location"
-    )
-    clusters_env["cl_a_cluster_name"] = config.ENV_DATA.get("cluster_name")
-    config.switch_ctx(index=2)
-    clusters_env["kubeconfig_cl_b_location"] = config.ENV_DATA.get(
-        "kubeconfig_location"
-    )
-    clusters_env["cl_b_cluster_name"] = config.ENV_DATA.get("cluster_name")
+    clusters_env = {}
+    for index in range(config.nclusters):
+        config.switch_ctx(index=index)
+        clusters_env[f"kubeconfig_location_c{index}"] = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        clusters_env[f"cluster_name_{index}"] = config.ENV_DATA["cluster_name"]
 
     config.switch_ctx(index=0)
 
@@ -369,12 +368,12 @@ def import_clusters_with_acm():
     """
     clusters_env = get_clusters_env()
     log.info(clusters_env)
-    kubeconfig_a = clusters_env.get("kubeconfig_cl_a_location")
-    kubeconfig_b = clusters_env.get("kubeconfig_cl_b_location")
+    kubeconfig_a = clusters_env.get("kubeconfig_location_c1")
+    kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
     global cluster_name_a
-    cluster_name_a = clusters_env.get("cl_a_cluster_name")
+    cluster_name_a = clusters_env.get("cluster_name_1")
     global cluster_name_b
-    cluster_name_b = clusters_env.get("cl_b_cluster_name")
+    cluster_name_b = clusters_env.get("cluster_name_2")
     verify_running_acm()
     driver = login_to_acm()
     acm_nav = AcmAddClusters(driver)
