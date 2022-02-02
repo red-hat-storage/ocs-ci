@@ -63,7 +63,9 @@ class BAREMETALUPI(Deployment):
             # check for BM status
             logger.info("Checking BM Status")
             status = self.check_bm_status_exist()
-            assert status == constants.BM_STATUS_ABSENT, "BM Cluster still present"
+            assert (
+                status == constants.BM_STATUS_ABSENT
+            ), f"BM Cluster still present and locked by {self.get_locked_username()}"
             # update BM status
             logger.info("Updating BM Status")
             result = self.update_bm_status(constants.BM_STATUS_PRESENT)
@@ -529,6 +531,19 @@ class BAREMETALUPI(Deployment):
                 url=self.helper_node_details["bm_status_check"], headers=headers
             )
             return response.json()[0]["status"]
+
+        def get_locked_username(self):
+            """
+            Get name of user who has locked baremetal resource
+
+            Returns:
+                str: username
+            """
+            headers = {"content-type": "application/json"}
+            response = requests.get(
+                url=self.helper_node_details["bm_status_check"], headers=headers
+            )
+            return response.json()[0]["user"]
 
         def update_bm_status(self, bm_status):
             """
