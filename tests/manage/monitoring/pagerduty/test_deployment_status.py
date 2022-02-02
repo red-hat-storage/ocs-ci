@@ -86,7 +86,6 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     # check that incidents  and CephClusterErrorState
     # alert are correctly raised
     for target_label in [
-        constants.ALERT_CLUSTERERRORSTATE,
         constants.ALERT_NODEDOWN,
     ]:
         assert pagerduty.check_incident_list(

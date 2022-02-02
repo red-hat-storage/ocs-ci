@@ -816,26 +816,33 @@ def measure_noobaa_ns_target_bucket_deleted(
 @pytest.fixture
 def measure_stop_worker_nodes(measurement_dir, nodes):
     """
-    Stop two worker nodes, measure the time when it was stopped and monitors
-    alerts that were triggered during this event.
+    Stop worker nodes that doesn't contain RGW (so that alerts are triggered
+    correctly), measure the time when it was stopped and monitors alerts that
+    were triggered during this event.
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
             worker node
 
     """
-    test_nodes = get_nodes(node_type="worker")[0:2]
+    mgr_pod = pod.get_mgr_pods()[0]
+    mgr_node = pod.get_pod_node(mgr_pod)
+    test_nodes = [
+        worker_node
+        for worker_node in get_nodes(node_type="worker")
+        if worker_node.name != mgr_node.name
+    ]
 
     def stop_nodes():
         """
-        Turn off two worker nodes for 13 minutes.
+        Turn off test nodes for 5 minutes.
 
         Returns:
-            list: Names of nodes that was turned down
+            list: Names of nodes that were turned down
 
         """
         # run_time of operation
-        run_time = 60 * 14
+        run_time = 60 * 5
         nonlocal test_nodes
         node_names = [node.name for node in test_nodes]
         logger.info(f"Turning off nodes {node_names}")
@@ -849,7 +856,12 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
     test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
     measured_op = measure_operation(stop_nodes, test_file)
     logger.info("Turning on nodes")
-    nodes.start_nodes(nodes=test_nodes)
+    try:
+        nodes.start_nodes(nodes=test_nodes)
+    except CommandFailed:
+        logger.warning(
+            "Nodes were not found: they were probably recreated. Check ceph health below"
+        )
     # Validate all nodes are in READY state and up
     retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
         wait_for_nodes_status
