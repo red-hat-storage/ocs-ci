@@ -373,8 +373,8 @@ def pytest_configure(config):
 
             config._metadata["Test Run Name"] = get_testrun_name()
             gather_version_info_for_report(config)
-    # switch the configuration context back to the first cluster
-    ocsci_config.switch_ctx(0)
+    # switch the configuration context back to the default cluster
+    ocsci_config.switch_default_cluster_ctx()
 
 
 def gather_version_info_for_report(config):
