@@ -63,6 +63,8 @@ class Config:
         out non-overridden items
         """
         field_names = [f.name for f in fields(self)]
+        if user_dict is None:
+            return
         for k, v in user_dict.items():
             if k not in field_names:
                 raise ValueError(
