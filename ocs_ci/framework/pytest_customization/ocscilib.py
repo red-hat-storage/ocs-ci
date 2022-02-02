@@ -342,7 +342,6 @@ def pytest_configure(config):
             # Add OCS related versions to the html report and remove
             # extraneous metadata
             markers_arg = config.getoption("-m")
-
             # add logs url
             logs_url = ocsci_config.RUN.get("logs_url")
             if logs_url:
@@ -355,6 +354,12 @@ def pytest_configure(config):
                 log.info(
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
+                )
+                continue
+            elif markers_arg == "acm_import":
+                log.info(
+                    "Skipping auto pytest executions and version collecting because "
+                    "Import Clusters to ACM is performed."
                 )
                 continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:

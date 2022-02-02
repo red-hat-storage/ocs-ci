@@ -706,6 +706,9 @@ def login_ui(console_url=None):
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
             chrome_options.add_argument("--allow-insecure-localhost")
+            if config.ENV_DATA.get("import_clusters_to_acm"):
+                # Dev shm should be disabled when sending big amonut characters, like the cert sections of a kubeconfig
+                chrome_options.add_argument("--disable-dev-shm-usage")
             capabilities = chrome_options.to_capabilities()
             capabilities["acceptInsecureCerts"] = True
 
@@ -772,11 +775,14 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
-    if config.ENV_DATA["flexy_deployment"]:
+    if config.ENV_DATA["flexy_deployment"] or config.ENV_DATA["import_clusters_to_acm"]:
         try:
             element = wait.until(
                 ec.element_to_be_clickable(
-                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
                 )
             )
             element.click()
