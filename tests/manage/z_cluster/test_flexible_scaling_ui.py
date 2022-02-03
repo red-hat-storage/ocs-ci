@@ -17,10 +17,9 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.node import get_nodes, add_disk_to_node
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.pv import check_available_pvs
 from ocs_ci.ocs.cluster import check_ceph_health_after_add_capacity
+from ocs_ci.deployment.helpers.lso_helpers import verify_pvs_created
 
 
 log = logging.getLogger(__name__)
@@ -50,6 +49,7 @@ class TestFlexibleScalingUI(ManageTest):
         """
         log.info("Check the number of osd pods")
         num_osd_pods = len(get_osd_pods())
+        log.info(f"There are {num_osd_pods} osd pods on the cluster")
 
         log.info("Choose one worker node")
         node_objs = get_nodes()
@@ -59,14 +59,7 @@ class TestFlexibleScalingUI(ManageTest):
         add_disk_to_node(node_obj=node_obj)
 
         log.info("Verify the number of PVs in Available state.")
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=check_available_pvs,
-            expected_available_pvs=1,
-        )
-        if not sample.wait_for_func_status(True):
-            raise Exception("The number of PVs on Available state is not as expected")
+        verify_pvs_created(expected_pvs=1, storageclass=constants.LOCALSTORAGE_SC)
 
         logging.info("Add capacity via UI")
         infra_ui_obj = AddReplaceDeviceUI(setup_ui)

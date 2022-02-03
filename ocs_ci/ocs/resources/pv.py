@@ -242,25 +242,3 @@ def get_node_pv_objs(sc_name, node_name):
         for pv_obj in pv_objs
         if pv_obj["metadata"]["labels"]["kubernetes.io/hostname"] == node_name
     ]
-
-
-def check_available_pvs(expected_available_pvs=1):
-    """
-    Verify the number of PVs on Available state is as expected
-
-    expected_available_pvs (int): expected number of PVs on Available state
-
-    Return:
-         bool: return True if the expected number of PVs equal to actual
-               number of PVs on Available state otherwise retun False
-
-    """
-    logger.info(
-        f"Verify the number of PVs on Available state is {expected_available_pvs}"
-    )
-    pvs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
-    cnt_avaible_pvs = 0
-    for pv in pvs:
-        if get_pv_status(pv) == constants.STATUS_AVAILABLE:
-            cnt_avaible_pvs += 1
-    return cnt_avaible_pvs == expected_available_pvs
