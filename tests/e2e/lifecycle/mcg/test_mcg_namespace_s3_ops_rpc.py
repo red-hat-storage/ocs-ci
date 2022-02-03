@@ -7,7 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs import bucket_utils
@@ -26,7 +26,7 @@ COPY_OBJ = "CopyKey-" + str(uuid.uuid4().hex)
 
 
 @pytest.mark.polarion_id("OCS-2296")
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")
 @tier2

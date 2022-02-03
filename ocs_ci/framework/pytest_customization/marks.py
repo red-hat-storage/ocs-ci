@@ -229,6 +229,11 @@ skipif_bmpsi = pytest.mark.skipif(
     reason="Test will not run on Baremetal PSI",
 )
 
+skipif_managed_service = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
+    reason="Test will not run on Managed service cluster",
+)
+
 skipif_openshift_dedicated = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == OPENSHIFT_DEDICATED_PLATFORM,
     reason="Test will not run on Openshift dedicated cluster",
