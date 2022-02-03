@@ -26,7 +26,7 @@ def test_verify_noobaa_status_cli(mcg_obj_session):
     for line in status.split("\n"):
         if "Not Found" in line:
             assert "Optional" in line, f"Error in noobaa status output- {line}"
-        if ocs_version_semantic >= version.VERSION_4_8 and "noobaa-db" in line:
+        if ocs_version_semantic >= version.VERSION_4_8 and 'Service "noobaa-db"' in line:
             assert (
                 "Old noobaa-db service is logged" in line
             ), f"Error in MCG Cli status output- {line}"
