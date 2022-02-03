@@ -412,7 +412,7 @@ def pagerduty_service(request):
         return None
 
 
-@pytest.fixture(scope="session", autouse=True)
+# @pytest.fixture(scope="session", autouse=True)
 def pagerduty_integration(request, pagerduty_service):
     """
     Create a new Pagerduty integration for service from pagerduty_service
