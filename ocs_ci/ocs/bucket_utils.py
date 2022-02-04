@@ -500,7 +500,8 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"]["pvPool"]["resources"]["requests"]["storage"] = str(size) + "Gi"
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
-    bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    if storage_class:
+        bs_data["spec"]["pvPool"]["storageClass"] = storage_class
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -518,10 +519,13 @@ def cli_create_pv_backingstore(
         storage_class (str): which storage class to use
 
     """
-    mcg_obj.exec_mcg_cmd(
+    cmd = (
         f"backingstore create pv-pool {backingstore_name} --num-volumes "
-        f"{vol_num} --pv-size-gb {size} --storage-class {storage_class}"
+        f"{vol_num} --pv-size-gb {size}"
     )
+    if storage_class:
+        cmd += f" --storage-class {storage_class}"
+    mcg_obj.exec_mcg_cmd(cmd)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
 

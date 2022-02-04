@@ -1,6 +1,7 @@
 import logging
 import pytest
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
@@ -63,7 +64,7 @@ class TestAdmissionWebhooks(MCGTest):
                         "type": "pv-pool",
                         "pvPool": {
                             "numVolumes": 1,
-                            "resources": {"requests": {"storage": "15Gi"}},
+                            "resources": {"requests": {"storage": "14Gi"}},
                         },
                     },
                     "minimum volume size is 16Gi",
@@ -125,7 +126,7 @@ class TestAdmissionWebhooks(MCGTest):
             created_bs = create_resource(**bs_data)
         except CommandFailed as e:
             if err_msg in e.args[0]:
-                logger.info("Backingstore creation failed with expected error")
+                logger.info("Backingstore creation failed with an expected error")
             else:
                 raise
         else:
@@ -239,7 +240,7 @@ class TestAdmissionWebhooks(MCGTest):
             created_bs = create_resource(**bs_data)
         except CommandFailed as e:
             if err_msg in e.args[0]:
-                logger.info("Namespacestore creation failed with expected error")
+                logger.info("Namespacestore creation failed with an expected error")
             else:
                 raise
         else:
@@ -270,26 +271,111 @@ class TestAdmissionWebhooks(MCGTest):
         ids=["AWS Backingstore", "AWS Namespacestore"],
     )
     def test_deletion_of_store_with_attached_buckets(
-        self, bucket_factory, bucketclass_dict
+        self, bucket_factory_session, bucketclass_dict
     ):
         """
         Test that store deletion fails when there are buckets attached to it
         """
         try:
             if "backingstore_dict" in bucketclass_dict:
-                bucket_factory(1, bucketclass=bucketclass_dict)[
+                bucket_factory_session(1, bucketclass=bucketclass_dict)[
                     0
                 ].bucketclass.backingstores[0].delete(retry=False)
             else:
-                bucket_factory(1, bucketclass=bucketclass_dict)[
+                bucket_factory_session(1, bucketclass=bucketclass_dict)[
                     0
                 ].bucketclass.namespacestores[0].delete(retry=False)
         except CommandFailed as e:
             if all(
                 err in e.args[0] for err in ["cannot complete", 'in "IN_USE" state']
             ):
-                logger.info("Store deletion failed with expected error")
+                logger.info("Store deletion failed with an expected error")
             else:
                 raise
         else:
             assert False, "Store deletion succeeded unexpectedly"
+
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier3],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                },
+                marks=[tier3],
+            ),
+        ],
+        ids=["AWS Backingstore", "AWS Namespacestore"],
+    )
+    def test_store_target_bucket_change(self, bucket_factory_session, bucketclass_dict):
+        """
+        Test that store deletion fails when there are buckets attached to it
+        """
+        if "backingstore_dict" in bucketclass_dict:
+            store_name = (
+                bucket_factory_session(1, bucketclass=bucketclass_dict)[0]
+                .bucketclass.backingstores[0]
+                .name
+            )
+            kind = "backingstore"
+        else:
+            store_name = (
+                bucket_factory_session(1, bucketclass=bucketclass_dict)[0]
+                .bucketclass.namespacestores[0]
+                .name
+            )
+            kind = "namespacestore"
+        try:
+            OCP(
+                kind=kind,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=store_name,
+            ).patch(
+                params='{"spec":{"awsS3":{"targetBucket": "other-bucket"}}}',
+                format_type="merge",
+            )
+
+        except CommandFailed as e:
+            if f"changing a {kind} target bucket is unsupported" in e.args[0].lower():
+                logger.info("Store patch failed with an expected error")
+            else:
+                raise
+        else:
+            assert False, "Store patch succeeded unexpectedly"
+
+    def test_pvpool_downscaling(self, backingstore_factory_session):
+        """
+        Test that store deletion fails when there are buckets attached to it
+        """
+        pv_backingstore = backingstore_factory_session(
+            "OC",
+            {"pv": [(2, constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB, None)]},
+        )[0]
+        try:
+            OCP(
+                kind="backingstore",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=pv_backingstore.name,
+            ).patch(params='{"spec":{"pvPool":{"numVolumes":1}}}', format_type="merge")
+
+        except CommandFailed as e:
+            if (
+                f"Scaling down the number of nodes is not currently supported"
+                in e.args[0]
+            ):
+                logger.info("Store patch failed with an expected error")
+            else:
+                raise
+        else:
+            assert False, "Store patch succeeded unexpectedly"
