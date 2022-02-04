@@ -130,3 +130,117 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             created_bs.delete()
             assert False, "Backingstore creation succeeded unexpectedly"
+
+    @pytest.mark.parametrize(
+        argnames="spec_dict,err_msg",
+        argvalues=[
+            pytest.param(
+                *[
+                    {
+                        "type": "aws-s3",
+                        "awsS3": {
+                            "targetBucket": "nonexistent-bucket",
+                            "secret": {"name": ""},
+                        },
+                    },
+                    "please provide secret name",
+                ],
+                marks=[tier3],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "type": "invalid-type",
+                        "awsS3": {
+                            "targetBucket": "nonexistent-bucket",
+                            "secret": {"name": "secret"},
+                        },
+                    },
+                    "please provide a valid Namespacestore type",
+                ],
+                marks=[tier3],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "type": "nsfs",
+                        "nsfs": {
+                            "pvcName": "",
+                            "subPath": "",
+                        },
+                    },
+                    "PvcName must not be empty",
+                ],
+                marks=[tier3],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "type": "nsfs",
+                        "nsfs": {
+                            "pvcName": "pvc",
+                            "subPath": "/path/",
+                        },
+                    },
+                    "must be a relative path",
+                ],
+                marks=[tier3],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "type": "nsfs",
+                        "nsfs": {
+                            "pvcName": "pvc",
+                            "subPath": "../path/",
+                        },
+                    },
+                    "must not contain '..'",
+                ],
+                marks=[tier3],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "type": "nsfs",
+                        "nsfs": {
+                            "pvcName": "pvc",
+                            "subPath": "path/",
+                        },
+                    },
+                    "must be no more than 63 characters",
+                ],
+                marks=[tier3],
+            ),
+        ],
+        ids=[
+            "Empty secret name",
+            "Invalid type",
+            "Empty NSFS PVC name",
+            "SubPath is not relative",
+            "SubPath contains ..",
+            "Exceedingly long mount path",
+        ],
+    )
+    def test_namespacestore_creation_webhook(self, spec_dict, err_msg):
+        """
+        Test the MCG admission control webhooks for Namespacestore creation
+        """
+        bs_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
+        bs_data["metadata"]["name"] = create_unique_resource_name(
+            "namespacestore", "invalid"
+        )
+        if "63 characters" in err_msg:
+            bs_data["metadata"]["name"] += bs_data["metadata"]["name"]
+        bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_data["spec"] = spec_dict
+        try:
+            created_bs = create_resource(**bs_data)
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info("Namespacestore creation failed with expected error")
+            else:
+                raise
+        else:
+            created_bs.delete()
+            assert False, "Namespacestore creation succeeded unexpectedly"
