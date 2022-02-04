@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     bugzilla,
     skipif_ocs_version,
 )
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 class TestBucketDeletion(MCGTest):
     """
     Test bucket Creation Deletion of buckets
@@ -322,7 +322,7 @@ class TestBucketDeletion(MCGTest):
         request.addfinalizer(finalizer)
 
     @tier3
-    @skipif_openshift_dedicated
+    @skipif_managed_service
     @bugzilla("1980299")
     @pytest.mark.polarion_id("OCS-2704")
     @skipif_ocs_version("<4.9")
