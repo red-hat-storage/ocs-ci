@@ -57,18 +57,18 @@ Now I'll run the test via following command:
 
 ```bash
 $ run-ci multicluster 2 tests/test_multicluster_dahorak.py \
-    --ocsci-conf ocsci_conf.yaml --ocsci-conf conf/ocsci/skip_ocs_deploy.yaml \
+    --ocsci-conf ocsci_conf.yaml \
     --cluster1 --cluster-path ../clusters/dahorak-test1/ --cluster-name dahorak-test1 --ocp-version 4.10 \
     --cluster2 --cluster-path ../clusters/dahorak-test2/ --cluster-name dahorak-test2 --ocp-version 4.9 --ocsci-conf config_for_cluster2.yaml
 ```
-* On the second line, I provided two configuration files common for both clusters (I provided the `skip_ocs_deploy.yaml` file, to avoid additional checks and log messages in the console output).
+* On the second line, I provided configuration file common for both clusters (beside other parameters I also set `skip_ocs_deployment: True`, to avoid additional checks and log messages in the console output).
 * Third and fourth line is specific for particular cluster (cluster path, cluster name and additional configuration variables and files).
 
 The output (truncated for better readability) looks like this:
 ```
 $ run-ci multicluster 2 \
     tests/test_multicluster_dahorak.py \
-    --ocsci-conf ocsci_conf.yaml --ocsci-conf conf/ocsci/skip_ocs_deploy.yaml \
+    --ocsci-conf ocsci_conf.yaml \
     --cluster1 --cluster-path ../clusters/dahorak-test1/ --cluster-name dahorak-test1 --ocp-version 4.10 \
     --cluster2 --cluster-path ../clusters/dahorak-test2/ --cluster-name dahorak-test2 --ocp-version 4.9 --ocsci-conf config_for_cluster2.yaml
 2022-02-02 16:19:21,790 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Pytest configure switching to: cluster=0
