@@ -5,7 +5,12 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import MCGTest, skipif_ocs_version, tier3
+from ocs_ci.framework.testlib import (
+    MCGTest,
+    skipif_ocs_version,
+    ignore_leftovers,
+    tier3,
+)
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
 
@@ -354,12 +359,13 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             assert False, "Store patch succeeded unexpectedly"
 
+    @ignore_leftovers
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """
         Test that store deletion fails when there are buckets attached to it
         """
         pv_backingstore = backingstore_factory_session(
-            "CLI",
+            "oc",
             {"pv": [(2, constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB, None)]},
         )[0]
         try:
