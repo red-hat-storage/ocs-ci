@@ -13,7 +13,7 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_anon_s3_resource,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     skipif_ocs_version,
 )
 
@@ -26,7 +26,7 @@ RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be paralleli
 
 
 @flaky
-@skipif_openshift_dedicated
+@skipif_managed_service
 class TestObjectIntegrity(MCGTest):
     """
     Test data integrity of various objects
