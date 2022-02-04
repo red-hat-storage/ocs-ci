@@ -371,7 +371,7 @@ class TestAdmissionWebhooks(MCGTest):
 
         except CommandFailed as e:
             if (
-                f"Scaling down the number of nodes is not currently supported"
+                "Scaling down the number of nodes is not currently supported"
                 in e.args[0]
             ):
                 logger.info("Store patch failed with an expected error")
