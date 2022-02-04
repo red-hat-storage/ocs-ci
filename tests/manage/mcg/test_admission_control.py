@@ -359,7 +359,7 @@ class TestAdmissionWebhooks(MCGTest):
         Test that store deletion fails when there are buckets attached to it
         """
         pv_backingstore = backingstore_factory_session(
-            "OC",
+            "CLI",
             {"pv": [(2, constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB, None)]},
         )[0]
         try:
