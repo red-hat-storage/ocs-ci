@@ -30,8 +30,10 @@ from ocs_ci.helpers import disruption_helpers
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4b
+@pytest.mark.skip(
+    reason="This test is disabled because this scenario is covered in the "
+    "test test_daemon_kill_during_pvc_pod_deletion_and_io.py"
+)
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_name"],
     argvalues=[
