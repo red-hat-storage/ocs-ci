@@ -42,11 +42,14 @@ def test_multicluster_dahorak():
 
 ## Execution of the example test
 
+See also [Running tests on multicluster environment section in Usage
+doc](usage.md#running-tests-on-multicluster-environment).
+
 I saved the above example test into `tests/test_multicluster_dahorak.py` file.
 Additionally I have two clusters and related cluster dirs:
 
-* cluster: `dahorak-test1`, cluster patch: `../clusters/dahorak-test1/`
-* cluster: `dahorak-test2`, cluster patch: `../clusters/dahorak-test2/`
+* cluster: `dahorak-test1`, cluster path: `../clusters/dahorak-test1/`
+* cluster: `dahorak-test2`, cluster path: `../clusters/dahorak-test2/`
 
 (Each cluster dir contains only `auth/kubeconfig` directory/file.)
 
