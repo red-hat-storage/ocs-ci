@@ -4,13 +4,14 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import MCGTest, tier3
+from ocs_ci.framework.testlib import MCGTest, skipif_ocs_version, tier3
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("<4.10")
 class TestAdmissionWebhooks(MCGTest):
     @pytest.mark.parametrize(
         argnames="spec_dict,err_msg",
@@ -244,3 +245,51 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             created_bs.delete()
             assert False, "Namespacestore creation succeeded unexpectedly"
+
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                marks=[tier3],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                },
+                marks=[tier3],
+            ),
+        ],
+        ids=["AWS Backingstore", "AWS Namespacestore"],
+    )
+    def test_deletion_of_store_with_attached_buckets(
+        self, bucket_factory, bucketclass_dict
+    ):
+        """
+        Test that store deletion fails when there are buckets attached to it
+        """
+        try:
+            if "backingstore_dict" in bucketclass_dict:
+                bucket_factory(1, bucketclass=bucketclass_dict)[
+                    0
+                ].bucketclass.backingstores[0].delete(retry=False)
+            else:
+                bucket_factory(1, bucketclass=bucketclass_dict)[
+                    0
+                ].bucketclass.namespacestores[0].delete(retry=False)
+        except CommandFailed as e:
+            if all(
+                err in e.args[0] for err in ["cannot complete", 'in "IN_USE" state']
+            ):
+                logger.info("Store deletion failed with expected error")
+            else:
+                raise
+        else:
+            assert False, "Store deletion succeeded unexpectedly"

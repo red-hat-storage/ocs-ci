@@ -31,50 +31,71 @@ class NamespaceStore:
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
 
-    def delete(self):
+    def delete(self, retry=True):
         """
         Deletes the current namespacestore by using OC/CLI commands
+
+        Args:
+            retry (bool): Whether to retry the deletion if it fails
 
         """
         log.info(f"Cleaning up namespacestore {self.name}")
 
-        if self.method == "oc":
+        def _oc_deletion_flow():
             try:
                 OCP(
                     kind="namespacestore",
                     namespace=config.ENV_DATA["cluster_namespace"],
                 ).delete(resource_name=self.name)
+                return True
             except CommandFailed as e:
                 if "not found" in str(e).lower():
                     log.warning(f"Namespacestore {self.name} was already deleted.")
+                    return True
+                elif all(
+                    err in e.args[0]
+                    for err in ["cannot complete because pool", "in", "state"]
+                ):
+                    if retry:
+                        log.warning(
+                            f"Deletion of {self.name} failed due to its state; Retrying"
+                        )
+                        return False
+                    else:
+                        raise
                 else:
                     raise
 
-        elif self.method == "cli":
+        def _cli_deletion_flow():
+            try:
+                self.mcg_obj.exec_mcg_cmd(f"namespacestore delete {self.name}")
+                return True
+            except CommandFailed as e:
+                if "being used by one or more buckets" in str(e).lower():
+                    log.warning(
+                        f"Deletion of {self.name} failed because it's being used by a bucket. "
+                        "Retrying..."
+                    )
+                else:
+                    log.warning(f"Deletion of self.name failed. Error:\n{str(e)}")
+                return False
 
-            def _cli_deletion_flow():
-                try:
-                    self.mcg_obj.exec_mcg_cmd(f"namespacestore delete {self.name}")
-                    return True
-                except CommandFailed as e:
-                    if "being used by one or more buckets" in str(e).lower():
-                        log.warning(
-                            f"Deletion of {self.name} failed because it's being used by a bucket. "
-                            "Retrying..."
-                        )
-                    else:
-                        log.warning(f"Deletion of self.name failed. Error:\n{str(e)}")
-                    return False
-
+        cmdMap = {
+            "oc": _oc_deletion_flow,
+            "cli": _cli_deletion_flow,
+        }
+        if retry:
             sample = TimeoutSampler(
                 timeout=120,
                 sleep=20,
-                func=_cli_deletion_flow,
+                func=cmdMap[self.method],
             )
             if not sample.wait_for_func_status(result=True):
-                err_msg = f"Failed to {self.name}"
+                err_msg = f"Failed to delete {self.name}"
                 log.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
+        else:
+            cmdMap[self.method]()
 
         log.info(f"Verifying whether namespacestore {self.name} exists after deletion")
         ns_deleted_successfully = False
