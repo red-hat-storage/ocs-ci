@@ -345,7 +345,7 @@ class PageNavigator(BaseUI):
             if self.ocs_version_semantic >= version.VERSION_4_9
             else OCS_OPERATOR
         )
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.7"):
             self.generic_locators = locators[self.ocp_version]["generic"]
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
@@ -455,6 +455,13 @@ class PageNavigator(BaseUI):
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
+        elif self.ocp_version_full == version.VERSION_4_7:
+            self.do_click(
+                self.generic_locators["project_selector"], enable_screenshot=False
+            )
+            self.do_click(
+                self.generic_locators["select_all_projects"],
+            )
 
     def navigate_to_ocs_operator_page(self):
         """

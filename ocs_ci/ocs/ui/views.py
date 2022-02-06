@@ -157,6 +157,7 @@ generic_locators = {
         'a[id="openshift-storage-link"]',
         By.CSS_SELECTOR,
     ),
+    "select_all_projects": ('a[id="#ALL_NS#-link"]', By.CSS_SELECTOR),
     "create_resource_button": ("yaml-create", By.ID),
     "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "first_dropdown_option": (
@@ -707,6 +708,7 @@ locators = {
     "4.7": {
         "login": login,
         "page": page_nav,
+        "generic": generic_locators,
         "deployment": {**deployment, **deployment_4_7},
         "pvc": {**pvc, **pvc_4_7},
         "add_capacity": add_capacity,
