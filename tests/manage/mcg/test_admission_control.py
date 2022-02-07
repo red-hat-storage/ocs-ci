@@ -237,16 +237,16 @@ class TestAdmissionWebhooks(MCGTest):
         """
         Test the MCG admission control webhooks for Namespacestore creation
         """
-        bs_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
-        bs_data["metadata"]["name"] = create_unique_resource_name(
+        store_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
+        store_data["metadata"]["name"] = create_unique_resource_name(
             "namespacestore", "invalid"
         )
         if "63 characters" in err_msg:
-            bs_data["metadata"]["name"] += bs_data["metadata"]["name"]
-        bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-        bs_data["spec"] = spec_dict
+            store_data["metadata"]["name"] += store_data["metadata"]["name"]
+        store_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        store_data["spec"] = spec_dict
         try:
-            created_bs = create_resource(**bs_data)
+            created_bs = create_resource(**store_data)
         except CommandFailed as e:
             if err_msg in e.args[0]:
                 logger.info("Namespacestore creation failed with an expected error")
@@ -388,3 +388,64 @@ class TestAdmissionWebhooks(MCGTest):
                 raise
         else:
             assert False, "Store patch succeeded unexpectedly"
+
+    @pytest.mark.parametrize(
+        argnames="spec_dict,err_msg",
+        argvalues=[
+            pytest.param(
+                {"quota": {"maxObjects": "-1"}},
+                "invalid maxObjects value",
+                marks=[tier3],
+            ),
+            pytest.param(
+                {"quota": {"maxSize": "900M"}},
+                "invalid obcMaxSizeValue value",
+                marks=[tier3],
+            ),
+            pytest.param(
+                {"quota": {"maxSize": "1024Pi"}},
+                "invalid obcMaxSizeValue value",
+                marks=[tier3],
+            ),
+            pytest.param(
+                {
+                    "placementPolicy": {
+                        "tiers": [
+                            {"backingStores": ["nonexistent-bs"]},
+                            {"backingStores": ["nonexistent-bs"]},
+                            {"backingStores": ["nonexistent-bs"]},
+                        ]
+                    }
+                },
+                "unsupported number of tiers",
+                marks=[tier3],
+            ),
+        ],
+        ids=[
+            "Negative amount of max object quota",
+            "Exceedingly small maxSize quota",
+            "Exceedinly large maxSize quota",
+            "Exceedingly high amount of tiers",
+        ],
+    )
+    def test_bucketclass_creation(self, spec_dict, err_msg):
+        """
+        Test that bucketclass creation fails when given invalid parameters
+
+        """
+        bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
+        bc_data["metadata"]["name"] = create_unique_resource_name(
+            "bucketclass", "invalid"
+        )
+        bc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bc_data["spec"] = spec_dict
+        try:
+            created_bc = create_resource(**bc_data)
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info("Bucketclass creation failed with an expected error")
+            else:
+                raise
+        else:
+            created_bc.delete()
+            assert False, "Bucketclass creation succeeded unexpectedly"
