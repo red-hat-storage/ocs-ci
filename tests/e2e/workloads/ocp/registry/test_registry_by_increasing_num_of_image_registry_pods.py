@@ -74,15 +74,10 @@ class TestRegistryByIncreasingNumPods(E2ETest):
 
         # Pull and push images to registries
         log.info("Pull and push images to registries")
-        image_pull_and_push(
-            project_name=self.project_name,
-            template="eap-cd-basic-s2i",
-            image="registry.redhat.io/jboss-eap-7-tech-preview/eap-cd-openshift-rhel8:latest",
-            pattern="eap-app",
-        )
+        image_pull_and_push(project_name=self.project_name)
 
         # Validate image exists in registries path
-        validate_image_exists(namespace=self.project_name)
+        validate_image_exists()
 
         # Reduce number to 2
         assert modify_registry_pod_count(count=2)
