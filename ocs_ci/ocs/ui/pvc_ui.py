@@ -3,7 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, generic_locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
@@ -239,3 +239,52 @@ class PvcUI(PageNavigator):
         logger.info("Confirm PVC Deletion")
         self.do_click(self.pvc_loc["confirm_pvc_deletion"])
         time.sleep(1)
+
+    def pvc_clone_ui(
+        self,
+        project_name,
+        pvc_name,
+        cloned_pvc_access_mode=constants.ACCESS_MODE_RWO,
+        cloned_pvc_name=None,
+    ):
+        """
+        Clone PVC via UI
+
+        Args:
+            project_name (str): The name of project
+            pvc_name (str): The name of PVC
+            cloned_pvc_access_mode (str): Access mode for cloned PVC
+            cloned_pvc_name (str): The name for cloned PVC
+
+        """
+        clone_name = cloned_pvc_name or f"{pvc_name}-clone"
+        self.navigate_persistentvolumeclaims_page()
+
+        logger.info(f"Search and select the project {project_name}")
+        self.do_click(self.pvc_loc["pvc_project_selector"])
+        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
+        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+
+        logger.info(f"Search for PVC {pvc_name}")
+        self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
+
+        logger.info(f"Go to PVC {pvc_name} page")
+        self.do_click(get_element_type(pvc_name))
+
+        logger.info("Click on Actions")
+        self.do_click(self.pvc_loc["pvc_actions"])
+
+        logger.info("Click on Clone PVC from dropdown options")
+        self.do_click(self.pvc_loc["clone_pvc"], enable_screenshot=True)
+
+        logger.info("Clear the default name of clone PVC")
+        self.do_clear(self.pvc_loc["clone_name_input"])
+
+        logger.info("Enter the name of clone PVC")
+        self.do_send_keys(self.pvc_loc["clone_name_input"], text=clone_name)
+
+        logger.info("Select Access Mode of clone PVC")
+        self.do_click(self.pvc_loc[cloned_pvc_access_mode])
+
+        logger.info("Click on Clone button")
+        self.do_click(generic_locators["confirm_action"], enable_screenshot=True)

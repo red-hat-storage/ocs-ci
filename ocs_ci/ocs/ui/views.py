@@ -290,6 +290,8 @@ pvc = {
     ),
     "confirm_pvc_deletion": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
+    "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
 }
 
 pvc_4_7 = {
@@ -678,6 +680,7 @@ locators = {
             **deployment_4_10,
         },
         "add_capacity": add_capacity,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.9": {
         "login": login,
