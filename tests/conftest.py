@@ -387,7 +387,7 @@ def pagerduty_service(request):
         pagerduty_api = pagerduty.PagerDutyAPI()
         payload = pagerduty_api.get_service_dict()
         service_response = pagerduty_api.create("services", payload=payload)
-        msg = f"Request {service_response.request.url} failed"
+        msg = f"Request {service_response.request.url} failed: {service_response.text}"
         assert service_response.ok, msg
         service = service_response.json().get("service")
 
@@ -412,7 +412,7 @@ def pagerduty_service(request):
         return None
 
 
-# @pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def pagerduty_integration(request, pagerduty_service):
     """
     Create a new Pagerduty integration for service from pagerduty_service
@@ -444,7 +444,10 @@ def pagerduty_integration(request, pagerduty_service):
             integration_response = pagerduty_api.create(
                 f"services/{service_id}/integrations", payload=payload
             )
-            msg = f"Request {integration_response.request.url} failed"
+            msg = (
+                f"Request {integration_response.request.url} failed: "
+                f"{integration_response.text}"
+            )
             assert integration_response.ok, msg
             integration = integration_response.json().get("integration")
             integration_key = integration["integration_key"]
