@@ -6,6 +6,8 @@ from ocs_ci.framework.testlib import polarion_id, bugzilla, version
 from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.framework.testlib import polarion_id, bugzilla, version
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +17,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1799077")
 @bugzilla("2004130")
 @skipif_openshift_dedicated
+@skipif_managed_service
 def test_verify_noobaa_status_cli(mcg_obj_session):
     """
     Verify noobaa status output is clean without any errors using the noobaa cli

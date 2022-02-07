@@ -17,7 +17,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     skipif_bmpsi,
     bugzilla,
     skipif_external_mode,
@@ -156,7 +156,7 @@ def delete_and_create_osd_node(osd_node_name):
 @tier4a
 @ignore_leftovers
 @ipi_deployment_required
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_bmpsi
 @skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
@@ -230,7 +230,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @tier4
 @tier4a
 @ignore_leftovers
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_bmpsi
 @skipif_external_mode
 class TestNodeReplacement(ManageTest):

@@ -1109,7 +1109,7 @@ def get_worker_nodes():
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
     # Eliminate infra nodes from worker nodes in case of openshift dedicated
-    if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         infra_nodes = ocp_node_obj.get(selector=constants.INFRA_NODE_LABEL).get("items")
         infra_node_ids = [
             infra_node.get("metadata").get("name") for infra_node in infra_nodes

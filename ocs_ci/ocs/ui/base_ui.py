@@ -336,6 +336,7 @@ class PageNavigator(BaseUI):
     def __init__(self, driver):
         super().__init__(driver)
         self.ocp_version = get_ocp_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
@@ -349,7 +350,13 @@ class PageNavigator(BaseUI):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            self.storage_class = "gp2_sc"
+            aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
+            if aws_sc == "gp3-csi":
+                self.storage_class = "gp3-csi_sc"
+            elif aws_sc == "gp2-csi":
+                self.storage_class = "gp2-csi_sc"
+            else:
+                self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
             self.storage_class = "managed-premium_sc"
 
@@ -374,7 +381,7 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
@@ -444,7 +451,10 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=25, sleep_time=10)
+        self.page_has_loaded(retries=25)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.do_click(self.page_nav["drop_down_projects"])
+            self.do_click(self.page_nav["choose_all_projects"])
 
     def navigate_to_ocs_operator_page(self):
         """

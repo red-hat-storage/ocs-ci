@@ -25,6 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
@@ -84,6 +85,7 @@ STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
 STATUS_RUNNING = "Running"
 STATUS_TERMINATING = "Terminating"
+STATUS_CLBO = "CrashLoopBackOff"
 STATUS_BOUND = "Bound"
 STATUS_RELEASED = "Released"
 STATUS_COMPLETED = "Completed"
@@ -596,6 +598,59 @@ EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
+# Multicluster related yamls
+ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
+)
+ODF_ORCHESTRATOR_OPERATOR_GROUP = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "odf_orchestrator_operatorgroup.yaml"
+)
+MIRROR_PEER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml")
+VOLUME_REPLICATION_CLASS = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "volume_replication_class.yaml"
+)
+OPENSHIFT_DR_CLUSTER_OPERATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_cluster_operator.yaml"
+)
+OPENSHIFT_DR_HUB_OPERATOR = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_hub_operator.yaml"
+)
+OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system.yaml"
+)
+OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system_operatorgroup.yaml"
+)
+DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
+ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
+OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
+DR_AWS_S3_PROFILE_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "dr_aws_s3_profile.yaml"
+)
+DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
+DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
+ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
+
+# DR constants
+SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
+DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
+TOKEN_EXCHANGE_AGENT_LABEL = "app=token-exchange-agent"
+RBD_MIRRORING_STORAGECLUSTER_PATCH = (
+    "-n openshift-storage --type json --patch  "
+    "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
+)
+RBD_MIRRORING_ENABLED_QUERY = (
+    "-o=jsonpath='{.items[?"
+    "(@.metadata.ownerReferences[*].kind=='StorageCluster')].spec.mirroring.enabled}'"
+)
+RBD_SIDECAR_PATCH_CMD = (
+    ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
+    '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
+)
+RBD_SIDECAR_COUNT = 16
+DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
+DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
+DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -831,6 +886,8 @@ ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
+NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
+ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -860,7 +917,10 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+
+# well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
+REGION_LABEL = "topology.kubernetes.io/region"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
@@ -1067,7 +1127,7 @@ RHCOS_WORKER_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhcos_workers.yaml")
 AWS_WORKER_NODE_TEMPLATE = "06_cluster_worker_node.yaml"
 AWS_S3_UPI_BUCKET = "ocs-qe-upi"
 AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
-RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel_workers.yaml")
+RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel{version}_workers.yaml")
 
 # Users
 NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
@@ -1301,6 +1361,12 @@ QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
 QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
 QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
 
+# logreader workload deployment yaml files
+LOGWRITER_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "logwriter")
+LOGWRITER_CEPHFS_REPRODUCER = os.path.join(LOGWRITER_DIR, "cephfs.reproducer.yaml")
+LOGWRITER_CEPHFS_READER = os.path.join(LOGWRITER_DIR, "cephfs.logreader.yaml")
+LOGWRITER_CEPHFS_WRITER = os.path.join(LOGWRITER_DIR, "cephfs.logwriter.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
@@ -1422,6 +1488,24 @@ debug_paxos = 20
 debug_crush = 20
 """
 
+
+# Values from configmap noobaa-postgres-config
+NOOBAA_POSTGRES_TUNING_VALUES = """
+max_connections = 300
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 300
+work_mem = 1747kB
+min_wal_size = 2GB
+max_wal_size = 8GB
+shared_preload_libraries = 'pg_stat_statements'
+"""
+
 WORKLOAD_STORAGE_TYPE_BLOCK = "block"
 WORKLOAD_STORAGE_TYPE_FS = "fs"
 # Components of OCS
@@ -1471,6 +1555,11 @@ PATCH_SPECIFIC_SOURCES_CMD = (
     '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
     "}}]}}}}' --type=merge"
 )
+
+# Submariner constants
+SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
+
+# Multicluster related
 
 # OpenSSL Certificate parameters
 OPENSSL_KEY_SIZE = 2048
