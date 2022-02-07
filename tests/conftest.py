@@ -383,33 +383,33 @@ def pagerduty_service(request):
         str: PagerDuty service json
 
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        pagerduty_api = pagerduty.PagerDutyAPI()
-        payload = pagerduty_api.get_service_dict()
-        service_response = pagerduty_api.create("services", payload=payload)
-        msg = f"Request {service_response.request.url} failed: {service_response.text}"
-        assert service_response.ok, msg
-        service = service_response.json().get("service")
-
-        def teardown():
-            """
-            Delete the service at the end of test run
-            """
-            service_id = service["id"]
-            log.info(f"Deleting service with id {service_id}")
-            delete_response = pagerduty_api.delete(f"services/{service_id}")
-            msg = f"Deletion of service {service_id} failed"
-            assert delete_response.ok, msg
-
-        request.addfinalizer(teardown)
-        return service
-    else:
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
         log.info(
             "PagerDuty service is not created because "
             f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
             "is not used"
         )
         return None
+
+    pagerduty_api = pagerduty.PagerDutyAPI()
+    payload = pagerduty_api.get_service_dict()
+    service_response = pagerduty_api.create("services", payload=payload)
+    msg = f"Request {service_response.request.url} failed: {service_response.text}"
+    assert service_response.ok, msg
+    service = service_response.json().get("service")
+
+    def teardown():
+        """
+        Delete the service at the end of test run
+        """
+        service_id = service["id"]
+        log.info(f"Deleting service with id {service_id}")
+        delete_response = pagerduty_api.delete(f"services/{service_id}")
+        msg = f"Deletion of service {service_id} failed"
+        assert delete_response.ok, msg
+
+    request.addfinalizer(teardown)
+    return service
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -421,37 +421,40 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        service_id = pagerduty_service["id"]
-        pagerduty_api = pagerduty.PagerDutyAPI()
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
+        # this is used only for managed service platforms
+        return
 
-        log.info(
-            "Looking if Prometheus integration for pagerduty service with id "
-            f"{service_id} exists"
-        )
-        integration_key = None
-        for integration in pagerduty_service.get("integrations"):
-            if integration["summary"] == "Prometheus":
-                log.info(
-                    "Prometheus integration already exists. "
-                    "Skipping creation of new one."
-                )
-                integration_key = integration["integration_key"]
-                break
+    service_id = pagerduty_service["id"]
+    pagerduty_api = pagerduty.PagerDutyAPI()
 
-        if not integration_key:
-            payload = pagerduty_api.get_integration_dict("Prometheus")
-            integration_response = pagerduty_api.create(
-                f"services/{service_id}/integrations", payload=payload
+    log.info(
+        "Looking if Prometheus integration for pagerduty service with id "
+        f"{service_id} exists"
+    )
+    integration_key = None
+    for integration in pagerduty_service.get("integrations"):
+        if integration["summary"] == "Prometheus":
+            log.info(
+                "Prometheus integration already exists. "
+                "Skipping creation of new one."
             )
-            msg = (
-                f"Request {integration_response.request.url} failed: "
-                f"{integration_response.text}"
-            )
-            assert integration_response.ok, msg
-            integration = integration_response.json().get("integration")
             integration_key = integration["integration_key"]
-        pagerduty.set_pagerduty_integration_secret(integration_key)
+            break
+
+    if not integration_key:
+        payload = pagerduty_api.get_integration_dict("Prometheus")
+        integration_response = pagerduty_api.create(
+            f"services/{service_id}/integrations", payload=payload
+        )
+        msg = (
+            f"Request {integration_response.request.url} failed: "
+            f"{integration_response.text}"
+        )
+        assert integration_response.ok, msg
+        integration = integration_response.json().get("integration")
+        integration_key = integration["integration_key"]
+    pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
