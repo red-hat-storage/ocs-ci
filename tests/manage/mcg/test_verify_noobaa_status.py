@@ -42,7 +42,7 @@ def test_verify_noobaa_db_service(mcg_obj_session):
     status = mcg_obj_session.exec_mcg_cmd("status").stderr
     assert (
         'Service "noobaa-db"' not in status
-    ), f"Error in MCG Cli status regarding non-existent noobaa-db service"
+    ), "Error in MCG Cli status regarding non-existent noobaa-db service"
     log.info(
         "Verified: noobaa status does not contain error related to `noobaa-db` service."
     )
