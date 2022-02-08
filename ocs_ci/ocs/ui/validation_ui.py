@@ -179,7 +179,8 @@ class ValidationUI(PageNavigator):
         """
         self.ocp_version = get_ocp_version()
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if self.ocp_version >= "4.9" and ocs_version >= version.VERSION_4_9:
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if ocp_version >= version.VERSION_4_9 and ocs_version >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
             logger.info("Click on project dropdown")
             self.do_click(self.validation_loc["project-dropdown"])
@@ -203,9 +204,11 @@ class ValidationUI(PageNavigator):
             logger.info(
                 "Check if 'Plugin available' option is available on the Installed Operators page"
             )
-            plugin_availability_check = self.check_element_text(
-                expected_text="Plugin available"
+            plugin_availability_check = self.wait_until_expected_text_is_found(
+                locator=self.dep_loc["plugin-available"],
+                expected_text="Plugin available",
             )
+
             if plugin_availability_check:
                 logger.info(
                     "Storage plugin is disabled, navigate to Operator details page further confirmation"

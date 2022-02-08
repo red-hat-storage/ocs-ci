@@ -146,6 +146,7 @@ deployment_4_10 = {
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
 generic_locators = {
@@ -680,6 +681,7 @@ locators = {
             **deployment_4_10,
         },
         "add_capacity": add_capacity,
+        "validation": {**validation, **validation_4_8, **validation_4_9},
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.9": {
