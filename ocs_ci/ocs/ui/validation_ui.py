@@ -179,8 +179,10 @@ class ValidationUI(PageNavigator):
         """
         self.ocp_version = get_ocp_version()
         ocs_version = version.get_semantic_ocs_version_from_config()
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        if ocp_version >= version.VERSION_4_9 and ocs_version >= version.VERSION_4_9:
+        if (
+            self.ocp_version_semantic >= version.VERSION_4_9
+            and ocs_version >= version.VERSION_4_9
+        ):
             self.navigate_installed_operators_page()
             logger.info("Click on project dropdown")
             self.do_click(self.validation_loc["project-dropdown"])
