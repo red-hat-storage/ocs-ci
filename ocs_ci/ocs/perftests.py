@@ -720,7 +720,7 @@ class PASTest(BaseTest):
             osd_pvc_name = osd_pod_obj.get()["spec"]["initContainers"][0][
                 "volumeDevices"
             ][0]["name"]
-            log.info(f"The Firs OSD name is : {osd_pvc_name}")
+            log.info(f"The First OSD name is : {osd_pvc_name}")
             osd_pvc_obj = OCP(
                 kind="PersistentVolumeClaim",
                 resource_name=osd_pvc_name,
