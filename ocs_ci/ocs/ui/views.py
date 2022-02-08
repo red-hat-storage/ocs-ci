@@ -139,6 +139,7 @@ deployment_4_9 = {
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
 deployment_4_10 = {
@@ -146,7 +147,6 @@ deployment_4_10 = {
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
-    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
 generic_locators = {
