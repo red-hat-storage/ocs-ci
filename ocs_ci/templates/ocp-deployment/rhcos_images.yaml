@@ -31,7 +31,7 @@
     metal_bios_url:          '/4.9/latest/rhcos-metal.x86_64.raw.gz'
     live_rootfs_url:         '/4.9/latest/rhcos-live-rootfs.x86_64.img'
 '4.10':
-    installer_initramfs_url: '/pre-release/latest-4.10/rhcos-live-initramfs.x86_64.img'
-    installer_kernel_url:    '/pre-release/latest-4.10/rhcos-live-kernel-x86_64'
-    metal_bios_url:          '/pre-release/latest-4.10/rhcos-metal.x86_64.raw.gz'
-    live_rootfs_url:         '/pre-release/latest-4.10/rhcos-live-rootfs.x86_64.img'
+    installer_initramfs_url: '/pre-release/4.10.0-rc.0/rhcos-live-initramfs.x86_64.img'
+    installer_kernel_url:    '/pre-release/4.10.0-rc.0/rhcos-live-kernel-x86_64'
+    metal_bios_url:          '/pre-release/4.10.0-rc.0/rhcos-metal.x86_64.raw.gz'
+    live_rootfs_url:         '/pre-release/4.10.0-rc.0/rhcos-live-rootfs.x86_64.img'
