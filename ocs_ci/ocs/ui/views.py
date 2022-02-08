@@ -139,6 +139,7 @@ deployment_4_9 = {
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
 deployment_4_10 = {
@@ -680,6 +681,7 @@ locators = {
             **deployment_4_10,
         },
         "add_capacity": add_capacity,
+        "validation": {**validation, **validation_4_8, **validation_4_9},
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.9": {
