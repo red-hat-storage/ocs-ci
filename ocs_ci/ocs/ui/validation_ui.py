@@ -177,7 +177,6 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
-        self.ocp_version = get_ocp_version()
         if (
             self.ocp_version_semantic >= version.VERSION_4_9
             and self.ocs_version_semantic >= version.VERSION_4_9
