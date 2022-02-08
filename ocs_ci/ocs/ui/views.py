@@ -394,6 +394,31 @@ acm_page_nav = {
     "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
 }
+
+# ACM page for create cluster
+# prefixing all keys with `cc` to denote create cluster operation
+acm_create_cluster_config = {
+    "cc_create_cluster": ("createCluster", By.ID),
+    "cc_provider_vmware_vsphere": ("//*[@id='vmware-vsphere']", By.XPATH),
+    "cc_cluster_name": ("input[placeholder='Enter cluster name']", By.CSS_SELECTOR),
+    "cc_base_dns_domain": (
+        "input[placeholder='Enter base DNS domain'",
+        By.CSS_SELECTOR,
+    ),
+    "cc_openshift_release_image": (
+        "input[placeholder='Select or enter a release image']",
+        By.CSS_SELECTOR,
+    ),
+    "cc_vsphere_network_name": (
+        "input[placeholder='vSphere network name']",
+        By.CSS_SELECTOR,
+    ),
+    "cc_api_vip": ("input[placeholder='Enter api vip']", By.CSS_SELECTOR),
+    "cc_ingress_vip": ("input[placeholder='Enter ingress VIP'", By.CSS_SELECTOR),
+    "cc_next_page_button": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "cc_create_button": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+}
+
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
     "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
