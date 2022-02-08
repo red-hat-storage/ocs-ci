@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
@@ -33,9 +33,11 @@ class QuayOperator(object):
         self.ocp_obj = ocp.OCP(namespace=self.namespace)
         self.quay_operator = None
         self.quay_registry = None
+        self.quay_registry_secret = None
         self.quay_pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
         self.quay_registry_name = ""
         self.quay_operator_csv = ""
+        self.quay_registry_secret_name = ""
         self.sc_default = False
         self.sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -81,17 +83,21 @@ class QuayOperator(object):
                 f"--request-timeout=120s"
             )
             self.sc_default = True
-        quay_registry_secret_name = create_unique_resource_name("quay-user", "secret")
-        logger.info(
-            f"Creating Quay registry config for super-user access: {quay_registry_secret_name}"
+        self.quay_registry_secret_name = create_unique_resource_name(
+            "quay-user", "secret"
         )
-        self.ocp_obj.exec_oc_cmd(
+        logger.info(
+            f"Creating Quay registry config for super-user access: {self.quay_registry_secret_name}"
+        )
+        self.quay_registry_secret = self.ocp_obj.exec_oc_cmd(
             command=f"create secret generic --from-file config.yaml={constants.QUAY_SUPER_USER} "
-            f"{quay_registry_secret_name}"
+            f"{self.quay_registry_secret_name}"
         )
         quay_registry_data = templating.load_yaml(file=constants.QUAY_REGISTRY)
         self.quay_registry_name = quay_registry_data["metadata"]["name"]
-        quay_registry_data["spec"]["configBundleSecret"] = quay_registry_secret_name
+        quay_registry_data["spec"][
+            "configBundleSecret"
+        ] = self.quay_registry_secret_name
         self.quay_registry = OCS(**quay_registry_data)
         logger.info(f"Creating Quay registry: {self.quay_registry.name}")
         self.quay_registry.create()
@@ -142,12 +148,14 @@ class QuayOperator(object):
                 f"-p {patch} "
                 f"--request-timeout=120s"
             )
+        if self.quay_registry_secret:
+            self.ocp_obj.exec_oc_cmd(f"delete secret {self.quay_registry_secret_name}")
         if self.quay_registry:
             self.quay_registry.delete()
         if self.quay_operator:
             self.quay_operator.delete()
         if self.quay_operator_csv:
-            exec_cmd(
-                f"oc delete {constants.CLUSTER_SERVICE_VERSION} "
-                f"{self.quay_operator_csv} -n {self.namespace}"
+            self.ocp_obj.exec_oc_cmd(
+                f"delete {constants.CLUSTER_SERVICE_VERSION} "
+                f"{self.quay_operator_csv}"
             )
