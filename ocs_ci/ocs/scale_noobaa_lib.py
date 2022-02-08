@@ -74,7 +74,7 @@ def check_all_obc_reached_bound_state_in_kube_job(
         if job_get_output is not None and len(job_get_output) == no_of_obc:
             for i in range(no_of_obc):
                 if "status" not in job_get_output[i]:
-                    log.info(f"XXX {job_get_output[i]}")
+                    log.info(f"waiting for OBC status {job_get_output[i]}")
                     while_iteration_count_1 += 1
                     time.sleep(3)
                     continue
