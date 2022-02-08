@@ -70,7 +70,6 @@ def check_all_obc_reached_bound_state_in_kube_job(
     while True:
         # Get kube_job obj and check if all OBC's are in Bound state
         # If not bound adding those OBCs to obc_not_bound_list
-        # import pdb; pdb.set_trace()
         job_get_output = kube_job_obj.get(namespace=namespace).get("items")
         if job_get_output is not None and len(job_get_output) == no_of_obc:
             for i in range(no_of_obc):
