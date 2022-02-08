@@ -2,14 +2,17 @@ import logging
 from time import sleep
 
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.helpers import (
+    storagecluster_independent_check,
+    create_unique_resource_name,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, run_cmd
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 logger = logging.getLogger(__name__)
@@ -23,10 +26,11 @@ class QuayOperator(object):
 
     def __init__(self):
         """
-        Initializer function
+        Quay operator initializer function
 
         """
         self.namespace = constants.OPENSHIFT_OPERATORS
+        self.ocp_obj = ocp.OCP(namespace=self.namespace)
         self.quay_operator = None
         self.quay_registry = None
         self.quay_pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
@@ -77,8 +81,17 @@ class QuayOperator(object):
                 f"--request-timeout=120s"
             )
             self.sc_default = True
+        quay_registry_secret_name = create_unique_resource_name("quay-user", "secret")
+        logger.info(
+            f"Creating Quay registry config for super-user access: {quay_registry_secret_name}"
+        )
+        self.ocp_obj.exec_oc_cmd(
+            command=f"create secret generic --from-file config.yaml={constants.QUAY_SUPER_USER} "
+            f"{quay_registry_secret_name}"
+        )
         quay_registry_data = templating.load_yaml(file=constants.QUAY_REGISTRY)
         self.quay_registry_name = quay_registry_data["metadata"]["name"]
+        quay_registry_data["spec"]["configBundleSecret"] = quay_registry_secret_name
         self.quay_registry = OCS(**quay_registry_data)
         logger.info(f"Creating Quay registry: {self.quay_registry.name}")
         self.quay_registry.create()
