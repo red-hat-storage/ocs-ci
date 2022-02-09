@@ -61,7 +61,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         super(TestPvcMultiSnapshotPerformance, self).setup()
 
-        self.total_creatio_time = 0
+        self.total_creation_time = 0
         self.total_creation_speed = 0
 
         # Getting the total Storage capacity
@@ -494,7 +494,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             # Taking Snapshot of the PVC
             ct = self.create_snapshot(test_num)
             speed = self.filesize / ct
-            self.total_creatio_time += ct
+            self.total_creation_time += ct
             self.total_creation_speed += speed
 
             results.append({"Snap Num": test_num, "time": ct, "speed": speed})
@@ -664,7 +664,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.end_time = self.get_time()
         full_results.add_key(
             "avg_creation_time",
-            f"{float(self.total_creatio_time / self.num_of_snaps):.2f}",
+            f"{float(self.total_creation_time / self.num_of_snaps):.2f}",
         )
         full_results.add_key(
             "avg_creation_speed",
