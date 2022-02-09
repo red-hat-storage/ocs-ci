@@ -103,7 +103,7 @@ class NamespaceStore:
         if self.method == "oc":
             try:
                 OCP(
-                    kind="namespacestore",
+                    kind=constants.NAMESPACESTORE,
                     namespace=config.ENV_DATA["cluster_namespace"],
                     resource_name=self.name,
                 ).get()
@@ -186,7 +186,7 @@ class NamespaceStore:
 
 def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
-    Create a Backing Store factory.
+    Create a NamespaceStore factory.
     Calling this fixture lets the user create namespace stores.
 
     Args:
@@ -220,7 +220,7 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         Tracks creation and cleanup of all the namespace stores that were created in the current scope
 
         Args:
-            method (str): String for selecting method of backing store creation (CLI/OC)
+            method (str): String for selecting method of namespace store creation (CLI/OC)
             nss_dict (dict): Dictionary containing storage provider as key and a list of tuples
             as value.
             Namespace store dictionary examples - 'CloudName': [(amount, region), (amount, region)]
