@@ -4431,20 +4431,117 @@ def nsfs_interface_fixture(request):
 
 
 @pytest.fixture(scope="function")
+def mcg_account_factory(request, mcg_obj_session):
+    return mcg_account_factory_fixture(request, mcg_obj_session)
+
+
+def mcg_account_factory_fixture(request, mcg_obj_session):
+    created_accounts = []
+
+    def mcg_account_factory_implementation(
+        email,
+        name,
+        has_login,
+        s3_access,
+        allowed_buckets,
+        default_resource,
+        uid=None,
+        gid=None,
+        new_buckets_path=None,
+        nsfs_only=None,
+        ssl=True,
+    ):
+        """
+        Create a new MCG account with the given parameters
+
+        Args:
+            email (str): Email address of the user
+            name (str): Name of the user
+            has_login (bool): Whether the user has a login
+            s3_access (bool): Whether the user has access to S3
+            allowed_buckets (str): Comma separated list of allowed buckets
+            default_resource (str): Default resource for the user
+            uid (str): UID of the user
+            gid (str): GID of the user
+            new_buckets_path (str): Path to the new buckets
+            nsfs_only (bool): Whether the user has access to NSFS only
+
+        Returns:
+            A dictionary containing the S3 credentials, with the following keys:
+            access_key (str)
+            access_key_id (str)
+            endpoint (str)
+            ssl (bool)
+
+        """
+        params = {
+            "email": email,
+            "name": name,
+            "has_login": has_login,
+            "s3_access": s3_access,
+            "allowed_buckets": allowed_buckets,
+            "default_resource": default_resource,
+        }
+        if None not in (uid, gid, new_buckets_path, nsfs_only):
+            params["nsfs_account_config"] = {
+                "uid": uid,
+                "gid": gid,
+                "new_buckets_path": new_buckets_path,
+                "nsfs_only": nsfs_only,
+            }
+        log.info(f"Creating MCG account with params: {params}")
+        acc_creation_resp = mcg_obj_session.send_rpc_query(
+            "account_api", "create_account", params
+        )
+        # Verify that the account was created successfuly and that the response contains the needed data
+        assert (
+            "access_key" in acc_creation_resp.text
+        ), f"Did not find access_key in account creation response. Response: {acc_creation_resp.text}"
+        access_keys = json.loads(acc_creation_resp.text)["reply"]["access_keys"][0]
+        return {
+            "access_key_id": access_keys["access_key"],
+            "access_key": access_keys["secret_key"],
+            "endpoint": mcg_obj_session.s3_endpoint,
+            "ssl": ssl,
+        }
+
+    def mcg_account_factory_cleanup():
+        for account_email in created_accounts:
+            log.info(f"Deleting MCG account {account_email}")
+            mcg_obj_session.send_rpc_query(
+                "account_api", "delete_account", {"email": account_email}
+            )
+
+    request.addfinalizer(mcg_account_factory_cleanup)
+    return mcg_account_factory_implementation
+
+
+@pytest.fixture(scope="function")
 def nsfs_bucket_factory(
-    request, namespace_store_factory, nsfs_interface, mcg_obj_session, bucket_factory
+    request,
+    namespace_store_factory,
+    nsfs_interface,
+    mcg_obj_session,
+    mcg_account_factory,
+    bucket_factory,
 ):
     return nsfs_bucket_factory_fixture(
         request,
         namespace_store_factory,
         nsfs_interface,
         mcg_obj_session,
+        mcg_account_factory,
         bucket_factory,
     )
 
 
 def nsfs_bucket_factory_fixture(
-    request, namespace_store_factory, nsfs_interface, mcg_obj_session, bucket_factory
+    request,
+    namespace_store_factory,
+    nsfs_interface,
+    mcg_obj_session,
+    mcg_account_factory,
+    bucket_factory,
 ):
     created_accounts = []
     created_rpc_buckets = []
@@ -4495,7 +4592,7 @@ def nsfs_bucket_factory_fixture(
             + "@redhat.qe"
         )
         created_accounts.append(acc_email)
-        acc_creation_resp = mcg_obj_session.create_nsfs_mcg_account(
+        nsfs_obj.s3_creds = mcg_account_factory(
             acc_email,
             "NSFS IntegrityTest",
             False,
@@ -4506,28 +4603,17 @@ def nsfs_bucket_factory_fixture(
             nsfs_obj.gid,
             "/",
             False,
+            False,
         )
-        # Verify that the account was created successfuly and that the response contains the needed data
-        assert (
-            "access_key" in acc_creation_resp.text
-        ), f"Did not find access_key in account creation response. Response: {acc_creation_resp.text}"
         # Let the account propagate through the system
         time.sleep(5)
-        access_keys = json.loads(acc_creation_resp.text)["reply"]["access_keys"][0]
-        s3_creds = {
-            "access_key_id": access_keys["access_key"],
-            "access_key": access_keys["secret_key"],
-            "endpoint": mcg_obj_session.s3_endpoint,
-            "ssl": False,
-        }
-        nsfs_obj.s3_creds = s3_creds
         # Create a boto3 S3 resource for commmunication with the NSFS bucket
         nsfs_s3_client = boto3.resource(
             "s3",
             verify=False,
-            endpoint_url=s3_creds["endpoint"],
-            aws_access_key_id=s3_creds["access_key_id"],
-            aws_secret_access_key=s3_creds["access_key"],
+            endpoint_url=nsfs_obj.s3_creds["endpoint"],
+            aws_access_key_id=nsfs_obj.s3_creds["access_key_id"],
+            aws_secret_access_key=nsfs_obj.s3_creds["access_key"],
         )
         # Create a new NSFS bucket
         # Follow this flow if the bucket should be created on top of an existing directory
@@ -4564,18 +4650,14 @@ def nsfs_bucket_factory_fixture(
         else:
             nsfs_obj.bucket_name = bucket_factory(
                 s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health
-            )[0]
+            )[0].name
         nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
 
     def nsfs_bucket_factory_cleanup():
         """
-        Delete the Pod or the DeploymentConfig
+        Delete the NSFS mounting DeploymentConfig
 
         """
-        for account_email in created_accounts:
-            mcg_obj_session.send_rpc_query(
-                "account_api", "delete_account", {"email": account_email}
-            )
         for rpc_bucket_name in created_rpc_buckets:
             mcg_obj_session.send_rpc_query(
                 "bucket_api", "delete_bucket", {"name": rpc_bucket_name}
