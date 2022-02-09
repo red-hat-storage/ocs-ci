@@ -1165,6 +1165,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
 ]
+RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
 # Bucket Policy action lists
 bucket_website_action_list = ["PutBucketWebsite", "GetBucketWebsite", "PutObject"]

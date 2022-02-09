@@ -250,11 +250,11 @@ class PVC(OCS):
         Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
 
         Returns:
-            OCS object
+            ocs_ci.ocs.resources.ocs.OCS:an OCS object representing ReclaimSpaceJob
 
         """
         assert (
-            self.provisioner == "openshift-storage.rbd.csi.ceph.com"
+            self.provisioner == constants.RBD_PROVISIONER
         ), "Only RBD PVC is supported"
         reclaim_space_job = helpers.create_reclaim_space_job(self.name)
         return reclaim_space_job

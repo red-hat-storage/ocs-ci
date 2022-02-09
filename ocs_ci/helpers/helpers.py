@@ -3910,7 +3910,7 @@ def create_reclaim_space_job(
             operation may be retried
 
     Returns:
-        OCS object
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
     """
     reclaim_space_job_name = (
         reclaim_space_job_name or f"reclaimspacejob-{pvc_name}-{uuid4().hex}"
