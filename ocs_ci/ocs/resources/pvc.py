@@ -250,7 +250,7 @@ class PVC(OCS):
         Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
 
         Returns:
-            ocs_ci.ocs.resources.ocs.OCS:an OCS object representing ReclaimSpaceJob
+            ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
 
         """
         assert (
