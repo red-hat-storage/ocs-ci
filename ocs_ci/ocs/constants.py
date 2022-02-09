@@ -140,6 +140,7 @@ VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
 STATEFULSET = "StatefulSet"
 BACKINGSTORE = "Backingstore"
+NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 
 # Provisioners
