@@ -13,7 +13,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.ocs.node import wait_for_nodes_status
-from ocs_ci.framework.pytest_customization.marks import tier3
+from ocs_ci.framework.pytest_customization.marks import system_test, polarion_id
 from ocs_ci.helpers import sanity_helpers
 
 logger = logging.getLogger(__name__)
@@ -194,7 +194,8 @@ class TestFullClusterHealth(PASTest):
         """
         return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running()
 
-    @tier3
+    @system_test
+    @polarion_id("OCS-2749")
     def test_full_cluster_health(
         self,
         nodes,
