@@ -93,6 +93,8 @@ STATUS_ERROR = "Error"
 STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
+STATUS_FAILEDOVER = "FailedOver"
+STATUS_RELOCATED = "Relocated"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -142,6 +144,7 @@ STATEFULSET = "StatefulSet"
 BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
+DRPC = "DRPlacementControl"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
