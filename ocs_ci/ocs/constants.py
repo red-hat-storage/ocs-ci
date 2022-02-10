@@ -1360,6 +1360,7 @@ QUAY_OPERATOR = "quay-operator"
 OPENSHIFT_OPERATORS = "openshift-operators"
 QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
 QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
+QUAY_SUPER_USER = os.path.join(QUAY_DIR, "quay_super_user_config.yaml")
 QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
 
 # logreader workload deployment yaml files

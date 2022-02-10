@@ -4,6 +4,7 @@ metadata:
   name: example-registry
   namespace: openshift-operators
 spec:
+  configBundleSecret: init-config-bundle-secret
   components:
     - managed: true
       kind: clair
