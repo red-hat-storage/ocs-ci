@@ -33,6 +33,7 @@ class Config:
     UI_SELENIUM: dict = field(default_factory=dict)
     PERF: dict = field(default_factory=dict)
     COMPONENTS: dict = field(default_factory=dict)
+    EXTERNAL_RHCS_DETAILS: dict = field(default_factory=dict)
     # Used for multicluster only
     MULTICLUSTER: dict = field(default_factory=dict)
 
