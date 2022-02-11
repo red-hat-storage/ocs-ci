@@ -944,11 +944,11 @@ class Deployment(object):
         self.set_rook_log_level()
 
         # get external cluster details
-        host = config.EXTERNAL_RHCS_DETAILS["external_cluster_node_roles"][0][
+        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
             "ip_address"
         ]
-        user = config.EXTERNAL_RHCS_DETAILS["login"]["username"]
-        password = config.EXTERNAL_RHCS_DETAILS["login"]["password"]
+        user = config.EXTERNAL_MODE["login"]["username"]
+        password = config.EXTERNAL_MODE["login"]["password"]
         external_cluster = ExternalCluster(host, user, password)
         external_cluster.get_external_cluster_details()
 
