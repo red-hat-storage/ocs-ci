@@ -66,7 +66,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
-from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
@@ -364,7 +364,8 @@ def log_ocs_version(cluster):
     elif skip_ocs_deployment:
         log.info("Skipping version reporting since OCS deployment is skipped.")
         return
-    cluster_version, image_dict = get_ocs_version()
+    cluster_version = get_ocp_version_dict()
+    image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
     )
