@@ -88,23 +88,52 @@ def get_environment_info():
     return results
 
 
-def get_ocs_version():
+def get_ocp_version_dict():
     """
-    Query OCP to get all information about OCS version.
+    Query OCP to get all information about OCP version.
 
     Returns:
       dict: ClusterVersion k8s object
-      dict: image_dict with information about images IDs
-
     """
-    logger.info("collecting ocs version")
-
+    logger.info("collecting ocp version")
     # We use ClusterVersion resource (which is acted upon by openshift
     # cluster-version operator, aka CVO) to get the version of our OCP
     # instance. See also:
     # https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusterversion.md
     ocp = OCP(kind="clusterversion")
-    cluster_version = ocp.get("version")
+    version_dict = ocp.get("version")
+    return version_dict
+
+
+def get_ocp_version(version_dict=None):
+    """
+    Query OCP to get sheer OCP version string. If optional ``version_dict`` is
+    specified, the version is extracted from the dict and OCP query is not
+    performed.
+
+    See an example of OCP version string::
+
+        '4.10.0-0.nightly-2022-02-09-111355'
+
+    Args:
+      version_dict(dict): k8s ClusterVersion dict dump (optional)
+
+    Returns:
+      str: full version string of OCP cluster
+    """
+    version_dict = get_ocp_version_dict()
+    version_str = version_dict["status"]["desired"]["version"]
+    return version_str
+
+
+def get_ocs_version():
+    """
+    Query OCP to get all information about OCS version.
+
+    Returns:
+      dict: image_dict with information about images IDs
+    """
+    logger.info("collecting ocs version")
 
     # TODO: When OLM (operator-lifecycle-manager) maintains OCS, it will be
     # possible to add a check via CSV (cluster service version) to get OCS
@@ -152,7 +181,7 @@ def get_ocs_version():
 
     logger.debug("ocs version collected")
 
-    return cluster_version, image_dict
+    return image_dict
 
 
 def report_ocs_version(cluster_version, image_dict, file_obj):
@@ -237,7 +266,8 @@ def main():
         os.path.join(args.cluster_path, config.RUN["kubeconfig_location"])
     )
 
-    cluster_version, image_dict = get_ocs_version()
+    cluster_version = get_ocp_version_dict()
+    image_dict = get_ocs_version()
 
     if args.verbose:
         pprint.pprint(cluster_version)
