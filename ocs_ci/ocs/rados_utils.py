@@ -267,3 +267,35 @@ class RadosHelper:
             ][0]
 
         return mgr_object
+
+    def corrupt_pg(self, osd_pod, pool_object, pgid):
+        """
+        Rewrite given pg with /etc/shadow file.
+
+        Args:
+            osd_pod (object): OSD pod object where PG will be corrupted
+            pool_object (str): name of object to be corrupted
+            pgid (str): pgid to be corrupted
+
+        Returns:
+            ceph.ceph.CephDemon: mgr object
+        """
+        oc = OCP(
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
+        )
+        osd_data = oc.get(deployment)
+        osd_containers = osd_data.get("spec").get("template").get("spec").get("containers")
+        original_osd_args = osd_containers[0].get("args")
+        ct_pod = pod.get_ceph_tools_pod()
+        logger.info("Setting osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd set noout")
+        osd_pod.exec_sh_cmd_on_pod(
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_pod.name} --pgid {pgid} {pool_object} "
+            f"set-bytes /etc/shadow --no-mon-config"
+        )
+        logger.info("Unsetting osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
+        osd_pod.exec_oc_cmd("ceph-osd")
+
