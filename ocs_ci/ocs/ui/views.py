@@ -480,35 +480,54 @@ acm_configuration = {
     "cc_review": ("//button[normalize-space()='Review']", By.XPATH),
     "cc_infrastructure_provider_creds": (
         "input[placeholder='Select a credential']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_provider_credentials": ("//div[@id='add-provider-connection']", By.XPATH),
     "cc_provider_creds_vsphere": (
         "//div[@id='vmw']//div[@class='pf-c-tile__header pf-m-stacked']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_provider_creds_vsphere_cred_name": ("//input[@id='credentialsName']", By.XPATH),
     "cc_provider_creds_vsphere_cred_namespace": (
         "//input[@id='namespaceName-input-toggle-select-typeahead']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
-    "cc_provider_creds_vsphere_vcenter_server": (
-        "//input[@id='vCenter']", By.XPATH
-    ),
+    "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
     "cc_provider_creds_vsphere_username": ("//input[@id='username']", By.XPATH),
     "cc_provider_creds_vsphere_password": ("//input[@id='password']", By.XPATH),
     "cc_provider_creds_vsphere_rootca": ("//textarea[@id='cacertificate']", By.XPATH),
     "cc_provider_creds_vsphere_clustername": ("//input[@id='cluster']", By.XPATH),
     "cc_provider_creds_vsphere_dc": ("//input[@id='datacenter']", By.XPATH),
-    "cc_provider_creds_vsphere_datastore": ("//input[@id='defaultDatastore']", By.XPATH),
+    "cc_provider_creds_vsphere_datastore": (
+        "//input[@id='defaultDatastore']",
+        By.XPATH,
+    ),
     "cc_provider_creds_vsphere_pullsecret": ("//textarea[@id='pullSecret']", By.XPATH),
-    "cc_provider_creds_vsphere_ssh_privkey": ("//textarea[@id='ssh-privatekey']", By.XPATH),
-    "cc_provider_creds_vsphere_ssh_pubkey": ("//textarea[@id='ssh-publickey']", By.XPATH),
-    "cc_provider_creds_vsphere_add_button": ("//button[normalize-space()='Add']", By.XPATH),
-    "cc_cluster_status_page_download_config": ("//button[@id='download-configuration']", By.XPATH),
-    "cc_cluster_status_page_download_install_config": ("//a[normalize-space()='install-config']", By.XPATH),
-    "cc_cluster_status_page_status_failed": ("//button[normalize-space()='Failed']", By.XPATH),
+    "cc_provider_creds_vsphere_ssh_privkey": (
+        "//textarea[@id='ssh-privatekey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_ssh_pubkey": (
+        "//textarea[@id='ssh-publickey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_add_button": (
+        "//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_config": (
+        "//button[@id='download-configuration']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_install_config": (
+        "//a[normalize-space()='install-config']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status_failed": (
+        "//button[normalize-space()='Failed']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
