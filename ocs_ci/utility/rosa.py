@@ -54,7 +54,7 @@ def create_cluster(cluster_name, version):
     utils.run_cmd(cmd)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        4000, 30, ocm.get_cluster_details, cluster_name
+        4500, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
