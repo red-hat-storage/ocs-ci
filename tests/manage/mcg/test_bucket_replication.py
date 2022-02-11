@@ -103,8 +103,8 @@ class TestReplication(MCGTest):
             "GCPtoAWS-BS-OC",
             "AZUREtoCGP-BS-CLI",
             "AWStoAZURE-BS-CLI",
-            "AWStoGCP-NS-OC",
-            "AZUREtoAWS-NS-Hybrid",
+            "AWStoAZURE-NS-OC",
+            "AZUREtoGCP-NS-Hybrid",
         ],
     )
     def test_unidirectional_bucket_replication(
