@@ -14,6 +14,7 @@ import base64
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
@@ -941,6 +942,18 @@ class Deployment(object):
 
         # Set rook log level
         self.set_rook_log_level()
+
+        # get external cluster details
+        host = config.EXTERNAL_RHCS_DETAILS["external_cluster_node_roles"][0][
+            "ip_address"
+        ]
+        user = config.EXTERNAL_RHCS_DETAILS["login"]["username"]
+        password = config.EXTERNAL_RHCS_DETAILS["login"]["password"]
+        external_cluster = ExternalCluster(host, user, password)
+        external_cluster.get_external_cluster_details()
+
+        # get admin keyring
+        external_cluster.get_admin_keyring()
 
         # Create secret for external cluster
         create_external_secret()
