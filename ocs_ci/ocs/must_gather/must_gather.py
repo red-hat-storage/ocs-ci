@@ -3,6 +3,7 @@ import logging
 import shutil
 import tempfile
 import re
+import tarfile
 from pathlib import Path
 
 from ocs_ci.helpers.helpers import storagecluster_independent_check
@@ -88,7 +89,6 @@ class MustGather(object):
 
         """
         self.search_file_path()
-        self.verify_noobaa_diagnostics()
         self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
@@ -212,6 +212,11 @@ class MustGather(object):
                 for file in files:
                     if re.search(r"noobaa_diagnostics_.*.tar.gz", file):
                         flag = True
+                        logger.info(f"Extract noobaa_diagnostics dir {file}")
+                        path_noobaa_diag = os.path.join(path, file)
+                        files_noobaa_diag = tarfile.open(path_noobaa_diag)
+                        files_noobaa_diag.extractall(path)
+                        break
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
@@ -221,6 +226,7 @@ class MustGather(object):
         Validate must-gather
 
         """
+        self.verify_noobaa_diagnostics()
         self.validate_file_size()
         self.validate_expected_files()
         self.print_invalid_files()
