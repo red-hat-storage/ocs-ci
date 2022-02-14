@@ -116,7 +116,35 @@ def test_log_reader_writer_parallel(project, tmp_path):
             f"pod/{workload_pod_name}:/mnt/target",
             local_dir,
         ]
-        run_cmd(cmd=oc_cmd, timeout=300)
+        try:
+            run_cmd(cmd=oc_cmd, timeout=300)
+        except Exception as ex:
+            # in case this fails, we are going to fetch extra evidence, that
+            # said such failure is most likely related to OCP or infrastructure
+            error_msg = "oc rsync failed: something is wrong with the cluster"
+            logger.exception(error_msg)
+            logger.debug(workload_file.describe())
+            oc_rpm_debug = [
+                "oc",
+                "rsh",
+                "-n",
+                project.namespace,
+                f"pod/{workload_pod_name}",
+                "bash",
+                "-c",
+                ";".join(
+                    [
+                        "rpm -qa",
+                        "rpm -qaV",
+                        "type -a tar",
+                        "tar --version",
+                        "type -a rsync",
+                        "rsync --version",
+                    ]
+                ),
+            ]
+            run_cmd(cmd=oc_rpm_debug, timeout=600)
+            raise exceptions.UnexpectedBehaviour(error_msg) from ex
         # look for null bytes in the just fetched local files in target dir,
         # and if these binary bytes are found, the test failed (the bug
         # was reproduced)
