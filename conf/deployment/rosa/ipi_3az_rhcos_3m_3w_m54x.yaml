@@ -2,7 +2,7 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
-  region: 'us-east-2'
+  addon_name: "ocs-converged"
   worker_availability_zones:
     - 'us-east-2a'
     - 'us-east-2b'
@@ -17,10 +17,10 @@ ENV_DATA:
   configs: 'aws,stage'
 DEPLOYMENT:
   force_download_ocm_cli: True
+  region: 'us-east-2'
   ocm_cli_version: '0.1.60'
   force_download_rosa_cli: True
   rosa_cli_version: '1.1.7'
-  addon_name: "ocs-converged"
   force_download_installer: True
   force_download_client: True
 REPORTING:
