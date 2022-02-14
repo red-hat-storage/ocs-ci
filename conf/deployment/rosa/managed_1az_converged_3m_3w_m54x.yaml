@@ -2,18 +2,10 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
-  region: 'us-east-2'
-  worker_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
-  master_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
+  multi_availability_zones: False
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.2xlarge'
+  worker_instance_type: 'm5.4xlarge'
   configs: 'aws,stage'
 DEPLOYMENT:
   force_download_ocm_cli: True
