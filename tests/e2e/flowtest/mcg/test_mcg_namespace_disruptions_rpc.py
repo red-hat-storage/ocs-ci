@@ -7,7 +7,8 @@ import botocore.exceptions as boto3exception
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
-    skipif_managed_service, tier4b,
+    skipif_managed_service,
+    tier4b,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
