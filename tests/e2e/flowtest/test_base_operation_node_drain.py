@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
 )
 from ocs_ci.ocs import node, constants
-from ocs_ci.framework.testlib import E2ETest, flowtests, config, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, tier4b, config, ignore_leftovers
 from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@flowtests
+@tier4b
 @pytest.mark.bugzilla("1869303")
 class TestBaseOperationNodeDrain(E2ETest):
     """

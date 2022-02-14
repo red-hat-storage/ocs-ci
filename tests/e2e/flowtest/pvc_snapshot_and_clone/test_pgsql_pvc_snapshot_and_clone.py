@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     E2ETest,
-    flowtests,
+    tier2,
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
@@ -14,7 +14,7 @@ from ocs_ci.ocs.benchmark_operator import BMO_NAME
 log = logging.getLogger(__name__)
 
 
-@flowtests
+@tier2
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     """
     Tests Story/Flow based test scenario for pgsql snapshot and clone

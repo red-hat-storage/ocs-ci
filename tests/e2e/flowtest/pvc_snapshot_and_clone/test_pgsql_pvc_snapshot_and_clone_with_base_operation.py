@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     E2ETest,
-    flowtests,
+    tier4b,
     ignore_leftovers,
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
@@ -19,7 +19,7 @@ from ocs_ci.ocs import flowtest
 log = logging.getLogger(__name__)
 
 
-@flowtests
+@tier4b
 @ignore_leftovers
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     """
