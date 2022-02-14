@@ -706,6 +706,32 @@ class PASTest(BaseTest):
         elif encrypt:
             platform = f"{platform}-Enc"
 
+        # Check the base storageclass on AWS
+        if self.environment.get("platform").upper() == "AWS":
+            osd_pod_list = pod.get_osd_pods()
+            osd_pod = osd_pod_list[0].pod_data["metadata"]["name"]
+            osd_pod_obj = OCP(
+                kind="POD",
+                resource_name=osd_pod,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            log.info(f"The First OSD pod nams is {osd_pod}")
+
+            osd_pvc_name = osd_pod_obj.get()["spec"]["initContainers"][0][
+                "volumeDevices"
+            ][0]["name"]
+            log.info(f"The First OSD name is : {osd_pvc_name}")
+            osd_pvc_obj = OCP(
+                kind="PersistentVolumeClaim",
+                resource_name=osd_pvc_name,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+
+            odf_back_storage = osd_pvc_obj.get()["spec"]["storageClassName"]
+            log.info(f"The ODF deployment use {odf_back_storage} as back storage")
+            if odf_back_storage != "gp2":
+                platform = f"{platform}-{odf_back_storage}"
+
         # Check if compression is enabled
         my_obj = OCP(
             kind="cephblockpool", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
