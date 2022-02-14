@@ -110,6 +110,7 @@ def test_log_reader_writer_parallel(project, tmp_path):
         oc_cmd = [
             "oc",
             "rsync",
+            "--loglevel=4",
             "-n",
             project.namespace,
             f"pod/{workload_pod_name}:/mnt/target",
