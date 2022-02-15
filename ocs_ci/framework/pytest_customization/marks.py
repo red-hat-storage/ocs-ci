@@ -206,6 +206,18 @@ managed_service_required = pytest.mark.skipif(
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
+ms_provider_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS)
+    and config.ENV_DATA["cluster_type"].lower() == "provider",
+    reason="Test runs ONLY on managed service provider cluster",
+)
+
+ms_consumer_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS)
+    and config.ENV_DATA["cluster_type"].lower() == "consumer",
+    reason="Test runs ONLY on managed service consumer cluster",
+)
+
 kms_config_required = pytest.mark.skipif(
     load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
     reason="Vault config not found in auth.yaml",
@@ -237,6 +249,18 @@ skipif_managed_service = pytest.mark.skipif(
 skipif_openshift_dedicated = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == OPENSHIFT_DEDICATED_PLATFORM,
     reason="Test will not run on Openshift dedicated cluster",
+)
+
+skipif_msprovider = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.ENV_DATA["cluster_type"].lower() == "provider",
+    reason="Test will not run on Managed service provider cluster",
+)
+
+skipif_msconsumer = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.ENV_DATA["cluster_type"].lower() == "consumer",
+    reason="Test will not run on Managed service consumer cluster",
 )
 
 skipif_rosa = pytest.mark.skipif(
