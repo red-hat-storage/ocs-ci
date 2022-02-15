@@ -39,11 +39,8 @@ from ocs_ci.ocs.resources.bucket_policy import (
 
 logger = logging.getLogger(__name__)
 
-MCG_NS_RESULT_DIR = "/result"
-MCG_NS_ORIGINAL_DIR = "/original"
 
-
-def setup_base_objects(awscli_pod, amount=2):
+def setup_base_objects(awscli_pod, origin_dir, amount=2):
     """
     Prepares two directories and populate one of them with objects
 
@@ -52,14 +49,10 @@ def setup_base_objects(awscli_pod, amount=2):
         amount (Int): Number of test objects to create
 
     """
-    awscli_pod.exec_cmd_on_pod(
-        command=f"mkdir {MCG_NS_ORIGINAL_DIR} {MCG_NS_RESULT_DIR}"
-    )
-
-    for i in range(amount):
+    for _ in range(amount):
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={MCG_NS_ORIGINAL_DIR}/{object_key}.txt bs=1M count=1 status=none"
+            f"dd if=/dev/urandom of={origin_dir}/{object_key}.txt bs=1M count=1 status=none"
         )
 
 
@@ -103,7 +96,13 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         ],
     )
     def test_mcg_namespace_lifecycle_crd(
-        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        bucket_factory,
+        test_directory_setup,
+        bucketclass_dict,
     ):
         """
         Test MCG namespace resource/bucket lifecycle using CRDs
@@ -216,7 +215,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             ), "Delete object operation was granted access, when it should have denied"
 
         logger.info("Setting up test files for upload, to the bucket/resources")
-        setup_base_objects(awscli_pod, amount=3)
+        setup_base_objects(awscli_pod, test_directory_setup.origin_dir, amount=3)
 
         # Upload files directly to NS resources
         logger.info(
@@ -224,7 +223,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         )
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{aws_target_bucket}",
             signed_request_creds=s3_creds,
         )
@@ -236,7 +235,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         sync_object_directory(
             awscli_pod,
             src=f"s3://{aws_target_bucket}",
-            target=MCG_NS_RESULT_DIR,
+            target=test_directory_setup.result_dir,
             signed_request_creds=s3_creds,
         )
 
@@ -256,7 +255,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         sync_object_directory(
             awscli_pod,
             src=f"s3://{ns_bucket.name}",
-            target=MCG_NS_RESULT_DIR,
+            target=test_directory_setup.result_dir,
             s3_obj=mcg_obj,
         )
 
@@ -315,7 +314,13 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
     @skipif_ocs_version("<4.8")
     @pytest.mark.polarion_id("OCS-2471")
     def test_mcg_cache_lifecycle(
-        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        bucket_factory,
+        test_directory_setup,
+        bucketclass_dict,
     ):
         """
         Test MCG cache bucket lifecycle
@@ -368,16 +373,19 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
 
         # Write to hub and read from cache
         logger.info("Setting up test files for upload")
-        setup_base_objects(awscli_pod, amount=3)
+        setup_base_objects(awscli_pod, test_directory_setup.origin_dir, amount=3)
         logger.info(f"Uploading objects to ns target: {target_bucket}")
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{target_bucket}",
             signed_request_creds=s3_creds,
         )
         sync_object_directory(
-            awscli_pod, f"s3://{ns_bucket.name}", MCG_NS_RESULT_DIR, mcg_obj
+            awscli_pod,
+            f"s3://{ns_bucket.name}",
+            test_directory_setup.result_dir,
+            mcg_obj,
         )
 
         # Read cached object

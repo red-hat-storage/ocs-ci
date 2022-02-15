@@ -92,7 +92,6 @@ from ocs_ci.utility.utils import (
     ceph_health_check_base,
     get_ocs_build_number,
     get_openshift_client,
-    get_system_architecture,
     get_testrun_name,
     load_auth_config,
     ocsci_log_path,
@@ -2118,14 +2117,14 @@ def mcg_obj_fixture(request, *args, **kwargs):
     return mcg_obj
 
 
-@pytest.fixture()
-def awscli_pod(request):
-    return awscli_pod_fixture(request, scope_name="function")
-
-
 @pytest.fixture(scope="session")
 def awscli_pod_session(request):
     return awscli_pod_fixture(request, scope_name="session")
+
+
+@pytest.fixture(scope="session")
+def awscli_pod(request, awscli_pod_session):
+    return awscli_pod_session
 
 
 def awscli_pod_fixture(request, scope_name):
@@ -2148,34 +2147,31 @@ def awscli_pod_fixture(request, scope_name):
     log.info("Trying to create the AWS CLI service CA")
     service_ca_configmap = helpers.create_resource(**service_ca_data)
 
-    arch = get_system_architecture()
-    if arch.startswith("x86"):
-        pod_dict_path = constants.AWSCLI_POD_YAML
-    else:
-        pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
-
-    awscli_pod_dict = templating.load_yaml(pod_dict_path)
-    awscli_pod_dict["spec"]["volumes"][0]["configMap"][
+    awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
+    awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
         "name"
     ] = service_ca_configmap_name
-    awscli_pod_name = create_unique_resource_name(
-        constants.AWSCLI_RELAY_POD_NAME, scope_name
+
+    update_container_with_mirrored_image(awscli_sts_dict)
+
+    s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
+    assert s3cli_sts_obj, f"Failed to create S3CLI STS"
+
+    awscli_pod_obj = Pod(
+        **get_pods_having_label(
+            constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
+        )[0]
     )
-    awscli_pod_dict["metadata"]["name"] = awscli_pod_name
 
-    update_container_with_mirrored_image(awscli_pod_dict)
-
-    awscli_pod_obj = Pod(**awscli_pod_dict)
-    assert awscli_pod_obj.create(
-        do_reload=True
-    ), f"Failed to create Pod {awscli_pod_name}"
-    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+    OCP(
+        namespace=config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name, column="DATA", condition="1"
     )
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
 
     def _awscli_pod_cleanup():
-        awscli_pod_obj.delete()
+        s3cli_sts_obj.delete()
         service_ca_configmap.delete()
 
     request.addfinalizer(_awscli_pod_cleanup)

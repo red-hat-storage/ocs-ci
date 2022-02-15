@@ -1055,18 +1055,16 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
     return obj_lst
 
 
-def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
+def setup_base_objects(awscli_pod, original_dir, amount=2):
     """
     Prepares two directories and populate one of them with objects
 
      Args:
         awscli_pod (Pod): A pod running the AWS CLI tools
         original_dir (str): original directory name
-        result_dir (str): result directory name
         amount (Int): Number of test objects to create
 
     """
-    awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
     write_random_objects_in_pod(awscli_pod, original_dir, amount)
 
 
