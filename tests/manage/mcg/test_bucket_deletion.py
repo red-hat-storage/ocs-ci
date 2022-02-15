@@ -1,5 +1,4 @@
 import logging
-import timeit
 
 import botocore
 import pytest
@@ -9,21 +8,17 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier3,
     acceptance,
-    performance,
     skipif_managed_service,
     bugzilla,
     skipif_ocs_version,
 )
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
-    rm_object_recursive,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
