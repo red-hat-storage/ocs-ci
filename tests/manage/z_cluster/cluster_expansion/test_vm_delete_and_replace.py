@@ -1,18 +1,18 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import (
-    tier4a,
-    E2ETest,
-    vsphere_platform_required,
-    skipif_vsphere_ipi,
-    bugzilla,
-)
+from ocs_ci.ocs.node import get_osd_running_nodes, verify_all_nodes_created
+from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.framework.testlib import (
+    bugzilla,
+    E2ETest,
+    skipif_vsphere_ipi,
+    tier4a,
+    vsphere_platform_required,
+)
 from ocs_ci.utility import vsphere
-from ocs_ci.ocs.node import verify_all_nodes_created, get_osd_running_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,6 @@ class TestVmDeletionAndReplacement(E2ETest):
 
     @pytest.fixture(autouse=True)
     def init(self):
-
         self.cluster_name = config.ENV_DATA.get("cluster_name")
         self.cluster = config.ENV_DATA["vsphere_cluster"]
         self.datacenter = config.ENV_DATA["vsphere_datacenter"]
@@ -46,7 +45,7 @@ class TestVmDeletionAndReplacement(E2ETest):
         """
         1. Get OSDs and OSD running nodes
         2. Get compute VMs
-        3. Destroy VM
+        3. Destroy VM along with data disks
         4. Replace VM
         5. Label node as OCS
         6. Check all pods are running and cluster in Healthy state
@@ -68,11 +67,10 @@ class TestVmDeletionAndReplacement(E2ETest):
         old_vms = vm_obj.get_compute_vms_in_pool(
             name=self.cluster_name, dc=self.datacenter, cluster=self.cluster
         )
-        logger.info(f"Type of vm {type(old_vms)}")
         logger.info(f"old_vms {old_vms}")
 
         # Destroy VM along with data disk
-        vm_obj.destroy_vms(vms=old_vms[0])
+        vm_obj.destroy_vms(vms=[old_vms[0]])
         vms = vm_obj.get_compute_vms_in_pool(
             name=self.cluster_name, dc=self.datacenter, cluster=self.cluster
         )
@@ -95,7 +93,7 @@ class TestVmDeletionAndReplacement(E2ETest):
 
         # Get new osd
         new_osd = [osd_name for osd_name in current_osds if osd_name not in old_osds]
-        logger.info(f"New osd {new_osd}")
+        assert new_osd, "No new OSD added in the cluster"
 
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
