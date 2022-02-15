@@ -9,7 +9,7 @@ from semantic_version import Version
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     E2ETest,
-    tier1,
+    tier2,
     on_prem_platform_required,
     bugzilla,
     skipif_external_mode,
@@ -28,7 +28,7 @@ from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @bugzilla("1937187")
 @bugzilla("1958818")
 @on_prem_platform_required
