@@ -195,6 +195,7 @@ ENV_DATA:
   rhel_version: "7.9"
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
+  cluster_type: ""
 
 
 # This section is related to upgrade

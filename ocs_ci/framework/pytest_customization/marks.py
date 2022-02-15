@@ -207,14 +207,18 @@ managed_service_required = pytest.mark.skipif(
 )
 
 ms_provider_required = pytest.mark.skipif(
-    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS)
-    and config.ENV_DATA["cluster_type"].lower() == "provider",
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "provider"
+    ),
     reason="Test runs ONLY on managed service provider cluster",
 )
 
 ms_consumer_required = pytest.mark.skipif(
-    (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS)
-    and config.ENV_DATA["cluster_type"].lower() == "consumer",
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    ),
     reason="Test runs ONLY on managed service consumer cluster",
 )
 
@@ -251,13 +255,13 @@ skipif_openshift_dedicated = pytest.mark.skipif(
     reason="Test will not run on Openshift dedicated cluster",
 )
 
-skipif_msprovider = pytest.mark.skipif(
+skipif_ms_provider = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
     and config.ENV_DATA["cluster_type"].lower() == "provider",
     reason="Test will not run on Managed service provider cluster",
 )
 
-skipif_msconsumer = pytest.mark.skipif(
+skipif_ms_consumer = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
     and config.ENV_DATA["cluster_type"].lower() == "consumer",
     reason="Test will not run on Managed service consumer cluster",
