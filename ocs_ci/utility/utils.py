@@ -3606,5 +3606,6 @@ def verify_huge_pages():
             log.info(f"Huge pages is enabled on {node.name}")
             continue
         else:
+            log.info(f"Huge pages is not applied on {node.name}")
             return False
     return True
