@@ -104,7 +104,7 @@ def test_noobaa_postupgrade(
             awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"
 
-    bucket.verify_health()
+    bucket.verify_health(timeout=100)
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {LOCAL_TEMP_PATH}/*"')
