@@ -2158,7 +2158,7 @@ def awscli_pod_fixture(request, scope_name):
     update_container_with_mirrored_image(awscli_sts_dict)
 
     s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
-    assert s3cli_sts_obj, f"Failed to create S3CLI STS"
+    assert s3cli_sts_obj, "Failed to create S3CLI STS"
 
     awscli_pod_obj = Pod(
         **get_pods_having_label(
