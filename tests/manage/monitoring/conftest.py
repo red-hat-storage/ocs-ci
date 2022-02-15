@@ -814,7 +814,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
 
 @pytest.fixture
-def measure_stop_worker_nodes(measurement_dir, nodes):
+def measure_stop_worker_nodes(request, measurement_dir, nodes):
     """
     Stop worker nodes that doesn't contain RGW (so that alerts are triggered
     correctly), measure the time when it was stopped and monitors alerts that
@@ -852,6 +852,13 @@ def measure_stop_worker_nodes(measurement_dir, nodes):
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return node_names
+
+    def finalizer():
+        nodes.restart_nodes_by_stop_and_start_teardown()
+        assert ceph_health_check(), "Ceph cluster health is not OK"
+        log.info("Ceph cluster health is OK")
+
+    request.addfinalizer(finalizer)
 
     test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
     measured_op = measure_operation(stop_nodes, test_file)
