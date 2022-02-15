@@ -2,19 +2,12 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
-  addon_name: "ocs-converged"
-  worker_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
-  master_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
+  multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.4xlarge'
+  worker_instance_type: 'm5.2xlarge'
   configs: 'aws,stage'
+  addon_name: "ocs-converged"
 DEPLOYMENT:
   force_download_ocm_cli: True
   region: 'us-east-2'

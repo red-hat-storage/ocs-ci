@@ -191,7 +191,7 @@ def install_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
@@ -226,7 +226,7 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
