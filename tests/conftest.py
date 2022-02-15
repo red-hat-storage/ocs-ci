@@ -2124,6 +2124,9 @@ def awscli_pod_session(request):
 
 @pytest.fixture(scope="session")
 def awscli_pod(request, awscli_pod_session):
+    # Used as a legacy fixture for backwards compatibility
+    # with tests who rely on the function-scope
+    # without the need for a wide refactor
     return awscli_pod_session
 
 
