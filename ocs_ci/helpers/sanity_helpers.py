@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
@@ -152,6 +153,8 @@ class Sanity:
             interface="OC",
             timeout=timeout,
         )[0].name
+        # Let the bucket propagate throughout the system to avoid NoSuchBucket failures
+        sleep(3)
         self.obj_data = "A string data"
 
         for i in range(0, 30):
