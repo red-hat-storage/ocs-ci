@@ -4,6 +4,8 @@ import random
 import time
 import traceback
 
+from ocs_ci.ocs.resources import pod
+
 logger = logging.getLogger(__name__)
 
 
@@ -280,15 +282,15 @@ class RadosHelper:
         Returns:
             ceph.ceph.CephDemon: mgr object
         """
-        oc = OCP(
-            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
+        osd_containers = (
+            osd_pod.get("spec").get("template").get("spec").get("containers")
         )
-        osd_data = oc.get(deployment)
-        osd_containers = osd_data.get("spec").get("template").get("spec").get("containers")
         original_osd_args = osd_containers[0].get("args")
         ct_pod = pod.get_ceph_tools_pod()
         logger.info("Setting osd noout flag")
         ct_pod.exec_ceph_cmd("ceph osd set noout")
+        logger.info("Killing ceph-osd process")
+        ct_pod.exec_cmd_on_pod("killall ceph-osd")
         osd_pod.exec_sh_cmd_on_pod(
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
             f"{osd_pod.name} --pgid {pgid} {pool_object} "
@@ -296,6 +298,5 @@ class RadosHelper:
         )
         logger.info("Unsetting osd noout flag")
         ct_pod.exec_ceph_cmd("ceph osd unset noout")
-        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
-        osd_pod.exec_oc_cmd("ceph-osd")
-
+        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
+        osd_pod.exec_oc_cmd("ceph-osd " + " ".join(original_osd_args))
