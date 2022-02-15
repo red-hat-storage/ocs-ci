@@ -1762,16 +1762,25 @@ def get_running_ocp_version(separator=None):
         return get_ocp_version(seperator=char)
 
 
-def get_ocp_repo():
+def get_ocp_repo(rhel_major_version=None):
     """
     Get ocp repo file, name will be generated dynamically based on
     ocp version.
+
+    Args:
+        rhel_major_version (int): Major version of RHEL. If not specified it will
+            take major version from config.ENV_DATA["rhel_version"]
 
     Returns:
         string : Path to ocp repo file
 
     """
-    repo_path = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
+    rhel_version = (
+        rhel_major_version or Version.coerce(config.ENV_DATA["rhel_version"]).major
+    )
+    repo_path = os.path.join(
+        constants.REPO_DIR, f"ocp_{get_ocp_version('_')}_rhel{rhel_version}.repo"
+    )
     path = os.path.expanduser(repo_path)
     assert os.path.exists(path), f"OCP repo file {path} doesn't exists!"
     return path
@@ -2419,6 +2428,7 @@ def create_rhelpod(namespace, pod_name, timeout=300):
     # importing here to avoid dependencies
     from ocs_ci.helpers import helpers
 
+    # TODO: This method should be updated to add argument to change RHEL version
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
