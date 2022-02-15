@@ -847,7 +847,7 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     def finalizer():
         nodes.restart_nodes_by_stop_and_start_teardown()
         assert ceph_health_check(), "Ceph cluster health is not OK"
-        log.info("Ceph cluster health is OK")
+        logger.info("Ceph cluster health is OK")
 
     request.addfinalizer(finalizer)
 

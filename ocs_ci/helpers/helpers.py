@@ -16,10 +16,8 @@ import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
-from subprocess import PIPE, TimeoutExpired, run
+from subprocess import PIPE, run
 from uuid import uuid4
-
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
