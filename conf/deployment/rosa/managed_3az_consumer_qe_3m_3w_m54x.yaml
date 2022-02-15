@@ -2,26 +2,19 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
-  region: 'us-east-2'
-  worker_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
-  master_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
+  cluster_type: 'consumer'
+  multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.2xlarge'
+  worker_instance_type: 'm5.4xlarge'
   configs: 'aws,stage'
+  addon_name: "ocs-consumer-qe"
 DEPLOYMENT:
   force_download_ocm_cli: True
   region: 'us-east-2'
   ocm_cli_version: '0.1.60'
   force_download_rosa_cli: True
   rosa_cli_version: '1.1.7'
-  addon_name: "ocs-converged"
   force_download_installer: True
   force_download_client: True
 REPORTING:
