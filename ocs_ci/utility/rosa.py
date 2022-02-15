@@ -46,10 +46,11 @@ def create_cluster(cluster_name, version):
     region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
+    multi_az = "--multi-az " if config.ENV_DATA["multi_availability_zones"] else ""
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
+        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     utils.run_cmd(cmd)
     logger.info("Waiting for installation of ROSA cluster")
