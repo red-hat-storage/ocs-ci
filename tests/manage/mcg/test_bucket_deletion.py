@@ -51,38 +51,6 @@ class TestBucketDeletion(MCGTest):
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1299")],
             ),
             pytest.param(
-                *[100, "S3", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1865"),
-                ],
-            ),
-            pytest.param(
-                *[100, "OC", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1915"),
-                ],
-            ),
-            pytest.param(
-                *[1000, "S3", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1866"),
-                ],
-            ),
-            pytest.param(
-                *[1000, "OC", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1916"),
-                ],
-            ),
-            pytest.param(
                 *[
                     1,
                     "OC",
@@ -113,10 +81,6 @@ class TestBucketDeletion(MCGTest):
             "3-S3-DEFAULT-BACKINGSTORE",
             "3-CLI-DEFAULT-BACKINGSTORE",
             "3-OC-DEFAULT-BACKINGSTORE",
-            "100-S3-DEFAULT-BACKINGSTORE",
-            "100-OC-DEFAULT-BACKINGSTORE",
-            "1000-S3-DEFAULT-BACKINGSTORE",
-            "1000-OC-DEFAULT-BACKINGSTORE",
             "1-OC-PVPOOL",
             "1-CLI-PVPOOL",
         ],
@@ -265,46 +229,6 @@ class TestBucketDeletion(MCGTest):
                     err
                 ), "Couldn't verify delete non-exist OBC with cli"
         logger.info(f"Delete non-exist OBC {name} failed as expected")
-
-    @pytest.mark.bugzilla("1753109")
-    @pytest.mark.polarion_id("OCS-1924")
-    def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod_session):
-        """
-        Test with deletion of bucket has 1T objects stored in.
-        """
-        bucketname = create_unique_resource_name(
-            resource_description="bucket", resource_type="s3"
-        )
-        try:
-            bucket = MCGS3Bucket(bucketname, mcg_obj)
-            logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
-            logger.info(f"aws region is {mcg_obj.region}")
-            data_dir = AWSCLI_TEST_OBJ_DIR
-
-            # Sync downloaded objects dir to the new bucket, sync to 3175
-            # virtual dirs. With each dir around 315MB, and 3175 dirs will
-            # reach targed 1TB data.
-            logger.info("Writing objects to bucket")
-            for i in range(3175):
-                full_object_path = f"s3://{bucketname}/{i}/"
-                sync_object_directory(
-                    awscli_pod_session, data_dir, full_object_path, mcg_obj
-                )
-
-            # Delete bucket content use aws rm with --recursive option.
-            # The object_versions.delete function does not work with objects
-            # exceeds 1000.
-            start = timeit.default_timer()
-            rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
-            bucket.delete()
-            stop = timeit.default_timer()
-            gap = (stop - start) // 60 % 60
-            if gap > 10:
-                assert False, "Failed to delete s3 bucket within 10 minutes"
-        finally:
-            if mcg_obj.s3_verify_bucket_exists(bucketname):
-                rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
-                mcg_obj.s3_resource.Bucket(bucketname).delete()
 
     @pytest.fixture(scope="function")
     def default_bucket_teardown(self, request, mcg_obj):
