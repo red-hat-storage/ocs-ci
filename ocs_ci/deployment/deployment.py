@@ -204,7 +204,6 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             try:
-                config.switch_acm_ctx()
                 self.deploy_acm_hub()
             except Exception as e:
                 logger.error(e)
