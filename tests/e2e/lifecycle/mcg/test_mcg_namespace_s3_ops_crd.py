@@ -99,6 +99,10 @@ def multipart_setup(pod_obj, origin_dir, result_dir):
     """
     mpu_key = "MpuKey-" + str(uuid.uuid4().hex)
     # Creates a 500MB file and splits it into multiple parts
+    pod_obj.exec_cmd_on_pod(
+        f"dd if=/dev/urandom of={origin_dir}/{mpu_key} bs=1MB count=500; "
+        f'split -a 1 -b 41m {origin_dir}/{mpu_key} {result_dir}/part"'
+    )
     parts = pod_obj.exec_cmd_on_pod(f'sh -c "ls -1 {result_dir}"').split()
     return mpu_key, origin_dir, result_dir, parts
 
