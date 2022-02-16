@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.8")
 @bugzilla("1995271")
 @bugzilla("1995271")
-@pytest.mark.polarion_id("")
+@pytest.mark.polarion_id("OCS-2754")
 @ignore_leftovers
 class TestHugePages(E2ETest):
     """
