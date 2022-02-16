@@ -270,33 +270,35 @@ class RadosHelper:
 
         return mgr_object
 
-    def corrupt_pg(self, osd_pod, pool_object, pgid):
-        """
-        Rewrite given pg with /etc/shadow file.
 
-        Args:
-            osd_pod (object): OSD pod object where PG will be corrupted
-            pool_object (str): name of object to be corrupted
-            pgid (str): pgid to be corrupted
+def corrupt_pg(osd_pod, pool_object, pgid):
+    """
+    Rewrite given pg with /etc/shadow file.
 
-        Returns:
-            ceph.ceph.CephDemon: mgr object
-        """
-        osd_containers = (
-            osd_pod.get("spec").get("template").get("spec").get("containers")
-        )
-        original_osd_args = osd_containers[0].get("args")
-        ct_pod = pod.get_ceph_tools_pod()
-        logger.info("Setting osd noout flag")
-        ct_pod.exec_ceph_cmd("ceph osd set noout")
-        logger.info("Killing ceph-osd process")
-        ct_pod.exec_cmd_on_pod("killall ceph-osd")
-        osd_pod.exec_sh_cmd_on_pod(
-            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-            f"{osd_pod.name} --pgid {pgid} {pool_object} "
-            f"set-bytes /etc/shadow --no-mon-config"
-        )
-        logger.info("Unsetting osd noout flag")
-        ct_pod.exec_ceph_cmd("ceph osd unset noout")
-        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
-        osd_pod.exec_oc_cmd("ceph-osd " + " ".join(original_osd_args))
+    Args:
+        osd_pod (object): OSD pod object where PG will be corrupted
+        pool_object (str): name of object to be corrupted
+        pgid (str): pgid to be corrupted
+
+    Returns:
+        ceph.ceph.CephDemon: mgr object
+    """
+    osd_data = osd_pod.get()
+    osd_containers = osd_data["spec"]["containers"]
+    original_osd_args = osd_containers[0].get("args")
+    osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
+
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info("Setting osd noout flag")
+    ct_pod.exec_ceph_cmd("ceph osd set noout")
+    logger.info("Killing ceph-osd process")
+    osd_pod.exec_cmd_on_pod("killall ceph-osd")
+    osd_pod.exec_sh_cmd_on_pod(
+        f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+        f"{osd_id} --pgid {pgid} {pool_object} "
+        f"set-bytes /etc/shadow --no-mon-config"
+    )
+    logger.info("Unsetting osd noout flag")
+    ct_pod.exec_ceph_cmd("ceph osd unset noout")
+    ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
+    osd_pod.exec_oc_cmd("ceph-osd " + " ".join(original_osd_args))

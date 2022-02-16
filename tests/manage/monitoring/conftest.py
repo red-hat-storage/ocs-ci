@@ -12,7 +12,7 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
-from ocs_ci.ocs.rados_utils import RadosHelper
+from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.retry import retry
@@ -219,9 +219,7 @@ def measure_corrupt_pg(request, measurement_dir):
         dict: Contains information about `start` and `stop` time for
         corrupting Ceph Placement Group
     """
-    oc = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA.get("cluster_namespace"))
-    osd_pods = oc.get(selector=constants.OSD_APP_LABEL).get("items")
-    osd_pod = osd_pods[0]
+    osd_pod = pod.get_osd_pods()[0]
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name("corrupted", "pool")
     ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
@@ -230,12 +228,14 @@ def measure_corrupt_pg(request, measurement_dir):
         """
         Make sure that corrupted pool is deleted and ceph health is ok
         """
-        nonlocal poolname
+        nonlocal pool_name
         logger.info(f"Deleting pool {pool_name}")
         ct_pod.exec_ceph_cmd(
             f"ceph osd pool delete {pool_name} {pool_name} "
             f"--yes-i-really-really-mean-it"
         )
+        logger.info("Unsetting osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
         logger.info(f"Checking that pool {pool_name} is deleted")
         # wait for ceph to return into HEALTH_OK state after osd deployment
         # is returned back to normal
@@ -273,7 +273,7 @@ def measure_corrupt_pg(request, measurement_dir):
 
         osd_pod_name = osd_pod.get("metadata").get("name")
         logger.info(f"Corrupting {pgid} PG on {osd_pod_name}")
-        RadosHelper.corrupt_pg(osd_pod, pool_object, pgid)
+        rados_utils.corrupt_pg(osd_pod, pool_object, pgid)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return osd_pod_name
