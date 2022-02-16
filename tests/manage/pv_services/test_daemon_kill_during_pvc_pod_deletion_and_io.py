@@ -44,10 +44,17 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         """
         Create PVCs and pods
         """
-        self.access_modes_cephfs = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
-        self.access_modes_rbd = [constants.ACCESS_MODE_RWO, f"{constants.ACCESS_MODE_RWO}-Block", f"{constants.ACCESS_MODE_RWX}-Block"]
+        self.access_modes_cephfs = [
+            constants.ACCESS_MODE_RWO,
+            constants.ACCESS_MODE_RWX,
+        ]
+        self.access_modes_rbd = [
+            constants.ACCESS_MODE_RWO,
+            f"{constants.ACCESS_MODE_RWO}-Block",
+            f"{constants.ACCESS_MODE_RWX}-Block",
+        ]
         num_of_pvcs_cephfs = 12
-        access_mode_dist_ratio_cephfs= [9, 3]
+        access_mode_dist_ratio_cephfs = [9, 3]
         num_of_pvcs_rbd = 15
         access_mode_dist_ratio_rbd = [7, 5, 3]
 
@@ -103,10 +110,27 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Select 2 RWO and 1 RWX PVC of both CephFS and RBD to create pods during disruption.
         cephfs_pvc_for_pods = []
         rbd_pvc_for_pods = []
-        for access_mode, num_pvc in [(constants.ACCESS_MODE_RWO, 2), (constants.ACCESS_MODE_RWX, 1)]:
-            cephfs_pvc_for_pods.extend([pvc_obj for pvc_obj in pvc_objs_cephfs if pvc_obj.access_mode == access_mode][:num_pvc])
-            rbd_pvc_for_pods.extend([pvc_obj for pvc_obj in pvc_objs_rbd if pvc_obj.access_mode == access_mode][:num_pvc])
-        log.info(f"PVCs selected for creating pods during disruption - {[pvc_obj.name for pvc_obj in cephfs_pvc_for_pods + rbd_pvc_for_pods]}")
+        for access_mode, num_pvc in [
+            (constants.ACCESS_MODE_RWO, 2),
+            (constants.ACCESS_MODE_RWX, 1),
+        ]:
+            cephfs_pvc_for_pods.extend(
+                [
+                    pvc_obj
+                    for pvc_obj in pvc_objs_cephfs
+                    if pvc_obj.access_mode == access_mode
+                ][:num_pvc]
+            )
+            rbd_pvc_for_pods.extend(
+                [
+                    pvc_obj
+                    for pvc_obj in pvc_objs_rbd
+                    if pvc_obj.access_mode == access_mode
+                ][:num_pvc]
+            )
+        log.info(
+            f"PVCs selected for creating pods during disruption - {[pvc_obj.name for pvc_obj in cephfs_pvc_for_pods + rbd_pvc_for_pods]}"
+        )
 
         # Remove the selected PVCs from the primary list
         for pvc_obj in cephfs_pvc_for_pods:
@@ -121,7 +145,9 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         nodes_iter = cycle(node.get_worker_nodes())
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
-        log.info("Starting the creation of pods. Creating one pod using each RWO PVC and two pods using each RWX PVC")
+        log.info(
+            "Starting the creation of pods. Creating one pod using each RWO PVC and two pods using each RWX PVC"
+        )
         for pvc_obj in pvc_objs:
             if pvc_obj.get_pvc_vol_mode == "Block":
                 pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
@@ -202,11 +228,19 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
             "mds",
         ]
 
-        pvc_objs, pod_objs, rwx_pod_objs, cephfs_pvc_for_pods, rbd_pvc_for_pods = setup_base
+        (
+            pvc_objs,
+            pod_objs,
+            rwx_pod_objs,
+            cephfs_pvc_for_pods,
+            rbd_pvc_for_pods,
+        ) = setup_base
 
         num_of_pods_to_delete = 3
         num_of_io_pods = 1
-        num_pvc_create_during_disruption = len(self.access_modes_cephfs + self.access_modes_rbd)
+        num_pvc_create_during_disruption = len(
+            self.access_modes_cephfs + self.access_modes_rbd
+        )
 
         # Select pods to be deleted
         pods_to_delete = pod_objs[:num_of_pods_to_delete]
@@ -279,10 +313,19 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Select the resource of each type
         for disruption, pod_type in zip(disruption_ops, daemons_to_kill):
             disruption.set_resource(resource=pod_type)
-        executor = ThreadPoolExecutor(max_workers=len(pod_objs) + len(rwx_pod_objs) + len(rbd_pvc_for_pods) + len(cephfs_pvc_for_pods) + len(daemons_to_kill) + num_pvc_create_during_disruption)
+        executor = ThreadPoolExecutor(
+            max_workers=len(pod_objs)
+            + len(rwx_pod_objs)
+            + len(rbd_pvc_for_pods)
+            + len(cephfs_pvc_for_pods)
+            + len(daemons_to_kill)
+            + num_pvc_create_during_disruption
+        )
 
         # Get number of pods of the type given in daemons_to_kill list
-        num_of_resource_pods = [len(pod_functions[resource_name]()) for resource_name in daemons_to_kill]
+        num_of_resource_pods = [
+            len(pod_functions[resource_name]()) for resource_name in daemons_to_kill
+        ]
 
         # Fetch PV names to verify after deletion
         pv_objs = []
@@ -322,7 +365,7 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
             log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
-            for sample in TimeoutSampler(700, 2, getattr, pod_obj, "wl_setup_done"):
+            for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
                     log.info(
                         f"Setup for running IO is completed on pod " f"{pod_obj.name}."
@@ -360,7 +403,9 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
             disruption.select_daemon()
             node_name = disruption.resource_obj[0].pod_data.get("spec").get("nodeName")
             # Create node-daemons dict. Value as string for passing in the 'kill' command
-            nodes_and_pids[node_name] = f"{nodes_and_pids.get(node_name, '')} {disruption.daemon_pid}"
+            nodes_and_pids[
+                node_name
+            ] = f"{nodes_and_pids.get(node_name, '')} {disruption.daemon_pid}"
 
         # Start IO on pods to be deleted
         pods_to_delete_io = [
@@ -376,10 +421,18 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Start creating new pods
         log.info("Start creating new pods.")
         pod_create_rbd = executor.submit(
-            helpers.create_pods, rbd_pvc_for_pods, pod_factory, constants.CEPHBLOCKPOOL, 2
+            helpers.create_pods,
+            rbd_pvc_for_pods,
+            pod_factory,
+            constants.CEPHBLOCKPOOL,
+            2,
         )
         pod_create_cephfs = executor.submit(
-            helpers.create_pods, cephfs_pvc_for_pods, pod_factory, constants.CEPHFILESYSTEM, 2
+            helpers.create_pods,
+            cephfs_pvc_for_pods,
+            pod_factory,
+            constants.CEPHFILESYSTEM,
+            2,
         )
 
         # Start creation of new CephFS PVCs.
@@ -432,16 +485,18 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         log.info(f"Killing daemons of {daemons_to_kill}")
         for node_name, pids in nodes_and_pids.items():
             # Command to kill the daemon
-            kill_cmd = (
-                f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
-            )
+            kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
             # Create node-kill process map for verifying the result
             node_and_kill_proc[node_name] = executor.submit(run_cmd, kill_cmd)
 
         # Verify daemon kill process
         for node_name, daemon_kill_proc in node_and_kill_proc.items():
             # Get the type of daemons killed on the particular node
-            resources = [disruption.resource for disruption in disruption_ops if disruption.daemon_pid in nodes_and_pids[node_name]]
+            resources = [
+                disruption.resource
+                for disruption in disruption_ops
+                if disruption.daemon_pid in nodes_and_pids[node_name]
+            ]
             # 'daemon_kill_proc' result will be an empty string if command is success
             cmd_out = daemon_kill_proc.result()
             assert isinstance(cmd_out, str) and (not cmd_out), (
@@ -528,15 +583,17 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         for pvc_obj, uuid in pvc_uuid_map.items():
             if pvc_obj.interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
-                    interface=constants.CEPHBLOCKPOOL, image_uuid=uuid, pool_name=pool_name
+                    interface=constants.CEPHBLOCKPOOL,
+                    image_uuid=uuid,
+                    pool_name=pool_name,
                 )
             if pvc_obj.interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
                     interface=constants.CEPHFILESYSTEM, image_uuid=uuid
                 )
-            assert ret, (
-                f"Volume associated with PVC {pvc_obj.name} still exists in the backend"
-            )
+            assert (
+                ret
+            ), f"Volume associated with PVC {pvc_obj.name} still exists in the backend"
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
@@ -549,8 +606,12 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
 
         # Verify that the new PVCs are usable by creating new pods
         log.info("Verify that the new PVCs are usable by creating new pods")
-        pod_objs_rbd_re = helpers.create_pods(pvc_objs_rbd_new, pod_factory, constants.CEPHBLOCKPOOL, 2)
-        pod_objs_cephfs_re = helpers.create_pods(pvc_objs_cephfs_new, pod_factory, constants.CEPHFILESYSTEM, 2)
+        pod_objs_rbd_re = helpers.create_pods(
+            pvc_objs_rbd_new, pod_factory, constants.CEPHBLOCKPOOL, 2
+        )
+        pod_objs_cephfs_re = helpers.create_pods(
+            pvc_objs_cephfs_new, pod_factory, constants.CEPHFILESYSTEM, 2
+        )
 
         # Verify pods are Running
         log.info("Verifying the pods are Running")
@@ -559,9 +620,16 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
-        log.info("Successfully created and verified the status of the pods using the new CephFS and RBD PVCs.")
+        log.info(
+            "Successfully created and verified the status of the pods using the new CephFS and RBD PVCs."
+        )
 
-        new_pods = pod_objs_rbd_new+ pod_objs_cephfs_new + pod_objs_rbd_re + pod_objs_cephfs_re
+        new_pods = (
+            pod_objs_rbd_new
+            + pod_objs_cephfs_new
+            + pod_objs_rbd_re
+            + pod_objs_cephfs_re
+        )
 
         # Do setup on the new pods for running IO
         log.info("Setting up the new pods for running IO.")
@@ -594,7 +662,9 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         log.info("Verified IO result on the new pods.")
 
         # Verify number of pods of each daemon type
-        final_num_resource_name = [len(pod_functions[resource_name]()) for resource_name in daemons_to_kill]
+        final_num_resource_name = [
+            len(pod_functions[resource_name]()) for resource_name in daemons_to_kill
+        ]
         assert final_num_resource_name == num_of_resource_pods, (
             f"Total number of pods of each type is not matching with "
             f"initial value. Total number of pods of each type before daemon kill: "

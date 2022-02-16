@@ -153,7 +153,9 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon is running
 
         """
-        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get("nodeName")
+        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
+            "nodeName"
+        )
         awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc debug node/{node_name} -- chroot /host ps ax | grep"
