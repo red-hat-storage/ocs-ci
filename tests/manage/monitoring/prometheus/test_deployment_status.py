@@ -92,30 +92,20 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mon.get("prometheus_alerts")
-    for target_label, target_msg, target_states, target_severity in [
-        (
-            constants.ALERT_MONQUORUMLOST,
-            "Storage quorum is lost",
-            ["pending", "firing"],
-            "critical",
-        ),
-        (
-            constants.ALERT_CLUSTERERRORSTATE,
-            "Storage cluster is in error state",
-            ["pending", "firing"],
-            "critical",
-        ),
-    ]:
-        prometheus.check_alert_list(
-            label=target_label,
-            msg=target_msg,
-            alerts=alerts,
-            states=target_states,
-            severity=target_severity,
-        )
-        api.check_alert_cleared(
-            label=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
-        )
+    target_label = constants.ALERT_MONQUORUMLOST
+    target_msg = "Storage quorum is lost"
+    target_states = ["pending", "firing"]
+
+    prometheus.check_alert_list(
+        label=target_label,
+        msg=target_msg,
+        alerts=alerts,
+        states=target_states,
+        severity="critical",
+    )
+    api.check_alert_cleared(
+        label=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+    )
 
 
 @tier4
