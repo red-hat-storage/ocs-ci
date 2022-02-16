@@ -129,7 +129,8 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
                 ][:num_pvc]
             )
         log.info(
-            f"PVCs selected for creating pods during disruption - {[pvc_obj.name for pvc_obj in cephfs_pvc_for_pods + rbd_pvc_for_pods]}"
+            f"PVCs selected for creating pods during disruption - "
+            f"{[pvc_obj.name for pvc_obj in cephfs_pvc_for_pods + rbd_pvc_for_pods]}"
         )
 
         # Remove the selected PVCs from the primary list
