@@ -136,7 +136,7 @@ class TestObjectIntegrity(MCGTest):
         full_object_path = f"s3://{bucketname}"
 
         # Touch create 100 empty files in pod
-        command = "for i in $(seq 1 100); do touch /data/test$i; done"
+        command = f"for i in $(seq 1 100); do touch {test_directory_setup.origin_dir}/test$i; done"
         awscli_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
         # Write all empty objects to the new bucket
         sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
