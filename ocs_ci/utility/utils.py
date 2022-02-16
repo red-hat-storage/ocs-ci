@@ -44,7 +44,6 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
     InteractivePromptException,
 )
-from ocs_ci.ocs.node import get_nodes
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -3592,20 +3591,3 @@ def disable_huge_pages():
     time.sleep(10)
     log.info("Waiting for machine config to be ready")
     wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
-
-
-def verify_huge_pages():
-    """
-    Verifies the higher page is set on the nodes
-
-    """
-    nodes = get_nodes()
-
-    for node in nodes:
-        if node.get()["status"]["allocatable"]["hugepages-2Mi"] == "64Mi":
-            log.info(f"Huge pages is enabled on {node.name}")
-            continue
-        else:
-            log.info(f"Huge pages is not applied on {node.name}")
-            return False
-    return True
