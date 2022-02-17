@@ -147,6 +147,10 @@ deployment_4_10 = {
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+    "choose_local_storage_version": (
+        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 generic_locators = {

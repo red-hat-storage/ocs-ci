@@ -10,7 +10,11 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disk_for_vsphere_platform,
+    setup_local_storage,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -366,6 +370,16 @@ class DeploymentUI(PageNavigator):
             )
         self.take_screenshot()
 
+    def create_lso_catalog_source(self):
+        """
+        Setup the necessary resources for enabling local storage.
+        [for non Ga'd OCP version]
+
+        """
+        ocp_ga_version = get_ocp_ga_version(self.ocp_version_semantic)
+        if self.ocp_version == "4.10" and not ocp_ga_version:
+            setup_local_storage(constants.LOCALSTORAGE_SC)
+
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """
         Search Operator on Installed Operators Page
@@ -377,7 +391,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version in ("4.7", "4.8", "4.9", "4.10"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -408,6 +422,7 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            self.create_lso_catalog_source()
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()

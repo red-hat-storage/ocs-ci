@@ -88,7 +88,8 @@ def setup_local_storage(storageclass):
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
         wait_for_machineconfigpool_status("all")
-
+        if config.DEPLOYMENT.get("ui_deployment", False):
+            return
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
         templating.load_yaml(constants.LOCAL_STORAGE_OPERATOR, multi_document=True)
