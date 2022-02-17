@@ -231,11 +231,12 @@ class DeploymentUI(PageNavigator):
             timeout_next = 30
         else:
             timeout_next = 600
+
+        self.enable_taint_nodes()
+
         self.do_click(
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
-
-        self.enable_taint_nodes()
 
         self.configure_encryption()
 
