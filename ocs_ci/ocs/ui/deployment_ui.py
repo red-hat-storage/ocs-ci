@@ -242,6 +242,7 @@ class DeploymentUI(PageNavigator):
         Install Internal Cluster
 
         """
+        time.sleep(600)
         logger.info("Click Internal")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(
