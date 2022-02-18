@@ -1,8 +1,25 @@
+import os
+from asyncio import constants
 import logging
+from platform import platform
+from ocs_ci.ocs.exceptions import ACMClusterDeployException
 
 from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.utils import get_ocp_version, get_running_cluster_id, expose_ocp_version
+from ocs_ci.ocs.constants import (
+    PLATFORM_XPATH_MAP,
+    ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
+    VSPHERE_CA_FILE_PATH,
+    DATA_DIR,
+    SSH_PRIV_KEY,
+    SSH_PUB_KEY,
+    ACM_OCP_RELEASE_IMG_URL_PREFIX,
+    ACM_VSPHERE_NETWORK,
+)
+from ocs_ci.framework import config
+from tests.conftest import cluster
 
 log = logging.getLogger(__name__)
 
@@ -103,3 +120,291 @@ class AcmPageNavigator(BaseUI):
         """
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
+
+
+class ACMOCPClusterDeployment(AcmPageNavigator):
+    """
+    Everything related to cluster creation through ACM goes here
+
+    """
+
+    def __init__(self, driver, platform, cluster_conf):
+        super().__init__(driver)
+        self.platform = platform
+        self.cluster_conf = cluster_conf
+
+    def create_cluster_prereq(self):
+        raise NotImplementedError("Child class has to implement this method")
+
+    def navigate_create_clusters_page(self):
+        # Navigate to Clusters page which has 'Create Cluster'/
+        # 'Import Cluster' buttons
+        # Here we click on "Create Cluster" and we will be in create cluster page
+        self.navigate_clusters_page()
+        self.do_click(locator=self.acm_page_nav["cc_create_cluster"])
+
+    def click_next_button(self):
+        self.do_click(self.acm_page_nav["cc_next_page_button"])
+
+    def send_keys_multiple(self, key_val):
+        """
+        In a page if we want to fill multiple text boxes we can use
+        this function which iteratively fills in values from the dictionary parameter
+
+        key_val (dict): keys corresponds to the xpath of text box, value corresponds
+            to the value to be filled in
+
+        """
+        for xpath, value in key_val.items():
+            self.do_send_keys(locator=xpath, text=value)
+
+    def click_platform_and_credentials(self):
+        self.navigate_create_clusters_page()
+        self.do_click(locator=self.acm_page_nav[PLATFORM_XPATH_MAP[self.platform]])
+        self.do_click(locator=self.acm_page_nav['cc_infrastructure_provider_creds_dropdown'])
+        credential = format_locator(
+            self.acm_page_nav['cc_infrastructure_provider_creds_select_creds'],
+            self.platform_credential_name
+        )
+        self.do_click(locator=credential)
+
+    def create_cluster(self, cluster_config=None):
+        """
+        Create cluster using ACM UI
+
+        Args:
+            cluster_config (Config): framework.Config object of complete configuration required
+                for deployment
+
+        """
+        raise NotImplementedError("Child class should implement this function")
+
+
+
+class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
+    """
+    This class handles all behind the scene activities
+    for cluster creation through ACM for vsphere platform
+
+    """
+
+    def __init__(self, driver, cluster_conf=None):
+        super().__init__(driver=driver, platform='vsphere', cluster_conf=cluster_conf)
+        self.platform_credential_name = (
+            cluster_conf.get(
+                'platform_credential_name',
+                f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{get_running_cluster_id()}"
+            )
+        )
+        # API VIP & Ingress IP
+        self.ips = None
+        self.vsphere_network = None
+
+    def create_cluster_prereq(self):
+        """
+        Perform all prereqs before vsphere cluster creation from ACM
+
+        """
+        # Create vsphre credentials
+        # Click on 'Add credential' in 'Infrastructure provider' page
+        self.navigate_create_clusters_page()
+        self.do_click(locator=self.acm_page_nav[PLATFORM_XPATH_MAP[self.platform]])
+
+        # "Basic vsphere credential info"
+        # 1. credential name
+        # 2. Namespace
+        # 3. Base DNS domain
+        self.do_click(locator=self.acm_page_nav["cc_provider_credentials"], timeout=100)
+        self.do_click(locator=self.acm_page_nav["cc_provider_creds_vsphere"])
+
+        basic_cred_dict = {
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_cred_name"
+            ]: self.platform_credential_name,
+            self.acm_page_nav["cc_provider_creds_vsphere_cred_namespace"]: f"default",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_base_dns"
+            ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
+        }
+        self.send_keys_multiple(basic_cred_dict)
+
+        # click on 'Next' button at the bottom
+        self.click_next_button()
+
+        # Detailed VMWare credentials section
+        # 1. vCenter server
+        # 2. vCenter username
+        # 3. vCenter password
+        # 4. cVenter root CA certificate
+        # 5. vSphere cluster name
+        # 6. vSphere datacenter
+        # 7. vSphere default  Datastore
+        with open(VSPHERE_CA_FILE_PATH, "r") as fp:
+            vsphere_ca = fp.read()
+        vsphere_creds_dict = {
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_vcenter_server"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_server']}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_username"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_user']}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_password"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_password']}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_rootca"
+            ]: f"{vsphere_ca}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_clustername"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_cluster']}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_dc"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_datacenter']}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_datastore"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_datastore']}"
+        }
+        self.send_keys_multiple(vsphere_creds_dict)
+        self.click_next_button()
+
+        # Pull Secret and SSH
+        # 1. Pull secret
+        # 2. SSH Private key
+        # 3. SSH Public key
+        with open(os.path.join(DATA_DIR, 'pull-secret'), "r") as fp:
+            pull_secret = fp.read()
+
+        with open(SSH_PUB_KEY, "r") as fp:
+            ssh_pub_key = fp.read()
+
+        with open(SSH_PRIV_KEY, "r") as fp:
+            ssh_priv_key = fp.read()
+
+        pull_secret_and_ssh = {
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_pullsecret"
+            ]: f"{pull_secret}",
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_ssh_privkey"
+            ]: f"{ssh_priv_key}" ,
+            self.acm_page_nav[
+                "cc_provider_creds_vsphere_ssh_pubkey"
+            ]: f"{ssh_pub_key}"
+        }
+        self.send_keys_multiple(pull_secret_and_ssh)
+        self.click_next_button()
+        self.do_click(locator=self.acm_page_nav['cc_provider_creds_vsphere_add_button'])
+        credential_table_entry = format_locator(
+            self.acm_page_nav['cc_cred_table_entry'],
+            self.platform_credential_name
+        )
+        if not self.check_element_presence(credential_table_entry):
+            raise ACMClusterDeployException("Could not create credentials for vsphere")
+        else:
+            log.info(
+                f"vsphere credential successfully created {self.platform_credential_name}"
+            )
+
+    def create_cluster(self):
+        """
+        This function navigates through following pages in the UI
+        1. Cluster details
+        2. Node poools
+        3. Networks
+        4. Proxy
+        5. Automation
+        6. Review
+        """
+        self.click_platform_and_credentials()
+        self.click_next_button()
+        self.fill_cluster_details_page()
+        self.click_next_button()
+        # For now we don't do anything in 'Node Pools' page
+        self.click_next_button()
+        self.fill_network_info()
+        self.click_next_button()
+        # Skip proxy for now
+        self.click_next_button()
+        # Skip Automation for now
+        self.click_next_button()
+        # We are at Review page
+        # Click on create
+        self.do_click(locator=self.acm_page_nav['cc_create_button'])
+        # We will be redirect to 'Details' page which has cluster deployment progress
+        try:
+            self.wait_for_deployment()
+        except ACMClusterDeployException:
+            log.error(f"Failed to deploy OCP cluster {self.cluster_conf.ENV_DATA['cluster_name']}")
+
+    def wait_for_deployment(self):
+        pass
+
+    def fill_network_info(self):
+        """
+        We need to fill following network info
+        1. vSphere network name
+        2. API VIP
+        3. Ingress VIP
+        """
+        from ocs_ci.deployment import vmware
+        # Switch context to cluster which we are about to create
+        prev_ctx = config.cur_index
+        config.switch_ctx(self.cluster_conf.MULTICLUSTER['multicluster_index'])
+        self.ips = vmware.assign_ips(2)
+        vmware.create_dns_records(self.ips)
+        self.vsphere_network = config.ENV_DATA.get('vm_network', ACM_VSPHERE_NETWORK)
+        config.switch_ctx(prev_ctx)
+
+        vsphere_network = {
+            self.acm_page_nav[
+                "cc_vsphere_network_name"
+            ]: self.vsphere_network,
+            self.acm_page_nav[
+                "cc_api_vip"
+            ]: f"{self.ips[0]}",
+            self.acm_page_nav[
+                "cc_ingress_vip"
+            ]: f"{self.ips[1]}"
+        }
+        self.send_keys_multiple(vsphere_network)
+
+    def fill_cluster_details_page(self):
+        """
+        Fill in following details in "Cluster details" page
+        1. Cluster name
+        2. Base DNS domain
+        3. Release image
+
+        """
+        release_img = self.get_ocp_release_img()
+        cluster_details = {
+            self.acm_page_nav[
+                'cc_cluster_name'
+            ]: f"{self.cluster_conf.ENV_DATA['cluster_name']}",
+            self.acm_page_nav[
+                'cc_base_dns_domain'
+            ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
+            self.acm_page_nav[
+                'cc_openshift_release_image'
+            ]:f"{release_img}"
+        }
+        self.send_keys_multiple(cluster_details)
+
+    def get_ocp_release_img(self):
+        vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT['installer_version'])
+        return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}{vers}"
+
+
+class dispatcher(object):
+    def __init__(self):
+        # All platform specific classes should have map here
+        self.platform_map = {
+            'vsphereipi': ACMOCPPlatformVsphereIPI
+        }
+
+    def get_platform_instance(self, cluster_config):
+        platform_deployment = (
+            f"{cluster_config.ENV_DATA['platform']}"
+            f"{cluster_config.ENV_DATA['deployment_type']}"
+        )
+        return self.platform_map[platform_deployment]

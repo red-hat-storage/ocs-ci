@@ -524,6 +524,30 @@ acm_configuration = {
         "//button[normalize-space()='Failed']",
         By.XPATH,
     ),
+    "cc_cluster_status_page_status_creating": (
+        "//button[normalize-space()='Creating']",
+        By.XPATH
+    ),
+    "cc_cluster_status_page_status_ready": (
+        "//button[normalize-space()='Ready']",
+        By.XPATH
+    ),
+    "cc_cluster_status_page_download_configuration": (
+        "//button[@id='download-configuration']",
+        By.XPATH
+    ),
+    "cc_cluster_status_page_download_config_install_config": (
+        "//a[normalize-space()='install-config']",
+        By.XPATH
+    ),
+    "cc_cluster_status_page_download_config_kubeconfig": (
+        "//a[normalize-space()='kubeconfig']",
+        By.XPATH
+    ),
+    "cc_cred_table_entry": (
+        "//a[normalize-space()={}]",
+        By.XPATH
+    ),
 }
 
 add_capacity = {

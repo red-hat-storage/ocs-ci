@@ -201,3 +201,31 @@ class Submariner(object):
         """
         # Always return the first worker node
         return get_typed_worker_nodes()[0]
+
+
+class OCPDeployWithACM(object):
+    """
+    When we instantiate this class, the assumption is we already have
+    an OCP cluster with ACM installed and current context is ACM
+
+    """
+    def __init__(self, mode, acm_instance=None):
+        """
+        mode (str): ex:regional_dr
+        acm_instance (dict): existing acm config if any
+
+        """
+        self.mode = mode
+        self.acm_instance = acm_instance
+
+    def deploy_ocp(self):
+        """
+        We deploy new OCP clusters using ACM
+        Note: Importing cluster through ACM has been implemented as part
+        of Jenkins pipeline
+        """
+        self.deploy_ocp_with_acm()
+
+    def deploy_ocp_with_acm(self):
+        # Invoke ocp deploy with ACM UI function
+        pass
