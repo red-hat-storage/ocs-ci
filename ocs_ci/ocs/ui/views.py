@@ -469,8 +469,12 @@ acm_configuration = {
     "cc_networks": ("//div[contains(text(),'Networks')]", By.XPATH),
     "cc_proxy": ("//div[contains(text(),'Proxy')]", By.XPATH),
     "cc_review": ("//button[normalize-space()='Review']", By.XPATH),
-    "cc_infrastructure_provider_creds": (
+    "cc_infrastructure_provider_creds_dropdown": (
         "input[placeholder='Select a credential']",
+        By.CSS_SELECTOR,
+    ),
+    "cc_infrastructure_provider_creds_select_creds": (
+        "//button[normalize-space()='{}']",
         By.XPATH,
     ),
     "cc_provider_credentials": ("//div[@id='add-provider-connection']", By.XPATH),
