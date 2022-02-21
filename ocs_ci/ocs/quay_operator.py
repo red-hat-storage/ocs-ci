@@ -184,8 +184,7 @@ def get_super_user_token(endpoint):
         data=data,
         verify=False,
     )
-    logging.info(f"respose {r.text}")
-    logging.info(f"respose {r.json()['access_token']}")
+    logging.info(f"response {r.json()['access_token']}")
     return r.json()["access_token"]
 
 
@@ -202,8 +201,7 @@ def check_super_user(endpoint, token):
         },
         verify=False,
     )
-    logging.info(f"respose {r.text}")
-    logging.info(f"respose {r.json()}")
+    logging.info(f"response {r.json()}")
 
 
 def create_quay_org(endpoint, token, org_name):
@@ -221,8 +219,7 @@ def create_quay_org(endpoint, token, org_name):
         data=data,
         verify=False,
     )
-    logging.info(f"response {r.text}")
-    logging.info(f"respose {r.json()}")
+    logging.info(f"response {r.json()}")
 
 
 def create_quay_repository(endpoint, token, repo_name, org_name):
@@ -240,8 +237,7 @@ def create_quay_repository(endpoint, token, repo_name, org_name):
         data=data,
         verify=False,
     )
-    logging.info(f"respose {r.text}")
-    logging.info(f"respose {r.json()}")
+    logging.info(f"response {r.json()}")
 
 
 def delete_quay_repository(endpoint, token, org, repo):
@@ -257,8 +253,7 @@ def delete_quay_repository(endpoint, token, org, repo):
         },
         verify=False,
     )
-    logging.info(f"respose {r.text}")
-    logging.info(f"respose {r.json()}")
+    logging.info(f"response {r.json()}")
 
 
 @retry(CommandFailed, tries=10, delay=5, backoff=1)

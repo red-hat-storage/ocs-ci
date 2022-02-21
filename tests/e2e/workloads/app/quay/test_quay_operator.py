@@ -96,34 +96,32 @@ class TestQuayWorkload(E2ETest):
 
         log.info("Validating super user using token")
         check_super_user(endpoint, token)
-        # token = "SFMFB4DRKFXK9R4YS8SPF8Y9OQ098C09H5WBDVM6"
 
         podman_url = endpoint.replace('https://', '')
         log.info("Logging into quay endpoint")
         quay_super_user_login(podman_url)
-        org_name = "test"
-        create_quay_org(endpoint, token, org_name)
 
         repo_name = "test_repo"
+        test_image = f"quayadmin/{repo_name}:latest"
         create_quay_repository(endpoint, token, org_name="quayadmin", repo_name=repo_name)
 
         log.info("Tagging test image")
         exec_cmd(
-            f"podman tag quay.io/ocsci/cosbench:latest {podman_url}/quayadmin/{repo_name}:latest"
+            f"podman tag quay.io/ocsci/cosbench:latest {podman_url}/{test_image}"
         )
 
         log.info("Pushing")
         exec_cmd(
-            f"podman push {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+            f"podman push {podman_url}/quayadmin/{test_image} --tls-verify=false"
         )
         log.info("Pulling")
         exec_cmd(
-            f"podman pull {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+            f"podman pull {podman_url}/quayadmin/{test_image} --tls-verify=false"
         )
 
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
-                label=self.labels_map["noobaa_core"],
+                label="noobaa_core",
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             )[0]
         )
@@ -135,10 +133,14 @@ class TestQuayWorkload(E2ETest):
             timeout=800,
             sleep=60,
         )
-        # self.cl_obj.wait_for_noobaa_health_ok()
         log.info("Pulling again")
         exec_cmd(
-            f"podman pull {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+            f"podman pull {podman_url}/{test_image} --tls-verify=false"
         )
 
-        delete_quay_repository(endpoint, token, org_name, repo_name)
+        log.info("Deleting repo")
+        delete_quay_repository(endpoint, token, org="quayadmin", repo=repo_name)
+
+        org_name = "test"
+        log.info("Creating new org")
+        create_quay_org(endpoint, token, org_name)
