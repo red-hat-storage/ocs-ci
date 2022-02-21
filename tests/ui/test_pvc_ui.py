@@ -260,8 +260,8 @@ class TestPvcUserInterface(object):
         pvc_ui_obj.pvc_clone_ui(
             project_name=project_name,
             pvc_name=pvc_name,
-            clone_name=clone_pvc_name,
-            clone_access_mode=clone_access_mode,
+            cloned_pvc_access_mode=clone_access_mode,
+            cloned_pvc_name=clone_pvc_name,
         )
 
         teardown_factory(
