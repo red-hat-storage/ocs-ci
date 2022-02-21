@@ -1,5 +1,6 @@
 import logging
 from time import sleep
+import requests
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
@@ -11,9 +12,10 @@ from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd, exec_cmd
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +138,13 @@ class QuayOperator(object):
             else False
         )
 
+    def get_quay_endpoint(self):
+        """
+        Returns quay endpoint
+
+        """
+        return self.quay_registry.get().get("status").get("registryEndpoint")
+
     def teardown(self):
         """
         Quay operator teardown
@@ -159,3 +168,101 @@ class QuayOperator(object):
                 f"delete {constants.CLUSTER_SERVICE_VERSION} "
                 f"{self.quay_operator_csv}"
             )
+
+
+def get_super_user_token(endpoint):
+    """
+    Gets the initialized super user token.
+    This is one time, cant get the token again once initialized.
+
+    """
+    data = '{"username": "quayadmin", "password": "quaypass123", "email": "quayadmin@example.com", "access_token": true}'
+
+    r = requests.post(
+        f"{endpoint}/api/v1/user/initialize",
+        headers={"content-type": "application/json"},
+        data=data,
+        verify=False,
+    )
+    logging.info(f"respose {r.text}")
+    logging.info(f"respose {r.json()['access_token']}")
+    return r.json()["access_token"]
+
+
+def check_super_user(endpoint, token):
+    """
+    Validates the super user based on the token
+
+    """
+    r = requests.get(
+        f"{endpoint}/api/v1/superuser/users/",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        verify=False,
+    )
+    logging.info(f"respose {r.text}")
+    logging.info(f"respose {r.json()}")
+
+
+def create_quay_org(endpoint, token, org_name):
+    """
+    Creates an organization in quay
+
+    """
+    data = f'{{"recaptcha_response": "string", "name": "{org_name}", "email": "{org_name}@test.com"}}'
+    r = requests.post(
+        f"{endpoint}/api/v1/organization/",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        data=data,
+        verify=False,
+    )
+    logging.info(f"response {r.text}")
+    logging.info(f"respose {r.json()}")
+
+
+def create_quay_repository(endpoint, token, repo_name, org_name):
+    """
+    Creates a quay repository
+
+    """
+    data = f'{{"namespace": "{org_name}", "repository": "{repo_name}", "description":"descriptionofyourrepo", "visibility": "public"}}'
+    r = requests.post(
+        f"{endpoint}/api/v1/repository",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        data=data,
+        verify=False,
+    )
+    logging.info(f"respose {r.text}")
+    logging.info(f"respose {r.json()}")
+
+
+def delete_quay_repository(endpoint, token, org, repo):
+    """
+    Deletes the quay repository
+
+    """
+    r = requests.post(
+        f"{endpoint}/api/v1/repository/{org}/{repo}",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        verify=False,
+    )
+    logging.info(f"respose {r.text}")
+    logging.info(f"respose {r.json()}")
+
+
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
+def quay_super_user_login(url):
+    exec_cmd(
+        f"podman login {url} -u quayadmin -p quaypass123 --tls-verify=false"
+    )

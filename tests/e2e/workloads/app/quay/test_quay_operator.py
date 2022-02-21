@@ -1,10 +1,23 @@
 import logging
+from time import sleep
+
 import pytest
+import requests
 
 from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, config
+from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.quay_operator import QuayOperator
+from ocs_ci.ocs.quay_operator import (
+    QuayOperator,
+    create_quay_repository,
+    get_super_user_token,
+    delete_quay_repository,
+    create_quay_org,
+    check_super_user, quay_super_user_login,
+)
+from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
 
@@ -57,3 +70,75 @@ class TestQuayWorkload(E2ETest):
             ).get()["status"]["phase"]
             == "Bound"
         )
+
+    @pytest.mark.polarion_id("OCS-2596")
+    @skipif_ocs_version("<4.6")
+    def test_quay_with_failures(self, quay_operator):
+        """
+        Test quay operations with Noobaa core failure
+
+        """
+        # Deploy quay operator
+        quay_operator.setup_quay_operator()
+
+        # Create quay registry
+        quay_operator.create_quay_registry()
+
+        endpoint = quay_operator.get_quay_endpoint()
+        log.info(endpoint)
+        sleep(60)
+        log.info("Pulling test image")
+        exec_cmd("podman pull quay.io/ocsci/cosbench:latest")
+
+        log.info("Getting Super user token")
+        token = get_super_user_token(endpoint)
+        log.info(token)
+
+        log.info("Validating super user using token")
+        check_super_user(endpoint, token)
+        # token = "SFMFB4DRKFXK9R4YS8SPF8Y9OQ098C09H5WBDVM6"
+
+        podman_url = endpoint.replace('https://', '')
+        log.info("Logging into quay endpoint")
+        quay_super_user_login(podman_url)
+        org_name = "test"
+        create_quay_org(endpoint, token, org_name)
+
+        repo_name = "test_repo"
+        create_quay_repository(endpoint, token, org_name="quayadmin", repo_name=repo_name)
+
+        log.info("Tagging test image")
+        exec_cmd(
+            f"podman tag quay.io/ocsci/cosbench:latest {podman_url}/quayadmin/{repo_name}:latest"
+        )
+
+        log.info("Pushing")
+        exec_cmd(
+            f"podman push {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+        )
+        log.info("Pulling")
+        exec_cmd(
+            f"podman pull {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+        )
+
+        pod_obj = pod.Pod(
+            **pod.get_pods_having_label(
+                label=self.labels_map["noobaa_core"],
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            )[0]
+        )
+        pod_obj.delete(force=True)
+        assert pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=self.labels_map["noobaa_core"],
+            resource_count=1,
+            timeout=800,
+            sleep=60,
+        )
+        # self.cl_obj.wait_for_noobaa_health_ok()
+        log.info("Pulling again")
+        exec_cmd(
+            f"podman pull {podman_url}/quayadmin/{repo_name}:latest --tls-verify=false"
+        )
+
+        delete_quay_repository(endpoint, token, org_name, repo_name)
