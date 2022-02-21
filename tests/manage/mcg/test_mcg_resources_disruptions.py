@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import cluster, constants, defaults, ocp
+from ocs_ci.ocs.bucket_utils import get_db_scc_and_sa
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
@@ -172,8 +173,7 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         # Teardown function to revert back the scc changes made
         def finalizer():
-            scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+            scc_name, service_account = get_db_scc_and_sa()
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
@@ -237,8 +237,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
 
         """
-        scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+        scc_name, service_account = get_db_scc_and_sa()
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],
