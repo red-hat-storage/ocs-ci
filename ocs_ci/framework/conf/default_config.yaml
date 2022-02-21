@@ -197,6 +197,7 @@ ENV_DATA:
   rhel_version_for_ansible: 7
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
+  cluster_type: ""
 
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
