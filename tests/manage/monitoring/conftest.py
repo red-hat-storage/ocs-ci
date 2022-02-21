@@ -217,9 +217,10 @@ def measure_corrupt_pg(request, measurement_dir):
 
     Returns:
         dict: Contains information about `start` and `stop` time for
-        corrupting Ceph Placement Group
+            corrupting Ceph Placement Group
     """
-    osd_pod = pod.get_osd_pods()[0]
+    osd_deployment = deployment.get_osd_deployments()[0]
+    original_deployment_revision = osd_deployment.revision
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name("corrupted", "pool")
     ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
@@ -229,6 +230,8 @@ def measure_corrupt_pg(request, measurement_dir):
         Make sure that corrupted pool is deleted and ceph health is ok
         """
         nonlocal pool_name
+        nonlocal osd_deployment
+        nonlocal original_deployment_revision
         logger.info(f"Deleting pool {pool_name}")
         ct_pod.exec_ceph_cmd(
             f"ceph osd pool delete {pool_name} {pool_name} "
@@ -237,6 +240,11 @@ def measure_corrupt_pg(request, measurement_dir):
         logger.info("Unsetting osd noout flag")
         ct_pod.exec_ceph_cmd("ceph osd unset noout")
         logger.info(f"Checking that pool {pool_name} is deleted")
+        logger.info(
+            f"Restoring deployment {osd_deployment.name} "
+            f"to its original revision: {revision}"
+        )
+        osd_deployment.set_revision(original_deployment_revision)
         # wait for ceph to return into HEALTH_OK state after osd deployment
         # is returned back to normal
         ceph_health_check(tries=20, delay=15)
@@ -269,14 +277,13 @@ def measure_corrupt_pg(request, measurement_dir):
         run_time = 60 * 12
         nonlocal pool_object
         nonlocal pgid
-        nonlocal osd_pod
+        nonlocal osd_deployment
 
-        osd_pod_name = osd_pod.get("metadata").get("name")
-        logger.info(f"Corrupting {pgid} PG on {osd_pod_name}")
-        rados_utils.corrupt_pg(osd_pod, pool_object, pgid)
+        logger.info(f"Corrupting {pgid} PG on {osd_deployment.name}")
+        rados_utils.corrupt_pg(osd_deployment, pool_object, pgid)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return osd_pod_name
+        return osd_deployment.name
 
     test_file = os.path.join(measurement_dir, "measure_corrupt_pg.json")
     measured_op = measure_operation(corrupt_pg, test_file)

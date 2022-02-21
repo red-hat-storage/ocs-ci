@@ -858,6 +858,9 @@ OCP_PEM = "ops-mirror.pem"
 # playbooks
 SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
 
+# annotations
+REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
+
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
