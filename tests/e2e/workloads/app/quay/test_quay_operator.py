@@ -2,7 +2,6 @@ import logging
 from time import sleep
 
 import pytest
-import requests
 
 from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
 from ocs_ci.framework.testlib import E2ETest, workloads, config
@@ -112,11 +111,11 @@ class TestQuayWorkload(E2ETest):
 
         log.info("Pushing")
         exec_cmd(
-            f"podman push {podman_url}/quayadmin/{test_image} --tls-verify=false"
+            f"podman push {podman_url}/{test_image} --tls-verify=false"
         )
         log.info("Pulling")
         exec_cmd(
-            f"podman pull {podman_url}/quayadmin/{test_image} --tls-verify=false"
+            f"podman pull {podman_url}/{test_image} --tls-verify=false"
         )
 
         pod_obj = pod.Pod(
