@@ -3741,6 +3741,7 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     dep_obj = OCP(
         kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
+    good_mon_id = mon_pod_running.get().get("metadata").get("labels").get("mon")
     if is_lso_cluster():
         mon = mon_pod_running.get().get("metadata").get("labels").get("mon")
         mon_deployment_name = f"rook-ceph-mon-{mon}"
@@ -3750,33 +3751,30 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         )
     running_mon_pod_yaml = dep_obj.get(resource_name=mon_deployment_name)
 
-    # Patch the mon Deployment to run a sleep
-    # instead of the ceph-mon command
+    # Patch the good mon Deployment so that deployment to stop the working of this mon without deleting the mon pod
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to set 'initialDelaySeconds: 2000'"
+    )
+    params = (
+        '[{"op":"remove", "path":"/spec/template/spec/containers/0/livenessProbe"}]'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 2000'"
+    )
+
     logger.info(
         f"Edit mon {mon_deployment_name} deployment to run a sleep instead of the ceph-mon command"
     )
     params = (
-        '{"spec": {"template": {"spec": '
-        '{"containers": [{"name": "mon", "command": ["sleep", "infinity"], "args": []}]}}}}'
+        '{"spec": {"template": {"spec": {"containers": '
+        '[{"name": "mon", "command": ["sleep", "infinity"], "args": []}]}}}}'
     )
     dep_obj.patch(
         resource_name=mon_deployment_name, params=params, format_type="strategic"
     )
     logger.info(
         f"Deployment {mon_deployment_name} successfully set to sleep instead of the ceph-mon command"
-    )
-
-    # Set 'initialDelaySeconds: 2000' so that pod doesn't restart
-    logger.info(
-        f"Edit mon {mon_deployment_name} deployment to set 'initialDelaySeconds: 2000'"
-    )
-    params = (
-        '[{"op": "replace", '
-        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":2000}]'
-    )
-    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
-    logger.info(
-        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 2000'"
     )
 
     # rsh to mon pod and run commands to remove lost mons
@@ -3816,23 +3814,17 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     command = f"monmaptool --print {monmap_path}"
     mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
 
-    # Take a backup of current monmap
-    backup_of_monmap_path = "/tmp/monmap.current"
-    logger.info(f"Take a backup of current monmap in location {backup_of_monmap_path}")
-    command = f"cp {monmap_path} {backup_of_monmap_path}"
-    mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
-
     # Remove the crashed mon from the monmap
     logger.info("Remove the crashed mon from the monmap")
     for mon_id in ceph_mon_daemon_id:
-        command = f"monmaptool {backup_of_monmap_path} --rm {mon_id}"
+        command = f"monmaptool {monmap_path} --rm {mon_id}"
         mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
     logger.info("Successfully removed the crashed mon from the monmap")
 
     # Inject the monmap back to the monitor
     logger.info("Inject the new monmap back to the monitor")
     args_from_mon_containers.pop()
-    args_from_mon_containers.append(f"--inject-monmap={backup_of_monmap_path}")
+    args_from_mon_containers.append(f"--inject-monmap={monmap_path}")
     inject_monmap = " ".join(args_from_mon_containers).translate(
         "()".maketrans("", "", "()")
     )
@@ -3840,29 +3832,71 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
     mon_pod_running.exec_cmd_on_pod(command=command)
     args_from_mon_containers.pop()
 
-    # Patch the mon deployment to run "mon" command again
-    logger.info(f"Edit mon {mon_deployment_name} deployment to run mon command again")
-    params = (
-        f'{{"spec": {{"template": {{"spec": {{"containers": '
-        f'[{{"name": "mon", "command": ["ceph-mon"], "args": {json.dumps(args_from_mon_containers)}}}]}}}}}}}}'
+    # Edit the Rook configmaps
+    logger.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
-    dep_obj.patch(resource_name=mon_deployment_name, params=params)
-    logger.info(
-        f"Deployment {mon_deployment_name} successfully set to run mon command again"
+    output_get = configmap_obj.get(resource_name=constants.ROOK_CEPH_MON_ENDPOINTS)
+    new_data = output_get["data"]
+    new_data["data"] = ",".join(
+        [value for value in new_data["data"].split(",") if f"{good_mon_id}=" in value]
     )
+    params = f'{{"data": {json.dumps(new_data)}}}'
+    configmap_obj.patch(
+        resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
+        params=params,
+        format_type="strategic",
+    )
+    logger.info(f"Configmap {constants.ROOK_CEPH_MON_ENDPOINTS} edited successfully")
 
-    # Set 'initialDelaySeconds: 10' back
     logger.info(
-        f"Edit mon {mon_deployment_name} deployment to set again 'initialDelaySeconds: 10'"
+        "Patch the rook-ceph-config secret and update mon_host and mon_initial_members"
     )
+    svc_obj = OCP(
+        kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    command = f"get svc {mon_deployment_name} -o jsonpath=" "{.spec.clusterIP}" ""
+    mon_host = svc_obj.exec_oc_cmd(command=command)
     params = (
-        '[{"op": "replace", '
-        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":10}]'
+        '{"stringData": {"mon_host": "[v2:'
+        f"{mon_host}"
+        ":3300,v1:"
+        f"{mon_host}"
+        ':6789]", "mon_initial_members": '
+        f'"{good_mon_id}"'
+        "}}"
     )
-    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
-    logger.info(
-        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 10'"
+    secret_obj = OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
+    secret_obj.patch(resource_name="rook-ceph-config", params=params)
+    logger.info("Updated mon_host and mon_initial_members of rook-ceph-config secret")
+
+    # Restart the mon
+    mon_dir = tempfile.mkdtemp(prefix="mon_")
+    yaml_file = f"{mon_dir}/{good_mon_id}.yaml"
+    templating.dump_data_to_temp_yaml(running_mon_pod_yaml, yaml_file)
+    command = f"replace --force -f {yaml_file}"
+    ocp_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    ocp_obj.exec_oc_cmd(command=command)
+    time.sleep(60)
+
+    # Delete the mon deployments that are no longer expected to be in quorum
+    for mon_pod in pod.get_mon_pods():
+        if mon_pod.get().get("metadata").get("labels").get("mon") != good_mon_id:
+            if is_lso_cluster():
+                mon = mon_pod_running.get().get("metadata").get("labels").get("mon")
+                mon_deployment = f"rook-ceph-mon-{mon}"
+                dep_obj.delete(resource_name=mon_deployment)
+            else:
+                mon_deployment = (
+                    mon_pod.get().get("metadata").get("labels").get("pvc_name")
+                )
+                dep_obj.delete(resource_name=mon_deployment)
 
     # Scale up the rook-ceph-operator deployment
     logger.info("Scale up rook-ceph-operator")
