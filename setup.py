@@ -22,7 +22,7 @@ setup(
         "requests==2.23.0",
         "paramiko==2.7.2",
         "pyyaml>=4.2b1",
-        "jinja2==2.11.3",
+        "jinja2==3.0.3",
         "openshift==0.11.2",
         "boto3==1.14.7",
         "munch==2.5.0",
