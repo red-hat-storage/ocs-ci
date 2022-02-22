@@ -21,6 +21,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bmpsi,
     bugzilla,
     skipif_external_mode,
+    skipif_ms_consumer,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -232,6 +233,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @ignore_leftovers
 @skipif_bmpsi
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -273,6 +275,7 @@ class TestNodeReplacement(ManageTest):
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
