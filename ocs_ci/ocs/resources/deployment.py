@@ -3,12 +3,14 @@ General Deployment object
 """
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.ocp import OCP
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class Deployment(OCS):
@@ -36,7 +38,10 @@ class Deployment(OCS):
         selectors = self.data.get("spec").get("selector").get("matchLabels")
         selectors = [f"{key}={selectors[key]}" for key in selectors.keys()]
         selectors_string = ",".join(selectors)
-        return get_pods_having_label(selectors_string, self.namespace)
+        return [
+            Pod(**pod_data)
+            for pod_data in get_pods_having_label(selectors_string, self.namespace)
+        ]
 
     @property
     def replicas(self):
@@ -46,7 +51,19 @@ class Deployment(OCS):
         Returns:
             int: Number of replicas
         """
+        self.reload()
         return self.data.get("status").get("replicas")
+
+    @property
+    def available_replicas(self):
+        """
+        Returns number of available replicas for the deployment
+
+        Returns:
+            int: Number of replicas
+        """
+        self.reload()
+        return self.data.get("status").get("availableReplicas", 0)
 
     @property
     def revision(self):
@@ -56,6 +73,7 @@ class Deployment(OCS):
         Returns:
             str: revision number
         """
+        self.reload()
         return (
             self.data.get("metadata")
             .get("annotations")
@@ -70,8 +88,8 @@ class Deployment(OCS):
             replicas (int): number of required replicas
             resource_name (str): name of resouce to querry the revision
         """
-        resource_name = resource_name or self.resource_name
-        cmd = b"scale --replicas {replicas} {self.kind}/{resource_name}"
+        resource_name = resource_name or self.name
+        cmd = f"scale --replicas {replicas} {self.kind}/{resource_name}"
         self.ocp.exec_oc_cmd(cmd)
 
     def set_revision(self, revision, resource_name=None):
@@ -82,9 +100,45 @@ class Deployment(OCS):
             revision (int): revision number of the resource
             resource_name (str): name of resouce to querry the revision
         """
-        resource_name = resource_name or self.resource_name
-        cmd = b"rollout undo {self.kind}/{resource_name} --to-revision={revision}"
+        resource_name = resource_name or self.name
+        cmd = f"rollout undo {self.kind}/{resource_name} --to-revision={revision}"
         self.ocp.exec_oc_cmd(cmd)
+
+    def wait_for_available_replicas(self, timeout=15, sleep=3):
+        """
+        Wait for number of available replicas reach number of desired replicas.
+
+        Args:
+            timeout (int): Timeout in seconds
+            sleep (int): Sleep interval in seconds
+        """
+        desired_replicas = self.replicas
+        if desired_replicas == None:
+            logger.warning("Number of desired replicas is missing. Trying to reload.")
+            for _ in TimeoutSampler(30, 5, func=self.reload):
+                desired_replicas = self.data.get("status").get("replicas")
+                if desired_replicas != None:
+                    break
+        logger.info(
+            f"Waiting for deployment {self.name} to reach "
+            f"desired number of replicas ({desired_replicas})"
+        )
+
+        def _get_available_replicas():
+            nonlocal desired_replicas
+            available_replicas = self.available_replicas
+            logger.info(
+                f"Deployment/{self.name}: {available_replicas} of {desired_replicas} available"
+            )
+            return available_replicas
+
+        for available_replicas in TimeoutSampler(360, 2, func=_get_available_replicas):
+            if available_replicas == desired_replicas:
+                logger.info(
+                    f"Deployment {self.name} reached "
+                    f"desired number of replicas ({available_replicas})"
+                )
+                break
 
 
 def get_deployments_having_label(label, namespace):
