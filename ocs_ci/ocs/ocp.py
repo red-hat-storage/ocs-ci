@@ -19,7 +19,6 @@ from ocs_ci.ocs.exceptions import (
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
-from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
@@ -132,6 +131,12 @@ class OCP(object):
         oc_cmd = "oc "
         # Managed services multicluster run - Use provider cluster in certain cases
         # TODO: Create a better solution to switch context when needed
+        # Importing here to avoid circular import
+        from ocs_ci.ocs.utils import (
+            get_primary_cluster_config,
+            get_provider_cluster_config,
+        )
+
         if (
             config.multicluster
             and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"

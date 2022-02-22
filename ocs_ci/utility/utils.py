@@ -44,7 +44,6 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
     InteractivePromptException,
 )
-from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -571,6 +570,9 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     original_cmd = cmd
     # Managed services multicluster run - Use provider cluster in certain cases
     # TODO: Create a better solution to switch context when needed
+    # Importing here to avoid circular import
+    from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
+
     if (
         "--kubeconfig " not in original_cmd
         and config.multicluster
