@@ -177,6 +177,19 @@ class BaseUI:
         )
         return len(element_list) > 0
 
+    def get_element_by_xpath(self, xpath=""):
+        """
+        Get elements by xpath
+
+        Args:
+            xpath (string): GUI xpath
+
+        Return:
+            list: list of webelements
+
+        """
+        return self.driver.find_elements_by_xpath(xpath)
+
     def get_element_text(self, locator):
         """
         Get the inner text of an element in locator.

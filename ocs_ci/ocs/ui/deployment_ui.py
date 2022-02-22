@@ -259,6 +259,15 @@ class DeploymentUI(PageNavigator):
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
+        if self.ocp_version_full == version.VERSION_4_10:
+            sample = TimeoutSampler(
+                timeout=1500,
+                sleep=100,
+                func=self.get_number_rows,
+            )
+            if not sample.wait_for_func_status(result=True):
+                logger.error("Worker nodes do not appear in the Selected nodes list")
+
         self.configure_osd_size()
 
         logger.info("Select all worker nodes")
@@ -277,6 +286,27 @@ class DeploymentUI(PageNavigator):
             self.configure_encryption()
 
         self.create_storage_cluster()
+
+    def get_number_rows(self, expected_rows=3):
+        """
+        Verify the number of rows in node table is greater or
+        equal to expected_rows
+        Args:
+            expected_rows (int): the expected rows in node table
+        Returns:
+            bool: return true if the number of rows in node table is
+                  greater or equal to expected_rows, otherwise return false
+        """
+        row_web_elements = self.get_element_by_xpath(xpath="//table/tbody/tr")
+        if len(row_web_elements) >= expected_rows:
+            return True
+        try:
+            self.refresh_page()
+            self.do_click(locator=self.dep_loc["next"])
+        except Exception as e:
+            logger.error(e)
+        self.take_screenshot()
+        return False
 
     def create_storage_cluster(self):
         """
