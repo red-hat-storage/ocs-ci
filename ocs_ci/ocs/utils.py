@@ -1269,5 +1269,5 @@ def get_provider_cluster_config():
 
     """
     for cluster in ocsci_config.clusters:
-        if cluster.ENV_DATA.get('cluster_type') == "provider":
+        if cluster.ENV_DATA.get("cluster_type") == "provider":
             return cluster

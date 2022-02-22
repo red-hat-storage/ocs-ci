@@ -132,10 +132,18 @@ class OCP(object):
         oc_cmd = "oc "
         # Managed services multicluster run - Use provider cluster in certain cases
         # TODO: Create a better solution to switch context when needed
-        if config.multicluster and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer" and any(res_type in command.lower() for res_type in ["cephfilesystem", "cephblockpool"]):
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+            and any(
+                res_type in command.lower()
+                for res_type in ["cephfilesystem", "cephblockpool"]
+            )
+        ):
             provider_cluster_config = get_provider_cluster_config()
             cluster_dir_kubeconfig = os.path.join(
-                provider_cluster_config.ENV_DATA["cluster_path"], provider_cluster_config.RUN.get("kubeconfig_location")
+                provider_cluster_config.ENV_DATA["cluster_path"],
+                provider_cluster_config.RUN.get("kubeconfig_location"),
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
@@ -143,7 +151,8 @@ class OCP(object):
             env_kubeconfig = os.getenv("KUBECONFIG")
             if not env_kubeconfig or not os.path.exists(env_kubeconfig):
                 cluster_dir_kubeconfig = os.path.join(
-                    config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                    config.ENV_DATA["cluster_path"],
+                    config.RUN.get("kubeconfig_location"),
                 )
                 if os.path.exists(cluster_dir_kubeconfig):
                     oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "

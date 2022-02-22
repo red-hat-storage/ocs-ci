@@ -481,7 +481,7 @@ def default_storage_class(
         config.DEPLOYMENT["external_mode"]
         or (
             config.multicluster
-            and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer"
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
         )
         or config.ENV_DATA.get("cluster_type") == "consumer"
     )
@@ -3023,7 +3023,7 @@ def default_volumesnapshotclass(interface_type):
         config.DEPLOYMENT["external_mode"]
         or (
             config.multicluster
-            and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer"
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
         )
         or config.ENV_DATA.get("cluster_type") == "consumer"
     )

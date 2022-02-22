@@ -571,9 +571,19 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     original_cmd = cmd
     # Managed services multicluster run - Use provider cluster in certain cases
     # TODO: Create a better solution to switch context when needed
-    if "--kubeconfig " not in original_cmd and config.multicluster and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer" and any(res_type in original_cmd.lower() for res_type in ["cephfilesystem", "cephblockpool"]):
+    if (
+        "--kubeconfig " not in original_cmd
+        and config.multicluster
+        and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        and any(
+            res_type in original_cmd.lower()
+            for res_type in ["cephfilesystem", "cephblockpool"]
+        )
+    ):
         log.debug("Switching to provider")
-        config.switch_ctx(get_provider_cluster_config().MULTICLUSTER["multicluster_index"])
+        config.switch_ctx(
+            get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+        )
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
@@ -604,7 +614,15 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
             f"\nError is {masked_stderr}"
         )
     # TODO: Create a better solution to switch context when needed
-    if "--kubeconfig " not in original_cmd and config.multicluster and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer" and any(res_type in original_cmd.lower() for res_type in ["cephfilesystem", "cephblockpool"]):
+    if (
+        "--kubeconfig " not in original_cmd
+        and config.multicluster
+        and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        and any(
+            res_type in original_cmd.lower()
+            for res_type in ["cephfilesystem", "cephblockpool"]
+        )
+    ):
         log.debug("Switching to default context")
         config.reset_ctx()
     return completed_process
