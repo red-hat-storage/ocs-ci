@@ -1258,3 +1258,16 @@ def get_primary_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def get_provider_cluster_config():
+    """
+    Get the provider cluster config object in a MS scenario
+
+    Return:
+        framework.config: provider cluster config object from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.ENV_DATA.get('cluster_type') == "provider":
+            return cluster

@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
@@ -129,13 +130,23 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        env_kubeconfig = os.getenv("KUBECONFIG")
-        if not env_kubeconfig or not os.path.exists(env_kubeconfig):
+        # Managed services multicluster run - Use provider cluster in certain cases
+        # TODO: Create a better solution to switch context when needed
+        if config.multicluster and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer" and any(res_type in command.lower() for res_type in ["cephfilesystem", "cephblockpool"]):
+            provider_cluster_config = get_provider_cluster_config()
             cluster_dir_kubeconfig = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                provider_cluster_config.ENV_DATA["cluster_path"], provider_cluster_config.RUN.get("kubeconfig_location")
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
+        else:
+            env_kubeconfig = os.getenv("KUBECONFIG")
+            if not env_kubeconfig or not os.path.exists(env_kubeconfig):
+                cluster_dir_kubeconfig = os.path.join(
+                    config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                )
+                if os.path.exists(cluster_dir_kubeconfig):
+                    oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "

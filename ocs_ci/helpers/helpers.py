@@ -26,7 +26,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.utils import mirror_image
+from ocs_ci.ocs.utils import mirror_image, get_primary_cluster_config
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -477,7 +477,14 @@ def default_storage_class(
     Returns:
         OCS: Existing StorageClass Instance
     """
-    external = config.DEPLOYMENT["external_mode"]
+    external = (
+        config.DEPLOYMENT["external_mode"]
+        or (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer"
+        )
+        or config.ENV_DATA.get("cluster_type") == "consumer"
+    )
     if interface_type == constants.CEPHBLOCKPOOL:
         if external:
             resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -3012,7 +3019,14 @@ def default_volumesnapshotclass(interface_type):
     Returns:
         OCS: VolumeSnapshotClass Instance
     """
-    external = config.DEPLOYMENT["external_mode"]
+    external = (
+        config.DEPLOYMENT["external_mode"]
+        or (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get('cluster_type') == "consumer"
+        )
+        or config.ENV_DATA.get("cluster_type") == "consumer"
+    )
     if interface_type == constants.CEPHBLOCKPOOL:
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
