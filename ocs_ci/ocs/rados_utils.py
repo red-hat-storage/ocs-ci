@@ -271,23 +271,20 @@ class RadosHelper:
         return mgr_object
 
 
-def corrupt_pg(osd_deployment, pool_object, pgid):
+def corrupt_pg(osd_deployment, pool_name, pool_object):
     """
-    Rewrite given pg with /etc/shadow file.
+    Rewrite given object in a ceph pool with /etc/shadow file.
 
     Args:
         osd_deployment (object): OSD deployment object where PG will be corrupted
+        pool_name (str): name of ceph pool to be corrupted
         pool_object (str): name of object to be corrupted
-        pgid (str): pgid to be corrupted
-
-    Returns:
-        ceph.ceph.CephDemon: mgr object
     """
     osd_pod = osd_deployment.pods[0]
     osd_data = osd_pod.get()
     osd_containers = osd_data["spec"]["containers"]
-    original_osd_cmd = osd_containers[0].get("command")
-    original_osd_args = osd_containers[0].get("args")
+    original_osd_cmd = " ".join(osd_containers[0].get("command"))
+    original_osd_args = " ".join(osd_containers[0].get("args"))
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
     ct_pod = pod.get_ceph_tools_pod()
@@ -300,10 +297,16 @@ def corrupt_pg(osd_deployment, pool_object, pgid):
         '"value" : ["/bin/bash", "-c", "sleep infinity"]}]',
     ]
     for change in patch_changes:
-        osd_deployment.ocp.patch(params=change, format_type="json")
+        osd_deployment.ocp.patch(
+            resource_name=osd_deployment.name, params=change, format_type="json"
+        )
 
-    logger.info("Killing ceph-osd process")
-    osd_pod.exec_cmd_on_pod("killall ceph-osd")
+    logger.info(f"Looking for Placement Group ID with {pool_object} object")
+    pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
+    logger.info(f"Found Placement Group ID: {pgid}")
+
+    osd_deployment.wait_for_available_replicas()
+    osd_pod = osd_deployment.pods[0]
     osd_pod.exec_sh_cmd_on_pod(
         f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
         f"{osd_id} --pgid {pgid} {pool_object} "
@@ -312,4 +315,4 @@ def corrupt_pg(osd_deployment, pool_object, pgid):
     logger.info("Unsetting osd noout flag")
     ct_pod.exec_ceph_cmd("ceph osd unset noout")
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
-    osd_pod.exec_oc_cmd("ceph-osd " + " ".join(original_osd_args))
+    osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)

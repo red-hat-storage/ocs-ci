@@ -13,7 +13,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.ocs import rados_utils
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
@@ -242,9 +242,12 @@ def measure_corrupt_pg(request, measurement_dir):
         logger.info(f"Checking that pool {pool_name} is deleted")
         logger.info(
             f"Restoring deployment {osd_deployment.name} "
-            f"to its original revision: {revision}"
+            f"to its original revision: {original_deployment_revision}"
         )
-        osd_deployment.set_revision(original_deployment_revision)
+        if original_deployment_revision:
+            osd_deployment.set_revision(original_deployment_revision)
+            # unset original_deployment_revision because revision number is deleted when used
+            original_deployment_revision = False
         # wait for ceph to return into HEALTH_OK state after osd deployment
         # is returned back to normal
         ceph_health_check(tries=20, delay=15)
@@ -255,9 +258,6 @@ def measure_corrupt_pg(request, measurement_dir):
     logger.info(f"Put object into {pool_name}")
     pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
-    logger.info(f"Looking for Placement Group ID with {pool_object} object")
-    pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
-    logger.info(f"Found Placement Group ID: {pgid}")
 
     def corrupt_pg():
         """
@@ -275,12 +275,12 @@ def measure_corrupt_pg(request, measurement_dir):
         """
         # run_time of operation
         run_time = 60 * 12
+        nonlocal pool_name
         nonlocal pool_object
-        nonlocal pgid
         nonlocal osd_deployment
 
-        logger.info(f"Corrupting {pgid} PG on {osd_deployment.name}")
-        rados_utils.corrupt_pg(osd_deployment, pool_object, pgid)
+        logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
+        rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return osd_deployment.name
