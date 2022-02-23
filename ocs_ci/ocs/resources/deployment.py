@@ -113,11 +113,11 @@ class Deployment(OCS):
             sleep (int): Sleep interval in seconds
         """
         desired_replicas = self.replicas
-        if desired_replicas == None:
+        if desired_replicas is None:
             logger.warning("Number of desired replicas is missing. Trying to reload.")
             for _ in TimeoutSampler(30, 5, func=self.reload):
                 desired_replicas = self.data.get("status").get("replicas")
-                if desired_replicas != None:
+                if desired_replicas is not None:
                     break
         logger.info(
             f"Waiting for deployment {self.name} to reach "
