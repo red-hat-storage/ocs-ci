@@ -128,15 +128,16 @@ class OCP(object):
             str: If out_yaml_format is False.
 
         """
-        oc_cmd = "oc "
-        # Managed services multicluster run - Use provider cluster in certain cases
-        # TODO: Create a better solution to switch context when needed
         # Importing here to avoid circular import
         from ocs_ci.ocs.utils import (
             get_primary_cluster_config,
             get_provider_cluster_config,
         )
 
+        oc_cmd = "oc "
+
+        # Managed services multicluster run - Use provider cluster in certain cases
+        # TODO: Create a better solution to switch context when needed
         if (
             config.multicluster
             and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"

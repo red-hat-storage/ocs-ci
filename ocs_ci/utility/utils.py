@@ -567,18 +567,18 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         stderr     (str): The standard error (None if not captured).
 
     """
-    original_cmd = cmd
-    # Managed services multicluster run - Use provider cluster in certain cases
-    # TODO: Create a better solution to switch context when needed
     # Importing here to avoid circular import
     from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 
+    # Managed services multicluster run - Use provider cluster in certain cases
+    # TODO: Create a better solution to switch context when needed
+    context_switched = False
     if (
-        "--kubeconfig " not in original_cmd
+        "--kubeconfig " not in cmd
         and config.multicluster
         and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
         and any(
-            res_type in original_cmd.lower()
+            res_type in cmd.lower()
             for res_type in ["cephfilesystem", "cephblockpool"]
         )
     ):
@@ -586,6 +586,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         config.switch_ctx(
             get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
         )
+        context_switched = True
+
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
@@ -598,6 +600,10 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    # TODO: Create a better solution to switch context when needed
+    if context_switched:
+        log.debug("Switching to default context")
+        config.reset_ctx()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -615,18 +621,6 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
             f"Error during execution of command: {masked_cmd}."
             f"\nError is {masked_stderr}"
         )
-    # TODO: Create a better solution to switch context when needed
-    if (
-        "--kubeconfig " not in original_cmd
-        and config.multicluster
-        and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
-        and any(
-            res_type in original_cmd.lower()
-            for res_type in ["cephfilesystem", "cephblockpool"]
-        )
-    ):
-        log.debug("Switching to default context")
-        config.reset_ctx()
     return completed_process
 
 
