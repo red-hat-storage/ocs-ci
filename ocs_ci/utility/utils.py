@@ -3263,6 +3263,8 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
         timeout (int): Time in seconds to wait
 
     """
+    log.info("Sleeping for 60 sec to start update machineconfigpool status")
+    time.sleep(60)
     # importing here to avoid dependencies
     from ocs_ci.ocs import ocp
 
@@ -3314,8 +3316,6 @@ def configure_chrony_and_wait_for_machineconfig_status(
         chrony_obj = OCS(**chrony_data)
         chrony_obj.create()
 
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
@@ -3583,8 +3583,6 @@ def add_chrony_to_ocp_deployment():
 def enable_huge_pages():
     log.info("Enabling huge pages.")
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
-    time.sleep(10)
-    log.info("Waiting for machine config will be applied with huge pages")
     wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
 
 
