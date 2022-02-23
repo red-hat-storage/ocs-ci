@@ -1267,8 +1267,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "}}}'"
         )
         run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
-        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        time.sleep(60)
         wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
