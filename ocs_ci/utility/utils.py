@@ -578,7 +578,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         and config.multicluster
         and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
         and any(
-            res_type in cmd.lower() for res_type in [" cephfilesystem ", " cephblockpool "]
+            res_type in cmd.lower()
+            for res_type in [" cephfilesystem ", " cephblockpool "]
         )
     ):
         log.debug("Switching to provider")
