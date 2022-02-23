@@ -284,12 +284,19 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     osd_data = osd_pod.get()
     osd_containers = osd_data["spec"]["containers"]
     original_osd_cmd = " ".join(osd_containers[0].get("command"))
-    original_osd_args = " ".join(osd_containers[0].get("args"))
+    original_osd_args = osd_containers[0].get("args")
+    original_osd_args = [",".join(arg.split()) for arg in original_osd_args]
+    original_osd_args.remove("--foreground")
+    original_osd_args = " ".join(original_osd_args)
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
     ct_pod = pod.get_ceph_tools_pod()
     logger.info("Setting osd noout flag")
     ct_pod.exec_ceph_cmd("ceph osd set noout")
+    logger.info("Setting osd noscrub flag")
+    ct_pod.exec_ceph_cmd("ceph osd set noscrub")
+    logger.info("Setting osd nodeep-scrub flag")
+    ct_pod.exec_ceph_cmd("ceph osd set nodeep-scrub")
     patch_changes = [
         '[{"op": "remove", "path": "/spec/template/spec/containers/0/args"}]',
         '[{"op": "remove", "path": "/spec/template/spec/containers/0/livenessProbe"}]',
@@ -312,7 +319,6 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         f"{osd_id} --pgid {pgid} {pool_object} "
         f"set-bytes /etc/shadow --no-mon-config"
     )
-    logger.info("Unsetting osd noout flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset noout")
-    ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
     osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)
+    ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
+    ct_pod.exec_ceph_cmd(f"ceph pg repair {pgid}")

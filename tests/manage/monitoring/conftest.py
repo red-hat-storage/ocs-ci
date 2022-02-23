@@ -224,6 +224,7 @@ def measure_corrupt_pg(request, measurement_dir):
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name("corrupted", "pool")
     ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
+    ct_pod.exec_ceph_cmd(f"ceph osd pool application enable {pool_name} rbd")
 
     def teardown():
         """
@@ -239,6 +240,10 @@ def measure_corrupt_pg(request, measurement_dir):
         )
         logger.info("Unsetting osd noout flag")
         ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("Unsetting osd noscrub flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noscrub")
+        logger.info("Unsetting osd nodeep-scrub flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset nodeep-scrub")
         logger.info(f"Checking that pool {pool_name} is deleted")
         logger.info(
             f"Restoring deployment {osd_deployment.name} "
