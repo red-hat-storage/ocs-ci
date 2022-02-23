@@ -143,7 +143,7 @@ class OCP(object):
             and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
             and any(
                 res_type in command.lower()
-                for res_type in ["cephfilesystem", "cephblockpool"]
+                for res_type in [" cephfilesystem ", " cephblockpool "]
             )
         ):
             provider_cluster_config = get_provider_cluster_config()
