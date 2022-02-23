@@ -24,6 +24,7 @@ KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+RBD_NAME = "rbd"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
