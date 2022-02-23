@@ -1,4 +1,5 @@
 from functools import reduce
+import base64
 import io
 import json
 import logging
@@ -3585,3 +3586,37 @@ def enable_huge_pages():
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
     wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
+
+
+def encode(message):
+    """
+    Encodes the message in base64
+
+    Args:
+        message (str/list): message to encode
+
+    Returns:
+        str: encoded message in base64
+
+    """
+    message_bytes = message.encode("ascii")
+    encoded_base64_bytes = base64.b64encode(message_bytes)
+    encoded_message = encoded_base64_bytes.decode("ascii")
+    return encoded_message
+
+
+def decode(encoded_message):
+    """
+    Decodes the message in base64
+
+    Args:
+        encoded_message (str): encoded message
+
+    Returns:
+        str: decoded message
+
+    """
+    encoded_message_bytes = encoded_message.encode("ascii")
+    decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
+    decoded_message = decoded_base64_bytes.decode("ascii")
+    return decoded_message
