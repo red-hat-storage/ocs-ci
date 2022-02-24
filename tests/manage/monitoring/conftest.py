@@ -76,7 +76,24 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir):
+def create_mon_quorum_loss(create_mon_quorum_loss=False):
+    """
+    Number of mon to go down in the cluster, so that accordingly
+    CephMonQuorumRisk or CephMonQuorumLost alerts are seen
+
+    Args:
+        mon_quorum_lost (bool): True, if mon quorum to be lost. False Otherwise.
+
+    Returns:
+        mon_quorum_lost (bool): True, if all mons down expect one mon
+            so that mon quorum lost. Otherwise False
+
+    """
+    return create_mon_quorum_loss
+
+
+@pytest.fixture
+def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -91,8 +108,12 @@ def measure_stop_ceph_mon(measurement_dir):
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
-    # get monitor deployments to stop, leave even number of monitors
-    split_index = len(mons) // 2 if len(mons) > 3 else 2
+    # get monitor deployments to stop,
+    # if mon quorum to be lost split_index will be 1
+    # else leave even number of monitors
+    split_index = (
+        1 if create_mon_quorum_loss else len(mons) // 2 if len(mons) > 3 else 2
+    )
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
@@ -123,7 +144,9 @@ def measure_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, "measure_stop_ceph_mon.json")
+    test_file = os.path.join(
+        measurement_dir, f"measure_stop_ceph_mon_{split_index}.json"
+    )
     measured_op = measure_operation(stop_mon, test_file)
 
     # expected minimal downtime of a mon inflicted by this fixture
@@ -140,8 +163,9 @@ def measure_stop_ceph_mon(measurement_dir):
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
-        msg = f"Downscaled monitors {mons_to_stop} were not replaced"
-        assert check_old_mons_deleted, msg
+        if not split_index == 1:
+            msg = f"Downscaled monitors {mons_to_stop} were not replaced"
+            assert check_old_mons_deleted, msg
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal

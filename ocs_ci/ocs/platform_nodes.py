@@ -37,6 +37,7 @@ from ocs_ci.utility.csr import (
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
+    get_ocp_repo,
     create_rhelpod,
     replace_content_in_file,
     get_ocp_version,
@@ -880,6 +881,9 @@ class AWSNodes(NodesBase):
 
         """
         rhel_pod_name = "rhel-ansible"
+        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
+        # different version of RHEL for running openshift ansible playbook, we need
+        # to update this method!
         rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name, 600)
         timeout = 4000  # For ansible-playbook
 
@@ -888,10 +892,21 @@ class AWSNodes(NodesBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = constants.YUM_REPOS_PATH
-        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
-        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
-        repo_file = os.path.basename(repo)
-        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+        # Ansible playbook and dependency is described in the documentation to run
+        # on RHEL7 node
+        # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
+        repo_rhel_ansible = get_ocp_repo(
+            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
+        )
+        repo = get_ocp_repo()
+        diff_rhel = repo != repo_rhel_ansible
+        pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
+        if diff_rhel:
+            repo_dst_path = constants.POD_UPLOADPATH
+            pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+            repo_file = os.path.basename(repo)
+        else:
+            repo_file = os.path.basename(repo_rhel_ansible)
         # prepare credential files for mirror.openshift.com
         with prepare_mirror_openshift_credential_files() as (
             mirror_user_file,
@@ -922,7 +937,7 @@ class AWSNodes(NodesBase):
             rhel_pod_obj.exec_cmd_on_node(
                 host,
                 pem_dst_path,
-                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
+                f"sudo mv {os.path.join(constants.RHEL_TMP_PATH, repo_file)} {constants.YUM_REPOS_PATH}",
                 user=constants.EC2_USER,
             )
             for file_name in (

@@ -5,7 +5,6 @@ This module contains functionality required for disconnected installation.
 import logging
 import os
 import tempfile
-import time
 
 import yaml
 
@@ -180,8 +179,6 @@ def prune_and_mirror_index_image(
     with open(icsp_file, "w") as f:
         yaml.dump(icsp_content, f)
     exec_cmd(f"oc apply -f {icsp_file}")
-    logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-    time.sleep(60)
     wait_for_machineconfigpool_status("all")
 
     cs_file = os.path.join(

@@ -248,6 +248,14 @@ class ExternalClusterRGWAdminOpsUserException(Exception):
     pass
 
 
+class ExternalClusterExporterRunFailed(Exception):
+    pass
+
+
+class ExternalClusterRGWEndPointMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 

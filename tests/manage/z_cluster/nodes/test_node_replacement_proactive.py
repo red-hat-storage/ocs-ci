@@ -21,6 +21,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bmpsi,
     bugzilla,
     skipif_external_mode,
+    skipif_ms_consumer,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -121,7 +122,7 @@ def delete_and_create_osd_node(osd_node_name):
         f"results of this test run are all invalid."
     )
 
-    if config.ENV_DATA["deployment_type"] == "ipi":
+    if config.ENV_DATA["deployment_type"] in ["ipi", "managed"]:
         if is_lso_cluster():
             # TODO: Implement functionality for Internal-Attached devices mode
             # once ocs-ci issue #4545 is resolved
@@ -230,9 +231,9 @@ class TestNodeReplacementWithIO(ManageTest):
 @tier4
 @tier4a
 @ignore_leftovers
-@skipif_managed_service
 @skipif_bmpsi
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -274,6 +275,7 @@ class TestNodeReplacement(ManageTest):
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:

@@ -395,6 +395,7 @@ acm_page_nav = {
     "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
 }
+
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
     "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
@@ -454,6 +455,75 @@ acm_configuration = {
         By.XPATH,
     ),
     "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
+    "cc_create_cluster": ("createCluster", By.ID),
+    "cc_provider_vmware_vsphere": ("//*[@id='vmware-vsphere']", By.XPATH),
+    "cc_cluster_name": ("//input[@id='eman']", By.XPATH),
+    "cc_base_dns_domain": ("//input[@id='baseDomain']", By.XPATH),
+    "cc_openshift_release_image": ("//input[@id='imageSet']", By.XPATH),
+    "cc_vsphere_network_name": ("//input[@id='networkType']", By.XPATH),
+    "cc_api_vip": ("//input[@id='apiVIP']", By.XPATH),
+    "cc_ingress_vip": ("//input[@id='ingressVIP']", By.XPATH),
+    "cc_next_page_button": ("//button[normalize-space()='Next']", By.XPATH),
+    "cc_create_button": ("//button[normalize-space()='Create']", By.XPATH),
+    "cc_cluster_details": ("//div[contains(text(),'Cluster details')]", By.XPATH),
+    "cc_node_pools": ("//div[contains(text(),'Node pools')]", By.XPATH),
+    "cc_networks": ("//div[contains(text(),'Networks')]", By.XPATH),
+    "cc_proxy": ("//div[contains(text(),'Proxy')]", By.XPATH),
+    "cc_review": ("//button[normalize-space()='Review']", By.XPATH),
+    "cc_infrastructure_provider_creds_dropdown": (
+        "input[placeholder='Select a credential']",
+        By.CSS_SELECTOR,
+    ),
+    "cc_infrastructure_provider_creds_select_creds": (
+        "//button[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "cc_provider_credentials": ("//div[@id='add-provider-connection']", By.XPATH),
+    "cc_provider_creds_vsphere": (
+        "//div[@id='vmw']//div[@class='pf-c-tile__header pf-m-stacked']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_cred_name": ("//input[@id='credentialsName']", By.XPATH),
+    "cc_provider_creds_vsphere_cred_namespace": (
+        "//input[@id='namespaceName-input-toggle-select-typeahead']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
+    "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
+    "cc_provider_creds_vsphere_username": ("//input[@id='username']", By.XPATH),
+    "cc_provider_creds_vsphere_password": ("//input[@id='password']", By.XPATH),
+    "cc_provider_creds_vsphere_rootca": ("//textarea[@id='cacertificate']", By.XPATH),
+    "cc_provider_creds_vsphere_clustername": ("//input[@id='cluster']", By.XPATH),
+    "cc_provider_creds_vsphere_dc": ("//input[@id='datacenter']", By.XPATH),
+    "cc_provider_creds_vsphere_datastore": (
+        "//input[@id='defaultDatastore']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_pullsecret": ("//textarea[@id='pullSecret']", By.XPATH),
+    "cc_provider_creds_vsphere_ssh_privkey": (
+        "//textarea[@id='ssh-privatekey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_ssh_pubkey": (
+        "//textarea[@id='ssh-publickey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_add_button": (
+        "//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_config": (
+        "//button[@id='download-configuration']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_install_config": (
+        "//a[normalize-space()='install-config']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status_failed": (
+        "//button[normalize-space()='Failed']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {

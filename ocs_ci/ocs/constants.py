@@ -77,7 +77,7 @@ CHRONY_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "99-role-chrony-configuration.yaml"
 )
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
-
+NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 # Statuses
 STATUS_READY = "Ready"
 STATUS_PENDING = "Pending"
@@ -493,6 +493,10 @@ RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
 
 GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
+CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
 
@@ -700,6 +704,7 @@ ALERT_CLUSTERWARNINGSTATE = "CephClusterWarningState"
 ALERT_DATARECOVERYTAKINGTOOLONG = "CephDataRecoveryTakingTooLong"
 ALERT_MGRISABSENT = "CephMgrIsAbsent"
 ALERT_MONQUORUMATRISK = "CephMonQuorumAtRisk"
+ALERT_MONQUORUMLOST = "CephMonQuorumLost"
 ALERT_OSDDISKNOTRESPONDING = "CephOSDDiskNotResponding"
 ALERT_PGREPAIRTAKINGTOOLONG = "CephPGRepairTakingTooLong"
 ALERT_PROMETHEUSRULEFAILURES = "PrometheusRuleFailures"
@@ -1165,6 +1170,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
 ]
+RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
 # Bucket Policy action lists
 bucket_website_action_list = ["PutBucketWebsite", "GetBucketWebsite", "PutObject"]
@@ -1576,3 +1582,18 @@ OPENSSL_CERT_LOCALITY_NAME = "."
 OPENSSL_CERT_ORGANIZATION_NAME = "OCS"
 OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME = "OCS-QE"
 OPENSSL_CERT_EMAIL_ADDRESS = "ocs-qe@redhat.com"
+
+# ACM Hub Parameters
+ACM_HUB_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "operatorgroup.yaml"
+)
+ACM_HUB_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "subscription.yaml"
+)
+ACM_HUB_MULTICLUSTERHUB_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "multiclusterhub.yaml"
+)
+ACM_HUB_NAMESPACE = "open-cluster-management"
+ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
+ACM_MULTICLUSTER_HUB = "MultiClusterHub"
+ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
