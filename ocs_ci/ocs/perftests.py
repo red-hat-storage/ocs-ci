@@ -3,6 +3,7 @@ import time
 import logging
 import os
 import re
+from uuid import uuid4
 
 import requests
 import json
@@ -44,7 +45,6 @@ class PASTest(BaseTest):
             name (str): The test name that will use in the performance dashboard
         """
         log.info("Setting up test environment")
-        self.crd_data = None  # place holder for Benchmark CDR data
         self.es = None  # place holder for the incluster deployment elasticsearch
         self.es_backup = None  # place holder for the elasticsearch backup
         self.main_es = None  # place holder for the main elasticsearch object
@@ -52,10 +52,15 @@ class PASTest(BaseTest):
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
         self.pod_obj = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
+        self.initialize_test_crd()
 
         # Place holders for test results file (all sub-tests together)
         self.results_path = ""
         self.results_file = ""
+
+        # All tests need a uuid for the ES results, benchmark-operator base test
+        # will overrite it with uuid pulling from the benchmark pod
+        self.uuid = uuid4().hex
 
         # Getting the full path for the test logs
         self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split("]")[0]
@@ -105,6 +110,30 @@ class PASTest(BaseTest):
                 time.sleep(120)
                 still_going_down = True
         log.info("Storage usage was cleandup")
+
+    def initialize_test_crd(self):
+        """
+        Initializing the test CRD file.
+        this include the Elasticsearch info, cluster name and user name which run the test
+        """
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",  # place holde only will be change in the test.
+                "clustername": "test_cluster",  # place holde only will be change in the test.
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
 
     def create_new_pool(self, pool_name):
         """

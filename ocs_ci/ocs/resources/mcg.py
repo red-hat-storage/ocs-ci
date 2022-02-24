@@ -996,7 +996,7 @@ class MCG:
             or not _compare_cli_hashes()
         ):
             logger.info(
-                f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
+                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
                 " attempting to copy it from the MCG operator pod"
             )
             local_mcg_cli_dir = os.path.dirname(

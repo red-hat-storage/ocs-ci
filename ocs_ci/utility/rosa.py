@@ -46,10 +46,11 @@ def create_cluster(cluster_name, version):
     region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
+    multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
+        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     utils.run_cmd(cmd)
     logger.info("Waiting for installation of ROSA cluster")
@@ -190,7 +191,7 @@ def install_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
@@ -225,7 +226,7 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
