@@ -181,6 +181,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
+        if self.dev_mode:
+            num_of_samples = 2
+
         accepted_creation_time = (
             600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
         )
@@ -199,7 +202,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         accepted_deletion_deviation_percent = 50
 
         creation_time_measures = []
+        csi_creation_times = []
         deletion_time_measures = []
+        csi_deletion_times = []
         msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
 
         for i in range(num_of_samples):
@@ -225,6 +230,11 @@ class TestPVCCreationDeletionPerformance(PASTest):
                     f"{accepted_creation_time} seconds."
                 )
             creation_time_measures.append(creation_time)
+            csi_creation_times.append(
+                performance_lib.csi_pvc_time_measure(
+                    self.interface, pvc_obj, "create", start_time
+                )
+            )
 
             pv_name = pvc_obj.backed_pv
             pvc_reclaim_policy = pvc_obj.reclaim_policy
@@ -249,6 +259,12 @@ class TestPVCCreationDeletionPerformance(PASTest):
                         f"{accepted_deletion_time} seconds."
                     )
                 deletion_time_measures.append(deletion_time)
+                csi_deletion_times.append(
+                    performance_lib.csi_pvc_time_measure(
+                        self.interface, pvc_obj, "delete", start_time
+                    )
+                )
+
             else:
                 logging.info(
                     f"Reclaim policy of the PVC {pvc_obj.name} is not Delete;"
@@ -262,6 +278,15 @@ class TestPVCCreationDeletionPerformance(PASTest):
             msg_prefix,
         )
         self.full_results.add_key("creation-time", creation_average)
+
+        csi_creation_average = self.process_time_measurements(
+            "csi-creation",
+            csi_creation_times,
+            accepted_creation_deviation_percent,
+            msg_prefix,
+        )
+        self.full_results.add_key("csi_creation_time", csi_creation_average)
+
         deletion_average = self.process_time_measurements(
             "deletion",
             deletion_time_measures,
@@ -269,8 +294,19 @@ class TestPVCCreationDeletionPerformance(PASTest):
             msg_prefix,
         )
         self.full_results.add_key("deletion-time", deletion_average)
+
+        csi_deletion_average = self.process_time_measurements(
+            "csi-deletion",
+            csi_deletion_times,
+            accepted_deletion_deviation_percent,
+            msg_prefix,
+        )
+        self.full_results.add_key("csi_deletion_time", csi_deletion_average)
+
         self.full_results.all_results["creation"] = creation_time_measures
         self.full_results.all_results["deletion"] = deletion_time_measures
+        self.full_results.all_results["csi-creation"] = csi_creation_times
+        self.full_results.all_results["csi-deletion"] = csi_deletion_times
         self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
