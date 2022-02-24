@@ -34,5 +34,4 @@ def test_corrupt_pg_pd(measure_corrupt_pg):
     api.check_incident_cleared(
         summary=target_label,
         measure_end_time=measure_corrupt_pg.get("stop"),
-        time_min=240,
     )
