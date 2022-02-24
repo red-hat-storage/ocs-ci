@@ -40,7 +40,6 @@ class ExternalCluster(object):
         self.host = host
         self.user = user
         self.password = password
-        self.rgw_endpoint_port = config.EXTERNAL_MODE.get("rgw_endpoint_port", 8080)
         self.rhcs_conn = Connection(
             host=self.host, user=self.user, password=self.password
         )
@@ -56,9 +55,12 @@ class ExternalCluster(object):
         # upload exporter script to external RHCS cluster
         script_path = self.upload_exporter_script()
 
+        # get rgw endpoint port
+        rgw_endpoint_port = self.get_rgw_endpoint_api_port()
+
         # get rgw endpoint
         rgw_endpoint = get_rgw_endpoint()
-        rgw_endpoint_with_port = f"{rgw_endpoint}:{self.rgw_endpoint_port}"
+        rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
         # run the exporter script on external RHCS cluster
         cmd = f"python {script_path} --rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
@@ -97,6 +99,19 @@ class ExternalCluster(object):
             if value == "key":
                 config.EXTERNAL_MODE["admin_keyring"]["key"] = client_admin[index + 2]
                 return
+
+    def get_rgw_endpoint_api_port(self):
+        """
+        Fetches rgw endpoint api port
+
+        Returns:
+            str: RGW endpoint port
+
+        """
+        cmd = "ceph dashboard get-rgw-api-port"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        logger.info(f"External cluster rgw endpoint api port: {out}")
+        return out
 
 
 def generate_exporter_script():
