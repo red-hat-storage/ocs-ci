@@ -17,7 +17,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_ocs_version,
-    skipif_external_mode,
     ignore_leftovers,
     E2ETest,
     tier2,
@@ -27,15 +26,14 @@ log = logging.getLogger(__name__)
 
 
 @tier2
-@skipif_external_mode
 @skipif_ocs_version("<4.8")
 @bugzilla("1995271")
-@bugzilla("1995271")
+@bugzilla("2001933")
 @pytest.mark.polarion_id("OCS-2754")
 @ignore_leftovers
 class TestHugePages(E2ETest):
     """
-    Enable huge pages post cluster deployment
+    Enable huge pages post ODF installation
 
     """
 
@@ -56,13 +54,24 @@ class TestHugePages(E2ETest):
 
             wait_for_nodes_status(status=constants.NODE_READY, timeout=600)
 
+            nodes = get_nodes()
+            for node in nodes:
+                assert (
+                    node.get()["status"]["allocatable"]["hugepages-2Mi"] == "0"
+                ), f"Huge pages is not applied on {node.name}"
+
             log.info("Wait for all pods to be in running state")
             wait_for_pods_to_be_running(timeout=600)
 
         request.addfinalizer(finalizer)
 
     def test_hugepages_post_odf_deployment(
-        self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        self,
+        pvc_factory,
+        pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
+        node_restart_teardown,
     ):
         """
         Test to verify that after enabling huge pages the nodes come up with
