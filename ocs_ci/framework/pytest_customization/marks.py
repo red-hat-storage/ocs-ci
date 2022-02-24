@@ -222,6 +222,11 @@ ms_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on managed service consumer cluster",
 )
 
+ipi_or_managed_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA["deployment_type"].lower() in ["ipi", "managed"],
+    reason="Test runs ONLY on IPI or managed deployed cluster",
+)
+
 kms_config_required = pytest.mark.skipif(
     load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
     reason="Vault config not found in auth.yaml",

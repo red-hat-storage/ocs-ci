@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
     ipi_deployment_required,
+    ipi_or_managed_deployment_required,
     ignore_leftovers,
 )
 from ocs_ci.framework import config
@@ -19,6 +20,7 @@ from ocs_ci.helpers.helpers import (
     remove_label_from_worker_node,
     wait_for_resource_state,
     wait_for_rook_ceph_pod_status,
+    get_failure_domain,
 )
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -29,8 +31,11 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     recover_node_to_ready_state,
     add_new_nodes_and_label_after_node_failure_ipi,
+    get_other_worker_nodes_in_same_rack_or_zone,
+    get_node_pods,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.cluster import is_ms_provider_cluster
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +43,7 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4
 @tier4b
-@ipi_deployment_required
+@ipi_or_managed_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
@@ -151,8 +156,15 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         machineset_name = machine.get_machineset_from_machine_name(machine_name)
         log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
 
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_name)
+        if not is_ms_provider_cluster():
+            # Add a new node and label it
+            add_new_node_and_label_it(machineset_name)
+        else:
+            log.info(
+                "When using the ms provider cluster, it should create and label "
+                "a new worker node automatically"
+            )
+
         # Get the failure node obj
         failure_node_obj = get_node_objs(node_names=[common_nodes[0]])
 
@@ -246,17 +258,6 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def add_new_storage_node(self, node_name):
-        machine_name = machine.get_machine_from_node_name(node_name)
-        log.info(f"{node_name} associated machine is {machine_name}")
-
-        # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        log.info(f"{node_name} associated machineset is {machineset_name}")
-
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_name)
-
     @pytest.mark.parametrize(
         argnames=["additional_node"],
         argvalues=[
@@ -291,12 +292,24 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             self.machineset_name
         )
 
-        temp_osd = get_osd_pods()[0]
-        osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
-        self.osd_worker_node = [get_pod_node(temp_osd)]
         if additional_node:
-            self.add_new_storage_node(self.osd_worker_node[0].name)
+            new_ocs_node = add_new_node_and_label_it(self.machineset_name)
             self.extra_node = True
+            failure_domain = get_failure_domain()
+            self.osd_worker_node = [
+                get_other_worker_nodes_in_same_rack_or_zone(
+                    failure_domain, new_ocs_node
+                )
+            ]
+        else:
+            self.osd_worker_node = [get_osd_running_nodes()[0]]
+
+        osd_pods = get_osd_pods()
+        temp_osd = get_node_pods(self.osd_worker_node[0].name, pods_to_search=osd_pods)[
+            0
+        ]
+        osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
+
         nodes.stop_nodes(self.osd_worker_node, wait=True)
         log.info(f"Successfully powered off node: {self.osd_worker_node[0].name}")
 

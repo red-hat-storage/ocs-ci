@@ -1995,3 +1995,35 @@ def add_new_nodes_and_label_after_node_failure_ipi(
     """
     machine.change_current_replica_count_to_ready_replica_count(machineset_name)
     return add_new_node_and_label_it(machineset_name, num_nodes, mark_for_ocs_label)
+
+
+def get_other_worker_nodes_in_same_rack_or_zone(failure_domain, node_obj):
+    """
+    Get other worker nodes in the same rack or zone of a given node.
+    """
+    node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    wnode_names = get_worker_nodes()
+    other_wnode_names = [name for name in wnode_names if name != node_obj.name]
+    other_wnodes = get_node_objs(other_wnode_names)
+
+    other_wnodes_in_same_rack_or_zone = [
+        wnode
+        for wnode in other_wnodes
+        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+    ]
+    return other_wnodes_in_same_rack_or_zone
+
+
+def get_another_osd_node_in_same_rack_or_zone(failure_domain, node_obj):
+    osd_node_names = get_osd_running_nodes()
+    other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
+        failure_domain, node_obj
+    )
+
+    osd_node_in_same_rack_or_zone = None
+    for wnode in other_wnodes_in_same_rack_or_zone:
+        if wnode.name in osd_node_names:
+            osd_node_in_same_rack_or_zone = wnode
+            break
+
+    return osd_node_in_same_rack_or_zone

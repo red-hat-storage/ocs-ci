@@ -1966,6 +1966,20 @@ def check_ceph_health_after_add_capacity(
     ), "Data re-balance failed to complete"
 
 
+def is_ms_provider_cluster():
+    """
+    Check if the cluster is a managed service provider cluster
+
+    Returns:
+        bool: True if the cluster is a managed service provider cluster. False otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+
+
 def validate_existence_of_blocking_pdb():
     """
     Validate creation of PDBs for OSDs.
