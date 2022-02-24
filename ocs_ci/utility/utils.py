@@ -3578,16 +3578,4 @@ def enable_huge_pages():
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
-
-
-def disable_huge_pages():
-    """
-    Removes huge pages
-
-    """
-    log.info("Disabling huge pages.")
-    exec_cmd(f"oc delete -f {constants.HUGE_PAGES_TEMPLATE}")
-    time.sleep(10)
-    log.info("Waiting for machine config to be ready")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
