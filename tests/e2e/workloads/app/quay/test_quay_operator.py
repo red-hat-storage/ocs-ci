@@ -121,7 +121,6 @@ class TestQuayWorkload(E2ETest):
 
         log.info("Tagging a test image")
         exec_cmd(f"podman tag {constants.COSBENCH_IMAGE} {podman_url}/{test_image}")
-
         log.info(f"Pushing the test image to quay repo: {repo_name}")
         exec_cmd(f"podman push {podman_url}/{test_image} --tls-verify=false")
 
