@@ -6,7 +6,6 @@ import random
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
     tier4b,
     ManageTest,
@@ -153,7 +152,6 @@ def delete_and_create_osd_node(osd_node_name):
     )
 
 
-@tier4
 @tier4a
 @ignore_leftovers
 @ipi_deployment_required
@@ -228,7 +226,6 @@ class TestNodeReplacementWithIO(ManageTest):
             osd_encryption_verification()
 
 
-@tier4
 @tier4a
 @ignore_leftovers
 @skipif_bmpsi

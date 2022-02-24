@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier4a,
+    tier4b,
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
@@ -21,7 +21,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4b
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @bugzilla("1959983")

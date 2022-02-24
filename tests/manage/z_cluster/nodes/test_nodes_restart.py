@@ -3,8 +3,8 @@ import pytest
 
 
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
+    tier4b,
     ignore_leftovers,
     ManageTest,
     cloud_platform_required,
@@ -24,7 +24,6 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
-@tier4
 @tier4a
 @ignore_leftovers
 @skipif_vsphere_ipi
@@ -77,6 +76,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     def test_rolling_nodes_restart(
