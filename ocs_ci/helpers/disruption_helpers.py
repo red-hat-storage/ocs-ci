@@ -3,6 +3,7 @@ import logging
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler, run_async, run_cmd
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -24,6 +25,18 @@ class Disruptions:
     daemon_pid = None
 
     def set_resource(self, resource, leader_type="provisioner"):
+        # Managed services multicluster run - Use provider cluster
+        # TODO: Create a better solution to switch context when needed
+        context_switched = False
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            log.debug("Switching to provider")
+            config.switch_ctx(
+                get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+            )
+            context_switched = True
         self.resource = resource
         resource_count = 0
         if self.resource == "mgr":
@@ -63,10 +76,25 @@ class Disruptions:
         if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
-
+        # TODO: Create a better solution to switch context when needed
+        if context_switched:
+            log.debug("Switching to default context")
+            config.reset_ctx()
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        # Managed services multicluster run - Use provider cluster
+        # TODO: Create a better solution to switch context when needed
+        context_switched = False
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            log.debug("Switching to provider")
+            config.switch_ctx(
+                get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+            )
+            context_switched = True
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
             condition="Running",
@@ -74,6 +102,10 @@ class Disruptions:
             resource_count=self.resource_count,
             timeout=300,
         )
+        # TODO: Create a better solution to switch context when needed
+        if context_switched:
+            log.debug("Switching to default context")
+            config.reset_ctx()
 
     @retry(AssertionError, tries=5, delay=3, backoff=1)
     def select_daemon(self, node_name=None):
@@ -92,8 +124,24 @@ class Disruptions:
             f"oc debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
+        # Managed services multicluster run - Use provider cluster
+        # TODO: Create a better solution to switch context when needed
+        context_switched = False
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            log.debug("Switching to provider")
+            config.switch_ctx(
+                get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+            )
+            context_switched = True
         pid_proc = run_async(pid_cmd)
         ret, pid, err = pid_proc.async_communicate()
+        # TODO: Create a better solution to switch context when needed
+        if context_switched:
+            log.debug("Switching to default context")
+            config.reset_ctx()
         pid = pid.strip()
 
         # Consider scenario where more than one self.resource pod is running
@@ -133,7 +181,24 @@ class Disruptions:
             f"oc debug node/{node_name} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
+        # Managed services multicluster run - Use provider cluster
+        # TODO: Create a better solution to switch context when needed
+        context_switched = False
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            log.debug("Switching to provider")
+            config.switch_ctx(
+                get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+            )
+            context_switched = True
         daemon_kill = run_cmd(kill_cmd)
+        # TODO: Create a better solution to switch context when needed
+        if context_switched:
+            log.debug("Switching to default context")
+            config.reset_ctx()
+            context_switched = False
 
         # 'daemon_kill' will be an empty string if command is success
         assert isinstance(daemon_kill, str) and (not daemon_kill), (
@@ -141,7 +206,17 @@ class Disruptions:
             f"Daemon kill command output - {daemon_kill}"
         )
         log.info(f"Killed ceph-{self.resource} daemon on node {node_name}")
-
+        # Managed services multicluster run - Use provider cluster
+        # TODO: Create a better solution to switch context when needed
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            log.debug("Switching to provider")
+            config.switch_ctx(
+                get_provider_cluster_config().MULTICLUSTER["multicluster_index"]
+            )
+            context_switched = True
         if check_new_pid:
             awk_print = "'{print $1}'"
             pid_cmd = (
@@ -165,6 +240,9 @@ class Disruptions:
                         log.info(f"New pid of ceph-{self.resource} is {new_pid}")
                         break
             except TimeoutExpiredError:
+                if context_switched:
+                    log.debug("Switching to default context")
+                    config.reset_ctx()
                 raise TimeoutExpiredError(
                     f"Waiting for pid of ceph-{self.resource} in {node_name}"
                 )
