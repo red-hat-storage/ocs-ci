@@ -89,6 +89,9 @@ def setup_local_storage(storageclass):
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
         wait_for_machineconfigpool_status("all")
         if config.DEPLOYMENT.get("ui_deployment", False):
+            logger.info(
+                "Skipping the rest of the setup because UI deployment was enabled"
+            )
             return
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
