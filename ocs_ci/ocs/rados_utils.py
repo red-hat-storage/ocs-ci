@@ -321,4 +321,3 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     )
     osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
-    ct_pod.exec_ceph_cmd(f"ceph pg repair {pgid}")

@@ -266,7 +266,7 @@ def measure_corrupt_pg(request, measurement_dir):
 
     def corrupt_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 12 minutes and measure it.
+        Corrupt PG on one OSD in Ceph pool for 14 minutes and measure it.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -279,7 +279,7 @@ def measure_corrupt_pg(request, measurement_dir):
             str: Name of corrupted pod
         """
         # run_time of operation
-        run_time = 60 * 12
+        run_time = 60 * 14
         nonlocal pool_name
         nonlocal pool_object
         nonlocal osd_deployment
