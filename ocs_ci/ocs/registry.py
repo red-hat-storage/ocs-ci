@@ -350,7 +350,13 @@ def check_image_exists_in_registry(image_url):
     return return_value
 
 
-def image_pull_and_push(project_name, template, image="", pattern="", wait=True):
+def image_pull_and_push(
+    project_name,
+    template="redis-ephemeral",
+    image="registry.redhat.io/rhel8/redis",
+    pattern="",
+    wait=True,
+):
     """
     Pull and push images running oc new-app command
     Args:
@@ -367,19 +373,23 @@ def image_pull_and_push(project_name, template, image="", pattern="", wait=True)
         if f'"{template}" not found' in str(cfe):
             logger.warn(f"Template {template} not found")
             template = "redis-ephemeral"
+            image = "registry.redhat.io/rhel8/redis"
         else:
             raise
 
     if config.DEPLOYMENT.get("disconnected"):
         mirror_image(image=image)
     else:
-        cmd = f"new-app --template={template} -n {project_name}"
+        cmd = f"new-app --template={template} -n {project_name} --name=build1"
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
         # Validate it completed
         if wait:
             if template == "redis-ephemeral":
+                wait_time = 180
+                logger.info(f"Wait for {wait_time} seconds for deployment to come up")
+                time.sleep(180)
                 ocp_obj = ocp.OCP(kind=constants.POD, namespace=project_name)
                 deploy_pod_name = get_pod_name_by_pattern(
                     pattern="deploy", namespace=project_name
@@ -430,11 +440,11 @@ def get_build_name_by_pattern(pattern="", namespace=None):
     return build_list
 
 
-def validate_image_exists(namespace=None):
+def validate_image_exists(app="redis"):
     """
     Validate image exists on registries path
     Args:
-        namespace (str): Namespace where the images/builds are created
+        app (str): Label or application name
 
     Returns:
         image_list (str): Dir/Files/Images are listed in string format
@@ -453,8 +463,9 @@ def validate_image_exists(namespace=None):
                     name=pod_name,
                     namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
                 )
+
                 return pod_obj.exec_cmd_on_pod(
-                    command=f"find /registry/docker/registry/v2/repositories/{namespace}"
+                    command=f"find /registry/docker/registry/v2/repositories/openshift/{app}"
                 )
 
 

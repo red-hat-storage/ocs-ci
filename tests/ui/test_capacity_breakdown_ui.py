@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     bugzilla,
+    skipif_ocs_version,
+    ui,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -43,8 +45,10 @@ class TestCapacityBreakdownUI(ManageTest):
             ),
         ],
     )
+    @ui
     @tier2
     @bugzilla("1832297")
+    @skipif_ocs_version("!=4.8")
     @skipif_ui_not_support("validation")
     def test_capacity_breakdown_ui(
         self, setup_ui, project_name, pod_name, sc_type, teardown_project_factory

@@ -127,8 +127,8 @@ def process_ocsci_conf(arguments):
     )
 
     args, unknown = parser.parse_known_args(args=arguments)
-    ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
+    ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
@@ -136,8 +136,7 @@ def process_ocsci_conf(arguments):
         ocs_version_from_image = utils.get_ocs_version_from_image(ocs_registry_image)
         if ocs_version and ocs_version != ocs_version_from_image:
             framework.config.DEPLOYMENT["ignore_csv_mismatch"] = True
-        if not ocs_version:
-            ocs_version = ocs_version_from_image
+        ocs_version = ocs_version_from_image
     if ocs_version:
         version_config_file = os.path.join(
             OCS_VERSION_CONF_DIR, f"ocs-{ocs_version}.yaml"
@@ -151,6 +150,9 @@ def process_ocsci_conf(arguments):
             OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
         )
         load_config([ocp_version_config])
+        # As we may have overridden values specified in the original config,
+        # reload it to get them back
+        load_config(args.ocsci_conf)
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
 

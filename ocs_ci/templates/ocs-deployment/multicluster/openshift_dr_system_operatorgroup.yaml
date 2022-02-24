@@ -1,0 +1,5 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-dr-system-operatorgroup
+  namespace: openshift-dr-system

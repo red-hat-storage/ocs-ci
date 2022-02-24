@@ -7,7 +7,9 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier3
+from ocs_ci.ocs import metrics
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
 
@@ -151,3 +153,37 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     assert health_validation, health_msg
     assert osd_up_validation, osd_up_msg
     assert osd_in_validation, osd_in_msg
+
+
+@tier3
+@pytest.mark.polarion_id("OCS-2734")
+def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd):
+    """
+    Since ODF 4.9 ceph metrics covering disruptions will be available only
+    when there are some disruptions to report, as noted in BZ 2028649.
+
+    This test case covers this behaviour for one stopped/disabled OSD.
+    """
+    prometheus = PrometheusAPI()
+    metrics_expected = list(metrics.ceph_metrics_healthy)
+    # metrics which should be present with one OSD down
+    for mtr in ("ceph_pg_degraded", "ceph_pg_undersized"):
+        assert mtr in metrics.ceph_metrics, "test code needs to be updated"
+        # make sure the test code is consistent with metrics module
+        metrics_expected.append(mtr)
+    # metrics which should not be present with one OSD down
+    for mtr in ["ceph_pg_clean"]:
+        assert mtr in metrics.ceph_metrics, "test code needs to be updated"
+        metrics_expected.remove(mtr)
+    metrics_without_results = metrics.get_missing_metrics(
+        prometheus,
+        metrics_expected,
+        current_platform=config.ENV_DATA["platform"].lower(),
+        start=measure_stop_ceph_osd["start"],
+        stop=measure_stop_ceph_osd["stop"],
+    )
+    msg = (
+        "Prometheus should provide some value(s) for all tested metrics, "
+        "so that the list of metrics without results is empty."
+    )
+    assert metrics_without_results == [], msg

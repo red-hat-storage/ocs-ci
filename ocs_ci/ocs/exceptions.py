@@ -248,6 +248,14 @@ class ExternalClusterRGWAdminOpsUserException(Exception):
     pass
 
 
+class ExternalClusterExporterRunFailed(Exception):
+    pass
+
+
+class ExternalClusterRGWEndPointMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -428,6 +436,10 @@ class PodNotCreated(Exception):
     pass
 
 
+class RBDSideCarContainerException(Exception):
+    pass
+
+
 class ElasticSearchNotDeployed(Exception):
     pass
 
@@ -437,6 +449,14 @@ class ManagedServiceAddonDeploymentError(Exception):
 
 
 class ConfigurationError(Exception):
+    pass
+
+
+class DRPrimaryNotFoundException(Exception):
+    pass
+
+
+class InteractivePromptException(Exception):
     pass
 
 

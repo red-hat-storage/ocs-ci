@@ -216,7 +216,7 @@ def create_custom_machineset(
 
     """
     # check for aws and IPI platform
-    if config.ENV_DATA["platform"] == "aws":
+    if config.ENV_DATA["platform"].lower() == "aws":
         machinesets_obj = OCP(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
@@ -1018,5 +1018,44 @@ def change_current_replica_count_to_ready_replica_count(machine_set):
         res = set_replica_count(machine_set, count=ready_replica_count)
     else:
         log.info("The current replica count is equal to the ready replica count")
+
+    return res
+
+
+def wait_for_ready_replica_count_to_reach_expected_value(
+    machine_set, expected_value, timeout=180
+):
+    """
+    Wait for the ready replica count to reach an expected value
+
+    Args:
+        machine_set (str): Name of the machine set
+        expected_value (int): The expected value to reach
+        timeout (int): Time to wait for the ready replica count to reach the expected value
+
+    Return:
+        bool: True, in case of the ready replica count reached the expected value. False otherwise
+
+    """
+    ready_replica_count = get_ready_replica_count(machine_set)
+    log.info(f"ready replica count = {ready_replica_count}")
+    log.info(
+        f"Wait {timeout} seconds for the ready replica count to reach the "
+        f"expected value {expected_value}"
+    )
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_ready_replica_count,
+        machine_set=machine_set,
+    )
+    try:
+        sample.wait_for_func_value(value=expected_value)
+        res = True
+    except TimeoutExpiredError:
+        log.info(
+            f"Ready replica count failed to reach the expected value {expected_value}"
+        )
+        res = False
 
     return res

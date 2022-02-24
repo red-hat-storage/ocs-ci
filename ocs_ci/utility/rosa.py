@@ -10,7 +10,10 @@ import os
 import re
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
+from ocs_ci.ocs.exceptions import (
+    ManagedServiceAddonDeploymentError,
+    UnsupportedPlatformVersionError,
+)
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -43,17 +46,16 @@ def create_cluster(cluster_name, version):
     region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
+    multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
+        f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
+        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     utils.run_cmd(cmd)
-    create_operator_roles(cluster_name)
-    create_oidc_provider(cluster_name)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        4000, 30, ocm.get_cluster_details, cluster_name
+        4500, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
@@ -83,11 +85,20 @@ def get_latest_rosa_version(version):
     """
     cmd = "rosa list versions"
     output = utils.run_cmd(cmd)
+    logger.info(f"Looking for z-stream version of {version}")
+    rosa_version = None
     for line in output.splitlines():
-        match = re.search(f"^{version}\\.(\\d) ", line)
+        match = re.search(f"^{version}\\.(\\d+) ", line)
         if match:
             rosa_version = match.group(0).rstrip()
             break
+    if rosa_version is None:
+        logger.error(f"Could not find any version of {version} available for ROSA")
+        logger.info("Try providing an older version of OCP with --ocp-version")
+        logger.info("Latest OCP versions available for ROSA are:")
+        for i in range(3):
+            logger.info(f"{output.splitlines()[i + 1]}")
+        raise UnsupportedPlatformVersionError
     return rosa_version
 
 
@@ -101,7 +112,7 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
 
     """
     cmd = (
-        f"rosa create account-roles --version {version} --mode auto"
+        f"rosa create account-roles --mode auto"
         f' --permissions-boundary "" --prefix {prefix}  --yes'
     )
     utils.run_cmd(cmd)
@@ -180,7 +191,7 @@ def install_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
@@ -215,7 +226,7 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
@@ -229,3 +240,25 @@ def delete_odf_addon(cluster):
             raise ManagedServiceAddonDeploymentError(
                 f"Addon {addon_name} failed to be uninstalled"
             )
+
+
+def delete_operator_roles(cluster_id):
+    """
+    Delete operator roles of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete operator-roles -c {cluster_id}"
+    utils.run_cmd(cmd)
+
+
+def delete_oidc_provider(cluster_id):
+    """
+    Delete oidc provider of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete oidc-provider -c {cluster_id}"
+    utils.run_cmd(cmd)

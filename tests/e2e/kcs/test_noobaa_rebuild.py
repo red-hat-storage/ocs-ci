@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
     tier3,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2653")
 @pytest.mark.bugzilla("1991361")
 @pytest.mark.bugzilla("2019577")
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_external_mode
 class TestNoobaaRebuild(E2ETest):
     """

@@ -24,6 +24,7 @@ KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+RBD_NAME = "rbd"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
@@ -38,6 +39,7 @@ OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
+ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
@@ -61,7 +63,7 @@ BG_LOAD_NAMESPACE = "bg-fio-load"
 MAX_BYTES_IN_POOL_AFTER_DATA_DELETE = 250000
 
 # Elastic search parameters
-ELASTICSEARCH_DEV_IP = "10.0.144.152"
+ELASTICSEARCH_DEV_IP = "10.0.144.103"
 ELASTICSEARCE_PORT = 9200
 
 # Local storage namespace

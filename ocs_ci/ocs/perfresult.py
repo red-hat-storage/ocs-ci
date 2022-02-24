@@ -102,14 +102,14 @@ class PerfResult:
 
         # Adding the results to the ES document / JSON file
         self.add_key("all_results", self.all_results)
-
+        log.info(json.dumps(self.results, indent=4))
         if self.es is None:
             log.warning("No elasticsearch server to write data to")
             self.dump_to_file()
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
-        log.debug(
+        log.info(
             f"Params : index={self.new_index}, "
             f"doc_type=_doc, body={self.results}, id={self.uuid}"
         )
@@ -122,6 +122,7 @@ class PerfResult:
                     body=self.results,
                     id=self.uuid,
                 )
+                return True
             except Exception as e:
                 if retry > 0:
                     log.warning("Failed to write data to ES, retrying in 3 sec...")
@@ -131,7 +132,7 @@ class PerfResult:
                     log.warning(f"Failed writing data with : {e}")
                     self.dump_to_file()
                     return False
-            return True
+        return True
 
     def add_key(self, key, value):
         """

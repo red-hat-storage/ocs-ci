@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
+from ocs_ci.utility.reporting import update_live_must_gather_image
 
 __all__ = [
     "pytest_addoption",
@@ -321,7 +322,7 @@ def pytest_configure(config):
     if ocscilib_module not in config.getoption("-p"):
         return
     for i in range(ocsci_config.nclusters):
-        log.debug(f"Pytest configure switching to: cluster={i}")
+        log.info(f"Pytest configure switching to: cluster={i}")
         ocsci_config.switch_ctx(i)
 
         if not (config.getoption("--help") or config.getoption("collectonly")):
@@ -355,17 +356,16 @@ def pytest_configure(config):
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
                 )
-                return
+                continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
                 log.info(
                     "Skipping version collection because we skipped "
                     "the OCS deployment"
                 )
-                return
+                continue
             elif ocsci_config.RUN["cli_params"].get("dev_mode"):
                 log.info("Running in development mode")
-                return
-            print("Collecting Cluster versions")
+                continue
             # remove extraneous metadata
             for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
                 if config._metadata.get(extra_meta):
@@ -373,6 +373,8 @@ def pytest_configure(config):
 
             config._metadata["Test Run Name"] = get_testrun_name()
             gather_version_info_for_report(config)
+    # switch the configuration context back to the default cluster
+    ocsci_config.switch_default_cluster_ctx()
 
 
 def gather_version_info_for_report(config):
@@ -389,13 +391,14 @@ def gather_version_info_for_report(config):
         config._metadata["Cluster Version"] = clusterversion
 
         # add ceph version
-        ceph_version = get_ceph_version()
-        config._metadata["Ceph Version"] = ceph_version
+        if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
+            ceph_version = get_ceph_version()
+            config._metadata["Ceph Version"] = ceph_version
 
-        # add csi versions
-        csi_versions = get_csi_versions()
-        config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
-        config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
+            config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
         config._metadata["OCS operator"] = get_ocs_build_number()
@@ -467,9 +470,14 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(
         os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
     )
-    ocsci_config.RUN["kubeconfig"] = os.path.join(
-        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    ocsci_config.RUN.update(
+        {
+            "kubeconfig": os.path.join(
+                cluster_path, ocsci_config.RUN["kubeconfig_location"]
+            )
+        }
     )
+
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
@@ -482,12 +490,7 @@ def process_cluster_cli_params(config):
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
     if live_deployment:
-        ocsci_config.REPORTING[
-            "default_ocs_must_gather_latest_tag"
-        ] = f"v{ocsci_config.ENV_DATA['ocs_version']}"
-        ocsci_config.REPORTING["ocs_must_gather_image"] = ocsci_config.REPORTING[
-            "ocs_live_must_gather_image"
-        ]
+        update_live_must_gather_image()
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True

@@ -5,6 +5,7 @@ import logging
 import pytest
 import math
 import datetime
+import os
 from uuid import uuid4
 
 import ocs_ci.ocs.exceptions as ex
@@ -29,7 +30,7 @@ class TestPVCCreationPerformance(PASTest):
         """
         logging.info("Starting the test setup")
         super(TestPVCCreationPerformance, self).setup()
-        self.benchmark_name = "pvc_creation_permorance"
+        self.benchmark_name = "pvc_creation_performance"
         self.uuid = uuid4().hex
         self.crd_data = {
             "spec": {
@@ -206,6 +207,7 @@ class TestPVCCreationPerformance(PASTest):
             f"{bulk_size} Bulk PVCs deletion time is {total_deletion_time} seconds."
         )
 
+        self.results_path = get_full_test_logs_path(cname=self)
         # Produce ES report
         # Collecting environment information
         self.get_env_info()
@@ -227,7 +229,12 @@ class TestPVCCreationPerformance(PASTest):
         full_results.add_key("bulk_pvc_deletion_time", total_deletion_time)
 
         # Write the test results into the ES server
-        full_results.es_write()
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
 
     @pytest.fixture()
     def base_setup_creation_after_deletion(
@@ -288,11 +295,11 @@ class TestPVCCreationPerformance(PASTest):
                 )
 
                 executor.submit(pvc_obj.reload)
-        log.info("Deleting 75% of the PVCs - 90 PVCs")
+        log.info(f"Deleting 75% of the PVCs - {number_of_pvcs} PVCs")
         assert pvc.delete_pvcs(
             pvc_objs[:number_of_pvcs], True
         ), "Deletion of 75% of PVCs failed"
-        log.info("Re-creating the 90 PVCs")
+        log.info(f"Re-creating the {number_of_pvcs} PVCs")
         pvc_objs, _ = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=self.namespace,
@@ -326,6 +333,7 @@ class TestPVCCreationPerformance(PASTest):
             )
         logging.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
 
+        self.results_path = get_full_test_logs_path(cname=self)
         # Produce ES report
         # Collecting environment information
         self.get_env_info()
@@ -346,4 +354,36 @@ class TestPVCCreationPerformance(PASTest):
         full_results.add_key("creation_after_deletion_time", total_time)
 
         # Write the test results into the ES server
-        full_results.es_write()
+        # Write the test results into the ES server
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (2 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_bulk_pvc_creation_deletion_performance_results(self):
+        """
+        This is not a test - it is only check that previous tests ran and finished as expected
+        and reporting the full results (links in the ES) of previous tests (4 + 2)
+        """
+
+        workloads = [
+            {
+                "name": "test_bulk_pvc_creation_deletion_measurement_performance",
+                "tests": 4,
+                "test_name": "PVC Bulk Creation-Deletion",
+            },
+            {
+                "name": "test_bulk_pvc_creation_after_deletion_performance",
+                "tests": 2,
+                "test_name": "PVC Bulk Creation-After-Deletion",
+            },
+        ]
+        for wl in workloads:
+            self.number_of_tests = wl["tests"]
+            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
+            self.results_file = os.path.join(self.results_path, "all_results.txt")
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])

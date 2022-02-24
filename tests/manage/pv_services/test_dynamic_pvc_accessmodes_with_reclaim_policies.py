@@ -1,7 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    acceptance,
+    skipif_managed_service,
+)
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
@@ -42,9 +48,13 @@ class TestDynamicPvc(ManageTest):
             tuple: containing the storage class instance and list of worker nodes
 
         """
-        # Create storage class
-        sc_obj = storageclass_factory(
-            interface=interface_type, reclaim_policy=reclaim_policy
+        # Create storage class if reclaim policy is not "Delete"
+        sc_obj = (
+            default_storage_class(interface_type)
+            if reclaim_policy == constants.RECLAIM_POLICY_DELETE
+            else storageclass_factory(
+                interface=interface_type, reclaim_policy=reclaim_policy
+            )
         )
         worker_nodes_list = node.get_worker_nodes()
 
@@ -77,6 +87,7 @@ class TestDynamicPvc(ManageTest):
                 marks=[
                     pytest.mark.polarion_id("OCS-530"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_managed_service,
                 ],
             ),
             pytest.param(
@@ -94,6 +105,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_managed_service,
                 ],
             ),
             pytest.param(
@@ -210,7 +222,7 @@ class TestDynamicPvc(ManageTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-                marks=pytest.mark.polarion_id("OCS-542"),
+                marks=[pytest.mark.polarion_id("OCS-542"), skipif_managed_service],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],

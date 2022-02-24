@@ -20,6 +20,8 @@ For this purpose we have this config file: [upgrade.yaml](https://github.com/red
 which you can pass via `--ocsci-conf` when you are running the deployment. This will
 automatically take not latest build but one before.
 
+Use `--live-deploy` parameter in the case you would like to deploy GAed version.
+
 ## Upgrade execution
 
 For upgrade we have few pytest marks defined [here](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/pytest_customization/marks.py):
@@ -90,3 +92,32 @@ run-ci tests/
     --upgrade-ocs-registry-image 'quay.io/rhceph-dev/ocs-olm-operator:latest-4.3'
 
 ```
+
+## Live upgrade
+
+In the case you would like to upgrade from GAed version to GAed version you need
+to use `--live-deploy` parameter for deployment as mentioned above, but also
+when you starting upgrade execution to have proper must gather image from live content.
+
+Also the `conf/upgrade/upgrade_in_current_source.yaml` should be passed via `--ocsci-conf`, to let
+OCS-CI know, that it should not update catalog source to the internal build, but
+keep in GAed content.
+
+> In the case of Z-stream upgrade, only manual approval strategy job can be used.
+> Or manually passing: `conf/ocsci/manual_subscription_plan_approval.yaml`
+> The cluster needs to be installed before content is released.
+> There is no way to install previous Z-stream version once content is released!
+
+## Stage upgrade
+
+In the case of upgrade from stage. This config file: `conf/ocsci/stage-rh-osbs.yaml`
+should be passed via `--ocsci-conf` parameter.
+
+Also the `conf/upgrade/upgrade_in_current_source.yaml` should be passed via `--ocsci-conf`, to let
+OCS-CI know, that it should not update catalog source to the internal build, but
+keep in stage content.
+
+> In the case of Z-stream upgrade, only manual approval strategy job can be used.
+> Or manually passing: `conf/ocsci/manual_subscription_plan_approval.yaml`
+> The cluster needs to be installed before push to the stage.
+> There is no way to install previous Z-stream version once content is pushed to the stage!
