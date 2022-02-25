@@ -20,7 +20,7 @@ class Connection(object):
         Initialize all required variables
 
         Args:
-            host (str):
+            host (str): Hostname or IP to connect
             user (str): User name to connect
             private_key (str): Private key  to connect to load balancer
             password (password): Password for host
@@ -40,8 +40,8 @@ class Connection(object):
             paramiko.client: Paramiko SSH client connection to load balancer
 
         Raises:
-            FileNotFoundError: In-case terraform.tfstate file not found
-                in terraform_data directory
+            authException: In-case of authentication failed
+            sshException: In-case of ssh connection failed
 
         """
         try:
