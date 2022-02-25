@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 @tier2
 @managed_service_required
 def test_capacity_workload_alerts(
-    notification_emails_required, workload_storageutilization_99p_rbd
+    notification_emails_required, workload_storageutilization_95p_rbd
 ):
     """
     Test that there are appropriate alert emails when ceph cluster is utilized
