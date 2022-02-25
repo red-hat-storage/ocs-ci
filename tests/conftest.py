@@ -264,9 +264,7 @@ def supported_configuration():
     Last documentation check: 2020-02-21
     """
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        log.info(
-            "Check for supported configuration is not applied on Managed Service"
-        )
+        log.info("Check for supported configuration is not applied on Managed Service")
         return
     min_cpu = constants.MIN_NODE_CPU
     min_memory = constants.MIN_NODE_MEMORY
