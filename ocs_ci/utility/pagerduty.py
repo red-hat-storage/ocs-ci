@@ -240,11 +240,13 @@ class PagerDutyAPI(object):
 
         """
         cluster_name = config.ENV_DATA["cluster_name"]
+        # timestamp is added to service name to ensure unique name of service
+        timestamp = time.time()
         default_policy = self.get_default_escalation_policy_id()
         return {
             "service": {
                 "type": "service",
-                "name": cluster_name,
+                "name": f"{cluster_name}_{int(timestamp)}",
                 "description": f"Service for cluster {cluster_name}",
                 "status": "active",
                 "escalation_policy": {

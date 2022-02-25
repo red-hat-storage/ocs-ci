@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     skipif_bmpsi,
+    skipif_ui_not_support,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class TestAddCapacityUI(object):
     @skipif_bmpsi
     @ignore_leftovers
     @skipif_external_mode
+    @skipif_ui_not_support("add_capacity")
     def test_add_capacity_internal(self, setup_ui):
         """
         Test Add Capacity on Internal cluster via UI

@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocp_version,
+    kms_config_required,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -23,6 +25,8 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.8")
 @skipif_ocp_version("<4.8")
+@kms_config_required
+@skipif_managed_service
 @pytest.mark.parametrize(
     argnames=["kv_version"],
     argvalues=[

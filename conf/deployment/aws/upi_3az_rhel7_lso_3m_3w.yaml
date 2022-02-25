@@ -8,7 +8,6 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   rhel_workers: true
-  rhel_worker_ami: 'ami-073251e3a0e36cebb' # RHEL7.7 as of now
   rhel_worker_instance_type: 'i3en.2xlarge'
   device_size: 2328
   root_disk_size: 120

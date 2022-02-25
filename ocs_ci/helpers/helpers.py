@@ -47,6 +47,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 
+
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
@@ -526,6 +527,7 @@ def create_storage_class(
     rbd_thick_provision=False,
     encrypted=False,
     encryption_kms_id=None,
+    fs_name=None,
 ):
     """
     Create a storage class
@@ -544,18 +546,20 @@ def create_storage_class(
             Applicable if interface_type is CephBlockPool
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
+        fs_name (str): the name of the filesystem for CephFS StorageClass
 
     Returns:
         OCS: An OCS instance for the storage class
     """
 
+    yamls = {
+        constants.CEPHBLOCKPOOL: constants.CSI_RBD_STORAGECLASS_YAML,
+        constants.CEPHFILESYSTEM: constants.CSI_CEPHFS_STORAGECLASS_YAML,
+    }
     sc_data = dict()
+    sc_data = templating.load_yaml(yamls[interface_type])
+
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -571,13 +575,8 @@ def create_storage_class(
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml(constants.CSI_CEPHFS_STORAGECLASS_YAML)
-        sc_data["parameters"]["csi.storage.k8s.io/node-stage-secret-name"] = secret_name
-        sc_data["parameters"][
-            "csi.storage.k8s.io/node-stage-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
-        sc_data["parameters"]["fsName"] = get_cephfs_name()
+        sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
@@ -589,16 +588,11 @@ def create_storage_class(
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
     sc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"]["csi.storage.k8s.io/provisioner-secret-name"] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/provisioner-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-name"
-    ] = secret_name
-    sc_data["parameters"][
-        "csi.storage.k8s.io/controller-expand-secret-namespace"
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    for key in ["node-stage", "provisioner", "controller-expand"]:
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
+        sc_data["parameters"][
+            f"csi.storage.k8s.io/{key}-secret-namespace"
+        ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2080,7 +2074,7 @@ def validate_scc_policy(sa_name, namespace, scc_name=constants.PRIVILEGED):
 
 def add_scc_policy(sa_name, namespace):
     """
-    Adding ServiceAccount to scc privileged
+    Adding ServiceAccount to scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2088,17 +2082,18 @@ def add_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy add-scc-to-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def remove_scc_policy(sa_name, namespace):
     """
-    Removing ServiceAccount from scc privileged
+    Removing ServiceAccount from scc anyuid and privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -2106,12 +2101,13 @@ def remove_scc_policy(sa_name, namespace):
 
     """
     ocp = OCP()
-    out = ocp.exec_oc_cmd(
-        command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
-        out_yaml_format=False,
-    )
-
-    logger.info(out)
+    scc_list = [constants.ANYUID, constants.PRIVILEGED]
+    for scc in scc_list:
+        out = ocp.exec_oc_cmd(
+            command=f"adm policy remove-scc-from-user {scc} system:serviceaccount:{namespace}:{sa_name}",
+            out_yaml_format=False,
+        )
+        logger.info(out)
 
 
 def craft_s3_command(cmd, mcg_obj=None, api=False):
@@ -3486,10 +3482,16 @@ def get_event_line_datetime(event_line):
          datetime object: The event line datetime
 
     """
-    if re.search(r"\d{4}-\d{2}-\d{2}", event_line):
-        return datetime.datetime.strptime(event_line[:26], "%Y-%m-%d %H:%M:%S.%f")
-    else:
-        return None
+    event_line_dt = None
+    regex = r"\d{4}-\d{2}-\d{2}"
+    if re.search(regex + "T", event_line):
+        dt_string = event_line[:23].replace("T", " ")
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+    elif re.search(regex, event_line):
+        dt_string = event_line[:26]
+        event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
+
+    return event_line_dt
 
 
 def get_rook_ceph_pod_events(pod_name):
@@ -3653,3 +3655,272 @@ def verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running(timeou
         func=check_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def induce_mon_quorum_loss():
+    """
+    Take mon quorum out by deleting /var/lib/ceph/mon directory
+    so that it will start crashing and the quorum is lost
+
+    Returns:
+        mon_pod_obj_list (list): List of mon objects
+        mon_pod_running[0] (obj): A mon object which is running
+        ceph_mon_daemon_id (list): List of crashed ceph mon id
+
+    """
+
+    # Get mon pods
+    mon_pod_obj_list = pod.get_mon_pods()
+
+    # rsh into 2 of the mon pod and delete /var/lib/ceph/mon directory
+    mon_pod_obj = random.sample(mon_pod_obj_list, 2)
+    mon_pod_running = list(set(mon_pod_obj_list) - set(mon_pod_obj))
+    for pod_obj in mon_pod_obj:
+        command = "rm -rf /var/lib/ceph/mon"
+        try:
+            pod_obj.exec_cmd_on_pod(command=command)
+        except CommandFailed as ef:
+            if "Device or resource busy" not in str(ef):
+                raise ef
+
+    # Get the crashed mon id
+    ceph_mon_daemon_id = [
+        pod_obj.get().get("metadata").get("labels").get("ceph_daemon_id")
+        for pod_obj in mon_pod_obj
+    ]
+    logger.info(f"Crashed ceph mon daemon id: {ceph_mon_daemon_id}")
+
+    # Wait for sometime after the mon crashes
+    time.sleep(300)
+
+    # Check the operator log mon quorum lost
+    operator_logs = get_logs_rook_ceph_operator()
+    pattern = (
+        "op-mon: failed to check mon health. "
+        "failed to get mon quorum status: mon "
+        "quorum status failed: exit status 1"
+    )
+    logger.info(f"Check the operator log for the pattern : {pattern}")
+    if not re.search(pattern=pattern, string=operator_logs):
+        logger.error(
+            f"Pattern {pattern} couldn't find in operator logs. "
+            "Mon quorum may not have been lost after deleting "
+            "var/lib/ceph/mon. Please check"
+        )
+        raise UnexpectedBehaviour(
+            f"Pattern {pattern} not found in operator logs. "
+            "Maybe mon quorum not failed or  mon crash failed Please check"
+        )
+    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+
+    return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
+
+
+def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
+    """
+    Recover mon quorum back by following
+    procedure mentioned in https://access.redhat.com/solutions/5898541
+
+    Args:
+        mon_pod_obj_list (list): List of mon objects
+        mon_pod_running (obj): A mon object which is running
+        ceph_mon_daemon_id (list): List of crashed ceph mon id
+
+    """
+    from ocs_ci.ocs.cluster import is_lso_cluster
+
+    # Scale down rook-ceph-operator
+    logger.info("Scale down rook-ceph-operator")
+    if not modify_deployment_replica_count(
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=0
+    ):
+        raise CommandFailed("Failed to scale down rook-ceph-operator to 0")
+    logger.info("Successfully scaled down rook-ceph-operator to 0")
+
+    # Take a backup of the current mon deployment which running
+    dep_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    if is_lso_cluster():
+        mon = mon_pod_running.get().get("metadata").get("labels").get("mon")
+        mon_deployment_name = f"rook-ceph-mon-{mon}"
+    else:
+        mon_deployment_name = (
+            mon_pod_running.get().get("metadata").get("labels").get("pvc_name")
+        )
+    running_mon_pod_yaml = dep_obj.get(resource_name=mon_deployment_name)
+
+    # Patch the mon Deployment to run a sleep
+    # instead of the ceph-mon command
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to run a sleep instead of the ceph-mon command"
+    )
+    params = (
+        '{"spec": {"template": {"spec": '
+        '{"containers": [{"name": "mon", "command": ["sleep", "infinity"], "args": []}]}}}}'
+    )
+    dep_obj.patch(
+        resource_name=mon_deployment_name, params=params, format_type="strategic"
+    )
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set to sleep instead of the ceph-mon command"
+    )
+
+    # Set 'initialDelaySeconds: 2000' so that pod doesn't restart
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to set 'initialDelaySeconds: 2000'"
+    )
+    params = (
+        '[{"op": "replace", '
+        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":2000}]'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 2000'"
+    )
+
+    # rsh to mon pod and run commands to remove lost mons
+    # set a few simple variables
+    time.sleep(60)
+    mon_pod_obj = pod.get_mon_pods()
+    for pod_obj in mon_pod_obj:
+        if (
+            is_lso_cluster()
+            and pod_obj.get().get("metadata").get("labels").get("mon") == mon
+        ):
+            mon_pod_running = pod_obj
+        elif (
+            pod_obj.get().get("metadata").get("labels").get("pvc_name")
+            == mon_deployment_name
+        ):
+            mon_pod_running = pod_obj
+    monmap_path = "/tmp/monmap"
+    args_from_mon_containers = (
+        running_mon_pod_yaml.get("spec")
+        .get("template")
+        .get("spec")
+        .get("containers")[0]
+        .get("args")
+    )
+
+    # Extract the monmap to a file
+    logger.info("Extract the monmap to a file")
+    args_from_mon_containers.append(f"--extract-monmap={monmap_path}")
+    extract_monmap = " ".join(args_from_mon_containers).translate(
+        "()".maketrans("", "", "()")
+    )
+    command = f"ceph-mon {extract_monmap}"
+    mon_pod_running.exec_cmd_on_pod(command=command)
+
+    # Review the contents of monmap
+    command = f"monmaptool --print {monmap_path}"
+    mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+    # Take a backup of current monmap
+    backup_of_monmap_path = "/tmp/monmap.current"
+    logger.info(f"Take a backup of current monmap in location {backup_of_monmap_path}")
+    command = f"cp {monmap_path} {backup_of_monmap_path}"
+    mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+    # Remove the crashed mon from the monmap
+    logger.info("Remove the crashed mon from the monmap")
+    for mon_id in ceph_mon_daemon_id:
+        command = f"monmaptool {backup_of_monmap_path} --rm {mon_id}"
+        mon_pod_running.exec_cmd_on_pod(command=command, out_yaml_format=False)
+    logger.info("Successfully removed the crashed mon from the monmap")
+
+    # Inject the monmap back to the monitor
+    logger.info("Inject the new monmap back to the monitor")
+    args_from_mon_containers.pop()
+    args_from_mon_containers.append(f"--inject-monmap={backup_of_monmap_path}")
+    inject_monmap = " ".join(args_from_mon_containers).translate(
+        "()".maketrans("", "", "()")
+    )
+    command = f"ceph-mon {inject_monmap}"
+    mon_pod_running.exec_cmd_on_pod(command=command)
+    args_from_mon_containers.pop()
+
+    # Patch the mon deployment to run "mon" command again
+    logger.info(f"Edit mon {mon_deployment_name} deployment to run mon command again")
+    params = (
+        f'{{"spec": {{"template": {{"spec": {{"containers": '
+        f'[{{"name": "mon", "command": ["ceph-mon"], "args": {json.dumps(args_from_mon_containers)}}}]}}}}}}}}'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params)
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set to run mon command again"
+    )
+
+    # Set 'initialDelaySeconds: 10' back
+    logger.info(
+        f"Edit mon {mon_deployment_name} deployment to set again 'initialDelaySeconds: 10'"
+    )
+    params = (
+        '[{"op": "replace", '
+        '"path": "/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds", "value":10}]'
+    )
+    dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
+    logger.info(
+        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 10'"
+    )
+
+    # Scale up the rook-ceph-operator deployment
+    logger.info("Scale up rook-ceph-operator")
+    if not modify_deployment_replica_count(
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
+    ):
+        raise CommandFailed("Failed to scale up rook-ceph-operator to 1")
+    logger.info("Successfully scaled up rook-ceph-operator to 1")
+    logger.info("Validate rook-ceph-operator pod is running")
+    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.OPERATOR_LABEL,
+        resource_count=1,
+        timeout=600,
+        sleep=5,
+    )
+
+    # Verify all mons are up and running
+    logger.info("Validate all mons are up and running")
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.MON_APP_LABEL,
+        resource_count=len(mon_pod_obj_list),
+        timeout=1200,
+        sleep=5,
+    )
+    logger.info("All mons are up and running")
+
+
+def create_reclaim_space_job(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+):
+    """
+    Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
+    """
+    reclaim_space_job_name = (
+        reclaim_space_job_name or f"reclaimspacejob-{pvc_name}-{uuid4().hex}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_JOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_job_name
+    job_data["spec"]["target"]["persistentVolumeClaim"] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["retryDeadlineSeconds"] = retry_deadline_seconds
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj

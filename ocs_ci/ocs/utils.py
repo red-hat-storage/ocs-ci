@@ -748,6 +748,10 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocsci_config.ENV_DATA["mcg_only_deployment"]:
+        log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
+        return
     namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
     # setup toolbox for external mode
@@ -760,7 +764,7 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
+    if ocs_version == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
@@ -775,6 +779,13 @@ def setup_ceph_toolbox(force_setup=False):
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
             env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
             # replace secret
             env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
@@ -866,9 +877,14 @@ def run_must_gather(log_dir_path, image, command=None):
         log_dir_path (str): directory for dumped must-gather logs
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
+
+    Returns:
+        mg_output (str): must-gather cli output
+
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
     timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
@@ -882,14 +898,21 @@ def run_must_gather(log_dir_path, image, command=None):
     log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
-        occli.exec_oc_cmd(cmd, out_yaml_format=False, timeout=must_gather_timeout)
+        mg_output = occli.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=must_gather_timeout
+        )
     except CommandFailed as ex:
-        log.error(f"Failed during must gather logs! Error: {ex}")
+        log.error(
+            f"Failed during must gather logs! Error: {ex}"
+            f"Must-Gather Output: {mg_output}"
+        )
     except TimeoutExpired as ex:
         log.error(
             f"Timeout {must_gather_timeout}s for must-gather reached, command"
             f" exited with error: {ex}"
+            f"Must-Gather Output: {mg_output}"
         )
+    return mg_output
 
 
 def collect_noobaa_db_dump(log_dir_path):
@@ -985,12 +1008,21 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             ),
         )
         ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
-        ocs_must_gather_image = ocsci_config.REPORTING["ocs_must_gather_image"]
+        ocs_must_gather_image = ocsci_config.REPORTING.get(
+            "ocs_must_gather_image",
+            ocsci_config.REPORTING["default_ocs_must_gather_image"],
+        )
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
         if ocsci_config.DEPLOYMENT.get("disconnected"):
             ocs_must_gather_image_and_tag = mirror_image(ocs_must_gather_image_and_tag)
-        run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
-
+        mg_output = run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
+        if (
+            ocsci_config.DEPLOYMENT.get("disconnected")
+            and "cannot stat 'jq'" in mg_output
+        ):
+            raise ValueError(
+                f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
+            )
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
@@ -1203,3 +1235,34 @@ def enable_console_plugin():
             f" --type json -p {patch}"
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+
+def get_non_acm_cluster_config():
+    """
+    Get a list of non-acm cluster's config objects
+
+    Returns:
+        list: of cluster config objects
+
+    """
+    non_acm_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i == ocsci_config.get_acm_index():
+            continue
+        else:
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+
+def get_primary_cluster_config():
+    """
+    Get the primary cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["primary_cluster"]:
+            return cluster

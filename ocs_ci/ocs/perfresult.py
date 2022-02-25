@@ -102,14 +102,14 @@ class PerfResult:
 
         # Adding the results to the ES document / JSON file
         self.add_key("all_results", self.all_results)
-
+        log.info(json.dumps(self.results, indent=4))
         if self.es is None:
             log.warning("No elasticsearch server to write data to")
             self.dump_to_file()
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
-        log.debug(
+        log.info(
             f"Params : index={self.new_index}, "
             f"doc_type=_doc, body={self.results}, id={self.uuid}"
         )
@@ -122,6 +122,7 @@ class PerfResult:
                     body=self.results,
                     id=self.uuid,
                 )
+                return True
             except Exception as e:
                 if retry > 0:
                     log.warning("Failed to write data to ES, retrying in 3 sec...")
@@ -131,7 +132,7 @@ class PerfResult:
                     log.warning(f"Failed writing data with : {e}")
                     self.dump_to_file()
                     return False
-            return True
+        return True
 
     def add_key(self, key, value):
         """
@@ -158,3 +159,29 @@ class PerfResult:
         res_link = f"http://{self.server}:{self.port}/{self.new_index}/"
         res_link += f"_search?q=uuid:{self.uuid}"
         return res_link
+
+
+class ResultsAnalyse(PerfResult):
+    """
+    This class generates results for all tests as one unit
+    and saves them to an elastic search server on the cluster
+
+    """
+
+    def __init__(self, uuid, crd, full_log_path, index_name):
+        """
+        Initialize the object by reading some of the data from the CRD file and
+        by connecting to the ES server and read all results from it.
+
+        Args:
+            uuid (str): the unique uid of the test
+            crd (dict): dictionary with test parameters - the test yaml file
+                        that modify it in the test itself.
+            full_log_path (str): the path of the results files to be found
+            index_name (str): index name in ES
+        """
+        super(ResultsAnalyse, self).__init__(uuid, crd)
+        self.new_index = index_name
+        self.full_log_path = full_log_path
+        # make sure we have connection to the elastic search server
+        self.es_connect()
