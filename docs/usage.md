@@ -169,14 +169,21 @@ that can be used to access an existing cluster.
 #### Deployment of cluster
 
 If you would like to deploy new cluster you can run following command:
+
 ```bash
-run-ci -m deployment --ocsci-conf conf/path_to_config_to_be_used.yaml \
+run-ci -m deployment \
+    --ocsci-conf conf/path_to_config_to_be_used.yaml \
     --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/ \
-    --deploy
- ```
-of course you can omit --cluster-name if you would like to use default
+    --cluster-path /home/my_user/my-ocs-dir \
+    --deploy \
+    tests/
+```
+
+Of course you can omit `--cluster-name` if you would like to use default
 values.
+
+> **_NOTE:_** You need to specify `tests/` directory as a test path even for
+> deployment.
 
 Note that during deployment, openshift command line tools like `oc` and
 `openshift-install` are installed into [`bin` directory of the
