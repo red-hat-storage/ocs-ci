@@ -277,7 +277,7 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
         for line in sublog:
             if (
                 operation == "delete"
-                and "generated Volume ID" in line
+                and "generated volume id" in line.lower()
                 and pv_name in line
             ):
                 pv_name = line.split("(")[1].split(")")[0]
