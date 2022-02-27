@@ -121,6 +121,16 @@ def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
 
 
 def string_to_time(time_string):
+    """
+    Converting string which present a time stamp to a time object
+
+    Args:
+        time_string (str): the string to convert
+
+    Return:
+        datetime : a time object
+
+    """
     return datetime.strptime(time_string, "%H:%M:%S.%f")
 
 
