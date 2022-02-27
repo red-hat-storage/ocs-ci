@@ -1,6 +1,6 @@
 """
 Test to verify performance of PVC creation and deletion
-for RBD, CephFS and RBD-Thick interfaces
+for RBD and CephFS interfaces
 """
 import time
 import logging
@@ -69,14 +69,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pod_factory: A fixture to create new pod
         """
         self.interface = interface_type
-        if self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc_obj = storageclass_factory(
-                interface=constants.CEPHBLOCKPOOL,
-                new_rbd_pool=True,
-                rbd_thick_provision=True,
-            )
-        else:
-            self.sc_obj = storageclass_factory(self.interface)
+        self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
 
     @pytest.fixture()
@@ -131,18 +124,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 *[constants.CEPHFILESYSTEM, "25Gi"],
                 marks=[pytest.mark.performance],
             ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
-                marks=[pytest.mark.performance_extended],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
-                marks=[pytest.mark.performance_extended],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "25Gi"],
-                marks=[pytest.mark.performance_extended],
-            ),
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -161,8 +142,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
-        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}-{pvc_size}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
@@ -184,17 +163,13 @@ class TestPVCCreationDeletionPerformance(PASTest):
         if self.dev_mode:
             num_of_samples = 2
 
-        accepted_creation_time = (
-            600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
-        )
+        accepted_creation_time = 1
 
-        # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs and for RBD Thick is 5 secs
+        # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs
         if self.interface == constants.CEPHFILESYSTEM:
             accepted_deletion_time = 2
         elif self.interface == constants.CEPHBLOCKPOOL:
             accepted_deletion_time = 1
-        else:
-            accepted_deletion_time = 5
 
         self.full_results.add_key("samples", num_of_samples)
 
@@ -211,7 +186,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            timeout = 60
             helpers.wait_for_resource_state(
                 pvc_obj, constants.STATUS_BOUND, timeout=timeout
             )
@@ -321,7 +296,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def test_pvc_creation_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (4)
+        and reporting the full results (links in the ES) of previous tests (6)
         """
 
         self.results_path = get_full_test_logs_path(
@@ -329,15 +304,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.results_file = os.path.join(self.results_path, "all_results.txt")
         log.info(f"Check results in {self.results_file}")
-        self.number_of_tests = 3
-        log.info("Check results for 'performance_extended' marker (3 tests)")
-        try:
-            self.check_tests_results()
-        except ex.BenchmarkTestFailed:
-            log.info("Look like performance_extended was not triggered")
-            log.info("Check results for 'performance' marker (9 tests)")
-            self.number_of_tests = 9
-            self.check_tests_results()
+        self.number_of_tests = 6
+        log.info("Check results for 'performance_extended' marker (6 tests)")
+        self.check_tests_results()
         self.push_to_dashboard(test_name="PVC Create-Delete")
 
     def process_time_measurements(
@@ -363,22 +332,19 @@ class TestPVCCreationDeletionPerformance(PASTest):
             f"PVCs is {average} seconds."
         )
 
-        if self.interface == constants.CEPHBLOCKPOOL_THICK:
-            st_deviation = statistics.stdev(time_measures)
-            st_deviation_percent = st_deviation / average * 100.0
-            if st_deviation_percent > accepted_deviation_percent:
-                log.error(
-                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
-                    f"PVCs is {st_deviation_percent}% which is bigger than accepted {accepted_deviation_percent}."
-                )
-            else:
-                log.info(
-                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
-                    f"PVCs is {st_deviation_percent}% and is within the accepted range."
-                )
-            self.full_results.add_key(
-                f"{action_name}_deviation_pct", st_deviation_percent
+        st_deviation = statistics.stdev(time_measures)
+        st_deviation_percent = st_deviation / average * 100.0
+        if st_deviation_percent > accepted_deviation_percent:
+            log.error(
+                f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                f"PVCs is {st_deviation_percent}% which is bigger than accepted {accepted_deviation_percent}."
             )
+        else:
+            log.info(
+                f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                f"PVCs is {st_deviation_percent}% and is within the accepted range."
+            )
+        self.full_results.add_key(f"{action_name}_deviation_pct", st_deviation_percent)
 
         return average
 
@@ -423,10 +389,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 *[constants.CEPHFILESYSTEM],
                 marks=[pytest.mark.performance],
             ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK],
-                marks=[pytest.mark.performance_extended],
-            ),
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -460,7 +422,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pvc_obj.reload()
             teardown_factory(pvc_obj)
 
-        timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+        timeout = 60
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
@@ -530,8 +492,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
-        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
 
         full_log_path = get_full_test_logs_path(cname=self) + f"-{self.sc}-{pvc_size}"
         self.results_path = get_full_test_logs_path(cname=self)
@@ -564,9 +524,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def test_multiple_pvc_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (3)
+        and reporting the full results (links in the ES) of previous tests (2)
         """
-        self.number_of_tests = 3
+        self.number_of_tests = 2
         results_path = get_full_test_logs_path(
             cname=self, fname="test_multiple_pvc_deletion_measurement_performance"
         )
