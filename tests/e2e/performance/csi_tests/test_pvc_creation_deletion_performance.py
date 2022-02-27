@@ -274,8 +274,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         self.full_results.all_results["creation"] = creation_time_measures
         self.full_results.all_results["deletion"] = deletion_time_measures
-        self.full_results.all_results["csi-creation"] = csi_creation_times
-        self.full_results.all_results["csi-deletion"] = csi_deletion_times
+        self.full_results.all_results["csi_creation"] = csi_creation_times
+        self.full_results.all_results["csi_deletion"] = csi_deletion_times
         self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
