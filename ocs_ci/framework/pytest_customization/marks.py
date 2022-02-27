@@ -222,9 +222,9 @@ ms_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on managed service consumer cluster",
 )
 
-ipi_or_managed_deployment_required = pytest.mark.skipif(
-    config.ENV_DATA["deployment_type"].lower() in ["ipi", "managed"],
-    reason="Test runs ONLY on IPI or managed deployed cluster",
+skipif_upi_deployment = pytest.mark.skipif(
+    config.ENV_DATA["deployment_type"].lower() == "upi",
+    reason="Test will not run on UPI deployment",
 )
 
 kms_config_required = pytest.mark.skipif(

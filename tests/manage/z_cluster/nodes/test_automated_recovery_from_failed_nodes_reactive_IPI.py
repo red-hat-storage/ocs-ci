@@ -5,8 +5,9 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    ipi_deployment_required,
-    ipi_or_managed_deployment_required,
+    skipif_upi_deployment,
+    skipif_ms_consumer,
+    skipif_lso,
     ignore_leftovers,
 )
 from ocs_ci.framework import config
@@ -31,7 +32,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     recover_node_to_ready_state,
     add_new_nodes_and_label_after_node_failure_ipi,
-    get_other_worker_nodes_in_same_rack_or_zone,
+    get_another_osd_node_in_same_rack_or_zone,
     get_node_pods,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -43,7 +44,9 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4
 @tier4b
-@ipi_or_managed_deployment_required
+@skipif_upi_deployment
+@skipif_lso
+@skipif_ms_consumer
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
@@ -158,15 +161,23 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         if not is_ms_provider_cluster():
             # Add a new node and label it
-            add_new_node_and_label_it(machineset_name)
+            new_ocs_node = add_new_node_and_label_it(machineset_name)
         else:
             log.info(
                 "When using the ms provider cluster, it should create and label "
                 "a new worker node automatically"
             )
 
+        failure_domain = get_failure_domain()
+        osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
+            failure_domain, new_ocs_node
+        )
+
+        assert (
+            osd_node_in_same_rack_or_zone.name in common_nodes
+        ), f"The osd node in the same rack or zone, is not in the common nodes {common_nodes}"
         # Get the failure node obj
-        failure_node_obj = get_node_objs(node_names=[common_nodes[0]])
+        failure_node_obj = get_node_objs([osd_node_in_same_rack_or_zone.name])[0]
 
         # Induce failure on the selected failure node
         log.info(f"Inducing failure on node {failure_node_obj[0].name}")
@@ -216,7 +227,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4
 @tier4a
-@ipi_deployment_required
+@skipif_upi_deployment
+@skipif_lso
+@skipif_ms_consumer
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -228,17 +241,17 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     def teardown(self, request, nodes):
         def finalizer():
             if self.extra_node:
-                nodes.terminate_nodes(self.osd_worker_node, wait=True)
+                nodes.terminate_nodes([self.osd_worker_node], wait=True)
                 log.info(
                     f"Successfully terminated node : "
-                    f"{self.osd_worker_node[0].name} instance"
+                    f"{self.osd_worker_node.name} instance"
                 )
             else:
-                is_recovered = recover_node_to_ready_state(self.osd_worker_node[0])
+                is_recovered = recover_node_to_ready_state(self.osd_worker_node)
                 if not is_recovered:
                     log.warning(
                         f"The recovery of the osd worker node "
-                        f"{self.osd_worker_node[0].name} failed. Adding a new OCS worker node..."
+                        f"{self.osd_worker_node.name} failed. Adding a new OCS worker node..."
                     )
                     add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
 
@@ -296,22 +309,19 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             new_ocs_node = add_new_node_and_label_it(self.machineset_name)
             self.extra_node = True
             failure_domain = get_failure_domain()
-            self.osd_worker_node = [
-                get_other_worker_nodes_in_same_rack_or_zone(
-                    failure_domain, new_ocs_node
-                )
-            ]
+            self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
+                failure_domain, new_ocs_node
+            )
         else:
-            self.osd_worker_node = [get_osd_running_nodes()[0]]
+            osd_node_names = get_osd_running_nodes()
+            self.osd_worker_node = get_node_objs(osd_node_names)[0]
 
         osd_pods = get_osd_pods()
-        temp_osd = get_node_pods(self.osd_worker_node[0].name, pods_to_search=osd_pods)[
-            0
-        ]
+        temp_osd = get_node_pods(self.osd_worker_node.name, pods_to_search=osd_pods)[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
 
-        nodes.stop_nodes(self.osd_worker_node, wait=True)
-        log.info(f"Successfully powered off node: {self.osd_worker_node[0].name}")
+        nodes.stop_nodes([self.osd_worker_node], wait=True)
+        log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
         assert wait_for_rook_ceph_pod_status(
@@ -331,11 +341,11 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                 new_osd = pod_obj
                 break
 
-        nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
-        log.info(f"Successfully powered on node: {self.osd_worker_node[0].name}")
+        nodes.start_nodes(nodes=[self.osd_worker_node], wait=True)
+        log.info(f"Successfully powered on node: {self.osd_worker_node.name}")
         wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=180)
         if additional_node:
             new_osd_node = get_pod_node(new_osd)
             assert (
-                new_osd_node.name != self.osd_worker_node[0].name
+                new_osd_node.name != self.osd_worker_node.name
             ), "New OSD is expected to run on the new additional node"

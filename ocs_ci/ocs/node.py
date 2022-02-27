@@ -1932,6 +1932,10 @@ def recover_node_to_ready_state(node_obj):
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
 
+    if not node_obj:
+        log.warning("The node object is not exist")
+        return False
+
     node_status = get_node_status(node_obj)
     node_name = node_obj.name
     log.info(f"The status of the node {node_name} is {node_status} ")
@@ -2000,6 +2004,15 @@ def add_new_nodes_and_label_after_node_failure_ipi(
 def get_other_worker_nodes_in_same_rack_or_zone(failure_domain, node_obj):
     """
     Get other worker nodes in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for other
+            worker nodes in the same rack or zone.
+
+    Returns:
+        list: The list of the other worker nodes in the same rack or zone of the given node.
+
     """
     node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
     wnode_names = get_worker_nodes()
@@ -2015,6 +2028,18 @@ def get_other_worker_nodes_in_same_rack_or_zone(failure_domain, node_obj):
 
 
 def get_another_osd_node_in_same_rack_or_zone(failure_domain, node_obj):
+    """
+    Get another osd node in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for another
+            osd node in the same rack or zone.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The osd node in the same rack or zone of the given node.
+
+    """
     osd_node_names = get_osd_running_nodes()
     other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
         failure_domain, node_obj
