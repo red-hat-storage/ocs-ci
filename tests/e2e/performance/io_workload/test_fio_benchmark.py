@@ -601,8 +601,12 @@ class TestFIOBenchmark(PASTest):
         """
 
         workloads = [
-            {"name": "test_fio_workload_simple", "tests": 4},
-            {"name": "test_fio_compressed_workload", "tests": 6},
+            {"name": "test_fio_workload_simple", "tests": 4, "test_name": "FIO"},
+            {
+                "name": "test_fio_compressed_workload",
+                "tests": 6,
+                "test_name": "FIO-Compress",
+            },
         ]
         for wl in workloads:
             self.number_of_tests = wl["tests"]
@@ -610,4 +614,4 @@ class TestFIOBenchmark(PASTest):
             self.results_file = os.path.join(self.results_path, "all_results.txt")
             log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
             self.check_tests_results()
-            self.push_to_dashboard(test_name=self.benchmark_name)
+            self.push_to_dashboard(test_name=wl["test_name"])
