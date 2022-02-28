@@ -443,7 +443,7 @@ class VSPHERE(object):
         """
         return [vm.summary.guest.ipAddress for vm in vms]
 
-    def stop_vms(self, vms, force=True):
+    def stop_vms(self, vms, force=True, wait=True):
         """
         Stop VMs
 
@@ -451,6 +451,7 @@ class VSPHERE(object):
             vms (list): VM (vm) objects
             force (bool): True for VM ungraceful power off, False for
                 graceful VM shutdown
+            wait (bool): Wait for the VMs to stop
 
         """
         if force:
@@ -468,14 +469,15 @@ class VSPHERE(object):
             def get_vms_power_status(vms):
                 return [self.get_vm_power_status(vm) for vm in vms]
 
-            for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
-                logger.info(
-                    f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
-                    f"Current VMs statuses: {statuses}"
-                )
-                if all(status == VM_POWERED_OFF for status in statuses):
-                    logger.info("All VMs reached poweredOff off status")
-                    break
+            if wait:
+                for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
+                    logger.info(
+                        f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
+                        f"Current VMs statuses: {statuses}"
+                    )
+                    if all(status == VM_POWERED_OFF for status in statuses):
+                        logger.info("All VMs reached poweredOff off status")
+                        break
 
     def start_vms(self, vms, wait=True):
         """
@@ -1429,3 +1431,40 @@ class VSPHERE(object):
             )
             else False
         )
+
+    def is_vm_obj_exist(self, vm):
+        """
+        Check if the vm object exists.
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            bool: True if the VM object exists, False otherwise.
+
+        """
+        vm_name = None
+        try:
+            logger.info("Trying to get the vm name to see if the vm object exists")
+            vm_name = vm.name
+        except vmodl.fault.ManagedObjectNotFound:
+            logger.info("The vm object is not exist")
+
+        return True if vm_name else False
+
+    def wait_for_vm_delete(self, vm, timeout=60):
+        """
+        Wait for the vm object to delete.
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            timeout (int): Time to wait for the VM object to delete.
+
+        Returns:
+            bool: True if the VM object is deleted in the given timeout, False otherwise.
+
+        """
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=10, func=self.is_vm_obj_exist, vm=vm
+        )
+        return sample.wait_for_func_status(result=False)

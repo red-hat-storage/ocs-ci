@@ -38,13 +38,14 @@ from ocs_ci.ocs.constants import (
     bucket_version_action_list,
     object_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
     """
@@ -242,9 +243,11 @@ class TestS3BucketPolicy(MCGTest):
         bucket_policy_generated = gen_bucket_policy(
             user_list=[obc_obj.obc_account, user.email_id],
             actions_list=["PutObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
             else ["GetObject", "DeleteObject"],
-            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
+            effect="Allow"
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+            else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -282,7 +285,7 @@ class TestS3BucketPolicy(MCGTest):
             f" is denied to Get object"
         )
         try:
-            if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
                 s3_get_object(user, obc_obj.bucket_name, object_key)
             else:
                 s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
@@ -298,7 +301,7 @@ class TestS3BucketPolicy(MCGTest):
         else:
             assert False, "Get object succeeded when it should have failed"
 
-        if float(config.ENV_DATA["ocs_version"]) == 4.6:
+        if version.get_semantic_ocs_version_from_config() == version.VERSION_4_6:
             logger.info(
                 f"Verifying whether the user: "
                 f"{obc_obj.obc_account} is able to access Get action"
@@ -329,7 +332,7 @@ class TestS3BucketPolicy(MCGTest):
             f"is denied to Delete object"
         )
         try:
-            if float(config.ENV_DATA["ocs_version"]) >= 4.6:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
                 s3_delete_object(user, obc_obj.bucket_name, object_key)
             else:
                 s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
@@ -351,7 +354,9 @@ class TestS3BucketPolicy(MCGTest):
             actions_list=["GetObject", "DeleteObject"]
             if float(config.ENV_DATA["ocs_version"]) <= 4.6
             else ["PutObject"],
-            effect="Allow" if float(config.ENV_DATA["ocs_version"]) <= 4.6 else "Deny",
+            effect="Allow"
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6
+            else "Deny",
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         new_policy = json.dumps(new_policy_generated)
@@ -636,21 +641,21 @@ class TestS3BucketPolicy(MCGTest):
             )
             object_versions.append(obj["VersionId"])
 
-        for version in object_versions:
-            logger.info(f"Reading version: {version} of {object_key}")
+        for obj_ver in object_versions:
+            logger.info(f"Reading version: {obj_ver} of {object_key}")
             assert s3_get_object(
                 s3_obj=obc_obj,
                 bucketname=obc_obj.bucket_name,
                 object_key=object_key,
-                versionid=version,
-            ), f"Failed: To Read object {version}"
-            logger.info(f"Deleting version: {version} of {object_key}")
+                versionid=obj_ver,
+            ), f"Failed: To Read object {obj_ver}"
+            logger.info(f"Deleting version: {obj_ver} of {object_key}")
             assert s3_delete_object(
                 s3_obj=obc_obj,
                 bucketname=obc_obj.bucket_name,
                 object_key=object_key,
-                versionid=version,
-            ), f"Failed: To Delete object with {version}"
+                versionid=obj_ver,
+            ), f"Failed: To Delete object with {obj_ver}"
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,

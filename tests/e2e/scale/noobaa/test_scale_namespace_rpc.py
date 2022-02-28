@@ -12,13 +12,13 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("!=4.6")
 @scale
 class TestScaleNamespace(E2ETest):
     """
     Test creation of a namespace scale resource
     """
 
-    @skipif_ocs_version("!=4.6")
     @pytest.mark.parametrize(
         argnames=["platform"],
         argvalues=[
@@ -47,7 +47,6 @@ class TestScaleNamespace(E2ETest):
             read_ns_resources=[ns_resource_name],
         )
 
-    @skipif_ocs_version("<4.6")
     @pytest.mark.polarion_id("OCS-2517")
     @on_prem_platform_required
     def test_scale_namespace_bucket_creation_with_rgw(

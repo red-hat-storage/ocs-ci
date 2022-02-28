@@ -3,6 +3,7 @@ import logging
 import shutil
 import tempfile
 import re
+import tarfile
 from pathlib import Path
 
 from ocs_ci.helpers.helpers import storagecluster_independent_check
@@ -29,6 +30,7 @@ class MustGather(object):
         self.empty_files = list()
         self.files_not_exist = list()
         self.files_content_issue = list()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
 
     @property
     def log_type(self):
@@ -87,7 +89,7 @@ class MustGather(object):
 
         """
         self.search_file_path()
-        self.verify_noobaa_diagnostics()
+        self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
@@ -97,6 +99,27 @@ class MustGather(object):
                 with open(file_path, "r") as f:
                     if "kind" not in f.read().lower():
                         self.files_content_issue.append(file)
+
+    def verify_ceph_file_content(self):
+        """
+        Verify ceph command does not return an error
+        https://bugzilla.redhat.com/show_bug.cgi?id=2014849
+        https://bugzilla.redhat.com/show_bug.cgi?id=2021427
+
+        """
+        if self.type_log != "CEPH" or self.ocs_version < version.VERSION_4_9:
+            return
+        pattern = re.compile("exit code [1-9]+")
+        for root, dirs, files in os.walk(self.root):
+            for file in files:
+                try:
+                    with open(os.path.join(root, file), "r") as f:
+                        data_file = f.read()
+                    exit_code_error = pattern.findall(data_file.lower())
+                    if len(exit_code_error) > 0 and "gather-debug" not in file:
+                        self.files_content_issue.append(os.path.join(root, file))
+                except Exception as e:
+                    logger.error(f"There is no option to read {file}, error: {e}")
 
     def compare_running_pods(self):
         """
@@ -189,6 +212,11 @@ class MustGather(object):
                 for file in files:
                     if re.search(r"noobaa_diagnostics_.*.tar.gz", file):
                         flag = True
+                        logger.info(f"Extract noobaa_diagnostics dir {file}")
+                        path_noobaa_diag = os.path.join(path, file)
+                        files_noobaa_diag = tarfile.open(path_noobaa_diag)
+                        files_noobaa_diag.extractall(path)
+                        break
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
@@ -198,6 +226,7 @@ class MustGather(object):
         Validate must-gather
 
         """
+        self.verify_noobaa_diagnostics()
         self.validate_file_size()
         self.validate_expected_files()
         self.print_invalid_files()

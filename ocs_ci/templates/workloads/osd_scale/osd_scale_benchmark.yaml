@@ -7,7 +7,7 @@ spec:
   clustername: place-holder
   elasticsearch:
     # v This is debug server v
-    # server: 10.0.144.152
+    # server: 10.0.144.103
     server: 10.0.78.167
     port: 9200
   es_index: osd-scaling

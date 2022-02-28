@@ -8,6 +8,8 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocp_version,
+    kms_config_required,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import (
@@ -34,6 +36,8 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version("<4.8")
 @skipif_ocp_version("<4.8")
+@kms_config_required
+@skipif_managed_service
 class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
     """
     Tests to take snapshots of encrypted RBD Block VolumeMode PVCs

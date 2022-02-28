@@ -12,6 +12,7 @@ import pytest
 from prettytable import PrettyTable
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.pod import get_pod_obj
@@ -62,6 +63,12 @@ class AMQ(object):
         self.consumer_pod = self.producer_pod = None
         self.kafka_topic = self.kafka_user = None
         self.kafka_connect = self.kafka_bridge = self.kafka_persistent = None
+        # ToDo: Remove skip once the issue is fixed
+        if config.ENV_DATA.get("fips"):
+            pytest.skip(
+                "Skipped due to open bug in AMQ. "
+                "For more info: https://issues.redhat.com/browse/ENTMQST-3422"
+            )
         self.dir = tempfile.mkdtemp(prefix="amq_")
         self._clone_amq()
 

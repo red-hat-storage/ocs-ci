@@ -61,8 +61,9 @@ class CephCluster(object):
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
+        if config.ENV_DATA["mcg_only_deployment"]:
+            return
         # cluster_name is name of cluster in rook of type CephCluster
-
         self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         self.CEPHCLUSTER = ocp.OCP(
             kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -70,6 +71,10 @@ class CephCluster(object):
         self.CEPHFS = ocp.OCP(
             kind="CephFilesystem", namespace=config.ENV_DATA["cluster_namespace"]
         )
+        self.RBD = ocp.OCP(
+            kind="CephBlockPool", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+
         self.DEP = ocp.OCP(
             kind="Deployment", namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -82,6 +87,13 @@ class CephCluster(object):
             logging.warning("No CephFS found")
             self.cephfs_config = None
 
+        try:
+            self.rbd_config = self.RBD.get().get("items")[0]
+        except IndexError as e:
+            logging.warning(e)
+            logging.warning("No RBD found")
+            self.rbd_config = None
+
         self._cluster_name = self.cluster_resource_config.get("metadata").get("name")
         self._namespace = self.cluster_resource_config.get("metadata").get("namespace")
 
@@ -93,6 +105,11 @@ class CephCluster(object):
             self.cephfs = ocs.OCS(**self.cephfs_config)
         else:
             self.cephfs = None
+
+        if self.rbd_config:
+            self.block = ocs.OCS(**self.rbd_config)
+        else:
+            self.block = None
 
         self.mon_selector = constant.MON_APP_LABEL
         self.mds_selector = constant.MDS_APP_LABEL
@@ -729,6 +746,151 @@ class CephCluster(object):
         )
         time_taken = time.time() - start_time
         return time_taken / 60
+
+    def set_pgs(self, poolname, pgs):
+        """
+        Setting up the PG / PGP / PG_MIN number of a pool
+        if the pg_num_min is not setting to the pg_num number, the autoscale will
+        set automaticlly the pg_num to 32 (incase you try to set pg_num > 32)
+
+        Args:
+            poolname (str): the pool name that need to be modify
+            pgs (int): new number of PG's
+
+        """
+        for key in ["pg_num", "pgp_num", "pg_num_min"]:
+            cmd = f"ceph osd pool set {poolname} {key} {pgs}"
+            try:
+                logger.debug(f"Try to set {key} to {pgs}")
+                _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+            except Exception as ex:
+                logger.error(f"Failed to setup {key} : {ex}")
+
+    def set_target_ratio(self, poolname, ratio):
+        """
+        Setting the target_size_ratio of a ceph pool
+
+        Args:
+            poolname (str): the pool name
+            ratio (float): the new ratio to set
+
+        """
+        cmd = f"ceph osd pool set {poolname} target_size_ratio {ratio}"
+        try:
+            logger.debug(f"Try to set target_size_ratio on {poolname} to : {ratio}")
+            _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+        except Exception as ex:
+            logger.error(f"Failed to change the ratio : {ex}")
+
+    def get_cephfilesystem_status(self, fsname=None):
+        """
+        Getting the ceph filesystem status
+
+        Args:
+            fsname (str): The filesystem name
+
+        Returnes:
+            bool : true if the filesystem status is `Ready`, false otherwise
+        """
+        res = self.CEPHFS.get(resource_name=fsname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_filesystem(self, fs_name):
+        """
+        Creating new filesystem to use in the tests insted of the default one.
+        the new filesystem is identical (parameters wise) to the default filesystem
+
+        Args:
+            fs_name (str):  The name of the filesystem to create
+
+        """
+        # Creating the new filesystem using the default parameters
+        self.cephfs.data["metadata"]["name"] = fs_name
+        self.cephfs.apply(**self.cephfs.data)
+
+        # Verify that the filesystem was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_cephfilesystem_status, fsname=fs_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new filesystem"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
+    def delete_filesystem(self, fs_name):
+        """
+        Delete a ceph filesystem - not the default one - from the cluster
+
+        Args:
+            fs_name (str): the name of the filesystem to delete
+        """
+        # Make sure the the default filesystem is not deleted.
+        if fs_name == "ocs-storagecluster-cephfilesystem":
+            return
+
+        # Delete the filesystem
+        self.CEPHFS.delete(resource_name=fs_name)
+        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+
+    def get_blockpool_status(self, poolname=None):
+        """
+        Getting the RBD pool status
+
+        Args:
+            fsname (str): The RBD pool name
+
+        Returnes:
+            bool : true if the RBD pool status is `Ready`, false otherwise
+        """
+
+        res = self.RBD.get(resource_name=poolname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_blockpool(self, pool_name):
+        """
+        Creating new RBD pool to use in the tests insted of the default one.
+        the new RBD pool is identical (parameters wise) to the default RBD pool
+
+        Args:
+            pool_name (str):  The name of the RBD pool to create
+
+        """
+        # Creating the new RBD pool using the default parameters
+        self.block.data["metadata"]["name"] = pool_name
+        self.block.apply(**self.block.data)
+
+        # Verify that the RBD pool was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_blockpool_status, poolname=pool_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new Block Pool"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
+    def delete_blockpool(self, pool_name):
+        """
+        Delete a ceph RBD pool - not the default one - from the cluster
+
+        Args:
+            pool_name (str): the name of the RBD pool to delete
+        """
+        # Make sure the the default RBD pool is not deleted.
+        if pool_name == "ocs-storagecluster-cephblockpool":
+            return
+
+        # Delete the RBD pool
+        try:
+            self.RBD.delete(resource_name=pool_name)
+        except Exception:
+            logger.warning(f"BlockPoool {pool_name} couldnt delete")
+            logger.info("Try to force delete it")
+            patch = (
+                f"cephblockpool {pool_name} --type=merge -p "
+                '\'{"metadata":{"finalizers":null}}\''
+            )
+            self.RBD.exec_oc_cmd(f"patch {patch}")
+        self.RBD.wait_for_delete(resource_name=pool_name)
 
 
 class CephHealthMonitor(threading.Thread):

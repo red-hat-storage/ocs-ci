@@ -216,7 +216,7 @@ def create_custom_machineset(
 
     """
     # check for aws and IPI platform
-    if config.ENV_DATA["platform"] == "aws":
+    if config.ENV_DATA["platform"].lower() == "aws":
         machinesets_obj = OCP(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
@@ -973,3 +973,89 @@ def add_annotation_to_machine(annotation, machine_name):
     command = f"annotate machine {machine_name} {annotation}"
     log.info(f"Adding annotation: {command} to machine {machine_name} ")
     ocp_obj.exec_oc_cmd(command)
+
+
+def set_replica_count(machine_set, count):
+    """
+    Change the replica count of a machine set.
+
+    Args:
+          machine_set (str): Name of the machine set
+          count (int): The number of the new replica count
+
+    Returns:
+        bool: True if the change was made successfully. False otherwise
+
+    """
+    ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp.exec_oc_cmd(f"scale --replicas={count} machinesets {machine_set}")
+    return True
+
+
+def change_current_replica_count_to_ready_replica_count(machine_set):
+    """
+    Change the current replica count to be equal to the ready replica count
+    We may use this function after deleting a node or after adding a new node.
+
+    Args:
+        machine_set (str): Name of the machine set
+
+    Returns:
+        bool: True if the change was made successfully. False otherwise
+
+    """
+    res = True
+    current_replica_count = get_replica_count(machine_set)
+    ready_replica_count = get_ready_replica_count(machine_set)
+    log.info(
+        f"current replica count is: {current_replica_count}, "
+        f"ready replica count is: {ready_replica_count}"
+    )
+    if current_replica_count != ready_replica_count:
+        log.info(
+            "Change the current replica count to be equal to the ready replica count"
+        )
+        res = set_replica_count(machine_set, count=ready_replica_count)
+    else:
+        log.info("The current replica count is equal to the ready replica count")
+
+    return res
+
+
+def wait_for_ready_replica_count_to_reach_expected_value(
+    machine_set, expected_value, timeout=180
+):
+    """
+    Wait for the ready replica count to reach an expected value
+
+    Args:
+        machine_set (str): Name of the machine set
+        expected_value (int): The expected value to reach
+        timeout (int): Time to wait for the ready replica count to reach the expected value
+
+    Return:
+        bool: True, in case of the ready replica count reached the expected value. False otherwise
+
+    """
+    ready_replica_count = get_ready_replica_count(machine_set)
+    log.info(f"ready replica count = {ready_replica_count}")
+    log.info(
+        f"Wait {timeout} seconds for the ready replica count to reach the "
+        f"expected value {expected_value}"
+    )
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_ready_replica_count,
+        machine_set=machine_set,
+    )
+    try:
+        sample.wait_for_func_value(value=expected_value)
+        res = True
+    except TimeoutExpiredError:
+        log.info(
+            f"Ready replica count failed to reach the expected value {expected_value}"
+        )
+        res = False
+
+    return res

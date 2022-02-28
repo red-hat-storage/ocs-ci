@@ -2,6 +2,7 @@ from semantic_version import Version
 
 import pytest
 
+from ocs_ci.ocs.exceptions import WrongVersionExpression
 from ocs_ci.utility import version
 
 
@@ -63,3 +64,91 @@ def test_compare_from_get_semantic_version():
     """
     tested_version = version.get_semantic_version("4.5.11", only_major_minor=True)
     assert tested_version < Version.coerce("4.11")
+
+
+@pytest.mark.parametrize(
+    "expression, expected",
+    [
+        ("4.1<4.1", False),
+        ("4.1>4.1", False),
+        ("4.1<=4.1", True),
+        ("4.1>=4.1", True),
+        ("4.1==4.1", True),
+        ("4.1!=4.1", False),
+        ("4.1<4.2", True),
+        ("4.1>4.2", False),
+        ("4.1<=4.2", True),
+        ("4.1>=4.2", False),
+        ("4.1==4.2", False),
+        ("4.1!=4.2", True),
+        ("4.2<4.1", False),
+        ("4.2>4.1", True),
+        ("4.2<=4.1", False),
+        ("4.2>=4.1", True),
+        ("4.2==4.1", False),
+        ("4.2!=4.1", True),
+        ("4.10<4.1", False),
+        ("4.10>4.1", True),
+        ("4.10<=4.1", False),
+        ("4.10>=4.1", True),
+        ("4.10==4.1", False),
+        ("4.10!=4.1", True),
+        ("4.1<4.10", True),
+        ("4.1>4.10", False),
+        ("4.1<=4.10", True),
+        ("4.1>=4.10", False),
+        ("4.1==4.10", False),
+        ("4.1!=4.10", True),
+        ("4.10<4.5", False),
+        ("4.10>4.5", True),
+        ("4.10<=4.5", False),
+        ("4.10>=4.5", True),
+        ("4.10==4.5", False),
+        ("4.10!=4.5", True),
+        ("4.5<4.10", True),
+        ("4.5>4.10", False),
+        ("4.5<=4.10", True),
+        ("4.5>=4.10", False),
+        ("4.5==4.10", False),
+        ("4.5!=4.10", True),
+        ("4.11<4.5", False),
+        ("4.11>4.5", True),
+        ("4.11<=4.5", False),
+        ("4.11>=4.5", True),
+        ("4.11==4.5", False),
+        ("4.11!=4.5", True),
+        ("4.5<4.11", True),
+        ("4.5>4.11", False),
+        ("4.5<=4.11", True),
+        ("4.5>=4.11", False),
+        ("4.5==4.11", False),
+        ("4.5!=4.11", True),
+    ],
+)
+def test_compare_versions(expression, expected):
+    """
+    This test is suppose to test if the compare_versions returns
+    expected values for different expressions.
+    """
+
+    assert version.compare_versions(expression) == expected
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "4.1??4.1",
+        "4.1 ===4.1",
+        "Foo version",
+        "<4.1",
+        "==4.1",
+    ],
+)
+def test_compare_versions_wrong_expression(expression):
+    """
+    This test is suppose to test if the compare_versions raises
+    expected exception for wrong expression.
+    """
+
+    with pytest.raises(WrongVersionExpression):
+        version.compare_versions(expression)

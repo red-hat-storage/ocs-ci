@@ -352,7 +352,7 @@ class ClusterLoad:
         timestamp = datetime.timestamp
         return float(
             self.prometheus_api.query(
-                query, str(timestamp(now())), mute_logs=mute_logs
+                query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
             )[0]["value"][1]
         )
 
@@ -416,7 +416,7 @@ class ClusterLoad:
             f"IOPS: {metrics.get('iops'):.2f}{limit_msg} || "
             f"Used Space: {metrics.get('used_space'):.2f} GB{pods_msg}"
         )
-        logger.info(f"Cluster utilization:{wrap_msg(msg)}")
+        logger.debug(f"Cluster utilization:{wrap_msg(msg)}")
         if metrics.get("latency") > high_latency:
             logger.warning(f"Cluster latency is higher than {high_latency} ms!")
 

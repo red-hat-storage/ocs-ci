@@ -5,6 +5,7 @@ import time
 from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -24,6 +25,8 @@ class DeploymentUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
+        if self.ocp_version_semantic <= version.VERSION_4_9:
+            self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -54,7 +57,6 @@ class DeploymentUI(PageNavigator):
     def install_ocs_operator(self):
         """
         Install OCS/ODF Opeartor
-
         """
         self.navigate_operatorhub_page()
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
@@ -77,7 +79,6 @@ class DeploymentUI(PageNavigator):
     def refresh_popup(self):
         """
         Refresh PopUp
-
         """
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
@@ -140,11 +141,10 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
-
-        if config.DEPLOYMENT.get("local_storage"):
-            self.install_lso_cluster()
-        elif config.ENV_DATA.get("mcg_only_deployment", False):
+        if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
+        elif config.DEPLOYMENT.get("local_storage"):
+            self.install_lso_cluster()
         else:
             self.install_internal_cluster()
 
@@ -154,10 +154,17 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Install MCG ONLY cluster via UI")
-        self.do_click(self.dep_loc["advanced_deployment"])
+        if self.ocp_version == "4.9":
+            self.do_click(self.dep_loc["advanced_deployment"])
         self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
-        self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        if self.ocp_version == "4.9":
+            self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
+        elif self.ocp_version == "4.10":
+            self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
+        if config.DEPLOYMENT.get("local_storage"):
+            self.install_lso_cluster()
+        else:
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.create_storage_cluster()
 
@@ -198,6 +205,8 @@ class DeploymentUI(PageNavigator):
 
         logger.info("Confirm new storage class")
         self.do_click(self.dep_loc["yes"], enable_screenshot=True)
+        if config.ENV_DATA.get("mcg_only_deployment", False):
+            return
 
         sample = TimeoutSampler(
             timeout=600,
@@ -218,10 +227,11 @@ class DeploymentUI(PageNavigator):
             timeout_next = 30
         else:
             timeout_next = 600
-
         self.do_click(
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
+
+        self.enable_taint_nodes()
 
         self.configure_encryption()
 
@@ -254,12 +264,14 @@ class DeploymentUI(PageNavigator):
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
+        self.enable_taint_nodes()
+
         if self.ocp_version == "4.6" and config.ENV_DATA.get("encryption_at_rest"):
             self.do_click(
                 locator=self.dep_loc["enable_encryption"], enable_screenshot=True
             )
 
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
             self.configure_encryption()
@@ -299,6 +311,20 @@ class DeploymentUI(PageNavigator):
                 status=True, locator=self.dep_loc["wide_encryption"]
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
+    def enable_taint_nodes(self):
+        """
+        Enable taint Nodes
+
+        """
+        logger.info("Enable taint Nodes")
+        if (
+            self.ocp_version_semantic >= version.VERSION_4_10
+            and config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0
+        ):
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_taint_node"]
+            )
 
     def configure_osd_size(self):
         """
@@ -364,9 +390,14 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            self.do_click(
-                self.dep_loc["enable_default_porjects"], enable_screenshot=True
-            )
+            default_projects_is_checked = self.driver.find_element_by_id(
+                "no-label-switch-on"
+            ).is_selected()
+            if not default_projects_is_checked:
+                logger.info("Show default projects")
+                self.do_click(
+                    self.dep_loc["enable_default_porjects"], enable_screenshot=True
+                )
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
@@ -380,4 +411,5 @@ class DeploymentUI(PageNavigator):
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
-        self.install_storage_cluster()
+        if not config.UPGRADE.get("ui_upgrade"):
+            self.install_storage_cluster()
