@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.skip(
     reason="This test is disabled because this scenario is covered in the "
-    "test test_daemon_kill_during_pvc_pod_deletion_and_io.py"
+    "test test_daemon_kill_during_pvc_pod_creation_deletion_and_io.py"
 )
 @pytest.mark.parametrize(
     argnames=["interface", "resource_name"],
