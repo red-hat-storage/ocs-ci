@@ -5,7 +5,7 @@ import tempfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, managedservice
+from ocs_ci.ocs import managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
