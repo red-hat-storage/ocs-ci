@@ -1,0 +1,10 @@
+GSS bug, Add a node and verify crashcollector pod created on new node
+
+Signed-off-by: Oded Viner <oviner@redhat.com>
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# On branch crashcollector_4_worker_nodes
+# Changes to be committed:
+#	new file:   tests/manage/z_cluster/cluster_expansion/test_add_node_crashcollector.py
