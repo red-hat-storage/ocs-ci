@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -21,8 +21,10 @@ from ocs_ci.helpers import helpers, disruption_helpers
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4c
+@pytest.mark.skip(
+    reason="This test is disabled because this scenario is covered in the "
+    "test test_daemon_kill_during_pvc_pod_deletion_and_io.py"
+)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_name"],
     argvalues=[
