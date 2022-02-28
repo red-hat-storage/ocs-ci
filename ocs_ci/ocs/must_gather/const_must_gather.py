@@ -709,6 +709,23 @@ GATHER_COMMANDS_OTHERS_4_7 = [
     "prometheus-adapter-view.yaml",
 ]
 
+GATHER_COMMANDS_OTHERS_4_10 = [
+    "BackingStoreList_crs.yaml",
+    "BucketClassList_crs.yaml",
+    "db-noobaa-db-pg-0-pvc-describe.txt",
+    "NamespaceStoreList_crs.yaml",
+    "noobaa-core-0-core.log",
+    "noobaa-core-0-pod-describe.txt",
+    "noobaa-db-pg-0-db.log",
+    "noobaa-db-pg-0-initialize-database.log",
+    "noobaa-db-pg-0-init.log",
+    "noobaa-db-pg-0-pod-describe.txt",
+    "noobaa-endpoint-scc-describe.txt",
+    "NooBaaList_crs.yaml",
+    "noobaa-scc-describe.txt",
+    "obc_list",
+]
+
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
     "ocs-external-storagecluster-ceph-rbd.yaml",
     "ocs-external-storagecluster-ceph-rgw.yaml",
@@ -796,7 +813,9 @@ GATHER_COMMANDS_VERSION = {
     4.10: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
-        "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
+        "OTHERS": GATHER_COMMANDS_OTHERS
+        + GATHER_COMMANDS_OTHERS_4_7
+        + GATHER_COMMANDS_OTHERS_4_10,
         "OTHERS_EXTERNAL": list(
             set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
