@@ -1,6 +1,6 @@
 """
 This module contains KMS related class and methods
-currently supported KMSs: Vault
+currently supported KMSs: Vault and Hpcs
 
 """
 import logging
@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
     KMSConnectionDetailsError,
+    HpcsDeploymentError,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
@@ -1039,7 +1040,157 @@ class Vault(KMS):
             logger.info(f"Role {role_name} created successfully")
 
 
-kms_map = {"vault": Vault}
+class Hpcs(KMS):
+    """
+    A class which handles deployment and other
+    configs related to hpcs
+
+    """
+
+    def __init__(self):
+        super().__init__("hpcs")
+        self.ibm_kp_service_instance_id = None
+        self.ibm_kp_secret_name = None
+        self.kms_service_name = None
+        self.ibm_kp_service_api_key = None
+        self.ibm_kp_customer_root_key = None
+        self.ibm_kp_base_url = None
+        self.ibm_kp_token_url = None
+        # default and only supported deploy mode for HPCS
+        self.hpcs_deploy_mode = "external"
+        self.kmsid = None
+
+    def deploy(self):
+        """
+        This function delegates the deployment of hpcs
+        based on OCP or vault standalone external mode deployment
+
+        """
+        if self.hpcs_deploy_mode == "external":
+            self.deploy_hpcs_external()
+        else:
+            raise HpcsDeploymentError("Not a supported hpcs deployment mode")
+
+    def deploy_hpcs_external(self):
+        """
+        This function takes care of deployment and configuration
+        for external mode hpcs deployment. We are assuming that
+        an external hpcs service already exists and we will be just
+        configuring the necessary OCP objects for OCS like secrets, token etc
+
+        """
+        self.gather_init_hpcs_conf()
+        self.create_ocs_hpcs_resources()
+
+    def gather_init_hpcs_conf(self):
+        """
+        Gather hpcs configuration and init the vars
+        This function currently gathers only for external mode
+
+        """
+        self.hpcs_conf = self.gather_hpcs_config()
+        self.ibm_kp_service_instance_id = self.hpcs_conf["IBM_KP_SERVICE_INSTANCE_ID"]
+        self.ibm_kp_service_api_key = self.hpcs_conf["IBM_KP_SERVICE_API_KEY"]
+        self.ibm_kp_customer_root_key = self.hpcs_conf["IBM_KP_CUSTOMER_ROOT_KEY"]
+        self.ibm_kp_base_url = self.hpcs_conf["IBM_KP_BASE_URL"]
+        self.ibm_kp_token_url = self.hpcs_conf["IBM_KP_TOKEN_URL"]
+        self.ibm_kp_secret_name = "ibm-kp-kms-test-secret"
+
+    def create_ocs_hpcs_resources(self):
+        """
+        This function takes care of creating ocp resources for
+        secrets like hpcs customer root key, service api key, etc.
+        Assumption is hpcs section in AUTH file contains hpcs service
+        instance id, base url, token url, api key and customer root key.
+
+        """
+
+        # create ibm-kp-kms-secret-somestring secret
+        ibm_kp_secret_name = self.create_ibm_kp_kms_secret()
+        # update the ibm_kp_secret_name with the parsed secret name
+        self.ibm_kp_secret_name = ibm_kp_secret_name
+
+        # 2. create ocs-kms-connection-details
+        connection_data = templating.load_yaml(
+            constants.EXTERNAL_HPCS_KMS_CONNECTION_DETAILS
+        )
+        connection_data["data"]["IBM_KP_BASE_URL"] = self.ibm_kp_base_url
+        connection_data["data"]["IBM_KP_SECRET_NAME"] = self.ibm_kp_secret_name
+        connection_data["data"][
+            "IBM_KP_SERVICE_INSTANCE_ID"
+        ] = self.ibm_kp_service_instance_id
+        connection_data["data"]["IBM_KP_TOKEN_URL"] = self.ibm_kp_token_url
+        self.create_resource(connection_data, prefix="kmsconnection")
+
+    def create_resource(self, resource_data, prefix=None):
+        """
+        Given a dictionary of resource data, this function will
+        creates oc resource
+
+        Args:
+            resource_data (dict): yaml dictionary for resource
+            prefix (str): prefix for NamedTemporaryFile
+
+        """
+        resource_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix=prefix, delete=False
+        )
+        templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
+        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
+
+    def gather_hpcs_config(self):
+        """
+        This function populates the hpcs configuration
+
+        """
+        if self.hpcs_deploy_mode == "external":
+            hpcs_conf = load_auth_config()["hpcs"]
+            return hpcs_conf
+
+    def create_ibm_kp_kms_secret(self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        """
+        create hpcs specific csi kms secret resource
+
+        """
+        ibm_kp_kms_secret = templating.load_yaml(constants.EXTERNAL_IBM_KP_KMS_SECRET)
+        ibm_kp_kms_secret["data"][
+            "IBM_KP_CUSTOMER_ROOT_KEY"
+        ] = self.ibm_kp_customer_root_key
+        ibm_kp_kms_secret["data"][
+            "IBM_KP_SERVICE_API_KEY"
+        ] = self.ibm_kp_service_api_key
+        ibm_kp_kms_secret["metadata"]["namespace"] = namespace
+        self.create_resource(ibm_kp_kms_secret, prefix="ibmkpkmssecret")
+
+        return ibm_kp_kms_secret["metadata"]["name"]
+
+    def create_hpcs_csi_kms_connection_details(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
+        """
+        Create hpcs specific csi kms connection details
+        configmap resource
+
+        """
+        # create hpcs secret resource
+        ibm_kp_secret_name = self.hpcs.create_ibm_kp_kms_secret()
+
+        csi_kms_conn_details = templating.load_yaml(
+            constants.EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS
+        )
+        conn_str = csi_kms_conn_details["data"]["1-hpcs"]
+        buf = json.loads(conn_str)
+        buf["IBM_KP_SERVICE_INSTANCE_ID"] = self.ibm_kp_service_instance_id
+        buf["IBM_KP_SECRET_NAME"] = ibm_kp_secret_name
+        buf["IBM_KP_BASE_URL"] = self.ibm_kp_base_url
+        buf["IBM_KP_TOKEN_URL"] = self.ibm_kp_token_url
+
+        csi_kms_conn_details["data"]["1-hpcs"] = json.dumps(buf)
+        csi_kms_conn_details["metadata"]["namespace"] = namespace
+        self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
+
+kms_map = {"vault": Vault, "hpcs": Hpcs}
 
 
 def update_csi_kms_vault_connection_details(update_config):
@@ -1167,7 +1318,7 @@ def get_encryption_kmsid():
         raise KMSConnectionDetailsError("CSI kms resource doesn't exist")
 
     for key in csi_kms_conf.get().get("data").keys():
-        if constants.VAULT_KMS_PROVIDER in key:
+        if constants.VAULT_KMS_PROVIDER or constants.HPCS_KMS_PROVIDER in key:
             kmsid.append(key)
     return kmsid
 

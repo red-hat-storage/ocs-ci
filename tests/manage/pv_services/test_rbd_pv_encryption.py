@@ -46,6 +46,35 @@ class TestRbdPvEncryption(ManageTest):
         Setup csi-kms-connection-details configmap
 
         """
+
+        # set the KMS provider based on platform
+        # if config.ENV_DATA["platform"].lower() == constants.IBM_PLATFORM:
+        self.kmsprovider = constants.HPCS_KMS_PROVIDER
+        # else:
+        #   self.kmsprovider = constants.VAULT_KMS_PROVIDER
+        if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
+            self.setupvault(self, kv_version)
+        else:
+            self.setuphpcs(self)
+
+        def finalizer():
+            # Remove the vault/hpcs config from csi-kms-connection-details configMap
+            if len(kms.get_encryption_kmsid()) > 1:
+                kms.remove_kmsid(self.new_kmsid)
+
+            if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
+                # Delete the resources in vault
+                self.vault.remove_vault_backend_path()
+                self.vault.remove_vault_policy()
+                self.vault.remove_vault_namespace()
+
+        request.addfinalizer(finalizer)
+
+    def setupvault(self, kv_version):
+        """
+        Setup csi-kms-connection-details configmap as per vault configuration
+
+        """
         # Initialize Vault
         self.vault = kms.Vault()
         self.vault.gather_init_vault_conf()
@@ -101,17 +130,56 @@ class TestRbdPvEncryption(ManageTest):
                     kv_version=kv_version
                 )
 
-        def finalizer():
-            # Remove the vault config from csi-kms-connection-details configMap
-            if len(kms.get_encryption_kmsid()) > 1:
-                kms.remove_kmsid(self.new_kmsid)
+    def setuphpcs(self):
+        """
+        Setup csi-kms-connection-details configmap as per HPCS configuration.
 
-            # Delete the resources in vault
-            self.vault.remove_vault_backend_path()
-            self.vault.remove_vault_policy()
-            self.vault.remove_vault_namespace()
+        """
+        # Initialize HPCS
+        self.hpcs = kms.Hpcs()
+        self.hpcs.gather_init_hpcs_conf()
 
-        request.addfinalizer(finalizer)
+        # Check if hpcs kms secret already exist, if not create hpcs secret
+        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        try:
+            ocp_obj.get_resource(
+                resource_name=self.hpcs.ibm_kp_secret_name, column="NAME"
+            )
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                self.hpcs.ibm_kp_secret_name = self.hpcs.create_ibm_kp_kms_secret()
+
+        # Create or update hpcs related confimap.
+        self.hpcs_resource_name = create_unique_resource_name("test", "hpcs")
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            self.new_kmsid = self.hpcs_resource_name
+            hdict = defaults.HPCS_CSI_CONNECTION_CONF
+            for key in hdict.keys():
+                old_key = key
+            hdict[self.new_kmsid] = hdict.pop(old_key)
+            hdict[self.new_kmsid][
+                "IBM_KP_SERVICE_INSTANCE_ID"
+            ] = self.hpcs.ibm_kp_service_instance_id
+            hdict[self.new_kmsid]["IBM_KP_SECRET_NAME"] = self.hpcs.ibm_kp_secret_name
+            hdict[self.new_kmsid]["IBM_KP_BASE_URL"] = self.hpcs.ibm_kp_base_url
+            hdict[self.new_kmsid]["IBM_KP_TOKEN_URL"] = self.hpcs.ibm_kp_token_url
+            hdict[self.new_kmsid]["KMS_SERVICE_NAME"] = self.new_kmsid
+
+            kms.update_csi_kms_vault_connection_details(hdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                self.new_kmsid = "1-hpcs"
+                self.hpcs.create_hpcs_csi_kms_connection_details()
 
     @tier1
     def test_rbd_pv_encryption(
@@ -126,6 +194,11 @@ class TestRbdPvEncryption(ManageTest):
         Test to verify creation and deletion of encrypted RBD PVC
 
         """
+        # set the KMS provider based on platform
+        # if config.ENV_DATA["platform"].lower() == constants.IBM_PLATFORM:
+        self.kmsprovider = constants.HPCS_KMS_PROVIDER
+        # else:
+        #   self.kmsprovider = constants.VAULT_KMS_PROVIDER
         # Create a project
         proj_obj = project_factory()
 
@@ -136,9 +209,10 @@ class TestRbdPvEncryption(ManageTest):
             encryption_kms_id=self.new_kmsid,
         )
 
-        # Create ceph-csi-kms-token in the tenant namespace
-        self.vault.vault_path_token = self.vault.generate_vault_token()
-        self.vault.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
+            # Create ceph-csi-kms-token in the tenant namespace
+            self.vault.vault_path_token = self.vault.generate_vault_token()
+            self.vault.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
         # Create RBD PVCs with volume mode Block
         pvc_size = 5
@@ -172,13 +246,16 @@ class TestRbdPvEncryption(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             vol_handles.append(vol_handle)
 
-            # Check if encryption key is created in Vault
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
+            if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
+                # Check if encryption key is created in Vault
+                if kms.is_key_present_in_path(
+                    key=vol_handle, path=self.vault.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for {pvc_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for {pvc_obj.name}"
+                    )
 
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
@@ -213,14 +290,15 @@ class TestRbdPvEncryption(ManageTest):
             pvc_obj.delete()
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
-        # Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244
-        if kv_version == "v1":
-            for vol_handle in vol_handles:
-                if not kms.is_key_present_in_path(
-                    key=vol_handle, path=self.vault.vault_backend_path
-                ):
-                    log.info(f"Vault: Key deleted for {vol_handle}")
-                else:
-                    raise KMSResourceCleaneupError(
-                        f"Vault: Key deletion failed for {vol_handle}"
-                    )
+        if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
+            # Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244
+            if kv_version == "v1":
+                for vol_handle in vol_handles:
+                    if not kms.is_key_present_in_path(
+                        key=vol_handle, path=self.vault.vault_backend_path
+                    ):
+                        log.info(f"Vault: Key deleted for {vol_handle}")
+                    else:
+                        raise KMSResourceCleaneupError(
+                            f"Vault: Key deletion failed for {vol_handle}"
+                        )

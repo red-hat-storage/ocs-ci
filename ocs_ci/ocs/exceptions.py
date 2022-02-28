@@ -364,6 +364,10 @@ class VaultOperationError(Exception):
     pass
 
 
+class HpcsDeploymentError(Exception):
+    pass
+
+
 class KMSNotSupported(Exception):
     pass
 

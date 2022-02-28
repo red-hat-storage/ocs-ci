@@ -613,6 +613,17 @@ RBD_CSI_VAULT_TENANT_CONFIGMAP = os.path.join(
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
+# External hpcs kms yamls
+EXTERNAL_HPCS_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "hpcs")
+EXTERNAL_HPCS_KMS_CONNECTION_DETAILS = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details-hpcs.yaml"
+)
+EXTERNAL_IBM_KP_KMS_SECRET = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ibm-kp-kms-secret.yaml"
+)
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
@@ -1458,9 +1469,11 @@ VAULT_DEFAULT_POLICY_PREFIX = "rook"
 VAULT_DEFAULT_NAMESPACE_PREFIX = "ocs-namespace"
 VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
+HPCS_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"
+HPCS_KMS_PROVIDER = "hpcs"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
