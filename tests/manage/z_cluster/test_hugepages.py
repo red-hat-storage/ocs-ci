@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.helpers import sanity_helpers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
@@ -62,7 +63,7 @@ class TestHugePages(E2ETest):
 
             log.info("Wait for all pods to be in running state")
             wait_for_pods_to_be_running(timeout=600)
-            self.sanity_helpers.health_check(tries=120)
+            sanity_helpers.ceph_health_check(tries=120)
 
         request.addfinalizer(finalizer)
 
