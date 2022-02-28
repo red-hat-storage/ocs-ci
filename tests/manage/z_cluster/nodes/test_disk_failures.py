@@ -5,7 +5,7 @@ from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier4,
-    tier4b,
+    tier4a,
     ignore_leftovers,
     ManageTest,
     cloud_platform_required,
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
-@tier4b
+@tier4a
 @ignore_leftovers
 class TestDiskFailures(ManageTest):
     """

@@ -25,7 +25,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     tier3,
     tier4,
-    tier4b,
+    tier4a,
     ManageTest,
     aws_based_platform_required,
     ignore_leftovers,
@@ -159,7 +159,7 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check(tries=90)
 
     @tier4
-    @tier4b
+    @tier4a
     @skipif_bm
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -313,7 +313,7 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check()
 
     @tier4
-    @tier4b
+    @tier4a
     @aws_based_platform_required
     @ipi_deployment_required
     @pytest.mark.parametrize(
@@ -442,7 +442,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @pytest.mark.polarion_id("OCS-2524")
-    @tier4b
+    @tier4a
     def test_pdb_check_simultaneous_node_drains(
         self,
         pvc_factory,

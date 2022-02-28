@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier4,
-    tier4b,
+    tier4c,
     ignore_leftover_label,
     skipif_ocp_version,
 )
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
-@tier4b
+@tier4c
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @ignore_leftover_label(constants.drain_canary_pod_label)

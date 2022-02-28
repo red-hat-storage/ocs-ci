@@ -8,7 +8,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
-    tier4b,
     ManageTest,
     ignore_leftovers,
     ipi_deployment_required,
@@ -270,7 +269,7 @@ class TestNodeReplacement(ManageTest):
         ), "Data re-balance failed to complete"
 
 
-@tier4b
+@tier4a
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")

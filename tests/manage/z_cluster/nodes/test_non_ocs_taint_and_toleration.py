@@ -7,7 +7,7 @@ from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
 )
 from ocs_ci.framework.testlib import (
-    tier4c,
+    tier4b,
     E2ETest,
     ignore_leftovers,
     skipif_tainted_nodes,
@@ -30,7 +30,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 logger = logging.getLogger(__name__)
 
 
-@tier4c
+@tier4b
 @ignore_leftovers
 @skipif_tainted_nodes
 @bugzilla("1992472")
