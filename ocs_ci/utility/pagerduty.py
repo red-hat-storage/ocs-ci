@@ -5,7 +5,7 @@ import tempfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
@@ -23,9 +23,8 @@ def set_pagerduty_integration_secret(integration_key):
     """
     logger.info("Setting up PagerDuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
-    addon_name = config.DEPLOYMENT["addon_name"]
     cmd = (
-        f"oc create secret generic {addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX} "
+        f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
         f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
         f"--kubeconfig {kubeconfig} --dry-run -o yaml"
     )
@@ -33,11 +32,11 @@ def set_pagerduty_integration_secret(integration_key):
         cmd,
         secrets=[
             integration_key,
-            addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX,
+            managedservice.get_pagerduty_secret_name(),
         ],
     ).stdout
     with tempfile.NamedTemporaryFile(
-        prefix=f"{addon_name + constants.MANAGED_PAGERDUTY_SECRET_SUFFIX}_"
+        prefix=f"{managedservice.get_pagerduty_secret_name()}_"
     ) as secret_file:
         secret_file.write(secret_data)
         secret_file.flush()
