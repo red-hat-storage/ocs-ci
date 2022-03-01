@@ -4,6 +4,7 @@ external cluster deployment.
 """
 
 import logging
+import re
 import tempfile
 
 from ocs_ci.framework import config
@@ -16,6 +17,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
 )
+from ocs_ci.utility import version
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import upload_file, encode, decode
 
@@ -62,8 +64,19 @@ class ExternalCluster(object):
         rgw_endpoint = get_rgw_endpoint()
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
+        # get external RHCS rhel version
+        rhel_version = self.get_rhel_version()
+        python_version = "python3"
+        if version.get_semantic_version(rhel_version) < version.get_semantic_version(
+            "8"
+        ):
+            python_version = "python"
+
         # run the exporter script on external RHCS cluster
-        cmd = f"python {script_path} --rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
+        cmd = (
+            f"{python_version} {script_path} --rbd-data-pool-name {defaults.RBD_NAME} "
+            f"--rgw-endpoint {rgw_endpoint_with_port}"
+        )
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
         if retcode != 0:
             logger.error(f"Failed to run {script_path}. Error: {err}")
@@ -112,6 +125,20 @@ class ExternalCluster(object):
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
         logger.info(f"External cluster rgw endpoint api port: {out}")
         return out
+
+    def get_rhel_version(self):
+        """
+        Fetches the RHEL version on external RHCS cluster
+
+        Returns:
+            str: RHEL version
+
+        """
+        pattern = re.compile(r".*(\d+.\d+).*")
+        cmd = "cat /etc/redhat-release"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        logger.debug(f"RHEL version on external RHCS cluster is {out}")
+        return pattern.search(out).groups()[0]
 
 
 def generate_exporter_script():
