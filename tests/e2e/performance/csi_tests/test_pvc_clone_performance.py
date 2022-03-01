@@ -5,12 +5,10 @@ Performance is measured by collecting clone creation/deletion speed.
 import logging
 import pytest
 import os
-from uuid import uuid4
 import statistics
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance
-from ocs_ci.framework import config
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -35,25 +33,6 @@ class TestPVCSingleClonePerformance(PASTest):
         logging.info("Starting the test setup")
         super(TestPVCSingleClonePerformance, self).setup()
         self.benchmark_name = "pvc_clone_permorance"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
 
     @pytest.fixture()
     def base_setup(
