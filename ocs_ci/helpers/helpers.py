@@ -3753,14 +3753,14 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
 
     # Patch the good mon Deployment so that deployment to stop the working of this mon without deleting the mon pod
     logger.info(
-        f"Edit mon {mon_deployment_name} deployment to set 'initialDelaySeconds: 2000'"
+        f"Edit mon {mon_deployment_name} deployment to remove livenessProbe part"
     )
     params = (
         '[{"op":"remove", "path":"/spec/template/spec/containers/0/livenessProbe"}]'
     )
     dep_obj.patch(resource_name=mon_deployment_name, params=params, format_type="json")
     logger.info(
-        f"Deployment {mon_deployment_name} successfully set 'initialDelaySeconds: 2000'"
+        f"Deployment {mon_deployment_name} successfully removed livenessProbe part"
     )
 
     logger.info(
