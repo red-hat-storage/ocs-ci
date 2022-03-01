@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @managed_service_required
-@pytest.mark.polarion_id("OCS-903")
+@pytest.mark.polarion_id("OCS-2771")
 def test_corrupt_pg_pd(measure_corrupt_pg):
     """
     Test that there is appropriate incident in PagerDuty when Placement group

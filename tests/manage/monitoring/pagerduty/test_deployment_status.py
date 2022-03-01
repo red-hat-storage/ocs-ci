@@ -1,7 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import bugzilla, managed_service_required, tier4, tier4a
+from ocs_ci.framework.testlib import (
+    bugzilla,
+    managed_service_required,
+    tier4,
+    tier4b,
+    tier4c,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
 
@@ -10,10 +16,10 @@ log = logging.getLogger(__name__)
 
 
 @tier4
-@tier4a
+@tier4c
 @managed_service_required
 @bugzilla("1998056")
-@pytest.mark.polarion_id("OCS-1052")
+@pytest.mark.polarion_id("OCS-2766")
 def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     """
     Test that there is appropriate incident in PagerDuty when ceph manager
@@ -38,9 +44,9 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 
 
 @tier4
-@tier4a
+@tier4c
 @managed_service_required
-@pytest.mark.polarion_id("OCS-900")
+@pytest.mark.polarion_id("OCS-2769")
 def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """
     Test that there are appropriate incidents in PagerDuty when ceph osd
@@ -69,9 +75,9 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
 
 
 @tier4
-@tier4a
+@tier4b
 @managed_service_required
-@pytest.mark.polarion_id("OCS-900")
+@pytest.mark.polarion_id("OCS-2770")
 def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     """
     Test that there are appropriate incidents in PagerDuty when two worker
