@@ -207,60 +207,63 @@ def setup_local_storage(storageclass):
     verify_pvs_created(expected_pvs, storageclass)
 
 
-def create_optional_operators_catalogsource_non_ga():
+def create_optional_operators_catalogsource_non_ga(force=False):
     """
     Creating optional operators CatalogSource and ImageContentSourcePolicy
     for non-ga OCP.
 
+    Args:
+        force (bool): enable/disable lso catalog setup
+
     """
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocp_ga_version = get_ocp_ga_version(ocp_version)
-    if not ocp_ga_version:
-        optional_operators_data = list(
-            templating.load_yaml(
-                constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
-            )
+    if ocp_ga_version and not force:
+        return
+    optional_operators_data = list(
+        templating.load_yaml(
+            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
         )
-        optional_operators_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="optional_operators", delete=False
+    )
+    optional_operators_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="optional_operators", delete=False
+    )
+    if config.DEPLOYMENT.get("optional_operators_image"):
+        for _dict in optional_operators_data:
+            if _dict.get("kind").lower() == "catalogsource":
+                _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                    "optional_operators_image"
+                )
+    if config.DEPLOYMENT.get("disconnected"):
+        # in case of disconnected environment, we have to mirror all the
+        # optional_operators images
+        icsp = None
+        for _dict in optional_operators_data:
+            if _dict.get("kind").lower() == "catalogsource":
+                index_image = _dict["spec"]["image"]
+            if _dict.get("kind").lower() == "imagecontentsourcepolicy":
+                icsp = _dict
+        mirrored_index_image = (
+            f"{config.DEPLOYMENT['mirror_registry']}/"
+            f"{index_image.split('/', 1)[-1]}"
         )
-        if config.DEPLOYMENT.get("optional_operators_image"):
-            for _dict in optional_operators_data:
-                if _dict.get("kind").lower() == "catalogsource":
-                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
-                        "optional_operators_image"
-                    )
-        if config.DEPLOYMENT.get("disconnected"):
-            # in case of disconnected environment, we have to mirror all the
-            # optional_operators images
-            icsp = None
-            for _dict in optional_operators_data:
-                if _dict.get("kind").lower() == "catalogsource":
-                    index_image = _dict["spec"]["image"]
-                if _dict.get("kind").lower() == "imagecontentsourcepolicy":
-                    icsp = _dict
-            mirrored_index_image = (
-                f"{config.DEPLOYMENT['mirror_registry']}/"
-                f"{index_image.split('/', 1)[-1]}"
-            )
-            prune_and_mirror_index_image(
-                index_image,
-                mirrored_index_image,
-                constants.DISCON_CL_REQUIRED_PACKAGES,
-                icsp,
-            )
-            _dict["spec"]["image"] = mirrored_index_image
-        templating.dump_data_to_temp_yaml(
-            optional_operators_data, optional_operators_yaml.name
+        prune_and_mirror_index_image(
+            index_image,
+            mirrored_index_image,
+            constants.DISCON_CL_REQUIRED_PACKAGES,
+            icsp,
         )
-        with open(optional_operators_yaml.name, "r") as f:
-            logger.info(f.read())
-        logger.info(
-            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
-        )
-        run_cmd(f"oc create -f {optional_operators_yaml.name}")
-        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        wait_for_machineconfigpool_status("all")
+        _dict["spec"]["image"] = mirrored_index_image
+    templating.dump_data_to_temp_yaml(
+        optional_operators_data, optional_operators_yaml.name
+    )
+    with open(optional_operators_yaml.name, "r") as f:
+        logger.info(f.read())
+    logger.info(
+        "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+    )
+    run_cmd(f"oc create -f {optional_operators_yaml.name}")
+    wait_for_machineconfigpool_status("all")
 
 
 def get_device_paths(worker_names):
