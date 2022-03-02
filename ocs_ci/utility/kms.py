@@ -13,7 +13,7 @@ import subprocess
 from subprocess import CalledProcessError
 import base64
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import (
@@ -73,7 +73,7 @@ class Vault(KMS):
         self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
-        self.kms_type = constants.VAULT_TOKEN
+        self.kms_auth_type = constants.VAULT_TOKEN
         self.ca_cert_name = None
         self.client_cert_name = None
         self.client_key_name = None
@@ -766,7 +766,7 @@ class Vault(KMS):
     def create_vault_csi_kms_connection_details(
         self,
         kv_version,
-        kms_type=constants.VAULT_TOKEN,
+        kms_auth_type=constants.VAULT_TOKEN,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     ):
         """
@@ -778,7 +778,7 @@ class Vault(KMS):
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
         )
-        if kms_type == constants.VAULT_TOKEN:
+        if kms_auth_type == constants.VAULT_TOKEN:
             conn_str = csi_kms_conn_details["data"]["1-vault"]
             buf = json.loads(conn_str)
             buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
@@ -830,6 +830,9 @@ class Vault(KMS):
         clusterRoleBindings required for the kubernetes auth method with vaulttenantsa
         encryption type.
 
+        Raises exception if the command fails due to any other reason except if the
+        resources already exist.
+
         """
 
         try:
@@ -837,7 +840,9 @@ class Vault(KMS):
                 constants.RBD_CSI_VAULT_TOKEN_REVIEWER, multi_document=True
             )
             self.create_resource(rbd_vault_token_reviewer, prefix="rbd-token-review")
-            logger.info("rbd-csi-vault-token-reviewer resources created successfully")
+            logger.warning(
+                "rbd-csi-vault-token-reviewer resources created successfully"
+            )
 
         except CommandFailed as cfe:
             if "AlreadyExists" in str(cfe):
@@ -862,12 +867,7 @@ class Vault(KMS):
     def create_tenant_configmap(
         self,
         tenant_namespace,
-        vault_backend=None,
-        vault_backend_path=None,
-        vault_namespace=None,
-        vault_role=None,
-        vault_auth_path=None,
-        vault_auth_namespace=None,
+        **vault_config,
     ):
         """
         This functional will create a configmap in the tenant namespace to override
@@ -892,35 +892,10 @@ class Vault(KMS):
         tenant_cm = templating.load_yaml(constants.RBD_CSI_VAULT_TENANT_CONFIGMAP)
         tenant_cm["metadata"]["namespace"] = tenant_namespace
 
-        if vault_backend is None:
-            tenant_cm["data"].pop("vaultBackend")
-        else:
-            tenant_cm["data"]["vaultBackend"] = vault_backend
-
-        if vault_backend_path is None:
-            tenant_cm["data"].pop("vaultBackendPath")
-        else:
-            tenant_cm["data"]["vaultBackendPath"] = vault_backend_path
-
-        if vault_namespace is None:
-            tenant_cm["data"].pop("vaultNamespace")
-        else:
-            tenant_cm["data"]["vaultNamespace"] = vault_namespace
-
-        if vault_role is None:
-            tenant_cm["data"].pop("vaultRole")
-        else:
-            tenant_cm["data"]["vaultRole"] = vault_role
-
-        if vault_auth_path is None:
-            tenant_cm["data"].pop("vaultAuthPath")
-        else:
-            tenant_cm["data"]["vaultAuthPath"] = vault_auth_path
-
-        if vault_auth_namespace is None:
-            tenant_cm["data"].pop("vaultAuthNamespace")
-        else:
-            tenant_cm["data"]["vaultAuthNamespace"] = vault_auth_namespace
+        merge_dict(tenant_cm, vault_config)
+        for k in tenant_cm.copy():
+            if not tenant_cm[k]:
+                tenant_cm.pop(k)
 
         self.create_resource(tenant_cm, prefix="tenant-cm")
         logger.info("Tenant ConfigMap ceph-csi-kms-config created successfully")
@@ -936,11 +911,14 @@ class Vault(KMS):
 
         Args:
             auth_path (str): The path where kubernetes auth is to be enabled.
-                             If not provided default 'kubernetes' path is used
+                If not provided default 'kubernetes' path is used
             auth_namespace (str): The vault namespace where kubernetes auth is
-                                  to be enabled, if applicable
+                to be enabled, if applicable
             token_reviewer_name (str): Name of the token-reviewer serviceaccount
-                                       in openshift-storage namespace
+                in openshift-storage namespace
+
+        Raises:
+            VaultOperationError: if kube auth method setup fails
 
         """
 
