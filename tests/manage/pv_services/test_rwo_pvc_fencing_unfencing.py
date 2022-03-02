@@ -25,6 +25,7 @@ from ocs_ci.ocs import constants, machine, node, ocp
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, get_az_count
 from ocs_ci.helpers import disruption_helpers, helpers
@@ -180,7 +181,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         # Recovery steps for MON and OSDS not required from OCS 4.4 onwards
         # Refer to BZ 1830015 and BZ 1835908
         ceph_pods = []
-        if float(config.ENV_DATA["ocs_version"]) < 4.4 and (
+        if (version.get_semantic_ocs_version_from_config() < version.VERSION_4_4) and (
             scenario == "colocated" and len(test_nodes) > 3
         ):
             pods_to_check = ceph_cluster.osds
@@ -792,7 +793,9 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
 
         # Force delete the app pods and/or mon,osd pods on the unresponsive node
-        if float(config.ENV_DATA["ocs_version"]) < 4.4 and ceph_cluster.mon_count == 5:
+        if (version.get_semantic_ocs_version_from_config() < version.VERSION_4_4) and (
+            ceph_cluster.mon_count == 5
+        ):
             for pod_obj in ceph_cluster.mons:
                 if pod.get_pod_node(pod_obj).name in app_pod_nodes:
                     ceph_pods.append(pod_obj)
