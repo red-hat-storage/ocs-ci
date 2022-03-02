@@ -2,15 +2,14 @@
 Test to verify clone creation and deletion performance for PVC with data written to it.
 Performance is measured by collecting clone creation/deletion speed.
 """
+import datetime
 import logging
 import pytest
 import os
-from uuid import uuid4
 import statistics
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance
-from ocs_ci.framework import config
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -35,25 +34,6 @@ class TestPVCSingleClonePerformance(PASTest):
         logging.info("Starting the test setup")
         super(TestPVCSingleClonePerformance, self).setup()
         self.benchmark_name = "pvc_clone_permorance"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
 
     @pytest.fixture()
     def base_setup(
@@ -139,6 +119,7 @@ class TestPVCSingleClonePerformance(PASTest):
 
         max_num_of_clones = 1
         clone_creation_measures = []
+        csi_clone_creation_measures = []
         clones_list = []
         timeout = 18000
         sc_name = self.pvc_obj.backed_sc
@@ -153,6 +134,9 @@ class TestPVCSingleClonePerformance(PASTest):
         logger.info(
             f"Start creating {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size} GB."
         )
+
+        # taking the time, so parsing the provision log will be faster.
+        start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for i in range(max_num_of_clones):
             logger.info(f"Start creation of clone number {i + 1}.")
@@ -185,10 +169,16 @@ class TestPVCSingleClonePerformance(PASTest):
                 "speed": creation_speed,
             }
             clone_creation_measures.append(creation_measures)
+            csi_clone_creation_measures.append(
+                performance_lib.csi_pvc_time_measure(
+                    self.interface, cloned_pvc_obj, "create", start_time
+                )
+            )
 
         # deleting one by one and measuring deletion times and speed for each one of the clones create above
         # in case of single clone will run one time
         clone_deletion_measures = []
+        csi_clone_deletion_measures = []
 
         logger.info(
             f"Start deleting {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size} GB."
@@ -221,6 +211,11 @@ class TestPVCSingleClonePerformance(PASTest):
                 "speed": deletion_speed,
             }
             clone_deletion_measures.append(deletion_measures)
+            csi_clone_deletion_measures.append(
+                performance_lib.csi_pvc_time_measure(
+                    self.interface, cloned_pvc_obj, "delete", start_time
+                )
+            )
 
         logger.info(
             f"Printing clone creation time and speed for {max_num_of_clones} clones "
@@ -239,6 +234,7 @@ class TestPVCSingleClonePerformance(PASTest):
         creation_time_list = [r["time"] for r in clone_creation_measures]
         creation_speed_list = [r["speed"] for r in clone_creation_measures]
         average_creation_time = statistics.mean(creation_time_list)
+        average_csi_creation_time = statistics.mean(csi_clone_creation_measures)
         average_creation_speed = statistics.mean(creation_speed_list)
         logger.info(f"Average creation time is  {average_creation_time} secs.")
         logger.info(f"Average creation speed is  {average_creation_speed} Mb/sec.")
@@ -254,6 +250,7 @@ class TestPVCSingleClonePerformance(PASTest):
         deletion_time_list = [r["time"] for r in clone_deletion_measures]
         deletion_speed_list = [r["speed"] for r in clone_deletion_measures]
         average_deletion_time = statistics.mean(deletion_time_list)
+        average_csi_deletion_time = statistics.mean(csi_clone_deletion_measures)
         average_deletion_speed = statistics.mean(deletion_speed_list)
         logger.info(f"Average deletion time is  {average_deletion_time} secs.")
         logger.info(f"Average deletion speed is  {average_deletion_speed} Mb/sec.")
@@ -266,7 +263,7 @@ class TestPVCSingleClonePerformance(PASTest):
 
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.results_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"--PVC-SIZE-{pvc_size}"
+        self.full_log_path += f"-{self.interface}-{pvc_size}-{file_size}"
         logger.info(f"Logs file path name is : {self.full_log_path}")
 
         # Initialize the results doc file.
@@ -282,27 +279,38 @@ class TestPVCSingleClonePerformance(PASTest):
         full_results.add_key("interface", self.interface)
         full_results.add_key("total_clone_number", max_num_of_clones)
         full_results.add_key("pvc_size", self.pvc_size)
-        full_results.add_key("clone_creation_time", creation_time_list)
-        full_results.add_key("clone_deletion_time", deletion_time_list)
         full_results.add_key("average_clone_creation_time", average_creation_time)
+        full_results.add_key(
+            "average_csi_clone_creation_time", average_csi_creation_time
+        )
         full_results.add_key("average_clone_deletion_time", average_deletion_time)
-        full_results.add_key("clone_creation_speed", creation_speed_list)
-        full_results.add_key("clone_deletion_speed", deletion_speed_list)
+        full_results.add_key(
+            "average_csi_clone_deletion_time", average_csi_deletion_time
+        )
         full_results.add_key("average_clone_creation_speed", average_creation_speed)
         full_results.add_key("average_clone_deletion_speed", average_deletion_speed)
+
+        full_results.all_results = {
+            "clone_creation_time": creation_time_list,
+            "csi_clone_creation_time": csi_clone_creation_measures,
+            "clone_deletion_time": deletion_time_list,
+            "csi_clone_deletion_time": csi_clone_deletion_measures,
+            "clone_creation_speed": creation_speed_list,
+            "clone_deletion_speed": deletion_speed_list,
+        }
 
         # Write the test results into the ES server
         if full_results.es_write():
             res_link = full_results.results_link()
             logger.info(f"The Result can be found at : {res_link}")
 
-            # Create text file with results of all subtest (4 - according to the parameters)
+            # Create text file with results of all subtest (8 - according to the parameters)
             self.write_result_to_file(res_link)
 
     def test_pvc_clone_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (4)
+        and reporting the full results (links in the ES) of previous tests (8)
         """
         self.number_of_tests = 8
         self.results_path = get_full_test_logs_path(
