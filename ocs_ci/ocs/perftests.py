@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +55,6 @@ class PASTest(BaseTest):
         self.initialize_test_crd()
 
         # Place holders for test results file (all sub-tests together)
-        self.results_path = ""
         self.results_file = ""
 
         # All tests need a uuid for the ES results, benchmark-operator base test
@@ -63,9 +62,19 @@ class PASTest(BaseTest):
         self.uuid = uuid4().hex
 
         # Getting the full path for the test logs
-        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split("]")[0]
-        self.full_log_path = self.full_log_path.replace("::", "/").replace("[", "-")
+        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split(" ")[0]
+        self.full_log_path = (
+            self.full_log_path.replace("::", "/").replace("[", "-").replace("]", "")
+        )
+        self.full_log_path = os.path.join(ocsci_log_path(), self.full_log_path)
         log.info(f"Logs file path name is : {self.full_log_path}")
+
+        # Getting the results path as a list
+        self.results_path = self.full_log_path.split("/")
+        self.results_path.pop()
+
+        # List of test(s) for checking the results
+        self.workloads = []
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
@@ -800,3 +809,35 @@ class PASTest(BaseTest):
             log.error(f"Can not push results into the performance Dashboard! [{ex}]")
 
         db.cleanup()
+
+    def add_test_to_results_check(self, test, test_count, test_name):
+        """
+        Adding test information to list of test(s) that we want to check the results
+        and push them to the dashboard.
+
+        Args:
+            test (str): the name of the test function that we want to check
+            test_count (int): number of test(s) that need to run - according to parametize
+            test_name (str): the test name in the Performance dashboard
+
+        """
+        self.workloads.append(
+            {"name": test, "tests": test_count, "test_name": test_name}
+        )
+
+    def check_results_and_push_to_dashboard(self):
+        """
+        Checking test(s) results - that all test(s) are finished OK, and push
+        the results into the performance dashboard
+
+        """
+
+        for wl in self.workloads:
+            self.number_of_tests = wl["tests"]
+
+            self.results_file = os.path.join(
+                "/", *self.results_path, wl["name"], "all_results.txt"
+            )
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
