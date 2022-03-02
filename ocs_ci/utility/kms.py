@@ -838,7 +838,7 @@ def get_kms_deployment():
         raise KMSNotSupported("Not a supported KMS deployment")
 
 
-def is_kms_enabled():
+def is_kms_enabled(dont_raise=False):
     """
     Checks StorageCluster yaml if kms is configured.
 
@@ -848,9 +848,13 @@ def is_kms_enabled():
     """
     cluster = storage_cluster.get_storage_cluster()
     logger.info("Checking if StorageCluster has configured KMS encryption")
-    resource = cluster.get()["items"][0]
-    encryption = resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
-    return bool(encryption)
+    resource_get = cluster.get(dont_raise=dont_raise)
+    if resource_get:
+        resource = resource_get["items"][0]
+        encryption = (
+            resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
+        )
+        return bool(encryption)
 
 
 def vault_kv_list(path):
