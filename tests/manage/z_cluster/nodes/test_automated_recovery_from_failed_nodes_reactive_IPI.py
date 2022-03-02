@@ -153,7 +153,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
 
         # Add a new node and label it
-        new_ocs_node = add_new_node_and_label_it(machineset_name)
+        new_ocs_node_names = add_new_node_and_label_it(machineset_name)
+        new_ocs_node = get_node_objs(new_ocs_node_names)[0]
         failure_domain = get_failure_domain()
         osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
             failure_domain, new_ocs_node, common_nodes
@@ -285,9 +286,12 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         )
 
         if additional_node:
-            new_ocs_node = add_new_node_and_label_it(self.machineset_name)
+            new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+            new_ocs_node = get_node_objs(new_ocs_node_names)[0]
+            log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
             self.extra_node = True
             failure_domain = get_failure_domain()
+            log.info("Get another OSD node in the same rack or zone...")
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
                 failure_domain, new_ocs_node
             )
