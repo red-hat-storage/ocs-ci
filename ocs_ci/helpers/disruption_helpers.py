@@ -24,6 +24,7 @@ class Disruptions:
     daemon_pid = None
 
     def set_resource(self, resource, leader_type="provisioner"):
+        run_on_provider = True
         self.resource = resource
         resource_count = 0
         if self.resource == "mgr":
@@ -67,6 +68,7 @@ class Disruptions:
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        run_on_provider = True
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
             condition="Running",
@@ -84,6 +86,7 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon has
                 to be selected.
         """
+        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -122,6 +125,7 @@ class Disruptions:
                 daemon. False to skip the check.
             kill_signal (str): kill signal type
         """
+        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -153,6 +157,7 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon is running
 
         """
+        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )

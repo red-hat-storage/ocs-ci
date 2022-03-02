@@ -10,6 +10,7 @@ import time
 import yaml
 import json
 import copy
+from inspect import stack
 
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -128,14 +129,40 @@ class OCP(object):
             str: If out_yaml_format is False.
 
         """
+
+        # Importing here to avoid circular import
+        from ocs_ci.ocs.utils import (
+            get_primary_cluster_config,
+            get_provider_cluster_config,
+        )
+
         oc_cmd = "oc "
-        env_kubeconfig = os.getenv("KUBECONFIG")
-        if not env_kubeconfig or not os.path.exists(env_kubeconfig):
-            cluster_dir_kubeconfig = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
-            )
-            if os.path.exists(cluster_dir_kubeconfig):
-                oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
+
+        # Managed services multi cluster run - Use provider cluster when needed
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            all_stack = stack()
+            for stack_frame in all_stack:
+                if stack_frame[0].f_locals.get("run_on_provider", False):
+                    provider_cluster_config = get_provider_cluster_config()
+                    cluster_dir_kubeconfig = os.path.join(
+                        provider_cluster_config.ENV_DATA["cluster_path"],
+                        provider_cluster_config.RUN.get("kubeconfig_location"),
+                    )
+                    oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
+        else:
+            env_kubeconfig = os.getenv("KUBECONFIG")
+            if not env_kubeconfig or not os.path.exists(env_kubeconfig):
+                cluster_dir_kubeconfig = os.path.join(
+                    config.ENV_DATA["cluster_path"],
+                    config.RUN.get("kubeconfig_location"),
+                )
+                if os.path.exists(cluster_dir_kubeconfig):
+                    oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "

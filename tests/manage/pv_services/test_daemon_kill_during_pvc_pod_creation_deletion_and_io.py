@@ -488,7 +488,9 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
             # Command to kill the daemon
             kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
             # Create node-kill process map for verifying the result
+            run_on_provider = True
             node_and_kill_proc[node_name] = executor.submit(run_cmd, kill_cmd)
+            run_on_provider = False
 
         # Verify daemon kill process
         for node_name, daemon_kill_proc in node_and_kill_proc.items():
