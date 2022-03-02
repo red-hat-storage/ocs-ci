@@ -24,7 +24,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     tier3,
-    tier4,
     tier4a,
     ManageTest,
     aws_based_platform_required,
@@ -158,7 +157,6 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=90)
 
-    @tier4
     @tier4a
     @skipif_bm
     @pytest.mark.parametrize(
@@ -312,7 +310,6 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
-    @tier4
     @tier4a
     @aws_based_platform_required
     @ipi_deployment_required

@@ -16,7 +16,6 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_power,
     skipif_vsphere_ipi,
     skipif_tainted_nodes,
-    tier4,
     tier4b,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
@@ -30,7 +29,6 @@ from ocs_ci.helpers import disruption_helpers, helpers
 logger = logging.getLogger(__name__)
 
 
-@tier4
 @tier4b
 @ignore_leftovers
 @skipif_vsphere_ipi

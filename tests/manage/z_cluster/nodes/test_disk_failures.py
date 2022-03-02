@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
     ignore_leftovers,
     ManageTest,
@@ -29,7 +28,6 @@ from ocs_ci.ocs import osd_operations
 logger = logging.getLogger(__name__)
 
 
-@tier4
 @tier4a
 @ignore_leftovers
 class TestDiskFailures(ManageTest):
