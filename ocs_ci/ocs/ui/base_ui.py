@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
 )
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -51,7 +52,7 @@ class BaseUI:
 
     """
 
-    def __init__(self, driver):
+    def __init__(self, driver: WebDriver):
         self.driver = driver
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
