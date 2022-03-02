@@ -12,13 +12,14 @@ from elasticsearch import Elasticsearch, exceptions as esexp
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed, MissingRequiredConfigKeyError
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -841,3 +842,32 @@ class PASTest(BaseTest):
             log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
             self.check_tests_results()
             self.push_to_dashboard(test_name=wl["test_name"])
+
+    def create_test_progect(self):
+        """
+        Creating new project (namespace) for performance test
+        """
+        self.namespace = "pas-test-namespace"
+        log.info(f"Creating new namespace ({self.namespace}) for the test")
+        try:
+            self.proj = helpers.create_project(project_name=self.namespace)
+        except CommandFailed as ex:
+            if str(ex).find("(AlreadyExists)"):
+                log.warning("The namespace is already exists !")
+            log.error("Cannot create new project")
+            raise CommandFailed(f"{self.namespace} was not created")
+
+    def delete_test_project(self):
+        """
+        Deleting the performance test project (namespace)
+        """
+        log.info(f"Deleting the test namespace : {self.namespace}")
+        switch_to_default_rook_cluster_project()
+        try:
+            self.proj.delete(resource_name=self.namespace)
+            self.proj.wait_for_delete(
+                resource_name=self.namespace, timeout=60, sleep=10
+            )
+        except CommandFailed:
+            log.error(f"Can not delete project {self.namespace}")
+            raise CommandFailed(f"{self.namespace} was not created")
