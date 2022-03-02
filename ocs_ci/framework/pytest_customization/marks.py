@@ -70,6 +70,7 @@ scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+acm_import = pytest.mark.acm_import
 
 tier_marks = [
     tier1,
