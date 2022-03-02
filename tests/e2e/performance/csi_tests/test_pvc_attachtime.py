@@ -2,7 +2,6 @@ import logging
 import pytest
 import statistics
 from uuid import uuid4
-import os.path
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
@@ -254,13 +253,7 @@ class TestPodStartTime(PASTest):
         and reporting the full results (links in the ES) of previous tests (2)
         """
 
-        self.number_of_tests = 2
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_pod_start_time"
+        self.add_test_to_results_check(
+            test="test_pod_start_time", test_count=2, test_name="PVC Attach Time"
         )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="PVC Attach Time")
+        self.check_results_and_push_to_dashboard()
