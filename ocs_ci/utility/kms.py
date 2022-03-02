@@ -840,13 +840,11 @@ class Vault(KMS):
                 constants.RBD_CSI_VAULT_TOKEN_REVIEWER, multi_document=True
             )
             self.create_resource(rbd_vault_token_reviewer, prefix="rbd-token-review")
-            logger.warning(
-                "rbd-csi-vault-token-reviewer resources created successfully"
-            )
+            logger.info("rbd-csi-vault-token-reviewer resources created successfully")
 
         except CommandFailed as cfe:
             if "AlreadyExists" in str(cfe):
-                logger.info("rbd-csi-vault-token-reviewer resources already exists")
+                logger.warning("rbd-csi-vault-token-reviewer resources already exists")
             else:
                 raise
 
