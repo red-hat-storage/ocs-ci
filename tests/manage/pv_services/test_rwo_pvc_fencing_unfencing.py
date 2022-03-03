@@ -525,7 +525,6 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     @skipif_bm
     @skipif_ibm_cloud
     @skipif_ibm_power
-    @tier4b
     @pytest.mark.parametrize(
         argnames=[
             "scenario",
