@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_managed_service,
     tier2,
+    tier4a,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus, version
@@ -87,7 +88,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
 
 
-@tier2
+@tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
