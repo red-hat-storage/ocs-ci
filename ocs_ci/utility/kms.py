@@ -90,6 +90,8 @@ class Vault(KMS):
         self.vault_policy_name = None
         self.vault_kube_auth_path = "kubernetes"
         self.vault_kube_auth_namespace = None
+        self.vault_cwd_kms_sa_name = None
+
 
     def deploy(self):
         """
@@ -297,6 +299,27 @@ class Vault(KMS):
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
 
+    def create_ocs_kube_auth_resources(self, sa_name=constants.VAULT_CWD_KMS_SA_NAME):
+        """
+        This function will create the serviceaccount and clusterrolebindings
+        required for kubernetes auth
+
+        Args:
+            sa_name (str): Name of the service account in ODF
+
+        """
+        ocp_obj = ocp.OCP()
+        cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
+        self.vault_cwd_kms_sa_name = sa_name
+        ocp_obj.exec_oc_cmd(command=cmd)
+        cmd = (
+            f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            "clusterrolebinding vault-tokenreview-binding "
+            "--clusterrole=system:auth-delegator "
+            f"--serviceaccount={constants.OPENSHIFT_STORAGE_NAMESPACE}:{sa_name}"
+        )
+        ocp_obj.exec_oc_cmd(command=cmd)
+
     def create_ocs_vault_resources(self):
         """
         This function takes care of creating ocp resources for
@@ -308,14 +331,18 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.create_ocs_vault_cert_resources()
 
-        # create oc resource secret for token
-        token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
-        # token has to base64 encoded (with padding)
-        token_data["data"]["token"] = base64.b64encode(
-            # encode() because b64encode expects a byte type
-            self.vault_path_token.encode()
-        ).decode()  # decode() because b64encode returns a byte type
-        self.create_resource(token_data, prefix="token")
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == "kubernetes":
+            self.create_ocs_kube_auth_resources()
+            self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+        else:
+            # create oc resource secret for token
+            token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
+            # token has to base64 encoded (with padding)
+            token_data["data"]["token"] = base64.b64encode(
+                # encode() because b64encode expects a byte type
+                self.vault_path_token.encode()
+            ).decode()  # decode() because b64encode returns a byte type
+            self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
         connection_data = templating.load_yaml(
@@ -330,7 +357,8 @@ class Vault(KMS):
         else:
             connection_data["data"].pop("VAULT_CLIENT_CERT")
             connection_data["data"].pop("VAULT_CLIENT_KEY")
-        connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
+        if config.ENV_DATA.get("use_vault_namespace"):
+            connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
         self.create_resource(connection_data, prefix="kmsconnection")

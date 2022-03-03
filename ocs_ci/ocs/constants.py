@@ -1454,6 +1454,7 @@ VAULT_KMS_PROVIDER = "vault"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
+VAULT_CWD_KMS_SA_NAME = "odf-vault-auth"
 
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
