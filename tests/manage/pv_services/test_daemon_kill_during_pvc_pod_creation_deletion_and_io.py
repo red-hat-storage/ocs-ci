@@ -504,7 +504,10 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         for node_name, pids in nodes_and_pids.items():
             # Command to kill the daemon
             if provider_kubeconfig:
-                kill_cmd = f"oc --kubeconfig {provider_kubeconfig} debug node/{node_name} -- chroot /host kill -9 {pids}"
+                kill_cmd = (
+                    f"oc --kubeconfig {provider_kubeconfig} debug node/{node_name} -- "
+                    f"chroot /host kill -9 {pids}"
+                )
             else:
                 kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
             # Create node-kill process map for verifying the result
