@@ -94,7 +94,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
-    @tier4a
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
@@ -247,7 +247,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
-    @tier4a
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["operation"],
         argvalues=[
@@ -356,7 +356,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
-    @tier4a
+    @tier4b
     @skipif_no_lso
     @bugzilla("1873938")
     @pytest.mark.polarion_id("OCS-2448")
