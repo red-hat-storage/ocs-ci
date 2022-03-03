@@ -571,7 +571,7 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
 
     """
     # Importing here to avoid circular import
-    from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
+    from ocs_ci.ocs.utils import get_primary_cluster_config
 
     # Managed services multi cluster run - Use provider cluster when needed
     if (
@@ -1254,7 +1254,7 @@ def run_async(command):
         ret, out, err = proc.async_communicate()
     """
     # Importing here to avoid circular import
-    from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
+    from ocs_ci.ocs.utils import get_primary_cluster_config
 
     # Managed services multi cluster run - Use provider cluster when needed
     if (

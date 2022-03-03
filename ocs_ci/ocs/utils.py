@@ -1304,7 +1304,7 @@ def run_on_cluster_type(cluster_type):
                         cluster.ENV_DATA.get("cluster_type", "").lower()
                         == cluster_type.lower()
                     ):
-                        cluster_kubeconfig = os.path.join(
+                        cluster_kubeconfig = os.path.join(  # noqa: F841
                             cluster.ENV_DATA["cluster_path"],
                             cluster.RUN.get("kubeconfig_location"),
                         )

@@ -131,10 +131,7 @@ class OCP(object):
         """
 
         # Importing here to avoid circular import
-        from ocs_ci.ocs.utils import (
-            get_primary_cluster_config,
-            get_provider_cluster_config,
-        )
+        from ocs_ci.ocs.utils import get_primary_cluster_config
 
         oc_cmd = "oc "
 
