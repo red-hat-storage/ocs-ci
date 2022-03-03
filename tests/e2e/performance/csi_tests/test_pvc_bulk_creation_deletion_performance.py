@@ -29,6 +29,19 @@ class TestPVCCreationPerformance(PASTest):
         super(TestPVCCreationPerformance, self).setup()
         self.benchmark_name = "pvc_creation_performance"
 
+        # Create new project (namespace for the test)
+        self.create_test_project()
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+
+        # Delete the test project (namespace)
+        self.delete_test_project()
+
+        super(TestPVCCreationPerformance, self).teardown()
+
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -72,14 +85,6 @@ class TestPVCCreationPerformance(PASTest):
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{sc}"
 
-    @pytest.fixture()
-    def namespace(self, project_factory):
-        """
-        Create a new project
-        """
-        proj_obj = project_factory()
-        self.namespace = proj_obj.namespace
-
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
         argvalues=[
@@ -102,7 +107,6 @@ class TestPVCCreationPerformance(PASTest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1620")
     def test_bulk_pvc_creation_deletion_measurement_performance(
         self, teardown_factory, bulk_size
@@ -238,7 +242,6 @@ class TestPVCCreationPerformance(PASTest):
         self.full_log_path += f"-{sc}"
 
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
-    @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1270")
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
