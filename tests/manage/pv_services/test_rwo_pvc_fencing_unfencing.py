@@ -17,7 +17,6 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
     skipif_tainted_nodes,
     tier4b,
-    tier4c,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
@@ -31,6 +30,7 @@ from ocs_ci.helpers import disruption_helpers, helpers
 logger = logging.getLogger(__name__)
 
 
+@tier4b
 @ignore_leftovers
 @skipif_vsphere_ipi
 class TestRwoPVCFencingUnfencing(ManageTest):
@@ -681,7 +681,6 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     @skipif_bm
     @skipif_ibm_cloud
     @skipif_ibm_power
-    @tier4b
     @pytest.mark.parametrize(
         argnames=[
             "scenario",
@@ -849,7 +848,6 @@ class TestRwoPVCFencingUnfencing(ManageTest):
     @skipif_bm
     @skipif_ibm_cloud
     @skipif_ibm_power
-    @tier4c
     @pytest.mark.parametrize(
         argnames=[
             "scenario",

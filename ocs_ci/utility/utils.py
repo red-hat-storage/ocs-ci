@@ -3581,9 +3581,27 @@ def add_chrony_to_ocp_deployment():
 
 
 def enable_huge_pages():
+    """
+    Applies huge pages
+
+    """
     log.info("Enabling huge pages.")
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
+    time.sleep(10)
+    log.info("Waiting for machine config will be applied with huge pages")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+
+
+def disable_huge_pages():
+    """
+    Removes huge pages
+
+    """
+    log.info("Disabling huge pages.")
+    exec_cmd(f"oc delete -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config to be ready")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
 
 
 def encode(message):
