@@ -5,7 +5,6 @@ import logging
 import pytest
 import math
 import datetime
-import os
 from uuid import uuid4
 
 import ocs_ci.ocs.exceptions as ex
@@ -368,22 +367,14 @@ class TestPVCCreationPerformance(PASTest):
         and reporting the full results (links in the ES) of previous tests (4 + 2)
         """
 
-        workloads = [
-            {
-                "name": "test_bulk_pvc_creation_deletion_measurement_performance",
-                "tests": 4,
-                "test_name": "PVC Bulk Creation-Deletion",
-            },
-            {
-                "name": "test_bulk_pvc_creation_after_deletion_performance",
-                "tests": 2,
-                "test_name": "PVC Bulk Creation-After-Deletion",
-            },
-        ]
-        for wl in workloads:
-            self.number_of_tests = wl["tests"]
-            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
-            self.results_file = os.path.join(self.results_path, "all_results.txt")
-            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
-            self.check_tests_results()
-            self.push_to_dashboard(test_name=wl["test_name"])
+        self.add_test_to_results_check(
+            test="test_bulk_pvc_creation_deletion_measurement_performance",
+            test_count=4,
+            test_name="PVC Bulk Creation-Deletion",
+        )
+        self.add_test_to_results_check(
+            test="test_bulk_pvc_creation_after_deletion_performance",
+            test_count=2,
+            test_name="PVC Bulk Creation-After-Deletion",
+        )
+        self.check_results_and_push_to_dashboard()
