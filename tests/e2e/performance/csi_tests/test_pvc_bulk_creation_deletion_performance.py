@@ -9,7 +9,7 @@ import datetime
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import performance, polarion_id, bugzilla
+from ocs_ci.framework.testlib import performance, polarion_id
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants
@@ -240,7 +240,6 @@ class TestPVCCreationPerformance(PASTest):
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
     @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1270")
-    @bugzilla("1741612")
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
         Measuring PVC creation time of bulk of 75% of initial PVC bulk (120) in the same
