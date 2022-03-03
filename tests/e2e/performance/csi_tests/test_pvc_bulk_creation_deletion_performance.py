@@ -203,7 +203,7 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         # Add the test time to the ES report
-        self.full_results.add_key("test_time", {"start": start_time, "end": end_time})
+        full_results.add_key("test_time", {"start": start_time, "end": end_time})
         full_results.add_key("bulk_size", bulk_size)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_pvc_creation_time", total_time)
@@ -327,7 +327,7 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         # Add the test time to the ES report
-        self.full_results.add_key("test_time", {"start": start_time, "end": end_time})
+        full_results.add_key("test_time", {"start": start_time, "end": end_time})
 
         full_results.add_key("number_of_pvcs", number_of_pvcs)
         full_results.add_key("pvc_size", self.pvc_size)
