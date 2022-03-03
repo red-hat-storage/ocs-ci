@@ -119,7 +119,7 @@ class TestPVCCreationPerformance(PASTest):
         log.info(f"Start creating new {bulk_size} PVCs")
 
         # Getting the start time of the test.
-        start_time = self.get_time()
+        self.test_start_time = self.get_time()
 
         pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
@@ -130,9 +130,6 @@ class TestPVCCreationPerformance(PASTest):
         )
         logging.info(f"PVC creation dir is {yaml_creation_dir}")
 
-        for pvc_obj in pvc_objs:
-            pvc_obj.reload()
-            teardown_factory(pvc_obj)
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
@@ -185,7 +182,7 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         # Getting the end time of the test
-        end_time = self.get_time()
+        self.test_end_time = self.get_time()
 
         self.results_path = get_full_test_logs_path(cname=self)
         # Produce ES report
@@ -203,7 +200,9 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         # Add the test time to the ES report
-        full_results.add_key("test_time", {"start": start_time, "end": end_time})
+        full_results.add_key(
+            "test_time", {"start": self.test_start_time, "end": self.test_end_time}
+        )
         full_results.add_key("bulk_size", bulk_size)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_pvc_creation_time", total_time)
@@ -251,7 +250,7 @@ class TestPVCCreationPerformance(PASTest):
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
         # Getting the test start time
-        start_time = self.get_time()
+        self.test_start_time = self.get_time()
 
         log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
         pvc_objs, _ = helpers.create_multiple_pvcs(
@@ -309,7 +308,7 @@ class TestPVCCreationPerformance(PASTest):
         logging.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
 
         # Getting the end time of the test
-        end_time = self.get_time()
+        self.test_end_time = self.get_time()
 
         self.results_path = get_full_test_logs_path(cname=self)
         # Produce ES report
@@ -327,7 +326,9 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         # Add the test time to the ES report
-        full_results.add_key("test_time", {"start": start_time, "end": end_time})
+        full_results.add_key(
+            "test_time", {"start": self.test_start_time, "end": self.test_end_time}
+        )
 
         full_results.add_key("number_of_pvcs", number_of_pvcs)
         full_results.add_key("pvc_size", self.pvc_size)
