@@ -584,13 +584,10 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     ):
         all_stack = stack()
         for stack_frame in all_stack:
-            if stack_frame[0].f_locals.get("run_on_provider", False):
-                provider_cluster_config = get_provider_cluster_config()
-                cluster_dir_kubeconfig = os.path.join(
-                    provider_cluster_config.ENV_DATA["cluster_path"],
-                    provider_cluster_config.RUN.get("kubeconfig_location"),
-                )
-                cmd = f"{cmd[:3]}--kubeconfig {cluster_dir_kubeconfig} {cmd[3:]}"
+            if stack_frame[0].f_locals.get("cluster_kubeconfig", ""):
+                cluster_kubeconfig = stack_frame[0].f_locals.get("cluster_kubeconfig")
+                cmd = f"{cmd[:3]}--kubeconfig {cluster_kubeconfig} {cmd[3:]}"
+                break
 
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
@@ -1256,6 +1253,27 @@ def run_async(command):
         proc = run_async(command)
         ret, out, err = proc.async_communicate()
     """
+    # Importing here to avoid circular import
+    from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
+
+    # Managed services multi cluster run - Use provider cluster when needed
+    if (
+        command.lower().startswith("oc ")
+        and "--kubeconfig " not in command
+        and config.multicluster
+        and get_primary_cluster_config().ENV_DATA["platform"].lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+    ):
+        all_stack = stack()
+        for stack_frame in all_stack:
+            if stack_frame[0].f_locals.get("cluster_kubeconfig", ""):
+                cluster_kubeconfig = stack_frame[0].f_locals.get("cluster_kubeconfig")
+                command = (
+                    f"{command[:3]}--kubeconfig {cluster_kubeconfig} {command[3:]}"
+                )
+                break
+
     log.info(f"Executing command: {command}")
     popen_obj = subprocess.Popen(
         command,

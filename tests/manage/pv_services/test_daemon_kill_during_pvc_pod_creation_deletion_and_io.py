@@ -1,4 +1,5 @@
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from time import sleep
@@ -17,6 +18,7 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_fio_rw_iops,
 )
+from ocs_ci.ocs.utils import get_primary_cluster_config, get_provider_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -481,16 +483,32 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Wait for 1 second before killing daemons. This is to wait for the create/delete operations to start
         sleep(1)
 
+        # Get provider cluster kubeconfig if the platform is Managed Services and running
+        # multi cluster with consumer as the primary cluster
+        provider_kubeconfig = ""
+        if (
+            config.multicluster
+            and get_primary_cluster_config().ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            and get_primary_cluster_config().ENV_DATA.get("cluster_type") == "consumer"
+        ):
+            provider_cluster_config = get_provider_cluster_config()
+            provider_kubeconfig = os.path.join(
+                provider_cluster_config.ENV_DATA["cluster_path"],
+                provider_cluster_config.RUN.get("kubeconfig_location"),
+            )
+
         # Kill daemons
         node_and_kill_proc = {}
         log.info(f"Killing daemons of {daemons_to_kill}")
         for node_name, pids in nodes_and_pids.items():
             # Command to kill the daemon
-            kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
+            if provider_kubeconfig:
+                kill_cmd = f"oc --kubeconfig {provider_kubeconfig} debug node/{node_name} -- chroot /host kill -9 {pids}"
+            else:
+                kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
             # Create node-kill process map for verifying the result
-            run_on_provider = True
             node_and_kill_proc[node_name] = executor.submit(run_cmd, kill_cmd)
-            run_on_provider = False
 
         # Verify daemon kill process
         for node_name, daemon_kill_proc in node_and_kill_proc.items():

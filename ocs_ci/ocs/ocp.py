@@ -147,13 +147,12 @@ class OCP(object):
         ):
             all_stack = stack()
             for stack_frame in all_stack:
-                if stack_frame[0].f_locals.get("run_on_provider", False):
-                    provider_cluster_config = get_provider_cluster_config()
-                    cluster_dir_kubeconfig = os.path.join(
-                        provider_cluster_config.ENV_DATA["cluster_path"],
-                        provider_cluster_config.RUN.get("kubeconfig_location"),
+                if stack_frame[0].f_locals.get("cluster_kubeconfig", ""):
+                    cluster_kubeconfig = stack_frame[0].f_locals.get(
+                        "cluster_kubeconfig"
                     )
-                    oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
+                    oc_cmd += f"--kubeconfig {cluster_kubeconfig} "
+                    break
         else:
             env_kubeconfig = os.getenv("KUBECONFIG")
             if not env_kubeconfig or not os.path.exists(env_kubeconfig):

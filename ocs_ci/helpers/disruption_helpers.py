@@ -3,6 +3,7 @@ import logging
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import run_on_cluster_type
 from ocs_ci.utility.utils import TimeoutSampler, run_async, run_cmd
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -23,8 +24,8 @@ class Disruptions:
     selector = None
     daemon_pid = None
 
+    @run_on_cluster_type(cluster_type="provider")
     def set_resource(self, resource, leader_type="provisioner"):
-        run_on_provider = True
         self.resource = resource
         resource_count = 0
         if self.resource == "mgr":
@@ -67,8 +68,8 @@ class Disruptions:
 
         self.resource_count = resource_count or len(self.resource_obj)
 
+    @run_on_cluster_type(cluster_type="provider")
     def delete_resource(self, resource_id=0):
-        run_on_provider = True
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
             condition="Running",
@@ -78,6 +79,7 @@ class Disruptions:
         )
 
     @retry(AssertionError, tries=5, delay=3, backoff=1)
+    @run_on_cluster_type(cluster_type="provider")
     def select_daemon(self, node_name=None):
         """
         Select pid of self.resource daemon
@@ -86,7 +88,6 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon has
                 to be selected.
         """
-        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -114,6 +115,7 @@ class Disruptions:
 
         self.daemon_pid = pid
 
+    @run_on_cluster_type(cluster_type="provider")
     def kill_daemon(self, node_name=None, check_new_pid=True, kill_signal="9"):
         """
         Kill self.resource daemon
@@ -125,7 +127,6 @@ class Disruptions:
                 daemon. False to skip the check.
             kill_signal (str): kill signal type
         """
-        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -149,6 +150,7 @@ class Disruptions:
         if check_new_pid:
             self.check_new_pid(node_name=node_name)
 
+    @run_on_cluster_type(cluster_type="provider")
     def check_new_pid(self, node_name=None):
         """
         Check if the pid of the daemon has changed from the initially selected pid(daemon_pid attribute)
@@ -157,7 +159,6 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon is running
 
         """
-        run_on_provider = True
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )

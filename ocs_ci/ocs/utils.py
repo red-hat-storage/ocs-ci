@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 from subprocess import TimeoutExpired
+from functools import wraps
 
 import yaml
 from gevent import sleep
@@ -1271,9 +1272,45 @@ def get_primary_cluster_config():
 def get_provider_cluster_config():
     """
     Get the provider cluster config object in a MS scenario
-    Return:
+
+    Returns:
         framework.config: provider cluster config object from config.clusters
     """
     for cluster in ocsci_config.clusters:
         if cluster.ENV_DATA.get("cluster_type") == "provider":
             return cluster
+
+
+def run_on_cluster_type(cluster_type):
+    """
+    To be used as a decorator in functions which need to use the kubeconfig of a particular cluster type.
+    This will set a local variable "cluster_kubeconfig" which can be accessed in called functions.
+    Currently applicable for Managed Services platforms only.
+
+    Returns:
+        function: run_on_cluster_type_decor
+    """
+
+    def run_on_cluster_type_decor(func):
+        @wraps(func)
+        def get_kubeconfig(*args, **kwargs):
+            if (
+                ocsci_config.multicluster
+                and get_primary_cluster_config().ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            ):
+                for cluster in ocsci_config.clusters:
+                    if (
+                        cluster.ENV_DATA.get("cluster_type", "").lower()
+                        == cluster_type.lower()
+                    ):
+                        cluster_kubeconfig = os.path.join(
+                            cluster.ENV_DATA["cluster_path"],
+                            cluster.RUN.get("kubeconfig_location"),
+                        )
+                        break
+            return func(*args, **kwargs)
+
+        return get_kubeconfig
+
+    return run_on_cluster_type_decor
