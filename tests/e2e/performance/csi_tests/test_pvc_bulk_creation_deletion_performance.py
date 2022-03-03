@@ -60,6 +60,7 @@ class TestPVCCreationPerformance(PASTest):
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
         full_results.add_key("index", full_results.new_index)
+        full_results.add_key("interface", self.sc)
         return full_results
 
     """
@@ -195,7 +196,6 @@ class TestPVCCreationPerformance(PASTest):
             )
         )
 
-        full_results.add_key("interface", self.interface)
         full_results.add_key("bulk_size", bulk_size)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_pvc_creation_time", total_time)
@@ -312,7 +312,6 @@ class TestPVCCreationPerformance(PASTest):
             )
         )
 
-        full_results.add_key("interface", self.interface)
         full_results.add_key("number_of_pvcs", number_of_pvcs)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("creation_after_deletion_time", total_time)
