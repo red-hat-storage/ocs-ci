@@ -62,7 +62,7 @@ class TestPodStartTime(PASTest):
         helpers.pull_images(constants.PERF_IMAGE)
 
         # Run the test in its own project (namespace)
-        self.create_test_progect()
+        self.create_test_project()
 
         # Initialize some lists used in the test.
         self.pod_result_list = []

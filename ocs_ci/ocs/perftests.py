@@ -843,7 +843,7 @@ class PASTest(BaseTest):
             self.check_tests_results()
             self.push_to_dashboard(test_name=wl["test_name"])
 
-    def create_test_progect(self):
+    def create_test_project(self):
         """
         Creating new project (namespace) for performance test
         """
