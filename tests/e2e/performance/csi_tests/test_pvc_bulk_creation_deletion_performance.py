@@ -90,19 +90,15 @@ class TestPVCCreationPerformance(PASTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 60],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 240],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 60],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 240],
-                marks=[pytest.mark.performance],
             ),
         ],
     )
