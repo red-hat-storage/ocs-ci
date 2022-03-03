@@ -18,6 +18,8 @@ from ocs_ci.ocs.perfresult import ResultsAnalyse
 
 log = logging.getLogger(__name__)
 
+Interface_Types = {constants.CEPHFILESYSTEM: "CephFS", constants.CEPHBLOCKPOOL: "RBD"}
+
 
 @performance
 class TestPVCCreationPerformance(PASTest):
@@ -31,6 +33,8 @@ class TestPVCCreationPerformance(PASTest):
 
         # Create new project (namespace for the test)
         self.create_test_project()
+
+        self.pvc_size = "1Gi"
 
     def teardown(self):
         """
@@ -62,8 +66,6 @@ class TestPVCCreationPerformance(PASTest):
     Test to verify PVC creation and deletion performance
     """
 
-    pvc_size = "1Gi"
-
     @pytest.fixture()
     def base_setup(self, interface_type, storageclass_factory):
         """
@@ -76,14 +78,6 @@ class TestPVCCreationPerformance(PASTest):
         """
         self.interface = interface_type
         self.sc_obj = storageclass_factory(self.interface)
-
-        if self.interface == constants.CEPHFILESYSTEM:
-            sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            sc = "RBD"
-
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{sc}"
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
@@ -119,6 +113,7 @@ class TestPVCCreationPerformance(PASTest):
         Returns:
 
         """
+        self.sc = Interface_Types[self.interface]
         bulk_creation_time_limit = bulk_size / 2
         log.info(f"Start creating new {bulk_size} PVCs")
 
@@ -229,14 +224,6 @@ class TestPVCCreationPerformance(PASTest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
 
-        if self.interface == constants.CEPHFILESYSTEM:
-            sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            sc = "RBD"
-
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{sc}"
-
     @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
     @polarion_id("OCS-1270")
     def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
@@ -251,6 +238,7 @@ class TestPVCCreationPerformance(PASTest):
         Returns:
 
         """
+        self.sc = Interface_Types[self.interface]
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
