@@ -13,6 +13,7 @@ from ocs_ci.deployment.deployment import (
     Deployment,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
+from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -35,6 +36,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
+    decode,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -630,6 +632,36 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             # Workaround for issue #2531
             time.sleep(30)
             # End of workaround
+
+        # update external secrets
+        if config.DEPLOYMENT["external_mode"]:
+            # post upgrade steps from 4.8 to 4.9
+            host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
+                "ip_address"
+            ]
+            user = config.EXTERNAL_MODE["login"]["username"]
+            password = config.EXTERNAL_MODE["login"]["password"]
+            external_cluster = ExternalCluster(host, user, password)
+            external_cluster.update_permission_caps()
+            external_cluster.get_external_cluster_details()
+
+            # update the external cluster details in secrets
+            log.info("updating external cluster secret")
+            external_cluster_details = NamedTemporaryFile(
+                mode="w+",
+                prefix="external-cluster-details-",
+                delete=False,
+            )
+            with open(external_cluster_details.name, "w") as fd:
+                decoded_external_cluster_details = decode(
+                    config.EXTERNAL_MODE["external_cluster_details"]
+                )
+                fd.write(decoded_external_cluster_details)
+            cmd = (
+                f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+                f"--from-file=external_cluster_details={external_cluster_details.name}"
+            )
+            exec_cmd(cmd)
 
         for sample in TimeoutSampler(
             timeout=725,
