@@ -826,12 +826,12 @@ class Vault(KMS):
 
     def create_token_reviewer_resources(self):
         """
-        This function will create the rbd-csi-vault-token-review SA, clusterRole and
-        clusterRoleBindings required for the kubernetes auth method with vaulttenantsa
-        encryption type.
+        This function will create the rbd-csi-vault-token-review SA, clusterRole
+        and clusterRoleBindings required for the kubernetes auth method with
+        vaulttenantsa encryption type.
 
-        Raises exception if the command fails due to any other reason except if the
-        resources already exist.
+        Raises:
+            CommandFailed: Exception if the command fails
 
         """
 
