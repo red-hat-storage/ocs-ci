@@ -873,16 +873,16 @@ class Vault(KMS):
 
         Args:
             tenant_namespace (str): Tenant namespace
-            vault_backend (str): KV version to be used, either kv or kv-v2
-            vault_backend_path (str): The backend path in Vault where the encryption
+            vaultBackend (str): KV version to be used, either kv or kv-v2
+            vaultBackendPath (str): The backend path in Vault where the encryption
                                       keys will be stored
-            vault_namespace (str): Namespace in Vault, if exists, where the backend
+            vaultNamespace (str): Namespace in Vault, if exists, where the backend
                                    path is created
-            vault_role (str): (Vaulttenantsa) The role name in Vault configured with
+            vaultRole (str): (Vaulttenantsa) The role name in Vault configured with
                               kube auth method for the given policy and tenant namespace
-            vault_auth_path (str): (Vaulttenantsa) The path where kubernetes auth
+            vaultAuthPath (str): (Vaulttenantsa) The path where kubernetes auth
                                    method is enabled
-            vault_auth_namespace (str): (Vaulttenantsa) The namespace where kubernetes
+            vaultAuthNamespace (str): (Vaulttenantsa) The namespace where kubernetes
                                         auth method is enabled, if exists
         """
 
@@ -890,10 +890,10 @@ class Vault(KMS):
         tenant_cm = templating.load_yaml(constants.RBD_CSI_VAULT_TENANT_CONFIGMAP)
         tenant_cm["metadata"]["namespace"] = tenant_namespace
 
-        merge_dict(tenant_cm, vault_config)
-        for k in tenant_cm.copy():
-            if not tenant_cm[k]:
-                tenant_cm.pop(k)
+        merge_dict(tenant_cm["data"], vault_config)
+        for k in tenant_cm["data"].copy():
+            if not tenant_cm["data"][k]:
+                tenant_cm["data"].pop(k)
 
         self.create_resource(tenant_cm, prefix="tenant-cm")
         logger.info("Tenant ConfigMap ceph-csi-kms-config created successfully")
