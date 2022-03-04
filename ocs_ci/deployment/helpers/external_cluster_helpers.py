@@ -122,11 +122,12 @@ class ExternalCluster(object):
         logger.debug(f"RHEL version on external RHCS cluster is {out}")
         return pattern.search(out).groups()[0]
 
-    def update_permission_caps(self):
+    def update_permission_caps(self, user=None):
         """
         Update permission caps on the external RHCS cluster
         """
-        params = "--upgrade"
+        user = user if user else defaults.EXTERNAL_CLUSTER_USER
+        params = f"--upgrade --run-as-user={user}"
         out = self.run_exporter_script(params=params)
         logger.info(f"updated permissions for the user are set as {out}")
 
