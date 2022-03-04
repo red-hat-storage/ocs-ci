@@ -776,7 +776,9 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
-    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get("import_clusters_to_acm"):
+    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
+        "import_clusters_to_acm"
+    ):
         try:
             element = wait.until(
                 ec.element_to_be_clickable(
