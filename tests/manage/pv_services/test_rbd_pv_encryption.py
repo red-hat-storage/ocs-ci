@@ -53,24 +53,12 @@ class TestRbdPvEncryption(ManageTest):
         # else:
         #   self.kmsprovider = constants.VAULT_KMS_PROVIDER
         if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
-            self.setupvault(self, kv_version)
+            self.setupvault(request, kv_version)
         else:
-            self.setuphpcs(self)
+            self.setuphpcs(request)
 
-        def finalizer():
-            # Remove the vault/hpcs config from csi-kms-connection-details configMap
-            if len(kms.get_encryption_kmsid()) > 1:
-                kms.remove_kmsid(self.new_kmsid)
-
-            if self.kmsprovider == constants.VAULT_KMS_PROVIDER:
-                # Delete the resources in vault
-                self.vault.remove_vault_backend_path()
-                self.vault.remove_vault_policy()
-                self.vault.remove_vault_namespace()
-
-        request.addfinalizer(finalizer)
-
-    def setupvault(self, kv_version):
+    # setup vault related resources.
+    def setupvault(self, request, kv_version):
         """
         Setup csi-kms-connection-details configmap as per vault configuration
 
@@ -130,7 +118,20 @@ class TestRbdPvEncryption(ManageTest):
                     kv_version=kv_version
                 )
 
-    def setuphpcs(self):
+        def finalizer():
+            # Remove the vault config from csi-kms-connection-details configMap
+            if len(kms.get_encryption_kmsid()) > 1:
+                kms.remove_kmsid(self.new_kmsid)
+
+            # Delete the resources in vault
+            self.vault.remove_vault_backend_path()
+            self.vault.remove_vault_policy()
+            self.vault.remove_vault_namespace()
+
+        request.addfinalizer(finalizer)
+
+    # setup hpcs related resources.
+    def setuphpcs(self, request):
         """
         Setup csi-kms-connection-details configmap as per HPCS configuration.
 
@@ -139,17 +140,9 @@ class TestRbdPvEncryption(ManageTest):
         self.hpcs = kms.Hpcs()
         self.hpcs.gather_init_hpcs_conf()
 
-        # Check if hpcs kms secret already exist, if not create hpcs secret
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        try:
-            ocp_obj.get_resource(
-                resource_name=self.hpcs.ibm_kp_secret_name, column="NAME"
-            )
-        except CommandFailed as cfe:
-            if "not found" not in str(cfe):
-                raise
-            else:
-                self.hpcs.ibm_kp_secret_name = self.hpcs.create_ibm_kp_kms_secret()
+        # Create ibm_kp_kms_secret with a unique name, raise an error if a secret
+        # with same name exists.
+        self.hpcs.ibm_kp_secret_name = self.hpcs.create_ibm_kp_kms_secret()
 
         # Create or update hpcs related confimap.
         self.hpcs_resource_name = create_unique_resource_name("test", "hpcs")
@@ -180,6 +173,19 @@ class TestRbdPvEncryption(ManageTest):
             else:
                 self.new_kmsid = "1-hpcs"
                 self.hpcs.create_hpcs_csi_kms_connection_details()
+
+        def finalizer():
+            # Remove the hpcs config from csi-kms-connection-details configMap
+            if len(kms.get_encryption_kmsid()) > 1:
+                kms.remove_kmsid(self.new_kmsid)
+            # remove the kms secret created to store hpcs creds
+            self.hpcs.delete_resource(
+                self.hpcs.ibm_kp_secret_name,
+                "secret",
+                constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+
+        request.addfinalizer(finalizer)
 
     @tier1
     def test_rbd_pv_encryption(

@@ -26,6 +26,7 @@ from ocs_ci.ocs.exceptions import (
     KMSConnectionDetailsError,
     HpcsDeploymentError,
 )
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -1138,6 +1139,22 @@ class Hpcs(KMS):
         templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
         run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
 
+    def delete_resource(self, resource_name, resource_type, resource_namespace):
+        """
+        Given resource type, resource name and namespace, this function will
+        delete oc resource
+
+        Args:
+            resource_name : name of the resource
+            resource_type: type of resource such as secret
+            resource_namespace: namespace in which resource is present
+
+        """
+        run_cmd(
+            f"oc delete {resource_type} {resource_name} -n {resource_namespace}",
+            timeout=300,
+        )
+
     def gather_hpcs_config(self):
         """
         This function populates the hpcs configuration
@@ -1159,6 +1176,9 @@ class Hpcs(KMS):
         ibm_kp_kms_secret["data"][
             "IBM_KP_SERVICE_API_KEY"
         ] = self.ibm_kp_service_api_key
+        ibm_kp_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
+            "test", "ibm-kp-kms"
+        )
         ibm_kp_kms_secret["metadata"]["namespace"] = namespace
         self.create_resource(ibm_kp_kms_secret, prefix="ibmkpkmssecret")
 
@@ -1173,7 +1193,7 @@ class Hpcs(KMS):
 
         """
         # create hpcs secret resource
-        ibm_kp_secret_name = self.hpcs.create_ibm_kp_kms_secret()
+        ibm_kp_secret_name = self.create_ibm_kp_kms_secret()
 
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS

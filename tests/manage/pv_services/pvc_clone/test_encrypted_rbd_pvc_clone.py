@@ -40,6 +40,12 @@ class TestEncryptedRbdClone(ManageTest):
 
     """
 
+    # set the KMS provider based on platform
+    # if config.ENV_DATA["platform"].lower() == constants.IBM_PLATFORM:
+    kmsprovider = constants.HPCS_KMS_PROVIDER
+    # else:
+    #   kmsprovider = constants.VAULT_KMS_PROVIDER
+
     @pytest.fixture(autouse=True)
     def setup(
         self,
@@ -69,9 +75,10 @@ class TestEncryptedRbdClone(ManageTest):
             encryption_kms_id=self.vault.kmsid,
         )
 
-        # Create ceph-csi-kms-token in the tenant namespace
-        self.vault.vault_path_token = self.vault.generate_vault_token()
-        self.vault.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
+        if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+            # Create ceph-csi-kms-token in the tenant namespace
+            self.vault.vault_path_token = self.vault.generate_vault_token()
+            self.vault.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
         # Create PVC and Pods
         self.pvc_size = 1
@@ -103,12 +110,16 @@ class TestEncryptedRbdClone(ManageTest):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
+
+            if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+                if kms.is_key_present_in_path(
+                    key=vol_handle, path=self.vault.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for {pvc_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for {pvc_obj.name}"
+                    )
 
     def test_pvc_to_pvc_clone(self, kv_version, pod_factory):
         """
@@ -189,14 +200,16 @@ class TestEncryptedRbdClone(ManageTest):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             cloned_vol_handles.append(vol_handle)
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Vault: Key not found for restored PVC {pvc_obj.name}"
-                )
+
+            if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+                if kms.is_key_present_in_path(
+                    key=vol_handle, path=self.vault.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for restored PVC {pvc_obj.name}"
+                    )
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(cloned_vol_handles, cloned_pod_objs):
             if pod_obj.exec_sh_cmd_on_pod(
@@ -240,16 +253,19 @@ class TestEncryptedRbdClone(ManageTest):
             pvc_obj.delete()
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
-        # Verify if the keys for parent and cloned PVCs are deleted from Vault
-        if kv_version == "v1":
-            log.info("Verify whether the keys for cloned PVCs are deleted from vault")
-            for key in cloned_vol_handles + self.vol_handles:
-                if not kms.is_key_present_in_path(
-                    key=key, path=self.vault.vault_backend_path
-                ):
-                    log.info(f"Vault: Key deleted for {key}")
-                else:
-                    raise KMSResourceCleaneupError(
-                        f"Vault: Key deletion failed for {key}"
-                    )
-            log.info("All keys from vault were deleted")
+        if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+            # Verify if the keys for parent and cloned PVCs are deleted from Vault
+            if kv_version == "v1":
+                log.info(
+                    "Verify whether the keys for cloned PVCs are deleted from vault"
+                )
+                for key in cloned_vol_handles + self.vol_handles:
+                    if not kms.is_key_present_in_path(
+                        key=key, path=self.vault.vault_backend_path
+                    ):
+                        log.info(f"Vault: Key deleted for {key}")
+                    else:
+                        raise KMSResourceCleaneupError(
+                            f"Vault: Key deletion failed for {key}"
+                        )
+                log.info("All keys from vault were deleted")
