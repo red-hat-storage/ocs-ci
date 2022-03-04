@@ -54,9 +54,6 @@ class ExternalCluster(object):
             ExternalClusterExporterRunFailed: If exporter script failed to run on external RHCS cluster
 
         """
-        # upload exporter script to external RHCS cluster
-        script_path = self.upload_exporter_script()
-
         # get rgw endpoint port
         rgw_endpoint_port = self.get_rgw_endpoint_api_port()
 
@@ -64,23 +61,8 @@ class ExternalCluster(object):
         rgw_endpoint = get_rgw_endpoint()
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
-        # get external RHCS rhel version
-        rhel_version = self.get_rhel_version()
-        python_version = "python3"
-        if version.get_semantic_version(rhel_version) < version.get_semantic_version(
-            "8"
-        ):
-            python_version = "python"
-
-        # run the exporter script on external RHCS cluster
-        cmd = (
-            f"{python_version} {script_path} --rbd-data-pool-name {defaults.RBD_NAME} "
-            f"--rgw-endpoint {rgw_endpoint_with_port}"
-        )
-        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
-        if retcode != 0:
-            logger.error(f"Failed to run {script_path}. Error: {err}")
-            raise ExternalClusterExporterRunFailed
+        params = f"--rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
+        out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
         external_cluster_details = encode(out)
@@ -139,6 +121,46 @@ class ExternalCluster(object):
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
         logger.debug(f"RHEL version on external RHCS cluster is {out}")
         return pattern.search(out).groups()[0]
+
+    def update_permission_caps(self):
+        """
+        Update permission caps on the external RHCS cluster
+        """
+        params = "--upgrade"
+        out = self.run_exporter_script(params=params)
+        logger.info(f"updated permissions for the user are set as {out}")
+
+    def run_exporter_script(self, params):
+        """
+        Runs the exporter script on RHCS cluster
+
+        Args:
+            params (str): Parameter to pass to exporter script
+
+        Returns:
+            str: output of exporter script
+
+        """
+        # upload exporter script to external RHCS cluster
+        script_path = self.upload_exporter_script()
+
+        # get external RHCS rhel version
+        rhel_version = self.get_rhel_version()
+        python_version = "python3"
+        if version.get_semantic_version(rhel_version) < version.get_semantic_version(
+            "8"
+        ):
+            python_version = "python"
+
+        # run the exporter script on external RHCS cluster
+        cmd = f"{python_version} {script_path} {params}"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(
+                f"Failed to run {script_path} with parameters {params}. Error: {err}"
+            )
+            raise ExternalClusterExporterRunFailed
+        return out
 
 
 def generate_exporter_script():
