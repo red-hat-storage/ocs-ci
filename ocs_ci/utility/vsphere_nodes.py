@@ -106,6 +106,17 @@ class VSPHERENode(object):
         cmd = "sudo reboot"
         return self.vmnode.exec_cmd(cmd)
 
+    def get_username(self):
+        """
+        Gets current logged user
+
+        Returns:
+            tuple: tuple which contains the command return code, output and error
+
+        """
+        cmd = "whoami"
+        return self.vmnode.exec_cmd(cmd)
+
 
 def get_node_ips_from_module(module):
     """
