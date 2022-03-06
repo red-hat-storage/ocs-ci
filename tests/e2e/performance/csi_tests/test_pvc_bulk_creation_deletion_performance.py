@@ -60,7 +60,7 @@ class TestPVCCreationPerformance(PASTest):
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
         full_results.add_key("index", full_results.new_index)
-        full_results.add_key("interface", self.sc)
+        full_results.add_key("interface", Interface_Types[self.interface])
         return full_results
 
     """
@@ -114,7 +114,6 @@ class TestPVCCreationPerformance(PASTest):
         Returns:
 
         """
-        self.sc = Interface_Types[self.interface]
         bulk_creation_time_limit = bulk_size / 2
         log.info(f"Start creating new {bulk_size} PVCs")
 
@@ -245,7 +244,6 @@ class TestPVCCreationPerformance(PASTest):
         Returns:
 
         """
-        self.sc = Interface_Types[self.interface]
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
