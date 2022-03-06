@@ -2014,3 +2014,8 @@ def get_encrypted_osd_devices(node_obj, node):
     ).split("\n")
     luks_devices = [device for device in luks_devices_out if device != ""]
     return luks_devices
+
+
+def get_osd_ids_per_node():
+    osd_node_names = get_osd_running_nodes()
+    return {node_name: get_node_osd_ids(node_name) for node_name in osd_node_names}

@@ -2263,3 +2263,13 @@ def get_crashcollector_pods(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     crashcollectors = get_pods_having_label(crashcollector_label, namespace)
     return [Pod(**crashcollector) for crashcollector in crashcollectors]
+
+
+def wait_for_pods_terminating(pods, timeout=180):
+    for p in pods:
+        if not helpers.wait_for_rook_ceph_pod_status(
+            p, constants.STATUS_TERMINATING, timeout
+        ):
+            return False
+
+    return True
