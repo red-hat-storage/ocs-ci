@@ -138,6 +138,9 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
+            if self.check_element_text("404"):
+                logger.info("Refresh storage cluster page")
+                self.refresh_page()
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
