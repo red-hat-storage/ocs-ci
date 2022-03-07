@@ -348,7 +348,10 @@ class PageNavigator(BaseUI):
         )
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.generic_locators = locators[self.ocp_version]["generic"]
-        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+
+        if config.DEPLOYMENT.get("local_storage", False):
+            self.storage_class = "localblock_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")

@@ -7,8 +7,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
-from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
-
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +100,6 @@ def ui_add_capacity_conditions():
     ocp_version = get_ocp_version()
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
-    is_lso = config.DEPLOYMENT.get("local_storage")
     is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
@@ -126,7 +123,7 @@ def ui_add_capacity_conditions():
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )
         return False
-    elif is_external or is_disconnected or is_proxy or is_lso:
+    elif is_external or is_disconnected or is_proxy:
         if is_external:
             logger.info(
                 "Add capacity via UI is not automated at the moment on external cluster"
@@ -139,38 +136,21 @@ def ui_add_capacity_conditions():
             logger.info(
                 "Add capacity via UI is not automated at the moment on proxy cluster"
             )
-        if is_lso:
-            logger.info(
-                "Add capacity via UI is not automated at the moment on lso cluster"
-            )
         return False
     else:
         return True
 
 
-def ui_add_capacity(osd_size_capacity_requested):
+def ui_add_capacity():
     """
     Add Capacity via UI
 
-    Args:
-        osd_size_capacity_requested (int): Requested osd size capacity
-
-    Returns:
-        new_storage_devices_sets_count (int) : Returns True if all OSDs are in Running state
-
     """
-    osd_size_existing = get_osd_size()
-    device_sets_required = int(osd_size_capacity_requested / osd_size_existing)
-    old_storage_devices_sets_count = get_deviceset_count()
-    new_storage_devices_sets_count = int(
-        device_sets_required + old_storage_devices_sets_count
-    )
     logger.info("Add capacity via UI")
     setup_ui = login_ui()
     add_ui_obj = AddReplaceDeviceUI(setup_ui)
     add_ui_obj.add_capacity_ui()
     close_browser(setup_ui)
-    return new_storage_devices_sets_count
 
 
 def get_element_type(element_name):

@@ -674,6 +674,58 @@ def verify_kms_ca_only():
         )
 
 
+def add_capacity_test():
+    from ocs_ci.ocs.cluster import (
+        is_flexible_scaling_enabled,
+        check_ceph_health_after_add_capacity,
+    )
+
+    osd_size = get_osd_size()
+    existing_osd_pods = get_osd_pods()
+    existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
+    result = add_capacity(osd_size)
+    osd_pods_post_expansion = get_osd_pods()
+    osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
+    restarted_osds = list()
+    logging.info(
+        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
+    )
+
+    for pod in existing_osd_pod_names:
+        if pod not in osd_pod_names_post_expansion:
+            restarted_osds.append(pod)
+    assert (
+        len(restarted_osds) == 0
+    ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
+
+    pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    if is_flexible_scaling_enabled():
+        replica_count = 1
+    else:
+        replica_count = 3
+    pod.wait_for_resource(
+        timeout=300,
+        condition=constants.STATUS_RUNNING,
+        selector="app=rook-ceph-osd",
+        resource_count=result * replica_count,
+    )
+
+    # Verify status of rook-ceph-osd-prepare pods. Verifies bug 1769061
+    # pod.wait_for_resource(
+    #     timeout=300,
+    #     condition=constants.STATUS_COMPLETED,
+    #     selector=constants.OSD_PREPARE_APP_LABEL,
+    #     resource_count=result * 3
+    # )
+    # Commented this lines as a workaround due to bug 1842500
+
+    # Verify OSDs are encrypted.
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
+
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+
+
 def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=True):
     """
     Add storage capacity to the cluster
@@ -705,6 +757,8 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
+    from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
+
     lvpresent = None
     lv_set_present = None
     osd_size_existing = get_osd_size()
@@ -769,11 +823,25 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     # adding the storage capacity to the cluster
     params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
                 "value": {new_storage_devices_sets_count}}}]"""
-    sc.patch(
-        resource_name=sc.get()["items"][0]["metadata"]["name"],
-        params=params.strip("\n"),
-        format_type="json",
-    )
+
+    if ui_add_capacity_conditions():
+        try:
+            ui_add_capacity()
+        except Exception as e:
+            logging.error(
+                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
+            )
+            sc.patch(
+                resource_name=sc.get()["items"][0]["metadata"]["name"],
+                params=params.strip("\n"),
+                format_type="json",
+            )
+    else:
+        sc.patch(
+            resource_name=sc.get()["items"][0]["metadata"]["name"],
+            params=params.strip("\n"),
+            format_type="json",
+        )
     return new_storage_devices_sets_count
 
 
