@@ -166,8 +166,14 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the values configured in noobaa-postgres configmap "
             "match the ones stored in ocs-ci"
         )
-        stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
-        stored_values.remove("")
+        
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version <= version.VERSION_4_9:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
+            stored_values.remove("")
+        elif ocs_version >= version.VERSION_4_10:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_10.split("\n")
+            stored_values.remove("")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
