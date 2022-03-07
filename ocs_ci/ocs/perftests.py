@@ -637,15 +637,23 @@ class PASTest(BaseTest):
             log.error(f"OS error: {err}")
 
     @staticmethod
-    def get_time():
+    def get_time(time_format=None):
         """
-        Getting the current GMT time in a specific format for the ES report
+        Getting the current GMT time in a specific format for the ES report,
+        or for seeking in the containers log
+
+        Args:
+            time_format (str): which thime format to return - None / CSI
 
         Returns:
             str : current date and time in formatted way
 
         """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        formated = "%Y-%m-%dT%H:%M:%SGMT"
+        if time_format and time_format.lower() == "csi":
+            formated = "%Y-%m-%dT%H:%M:%SZ"
+
+        return time.strftime(formated, time.gmtime())
 
     def check_tests_results(self):
         """
