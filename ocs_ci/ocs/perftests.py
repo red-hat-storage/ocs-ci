@@ -861,7 +861,7 @@ class PASTest(BaseTest):
             self.proj = helpers.create_project(project_name=self.namespace)
         except CommandFailed as ex:
             if str(ex).find("(AlreadyExists)"):
-                log.warning("The namespace is already exists !")
+                log.warning("The namespace already exists !")
             log.error("Cannot create new project")
             raise CommandFailed(f"{self.namespace} was not created")
 
@@ -877,5 +877,5 @@ class PASTest(BaseTest):
                 resource_name=self.namespace, timeout=60, sleep=10
             )
         except CommandFailed:
-            log.error(f"Can not delete project {self.namespace}")
+            log.error(f"Cannot delete project {self.namespace}")
             raise CommandFailed(f"{self.namespace} was not created")
