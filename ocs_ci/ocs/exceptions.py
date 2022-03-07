@@ -252,6 +252,10 @@ class ExternalClusterExporterRunFailed(Exception):
     pass
 
 
+class ExternalClusterObjectStoreUserCreationFailed(Exception):
+    pass
+
+
 class ExternalClusterRGWEndPointMissing(Exception):
     pass
 

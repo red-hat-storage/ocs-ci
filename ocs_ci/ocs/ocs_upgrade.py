@@ -541,6 +541,14 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+    # create external cluster object
+    if config.DEPLOYMENT["external_mode"]:
+        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
+            "ip_address"
+        ]
+        user = config.EXTERNAL_MODE["login"]["username"]
+        password = config.EXTERNAL_MODE["login"]["password"]
+        external_cluster = ExternalCluster(host, user, password)
 
     # For external cluster , create the secrets if upgraded version is 4.8
     if (
@@ -548,6 +556,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         and original_ocs_version == "4.7"
         and upgrade_version == "4.8"
     ):
+        external_cluster.create_object_store_user()
         access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
         secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
         if not (access_key and secret_key):
@@ -634,14 +643,9 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             # End of workaround
 
         # update external secrets
-        if config.DEPLOYMENT["external_mode"]:
-            # post upgrade steps from 4.8 to 4.9
-            host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
-                "ip_address"
-            ]
-            user = config.EXTERNAL_MODE["login"]["username"]
-            password = config.EXTERNAL_MODE["login"]["password"]
-            external_cluster = ExternalCluster(host, user, password)
+        if config.DEPLOYMENT["external_mode"] and not (
+            original_ocs_version == "4.7" and upgrade_version == "4.8"
+        ):
             external_cluster.update_permission_caps()
             external_cluster.get_external_cluster_details()
 
