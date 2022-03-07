@@ -349,6 +349,7 @@ class Vault(KMS):
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
+        connection_data["data"]["VAULT_AUTH_METHOD"] = os.environ["VAULT_AUTH_TYPE"]
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
@@ -361,6 +362,12 @@ class Vault(KMS):
             connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == "kubernetes":
+            connection_data["data"][
+                "VAULT_AUTH_KUBERNETES_ROLE"
+            ] = constants.VAULT_AUTH_KUBERNETES_ROLE
+        else:
+            connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def create_resource(self, resource_data, prefix=None):

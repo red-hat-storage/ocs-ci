@@ -3,7 +3,9 @@ data:
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
   VAULT_ADDR: PLACEHOLDER
-  VAULT_BACKEND_PATH: "" 
+  VAULT_AUTH_METHOD: token
+  VAULT_AUTH_KUBERNETES_ROLE: odf-rook-ceph-op
+  VAULT_BACKEND_PATH: ""
   VAULT_CACERT: ocs-kms-ca-secret
   VAULT_CLIENT_CERT: ocs-kms-client-cert
   VAULT_CLIENT_KEY: ocs-kms-client-key
