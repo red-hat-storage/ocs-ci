@@ -47,7 +47,7 @@ def test_rgw_unavailable(measure_stop_rgw):
         severity="error",
     )
     api.check_alert_cleared(
-        label=target_label, measure_end_time=measure_stop_rgw.get("stop")
+        label=target_label, measure_end_time=measure_stop_rgw.get("stop"), time_min=300
     )
 
 
