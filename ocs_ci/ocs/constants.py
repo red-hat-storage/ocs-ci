@@ -1517,6 +1517,23 @@ debug_crush = 20
 
 # Values from configmap noobaa-postgres-config
 NOOBAA_POSTGRES_TUNING_VALUES = """
+max_connections = 300
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 300
+work_mem = 1747kB
+min_wal_size = 2GB
+max_wal_size = 8GB
+shared_preload_libraries = 'pg_stat_statements'
+"""
+
+# Values from configmap noobaa-postgres-config wrt OCP version 4.10 and above
+NOOBAA_POSTGRES_TUNING_VALUES_4_10 = """
 max_connections = 600
 shared_buffers = 1GB
 effective_cache_size = 3GB
