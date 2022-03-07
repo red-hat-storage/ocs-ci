@@ -1819,7 +1819,9 @@ def run_osd_removal_job(osd_ids=None):
     """
     osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
-    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+    if Version.coerce(ocp_version) >= Version.coerce("4.10"):
+        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
+    elif Version.coerce(ocp_version) >= Version.coerce("4.6"):
         cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
         cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
