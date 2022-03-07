@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
     skipif_managed_service,
+    skipif_ocs_version,
     tier4,
     tier4a,
 )
@@ -93,6 +94,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service
+@skipif_ocs_version("<4.7")
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """
     Test that there are appropriate alerts when target bucket used of
