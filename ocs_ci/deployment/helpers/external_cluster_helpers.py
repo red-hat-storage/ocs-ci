@@ -3,6 +3,7 @@ This module contains helpers functions needed for
 external cluster deployment.
 """
 
+import json
 import logging
 import re
 import tempfile
@@ -12,6 +13,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
+    ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
@@ -162,6 +164,29 @@ class ExternalCluster(object):
             )
             raise ExternalClusterExporterRunFailed
         return out
+
+    def create_object_store_user(self):
+        """
+        Create object store user on external cluster
+        """
+        # create new object store user
+        cmd = (
+            f"radosgw-admin user create --uid {defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER} --display-name "
+            f'"Rook RGW Admin Ops user" --caps "buckets=*;users=*;usage=read;metadata=read;zone=read"'
+        )
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(f"Failed to create object store user. Error: {err}")
+            raise ExternalClusterObjectStoreUserCreationFailed
+
+        # update access_key and secret_key in config.EXTERNAL_MODE
+        objectstore_user_details = json.loads(out)
+        config.EXTERNAL_MODE[
+            "access_key_rgw-admin-ops-user"
+        ] = objectstore_user_details["keys"][0]["access_key"]
+        config.EXTERNAL_MODE[
+            "secret_key_rgw-admin-ops-user"
+        ] = objectstore_user_details["keys"][0]["secret_key"]
 
 
 def generate_exporter_script():

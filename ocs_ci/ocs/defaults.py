@@ -109,3 +109,4 @@ VAULT_TENANT_SA_CONNECTION_CONF = {
 
 # External cluster username
 EXTERNAL_CLUSTER_USER = "client.healthchecker"
+EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
