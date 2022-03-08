@@ -92,7 +92,6 @@ class Vault(KMS):
         self.vault_kube_auth_namespace = None
         self.vault_cwd_kms_sa_name = None
 
-
     def deploy(self):
         """
         This function delegates the deployment of vault
@@ -334,6 +333,16 @@ class Vault(KMS):
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == "kubernetes":
             self.create_ocs_kube_auth_resources()
             self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+            self.create_vault_kube_auth_role(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                role_name="odf-rook-ceph-op",
+                sa_name="rook-ceph-system,rook-ceph-osd,noobaa",
+            )
+            self.create_vault_kube_auth_role(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                role_name="odf-rook-ceph-osd",
+                sa_name="rook-ceph-osd",
+            )
         else:
             # create oc resource secret for token
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
@@ -963,7 +972,7 @@ class Vault(KMS):
         )
         secrets = run_cmd(cmd=cmd).split()
         for secret in secrets:
-            if "rbd-csi-vault-token-review-token" in secret:
+            if "-token-" in secret:
                 secret_name = secret
         if not secret_name:
             raise NotFoundError("Secret name not found")
@@ -997,6 +1006,11 @@ class Vault(KMS):
         # get cluster API endpoint
         k8s_host = run_cmd(cmd="oc whoami --show-server").strip()
 
+        # get issuer
+        issuer = run_cmd(
+            cmd="oc get authentication.config cluster -o template='{{ .spec.serviceAccountIssuer }}'"
+        )
+
         # enable kubernetes auth method
         if auth_path and auth_namespace:
             self.vault_kube_auth_path = auth_path
@@ -1024,7 +1038,7 @@ class Vault(KMS):
             cmd = (
                 f"vault write -namespace={self.vault_kube_auth_namespace} "
                 f"auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
-                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name} issuer={issuer}"
             )
         # Configure kubernetes auth method
         else:
@@ -1050,7 +1064,7 @@ class Vault(KMS):
 
     def create_vault_kube_auth_role(
         self,
-        tenant_namespace,
+        namespace,
         role_name="csi-kubernetes",
         sa_name="ceph-csi-vault-sa",
     ):
@@ -1058,7 +1072,7 @@ class Vault(KMS):
         Create a role for tenant authentication in Vault
 
         Args:
-           tenant_namespace (str): Tenant namespace where encrypted PVCs will be created
+           namespace (str): namespace in ODF cluster
            role_name (str): Name of the role in Vault
            sa_name (str): Service account in the tenant namespace to be used for authentication
 
@@ -1067,7 +1081,7 @@ class Vault(KMS):
         cmd = (
             f"vault write auth/{self.vault_kube_auth_path}/role/{role_name} "
             f"bound_service_account_names={sa_name} policies={self.vault_policy_name} "
-            f"bound_service_account_namespaces={tenant_namespace}"
+            f"bound_service_account_namespaces={namespace} ttl=1440h"
         )
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
