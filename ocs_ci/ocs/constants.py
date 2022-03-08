@@ -980,6 +980,7 @@ HTPASSWD_SECRET_NAME = "htpass-secret"
 HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
+UI_DEPLOYMENT = "ui"
 SUPPORTED_BROWSERS = CHROME_BROWSER
 
 # Managed service deployment constants
