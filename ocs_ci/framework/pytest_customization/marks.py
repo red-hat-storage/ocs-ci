@@ -225,14 +225,19 @@ ms_consumer_required = pytest.mark.skipif(
 
 kms_config_required = pytest.mark.skipif(
     # (
-    # config.ENV_DATA["platform"].lower() != IBMCLOUD_PLATFORM
-    # and load_auth_config().get("vault", {}).get("VAULT_ADDR") is None
+    #    config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
+    #    and load_auth_config().get("vault", {}).get("VAULT_ADDR") is None
     # )
     # or
     # (
-    # config.ENV_DATA["platform"].lower() ==
-    load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID") is None,
+    #    not
+    #    (
+    #        config.ENV_DATA["KMS_PROVIDER"].lower() == HPCS_KMS_PROVIDER
+    #        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_10
+    #        and load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID") is not None,
+    #    )
     # ),
+    load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID") is None,
     reason="KMS config not found in auth.yaml",
 )
 

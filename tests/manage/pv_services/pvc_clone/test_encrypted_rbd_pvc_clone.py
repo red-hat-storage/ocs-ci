@@ -21,6 +21,19 @@ from ocs_ci.utility import kms
 
 log = logging.getLogger(__name__)
 
+# Set the arg values based on KMS provider.
+# if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+kmsprovider = constants.HPCS_KMS_PROVIDER
+argvalues = [
+    pytest.param("v1", kmsprovider),
+]
+# else:
+#   kmsprovider = constants.VAULT_KMS_PROVIDER
+#  argvalues=[
+#     pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2650")),
+#    pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2651")),
+# ]
+
 
 @tier1
 @skipif_ocs_version("<4.8")
@@ -28,11 +41,8 @@ log = logging.getLogger(__name__)
 @kms_config_required
 @skipif_managed_service
 @pytest.mark.parametrize(
-    argnames=["kv_version"],
-    argvalues=[
-        pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2650")),
-        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2651")),
-    ],
+    argnames=["kv_version", "kms_provider"],
+    argvalues=argvalues,
 )
 class TestEncryptedRbdClone(ManageTest):
     """
@@ -40,16 +50,16 @@ class TestEncryptedRbdClone(ManageTest):
 
     """
 
-    # set the KMS provider based on platform
-    # if config.ENV_DATA["platform"].lower() == constants.IBM_PLATFORM:
-    kmsprovider = constants.HPCS_KMS_PROVIDER
+    # set the KMS provider based on KMS_PROVIDER env value.
+    # if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    #   kmsprovider = constants.HPCS_KMS_PROVIDER
     # else:
     #   kmsprovider = constants.VAULT_KMS_PROVIDER
 
     @pytest.fixture(autouse=True)
     def setup(
         self,
-        kv_version,
+        kms_provider,
         pv_encryption_kms_setup_factory,
         project_factory,
         multi_pvc_factory,
@@ -62,7 +72,7 @@ class TestEncryptedRbdClone(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.vault = pv_encryption_kms_setup_factory(kv_version)
+        self.kms = pv_encryption_kms_setup_factory()
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
@@ -72,13 +82,13 @@ class TestEncryptedRbdClone(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryption_kms_id=self.vault.kmsid,
+            encryption_kms_id=self.kms.kmsid,
         )
 
-        if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+        if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Create ceph-csi-kms-token in the tenant namespace
-            self.vault.vault_path_token = self.vault.generate_vault_token()
-            self.vault.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
+            self.kms.vault_path_token = self.kms.generate_vault_token()
+            self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
         # Create PVC and Pods
         self.pvc_size = 1
@@ -111,9 +121,9 @@ class TestEncryptedRbdClone(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
 
-            if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+            if kms_provider == constants.VAULT_KMS_PROVIDER:
                 if kms.is_key_present_in_path(
-                    key=vol_handle, path=self.vault.vault_backend_path
+                    key=vol_handle, path=self.kms.vault_backend_path
                 ):
                     log.info(f"Vault: Found key for {pvc_obj.name}")
                 else:
@@ -121,7 +131,7 @@ class TestEncryptedRbdClone(ManageTest):
                         f"Vault: Key not found for {pvc_obj.name}"
                     )
 
-    def test_pvc_to_pvc_clone(self, kv_version, pod_factory):
+    def test_pvc_to_pvc_clone(self, kv_version, kms_provider, pod_factory):
         """
         Test to create a clone from an existing encrypted RBD PVC.
         Verify that the cloned PVC is encrypted and all the data is preserved.
@@ -201,9 +211,9 @@ class TestEncryptedRbdClone(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             cloned_vol_handles.append(vol_handle)
 
-            if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+            if kms_provider == constants.VAULT_KMS_PROVIDER:
                 if kms.is_key_present_in_path(
-                    key=vol_handle, path=self.vault.vault_backend_path
+                    key=vol_handle, path=self.kms.vault_backend_path
                 ):
                     log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
                 else:
@@ -253,7 +263,7 @@ class TestEncryptedRbdClone(ManageTest):
             pvc_obj.delete()
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
-        if self.kmsprovider == constants.constants.VAULT_KMS_PROVIDER:
+        if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify if the keys for parent and cloned PVCs are deleted from Vault
             if kv_version == "v1":
                 log.info(
@@ -261,7 +271,7 @@ class TestEncryptedRbdClone(ManageTest):
                 )
                 for key in cloned_vol_handles + self.vol_handles:
                     if not kms.is_key_present_in_path(
-                        key=key, path=self.vault.vault_backend_path
+                        key=key, path=self.kms.vault_backend_path
                     ):
                         log.info(f"Vault: Key deleted for {key}")
                     else:

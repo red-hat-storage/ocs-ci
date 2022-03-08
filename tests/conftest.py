@@ -4150,11 +4150,11 @@ def pv_encryption_kms_setup_factory(request):
     Create vault resources and setup csi-kms-connection-details configMap
     """
 
-    # set the KMS provider based on platform
-    # if config.ENV_DATA["platform"].lower() == constants.IBM_PLATFORM:
-    return pv_encryption_hpcs_setup_factory()
+    # set the KMS provider based on KMS_PROVIDER env value.
+    # if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    return pv_encryption_hpcs_setup_factory(request)
     # else:
-    # return pv_encryption_vault_setup_factory()
+    #   return pv_encryption_vault_setup_factory(request)
 
 
 def pv_encryption_vault_setup_factory(request):
@@ -4246,8 +4246,6 @@ def pv_encryption_hpcs_setup_factory(request):
 
     def factory():
         """
-        Args:
-            kv_version(str): KV version to be used, either v1 or v2
 
         Returns:
             object: Hpcs(KMS) object
@@ -4255,15 +4253,8 @@ def pv_encryption_hpcs_setup_factory(request):
         """
         hpcs.gather_init_hpcs_conf()
 
-        # Check if hpcs kms secret already exist, if not create hpcs secret
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        try:
-            ocp_obj.get_resource(resource_name=hpcs.ibm_kp_secret_name, column="NAME")
-        except CommandFailed as cfe:
-            if "not found" not in str(cfe):
-                raise
-            else:
-                hpcs.ibm_kp_secret_name = hpcs.create_ibm_kp_kms_secret()
+        # Create hpcs secret with a unique name otherwise raise error if it already exists.
+        hpcs.ibm_kp_secret_name = hpcs.create_ibm_kp_kms_secret()
 
         # Create or update hpcs related confimap.
         hpcs_resource_name = create_unique_resource_name("test", "hpcs")
@@ -4304,6 +4295,12 @@ def pv_encryption_hpcs_setup_factory(request):
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(hpcs.kmsid)
+        # remove the kms secret created to store hpcs creds
+        hpcs.delete_resource(
+            hpcs.ibm_kp_secret_name,
+            "secret",
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
     request.addfinalizer(finalizer)
     return factory
