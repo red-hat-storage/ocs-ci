@@ -10,3 +10,5 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
 ENV_DATA:
   vm_template: "rhcos-47.83.202102090044-0-vmware.x86_64"
+  # RHEL Version for RHEL deployment types
+  rhel_version: "7.9"
