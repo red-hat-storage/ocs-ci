@@ -899,7 +899,10 @@ class MCG:
         return result
 
     @retry(
-        (NoobaaCliChecksumFailedException, CommandFailed), tries=5, delay=15, backoff=1
+        (NoobaaCliChecksumFailedException, CommandFailed),
+        tries=5,
+        delay=15,
+        backoff=1,
     )
     def retrieve_noobaa_cli_binary(self):
         """
