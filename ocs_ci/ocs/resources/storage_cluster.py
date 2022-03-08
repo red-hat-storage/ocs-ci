@@ -4,6 +4,7 @@ StorageCluster related functionalities
 import logging
 import tempfile
 import yaml
+import time
 
 from jsonschema import validate
 
@@ -30,7 +31,11 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
+from ocs_ci.ocs.node import (
+    get_osds_per_node,
+    add_new_disk_for_vsphere,
+    get_worker_nodes,
+)
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
     localstorage,
@@ -622,6 +627,46 @@ def osd_encryption_verification():
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
+
+    if ocs_version != version.VERSION_4_6:
+        log.info("Verify luks header label for encrypted devices")
+        worker_nodes = get_worker_nodes()
+        logging.info("NODES: {}".format(worker_nodes))
+        failures = 0
+        failure_message = ""
+        node_obj = OCP(kind="node")
+
+        for n in worker_nodes:
+            luks_device_name = node_obj.exec_oc_debug_cmd(
+                node=n,
+                cmd_list=[
+                    "lsblk -o NAME,TYPE,FSTYPE | grep -E 'disk.*crypto_LUKS' | awk '{print $1}'"
+                ],
+            ).strip()
+            logging.info(
+                "Checking luks header label on Luks device {} for node {}".format(
+                    luks_device_name, n
+                )
+            )
+
+            logging.info("Waiting for 30 seconds")
+            time.sleep(30)
+
+            cmd = "cryptsetup luksDump /dev/" + str(luks_device_name)
+            cmd_out = node_obj.exec_oc_debug_cmd(node=n, cmd_list=[cmd])
+
+            if "(no label)" in str(cmd_out) or "(no subsystem)" in str(cmd_out):
+                failures += 1
+                failure_message += (
+                    "\nNo label found on Luks header information for node {}\n".format(
+                        n
+                    )
+                )
+
+        if failures != 0:
+            logging.error(failure_message)
+            raise ValueError("Luks header label is not found")
+        logging.info("Luks header info found for all the worker nodes")
 
 
 def verify_kms_ca_only():
