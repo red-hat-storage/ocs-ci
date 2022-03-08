@@ -1505,7 +1505,6 @@ mon_data_avail_warn = 15
 osd_memory_target_cgroup_limit_ratio = 0.8
 """
 
-
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 20
