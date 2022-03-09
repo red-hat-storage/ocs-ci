@@ -2265,11 +2265,99 @@ def get_crashcollector_pods(
     return [Pod(**crashcollector) for crashcollector in crashcollectors]
 
 
-def wait_for_pods_terminating(pods, timeout=180):
-    for p in pods:
-        if not helpers.wait_for_rook_ceph_pod_status(
-            p, constants.STATUS_TERMINATING, timeout
-        ):
-            return False
+def check_pods_in_statuses(
+    expected_statuses,
+    pod_names=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    raise_pod_not_found_error=False,
+):
+    """
+    checks whether the pods in a given namespace are in the expected statuses or not
 
-    return True
+    Args:
+        expected_statuses (list): The expected statuses of the pods
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            check the pod objects of the rest of the pod names. The default value is False
+
+    Returns:
+        Boolean: True, if the pods are in the expected statuses. False, otherwise
+
+    """
+    ret_val = True
+
+    if pod_names:
+        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+    else:
+        list_of_pods = get_all_pods(namespace)
+
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        try:
+            status = ocp_pod_obj.get_resource(p.name, "STATUS")
+        except CommandFailed as e:
+            logger.info(f"Can't get the pod status due to the error: {str(e)}")
+            status = ""
+
+        if status not in expected_statuses:
+            logger.warning(
+                f"The pod {p.name} is in {status} state, and not in the expected statuses {expected_statuses}"
+            )
+            ret_val = False
+
+    logger.info(f"All the pods reached the expected statuses {expected_statuses}")
+    return ret_val
+
+
+def wait_for_pods_to_be_in_statuses(
+    expected_statuses,
+    pod_names=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    raise_pod_not_found_error=False,
+    timeout=180,
+    sleep=10,
+):
+    """
+    Wait for the pods in a given namespace to be in the expected statuses
+
+    Args:
+        expected_statuses (list): The expected statuses of the pods
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            check the pod objects of the rest of the pod names. The default value is False
+        timeout (int): time to wait for the pods to be in the expected statuses
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        Boolean: True, if all pods are in the expected statuses. False, otherwise
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_pods_in_statuses,
+        expected_statuses=expected_statuses,
+        pod_names=pod_names,
+        namespace=namespace,
+        raise_pod_not_found_error=raise_pod_not_found_error,
+    )
+    return sample.wait_for_func_status(result=True)
+
+
+def get_pod_ip(pod_obj):
+    """
+    Get the pod ip
+
+    Args:
+        pod_obj (Pod): The pod object
+
+    Returns:
+        str: The pod ip
+
+    """
+    return pod_obj.get().get("status").get("podIP")

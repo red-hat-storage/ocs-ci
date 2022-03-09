@@ -2017,5 +2017,87 @@ def get_encrypted_osd_devices(node_obj, node):
 
 
 def get_osd_ids_per_node():
+    """
+    Get a dictionary of the osd ids per node
+
+    Returns:
+        dict: The dictionary of the osd ids per node
+
+    """
     osd_node_names = get_osd_running_nodes()
     return {node_name: get_node_osd_ids(node_name) for node_name in osd_node_names}
+
+
+def get_node_rook_ceph_pod_names(node_name):
+    """
+    Get the rook ceph pod names associated with the node
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: The rook ceph pod names associated with the node
+
+    """
+    rook_ceph_pods = pod.get_pod_objs(pod.get_rook_ceph_pod_names())
+    node_rook_ceph_pods = get_node_pods(node_name, rook_ceph_pods)
+    return [p.name for p in node_rook_ceph_pods]
+
+
+def get_node_internal_ip(node_obj):
+    """
+    Get the node internal ip
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The node internal ip
+
+    """
+    addresses = node_obj.get().get("status").get("addresses")
+    for address in addresses:
+        if address["type"] == "InternalIP":
+            return address["address"]
+
+    return None
+
+
+def check_node_ip_equal_to_associated_pods_ips(node_obj):
+    """
+    Check that the node ip is equal to the pods ips associated with the node.
+    This function is mainly for the managed service deployment.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        bool: True, if the node ip is equal to the pods ips associated with the node.
+            False, otherwise.
+
+    """
+    rook_ceph_pods = pod.get_pod_objs(pod.get_rook_ceph_pod_names())
+    node_rook_ceph_pods = get_node_pods(node_obj.name, rook_ceph_pods)
+    node_ip = get_node_internal_ip(node_obj)
+    return all([pod.get_pod_ip(p) == node_ip for p in node_rook_ceph_pods])
+
+
+def verify_worker_nodes_security_groups():
+    """
+    Check the worker nodes security groups set correctly
+
+    Returns:
+        bool: True, if the worker nodes security groups set correctly. False otherwise
+
+    TO DO: We may need to modify the steps, but for now this will suffice.
+
+    """
+    res = True
+    wnodes = get_nodes(constants.WORKER_MACHINE)
+    for wnode in wnodes:
+        if not check_node_ip_equal_to_associated_pods_ips(wnode):
+            log.warning(f"The node {wnode.name} security groups is not set correctly")
+            res = False
+
+    log.info("All the worker nodes security groups are set correctly")
+    return res
