@@ -512,12 +512,16 @@ acm_configuration = {
         "//button[normalize-space()='Add']",
         By.XPATH,
     ),
-    "cc_cluster_status_page_download_config": (
+    "cc_cluster_status_page_download_config_dropdown": (
         "//button[@id='download-configuration']",
         By.XPATH,
     ),
     "cc_cluster_status_page_download_install_config": (
         "//a[normalize-space()='install-config']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status": (
+        "//button[normalize-space()={}]",
         By.XPATH,
     ),
     "cc_cluster_status_page_status_failed": (
@@ -526,28 +530,17 @@ acm_configuration = {
     ),
     "cc_cluster_status_page_status_creating": (
         "//button[normalize-space()='Creating']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_cluster_status_page_status_ready": (
         "//button[normalize-space()='Ready']",
-        By.XPATH
-    ),
-    "cc_cluster_status_page_download_configuration": (
-        "//button[@id='download-configuration']",
-        By.XPATH
-    ),
-    "cc_cluster_status_page_download_config_install_config": (
-        "//a[normalize-space()='install-config']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_cluster_status_page_download_config_kubeconfig": (
         "//a[normalize-space()='kubeconfig']",
-        By.XPATH
+        By.XPATH,
     ),
-    "cc_cred_table_entry": (
-        "//a[normalize-space()={}]",
-        By.XPATH
-    ),
+    "cc_cred_table_entry": ("//a[normalize-space()={}]", By.XPATH),
 }
 
 add_capacity = {

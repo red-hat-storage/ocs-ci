@@ -1,13 +1,16 @@
 import os
-from asyncio import constants
 import logging
-from platform import platform
-from ocs_ci.ocs.exceptions import ACMClusterDeployException
 
+
+from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version, get_running_cluster_id, expose_ocp_version
+from ocs_ci.utility.utils import (
+    get_ocp_version,
+    get_running_cluster_id,
+    expose_ocp_version,
+)
 from ocs_ci.ocs.constants import (
     PLATFORM_XPATH_MAP,
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
@@ -17,9 +20,9 @@ from ocs_ci.ocs.constants import (
     SSH_PUB_KEY,
     ACM_OCP_RELEASE_IMG_URL_PREFIX,
     ACM_VSPHERE_NETWORK,
+    ACM_CLUSTER_DEPLOY_WAIT_TIME,
 )
 from ocs_ci.framework import config
-from tests.conftest import cluster
 
 log = logging.getLogger(__name__)
 
@@ -128,10 +131,12 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver, platform, cluster_conf):
+    def __init__(self, driver, deployment_platform, cluster_conf):
         super().__init__(driver)
-        self.platform = platform
+        self.platform = deployment_platform
         self.cluster_conf = cluster_conf
+        self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
+        self.cluster_path = self.cluster_conf.ENV_DATA["cluster_path"]
 
     def create_cluster_prereq(self):
         raise NotImplementedError("Child class has to implement this method")
@@ -161,10 +166,12 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
     def click_platform_and_credentials(self):
         self.navigate_create_clusters_page()
         self.do_click(locator=self.acm_page_nav[PLATFORM_XPATH_MAP[self.platform]])
-        self.do_click(locator=self.acm_page_nav['cc_infrastructure_provider_creds_dropdown'])
+        self.do_click(
+            locator=self.acm_page_nav["cc_infrastructure_provider_creds_dropdown"]
+        )
         credential = format_locator(
-            self.acm_page_nav['cc_infrastructure_provider_creds_select_creds'],
-            self.platform_credential_name
+            self.acm_page_nav["cc_infrastructure_provider_creds_select_creds"],
+            self.platform_credential_name,
         )
         self.do_click(locator=credential)
 
@@ -180,7 +187,6 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         raise NotImplementedError("Child class should implement this function")
 
 
-
 class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     """
     This class handles all behind the scene activities
@@ -189,12 +195,10 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     """
 
     def __init__(self, driver, cluster_conf=None):
-        super().__init__(driver=driver, platform='vsphere', cluster_conf=cluster_conf)
-        self.platform_credential_name = (
-            cluster_conf.get(
-                'platform_credential_name',
-                f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{get_running_cluster_id()}"
-            )
+        super().__init__(driver=driver, platform="vsphere", cluster_conf=cluster_conf)
+        self.platform_credential_name = cluster_conf.get(
+            "platform_credential_name",
+            f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{get_running_cluster_id()}",
         )
         # API VIP & Ingress IP
         self.ips = None
@@ -221,7 +225,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_cred_name"
             ]: self.platform_credential_name,
-            self.acm_page_nav["cc_provider_creds_vsphere_cred_namespace"]: f"default",
+            self.acm_page_nav["cc_provider_creds_vsphere_cred_namespace"]: "default",
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_base_dns"
             ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
@@ -251,9 +255,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_password"
             ]: f"{self.cluster_conf.ENV_DATA['vsphere_password']}",
-            self.acm_page_nav[
-                "cc_provider_creds_vsphere_rootca"
-            ]: f"{vsphere_ca}",
+            self.acm_page_nav["cc_provider_creds_vsphere_rootca"]: f"{vsphere_ca}",
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_clustername"
             ]: f"{self.cluster_conf.ENV_DATA['vsphere_cluster']}",
@@ -262,7 +264,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             ]: f"{self.cluster_conf.ENV_DATA['vsphere_datacenter']}",
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_datastore"
-            ]: f"{self.cluster_conf.ENV_DATA['vsphere_datastore']}"
+            ]: f"{self.cluster_conf.ENV_DATA['vsphere_datastore']}",
         }
         self.send_keys_multiple(vsphere_creds_dict)
         self.click_next_button()
@@ -271,7 +273,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # 1. Pull secret
         # 2. SSH Private key
         # 3. SSH Public key
-        with open(os.path.join(DATA_DIR, 'pull-secret'), "r") as fp:
+        with open(os.path.join(DATA_DIR, "pull-secret"), "r") as fp:
             pull_secret = fp.read()
 
         with open(SSH_PUB_KEY, "r") as fp:
@@ -281,22 +283,17 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             ssh_priv_key = fp.read()
 
         pull_secret_and_ssh = {
-            self.acm_page_nav[
-                "cc_provider_creds_vsphere_pullsecret"
-            ]: f"{pull_secret}",
+            self.acm_page_nav["cc_provider_creds_vsphere_pullsecret"]: f"{pull_secret}",
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_ssh_privkey"
-            ]: f"{ssh_priv_key}" ,
-            self.acm_page_nav[
-                "cc_provider_creds_vsphere_ssh_pubkey"
-            ]: f"{ssh_pub_key}"
+            ]: f"{ssh_priv_key}",
+            self.acm_page_nav["cc_provider_creds_vsphere_ssh_pubkey"]: f"{ssh_pub_key}",
         }
         self.send_keys_multiple(pull_secret_and_ssh)
         self.click_next_button()
-        self.do_click(locator=self.acm_page_nav['cc_provider_creds_vsphere_add_button'])
+        self.do_click(locator=self.acm_page_nav["cc_provider_creds_vsphere_add_button"])
         credential_table_entry = format_locator(
-            self.acm_page_nav['cc_cred_table_entry'],
-            self.platform_credential_name
+            self.acm_page_nav["cc_cred_table_entry"], self.platform_credential_name
         )
         if not self.check_element_presence(credential_table_entry):
             raise ACMClusterDeployException("Could not create credentials for vsphere")
@@ -314,6 +311,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         4. Proxy
         5. Automation
         6. Review
+
         """
         self.click_platform_and_credentials()
         self.click_next_button()
@@ -329,15 +327,60 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.click_next_button()
         # We are at Review page
         # Click on create
-        self.do_click(locator=self.acm_page_nav['cc_create_button'])
+        self.do_click(locator=self.acm_page_nav["cc_create_button"])
         # We will be redirect to 'Details' page which has cluster deployment progress
         try:
-            self.wait_for_deployment()
+            self.wait_for_cluster_create()
         except ACMClusterDeployException:
-            log.error(f"Failed to deploy OCP cluster {self.cluster_conf.ENV_DATA['cluster_name']}")
+            log.error(
+                f"Failed to create OCP cluster {self.cluster_conf.ENV_DATA['cluster_name']}"
+            )
+            raise
+        # Download kubeconfig and install-config file
+        self.download_cluster_conf_files()
 
-    def wait_for_deployment(self):
-        pass
+    def wait_for_cluster_create(self):
+        cluster_deploy_wait_time = self.cluster_conf.ENV_DATA(
+            "cluster_deploy_wait_time", ACM_CLUSTER_DEPLOY_WAIT_TIME
+        )
+
+        # Wait for status creating
+        staus_check_timeout = 300
+        while (
+            not self.acm_cluster_status_ready(staus_check_timeout)
+            and cluster_deploy_wait_time >= 1
+        ):
+            cluster_deploy_wait_time -= staus_check_timeout
+            if self.acm_cluster_status_creating():
+                log.info(f"Cluster {self.cluster_name} is in 'Creating' phase")
+            else:
+                self.acm_bailout_if_failed()
+        if self.acm_cluster_status_ready():
+            log.info(
+                f"Cluster create successful, Cluster {self.cluster_name} is in 'Ready' state"
+            )
+
+    def acm_bailout_if_failed(self):
+        if self.acm_cluster_status_failed():
+            raise ACMClusterDeployException("Deployment is in 'FAILED' state")
+        return
+
+    def acm_cluster_status_failed(self, timeout=5):
+        status_xpath = format_locator(
+            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH),
+            "Failed",
+        )
+        return self.wait_until_expected_text_is_found(status_xpath, self.By.XPATH)
+
+    def acm_cluster_status_ready(self, timeout=300):
+        status_xpath = format_locator(
+            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH), "Ready"
+        )
+        return self.wait_until_expected_text_is_found(status_xpath, timeout=timeout)
+
+    def acm_cluster_status_creating(self, timeout=300):
+        status_xpath = self.acm_page_nav["cc_cluster_status_page_status_creating"]
+        return self.check_element_presence(status_xpath, timeout)
 
     def fill_network_info(self):
         """
@@ -347,24 +390,19 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         3. Ingress VIP
         """
         from ocs_ci.deployment import vmware
+
         # Switch context to cluster which we are about to create
         prev_ctx = config.cur_index
-        config.switch_ctx(self.cluster_conf.MULTICLUSTER['multicluster_index'])
+        config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
         self.ips = vmware.assign_ips(2)
         vmware.create_dns_records(self.ips)
-        self.vsphere_network = config.ENV_DATA.get('vm_network', ACM_VSPHERE_NETWORK)
+        self.vsphere_network = config.ENV_DATA.get("vm_network", ACM_VSPHERE_NETWORK)
         config.switch_ctx(prev_ctx)
 
         vsphere_network = {
-            self.acm_page_nav[
-                "cc_vsphere_network_name"
-            ]: self.vsphere_network,
-            self.acm_page_nav[
-                "cc_api_vip"
-            ]: f"{self.ips[0]}",
-            self.acm_page_nav[
-                "cc_ingress_vip"
-            ]: f"{self.ips[1]}"
+            self.acm_page_nav["cc_vsphere_network_name"]: self.vsphere_network,
+            self.acm_page_nav["cc_api_vip"]: f"{self.ips[0]}",
+            self.acm_page_nav["cc_ingress_vip"]: f"{self.ips[1]}",
         }
         self.send_keys_multiple(vsphere_network)
 
@@ -379,28 +417,54 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         release_img = self.get_ocp_release_img()
         cluster_details = {
             self.acm_page_nav[
-                'cc_cluster_name'
+                "cc_cluster_name"
             ]: f"{self.cluster_conf.ENV_DATA['cluster_name']}",
             self.acm_page_nav[
-                'cc_base_dns_domain'
+                "cc_base_dns_domain"
             ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
-            self.acm_page_nav[
-                'cc_openshift_release_image'
-            ]:f"{release_img}"
+            self.acm_page_nav["cc_openshift_release_image"]: f"{release_img}",
         }
         self.send_keys_multiple(cluster_details)
 
     def get_ocp_release_img(self):
-        vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT['installer_version'])
+        vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
         return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}{vers}"
+
+    def download_cluster_conf_files(self):
+        """
+        Download install-config and kubeconfig to cluster dir
+
+        """
+        if not os.path.exists(os.path.expanduser(f"{self.cluster_path}")):
+            os.mkdir(os.path.expanduser(f"{self.cluster_path}"))
+
+        # create auth dir inside cluster dir
+        auth_dir = os.path.join(os.path.expanduser(f"{self.cluster_path}"), "auth")
+        if not os.path.exists(auth_dir):
+            os.mkdir(auth_dir)
+
+        self.do_click(
+            self.acm_page_nav["cc_cluster_status_page_download_config_dropdown"]
+        )
+        # Get kubeconfig
+        self.do_click(
+            self.acm_page_nav["cc_cluster_status_page_download_config_kubeconfig"]
+        )
+        # Get install-config
+        self.do_click(
+            self.acm_page_nav["cc_cluster_status_page_download_config_dropdown"]
+        )
+        self.do_click(
+            self.acm_page_nav["cc_cluster_status_page_download_install_config"]
+        )
+
+        # Todo: Move browser downloaded config files to cluster dirs
 
 
 class dispatcher(object):
     def __init__(self):
         # All platform specific classes should have map here
-        self.platform_map = {
-            'vsphereipi': ACMOCPPlatformVsphereIPI
-        }
+        self.platform_map = {"vsphereipi": ACMOCPPlatformVsphereIPI}
 
     def get_platform_instance(self, cluster_config):
         platform_deployment = (

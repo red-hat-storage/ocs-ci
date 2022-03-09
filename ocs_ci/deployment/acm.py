@@ -209,6 +209,7 @@ class OCPDeployWithACM(object):
     an OCP cluster with ACM installed and current context is ACM
 
     """
+
     def __init__(self, mode, acm_instance=None):
         """
         mode (str): ex:regional_dr
