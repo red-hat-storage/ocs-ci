@@ -166,7 +166,6 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the values configured in noobaa-postgres configmap "
             "match the ones stored in ocs-ci"
         )
-        
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version <= version.VERSION_4_9:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
