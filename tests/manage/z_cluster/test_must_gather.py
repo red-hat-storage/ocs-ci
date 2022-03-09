@@ -44,7 +44,9 @@ class TestMustGather(ManageTest):
             "Skipping must_gather test, because there is not data for this version"
         ),
     )
-    def test_must_gather(self, mustgather, log_type):
+    def test_must_gather(
+        self, mustgather, log_type, disable_ocs_mg_collection_on_failure
+    ):
         """
         Tests functionality of: oc adm must-gather
 

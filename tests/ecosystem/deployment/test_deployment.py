@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 @deployment
 @polarion_id(get_polarion_id())
-def test_deployment(pvc_factory, pod_factory):
+def test_deployment(pvc_factory, pod_factory, enable_ocp_mg_collection_on_failure):
     deploy = config.RUN["cli_params"].get("deploy")
     teardown = config.RUN["cli_params"].get("teardown")
     if not teardown or deploy:

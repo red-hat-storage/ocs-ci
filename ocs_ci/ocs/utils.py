@@ -965,7 +965,7 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
+def collect_ocs_logs(dir_name, ocp=False, ocs=True, mcg=False, status_failure=True):
     """
     Collects OCS logs
 
