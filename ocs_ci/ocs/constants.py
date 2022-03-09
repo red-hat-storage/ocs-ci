@@ -1499,6 +1499,18 @@ mon_data_avail_warn = 15
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
 
+ROOK_CEPH_CONFIG_VALUES_410 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+"""
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
@@ -1512,6 +1524,23 @@ debug_crush = 20
 # Values from configmap noobaa-postgres-config
 NOOBAA_POSTGRES_TUNING_VALUES = """
 max_connections = 300
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 300
+work_mem = 1747kB
+min_wal_size = 2GB
+max_wal_size = 8GB
+shared_preload_libraries = 'pg_stat_statements'
+"""
+
+# Values from configmap noobaa-postgres-config wrt OCP version 4.10 and above
+NOOBAA_POSTGRES_TUNING_VALUES_4_10 = """
+max_connections = 600
 shared_buffers = 1GB
 effective_cache_size = 3GB
 maintenance_work_mem = 256MB
