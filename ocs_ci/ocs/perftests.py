@@ -637,15 +637,23 @@ class PASTest(BaseTest):
             log.error(f"OS error: {err}")
 
     @staticmethod
-    def get_time():
+    def get_time(time_format=None):
         """
-        Getting the current GMT time in a specific format for the ES report
+        Getting the current GMT time in a specific format for the ES report,
+        or for seeking in the containers log
+
+        Args:
+            time_format (str): which thime format to return - None / CSI
 
         Returns:
             str : current date and time in formatted way
 
         """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        formated = "%Y-%m-%dT%H:%M:%SGMT"
+        if time_format and time_format.lower() == "csi":
+            formated = "%Y-%m-%dT%H:%M:%SZ"
+
+        return time.strftime(formated, time.gmtime())
 
     def check_tests_results(self):
         """
@@ -853,7 +861,7 @@ class PASTest(BaseTest):
             self.proj = helpers.create_project(project_name=self.namespace)
         except CommandFailed as ex:
             if str(ex).find("(AlreadyExists)"):
-                log.warning("The namespace is already exists !")
+                log.warning("The namespace already exists !")
             log.error("Cannot create new project")
             raise CommandFailed(f"{self.namespace} was not created")
 
@@ -869,5 +877,5 @@ class PASTest(BaseTest):
                 resource_name=self.namespace, timeout=60, sleep=10
             )
         except CommandFailed:
-            log.error(f"Can not delete project {self.namespace}")
+            log.error(f"Cannot delete project {self.namespace}")
             raise CommandFailed(f"{self.namespace} was not created")
