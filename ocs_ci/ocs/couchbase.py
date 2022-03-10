@@ -68,7 +68,7 @@ class CouchBase(PillowFight):
 
         """
         operatorgroup_yaml = templating.load_yaml(
-            constants.COUCHBASE_NEW_OPERATOR_GROUP_YAML
+            constants.COUCHBASE_OPERATOR_GROUP_YAML
         )
         self.operatorgroup_yaml = OCS(**operatorgroup_yaml)
         self.operatorgroup_yaml.create()
@@ -82,7 +82,7 @@ class CouchBase(PillowFight):
         log.info("Creating operator group for couchbase")
         self.couchbase_operatorgroup()
         subscription_yaml = templating.load_yaml(
-            constants.COUCHBASE_NEW_OPERATOR_SUBSCRIPTION_YAML
+            constants.COUCHBASE_OPERATOR_SUBSCRIPTION_YAML
         )
         self.subscription_yaml = OCS(**subscription_yaml)
         self.subscription_yaml.create()
@@ -116,7 +116,7 @@ class CouchBase(PillowFight):
         Create secrets for running Couchbase workers
 
         """
-        cb_secrets = templating.load_yaml(constants.COUCHBASE_NEW_WORKER_SECRET)
+        cb_secrets = templating.load_yaml(constants.COUCHBASE_WORKER_SECRET)
         self.cb_secrets = OCS(**cb_secrets)
         self.cb_secrets.create()
         log.info("Successfully created secrets for Couchbase")
@@ -141,6 +141,7 @@ class CouchBase(PillowFight):
         """
         log.info("Creating Couchbase worker pods...")
         cb_example = templating.load_yaml(constants.COUCHBASE_NEW_WORKER_EXAMPLE)
+
         if storagecluster_independent_check():
             cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
                 "storageClassName"
@@ -172,7 +173,7 @@ class CouchBase(PillowFight):
         Create data buckets
 
         """
-        cb_bucket = templating.load_yaml(constants.COUCHBASE_NEW_DATA_BUCKET)
+        cb_bucket = templating.load_yaml(constants.COUCHBASE_DATA_BUCKET)
         self.cb_bucket = OCS(**cb_bucket)
         self.cb_bucket.create()
         log.info("Successfully created data buckets")

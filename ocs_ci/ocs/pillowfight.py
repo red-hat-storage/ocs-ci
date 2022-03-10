@@ -74,7 +74,7 @@ class PillowFight(object):
         self.replicas = replicas
         for i in range(self.replicas):
             # for basic-fillowfight.yaml
-            pfight = templating.load_yaml(constants.COUCHBASE_NEW_PILLOWFIGHT)
+            pfight = templating.load_yaml(constants.COUCHBASE_PILLOWFIGHT)
             pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
             # change the name
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][2] = (
