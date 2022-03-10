@@ -395,7 +395,7 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"aws": [(1, None)]}},
-                marks=[tier1, pytest.mark.polarion_id("OCS-2685")],
+                marks=[tier2, pytest.mark.polarion_id("OCS-2685")],
             ),
         ],
         ids=[
