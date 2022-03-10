@@ -95,17 +95,16 @@ class PerfResult:
 
     def es_write(self):
         """
-        Writing the results to the elastic-search server, if data can not be
-        written to the elasticsearch server, it will be written to JSON file
+        Writing the results to the elastic-search server, and to a JSON file
 
         """
 
-        # Adding the results to the ES document / JSON file
+        # Adding the results to the ES document and JSON file
         self.add_key("all_results", self.all_results)
-        log.info(json.dumps(self.results, indent=4))
+        log.debug(json.dumps(self.results, indent=4))
+        self.dump_to_file()
         if self.es is None:
             log.warning("No elasticsearch server to write data to")
-            self.dump_to_file()
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
@@ -130,7 +129,6 @@ class PerfResult:
                     time.sleep(3)
                 else:
                     log.warning(f"Failed writing data with : {e}")
-                    self.dump_to_file()
                     return False
         return True
 
