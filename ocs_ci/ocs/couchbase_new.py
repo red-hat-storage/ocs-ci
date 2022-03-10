@@ -139,7 +139,7 @@ class CouchBase(PillowFight):
                 per second)
 
         """
-        logging.info("Creating Couchbase worker pods...")
+        log.info("Creating Couchbase worker pods...")
         cb_example = templating.load_yaml(constants.COUCHBASE_NEW_WORKER_EXAMPLE)
         if storagecluster_independent_check():
             cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
@@ -156,7 +156,7 @@ class CouchBase(PillowFight):
 
         # Wait for the Couchbase workers to be running.
 
-        logging.info("Waiting for the Couchbase pods to be Running")
+        log.info("Waiting for the Couchbase pods to be Running")
         self.pod_obj.wait_for_resource(
             condition="Running",
             selector="app=couchbase",
@@ -189,7 +189,7 @@ class CouchBase(PillowFight):
 
         """
         self.result = None
-        logging.info("Running IOs using Pillow-fight")
+        log.info("Running IOs using Pillow-fight")
         if run_in_bg:
             executor = ThreadPoolExecutor(1)
             self.result = executor.submit(
@@ -213,7 +213,7 @@ class CouchBase(PillowFight):
 
         """
         if not skip_analyze:
-            logging.info("Analyzing  workload run logs..")
+            log.info("Analyzing  workload run logs..")
             PillowFight.analyze_all(self)
 
     def respin_couchbase_app_pod(self):
@@ -228,7 +228,7 @@ class CouchBase(PillowFight):
             "cb-example", constants.COUCHBASE_OPERATOR
         )
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
-        logging.info(f"respin pod {app_pod}")
+        log.info(f"respin pod {app_pod}")
         app_pod_obj = get_pod_obj(app_pod, namespace=constants.COUCHBASE_OPERATOR)
         app_pod_obj.delete(wait=True, force=False)
         wait_for_resource_state(
@@ -254,7 +254,7 @@ class CouchBase(PillowFight):
         log.info("Create a list of nodes that contain a couchbase app pod")
         nodes_set = set()
         for pod in app_pod_objs:
-            logging.info(
+            log.info(
                 f"pod {pod.name} located on "
                 f"node {pod.get().get('spec').get('nodeName')}"
             )

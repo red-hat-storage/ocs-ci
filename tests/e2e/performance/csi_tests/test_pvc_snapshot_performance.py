@@ -89,7 +89,7 @@ class TestPvcSnapshotPerformance(PASTest):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
+        log.info("Starting the test setup")
         super(TestPvcSnapshotPerformance, self).setup()
         self.benchmark_name = "pvc_snaspshot_performance"
         self.uuid = uuid4().hex
@@ -655,7 +655,7 @@ class TestPvcSnapshotPerformance(PASTest):
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
             # write the ES link to the test results in the test log.
-            logging.info(f"The result can be found at : {res_link}")
+            log.info(f"The result can be found at : {res_link}")
 
             # Create text file with results of all subtest
             self.write_result_to_file(res_link)

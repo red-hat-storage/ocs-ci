@@ -474,12 +474,12 @@ class AWSUPI(AWSBase):
         """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get("num_workers", 3))
-        logging.info(f"Creating {num_workers} RHEL workers")
+        logger.info(f"Creating {num_workers} RHEL workers")
         rhel_version = config.ENV_DATA["rhel_version"]
         rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         for i in range(num_workers):
             self.gather_worker_data(f"no{i}")
-            logging.info(f"Creating {i + 1}/{num_workers} worker")
+            logger.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
@@ -515,7 +515,7 @@ class AWSUPI(AWSBase):
                     {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
                 ],
             )
-            logging.info(self.worker_iam_role)
+            logger.info(self.worker_iam_role)
             self.client.associate_iam_instance_profile(
                 IamInstanceProfile=self.worker_iam_role,
                 InstanceId=inst_id,
@@ -698,7 +698,7 @@ class AWSUPI(AWSBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -746,12 +746,12 @@ class AWSUPI(AWSBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)

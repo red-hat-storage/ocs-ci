@@ -94,11 +94,11 @@ class TestCapacityBreakdownUI(ManageTest):
             size="4GB",
         )
         fio_result = pod_obj.get_fio_results()
-        logging.info("IOPs after FIO:")
+        logger.info("IOPs after FIO:")
         reads = fio_result.get("jobs")[0].get("read").get("iops")
         writes = fio_result.get("jobs")[0].get("write").get("iops")
-        logging.info(f"Read: {reads}")
-        logging.info(f"Write: {writes}")
+        logger.info(f"Read: {reads}")
+        logger.info(f"Write: {writes}")
 
         validation_ui_obj = ValidationUI(setup_ui)
         assert validation_ui_obj.check_capacity_breakdown(

@@ -177,7 +177,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
 
         for i in range(num_of_samples):
-            logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
+            log.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
             timeout = 60
@@ -190,7 +190,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 self.interface, pvc_obj.name, start_time
             )
 
-            logging.info(
+            log.info(
                 f"{msg_prefix} PVC number {i + 1} was created in {creation_time} seconds."
             )
             if creation_time > accepted_creation_time:
@@ -211,7 +211,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pod_obj = self.write_file_on_pvc(pvc_obj)
             pod_obj.delete(wait=True)
             teardown_factory(pvc_obj)
-            logging.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
+            log.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 pvc_obj.delete()
                 pvc_obj.ocp.wait_for_delete(pvc_obj.name)
@@ -219,7 +219,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 deletion_time = helpers.measure_pvc_deletion_time(
                     self.interface, pv_name
                 )
-                logging.info(
+                log.info(
                     f"{msg_prefix} PVC number {i + 1} was deleted in {deletion_time} seconds."
                 )
                 if deletion_time > accepted_deletion_time:
@@ -235,7 +235,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 )
 
             else:
-                logging.info(
+                log.info(
                     f"Reclaim policy of the PVC {pvc_obj.name} is not Delete;"
                     f" therefore not measuring deletion time for this PVC."
                 )
@@ -476,9 +476,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
                     f"greater than {accepted_pvc_deletion_time} seconds"
                 )
 
-        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
+        log.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
         for name, a_time in pvc_deletion_time.items():
-            logging.info(f"{name} deletion time is: {a_time} seconds")
+            log.info(f"{name} deletion time is: {a_time} seconds")
 
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
