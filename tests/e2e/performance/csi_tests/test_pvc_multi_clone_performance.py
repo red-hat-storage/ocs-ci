@@ -34,7 +34,7 @@ class TestPvcMultiClonePerformance(PASTest):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
+        log.info("Starting the test setup")
         super(TestPvcMultiClonePerformance, self).setup()
         self.benchmark_name = "pvc_multi_clone_performance"
         self.uuid = uuid4().hex

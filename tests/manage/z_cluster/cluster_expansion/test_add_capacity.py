@@ -43,7 +43,7 @@ def add_capacity_test():
         try:
             result = ui_add_capacity(osd_size)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
             )
             result = storage_cluster.add_capacity(osd_size)
