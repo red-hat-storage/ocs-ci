@@ -99,7 +99,7 @@ class PerfResult:
 
         """
 
-        # Adding the results to the ES document / JSON file
+        # Adding the results to the ES document and JSON file
         self.add_key("all_results", self.all_results)
         log.debug(json.dumps(self.results, indent=4))
         self.dump_to_file()
