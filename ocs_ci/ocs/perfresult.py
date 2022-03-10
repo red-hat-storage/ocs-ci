@@ -157,7 +157,7 @@ class PerfResult:
         """
 
         res_link = f"http://{self.server}:{self.port}/{self.new_index}/"
-        res_link += f"_search?q=uuid:{self.uuid}"
+        res_link += f'_search?q=uuid:"{self.uuid}"'
         return res_link
 
 
