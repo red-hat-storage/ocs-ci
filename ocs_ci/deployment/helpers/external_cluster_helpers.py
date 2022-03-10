@@ -167,26 +167,65 @@ class ExternalCluster(object):
 
     def create_object_store_user(self):
         """
-        Create object store user on external cluster
+        Create object store user on external cluster and update
+        access_key and secret_key to config
         """
-        # create new object store user
-        cmd = (
-            f"radosgw-admin user create --uid {defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER} --display-name "
-            f'"Rook RGW Admin Ops user" --caps "buckets=*;users=*;usage=read;metadata=read;zone=read"'
-        )
-        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
-        if retcode != 0:
-            logger.error(f"Failed to create object store user. Error: {err}")
-            raise ExternalClusterObjectStoreUserCreationFailed
+        # check if object store user exists or not
+        user = defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
+        if self.is_object_store_user_exists(user):
+            logger.info(f"object store user {user} already exists in external cluster")
+            # get the access and secret key
+            access_key, secret_key = self.get_object_store_user_secrets(user)
+        else:
+            # create new object store user
+            logger.info(f"creating new object store user {user}")
+            cmd = (
+                f"radosgw-admin user create --uid {user} --display-name "
+                f'"Rook RGW Admin Ops user" --caps "buckets=*;users=*;usage=read;metadata=read;zone=read"'
+            )
+            retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+            if retcode != 0:
+                logger.error(f"Failed to create object store user. Error: {err}")
+                raise ExternalClusterObjectStoreUserCreationFailed
+
+            # get the access and secret key
+            objectstore_user_details = json.loads(out)
+            access_key = objectstore_user_details["keys"][0]["access_key"]
+            secret_key = objectstore_user_details["keys"][0]["secret_key"]
 
         # update access_key and secret_key in config.EXTERNAL_MODE
-        objectstore_user_details = json.loads(out)
-        config.EXTERNAL_MODE[
-            "access_key_rgw-admin-ops-user"
-        ] = objectstore_user_details["keys"][0]["access_key"]
-        config.EXTERNAL_MODE[
-            "secret_key_rgw-admin-ops-user"
-        ] = objectstore_user_details["keys"][0]["secret_key"]
+        config.EXTERNAL_MODE["access_key_rgw-admin-ops-user"] = access_key
+        config.EXTERNAL_MODE["secret_key_rgw-admin-ops-user"] = secret_key
+
+    def is_object_store_user_exists(self, user):
+        """
+        Checks whether user exists in external cluster
+
+        Returns:
+            bool: True if user exists, otherwise false
+
+        """
+        cmd = "radosgw-admin user list"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        objectstore_user_list = json.loads(out)
+        if user in objectstore_user_list:
+            return True
+
+    def get_object_store_user_secrets(self, user):
+        """
+        Get the access and secret key for user
+
+        Returns:
+            tuple: tuple which contains access_key and secret_key
+
+        """
+        cmd = f"radosgw-admin user info --uid {user}"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        user_details = json.loads(out)
+        return (
+            user_details["keys"][0]["access_key"],
+            user_details["keys"][0]["secret_key"],
+        )
 
 
 def generate_exporter_script():
