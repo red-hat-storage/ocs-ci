@@ -628,7 +628,7 @@ def osd_encryption_verification():
             )
             raise ValueError("OSD is not encrypted")
 
-    if ocs_version != version.VERSION_4_6:
+    if ocs_version > version.VERSION_4_6:
         log.info("Verify luks header label for encrypted devices")
         worker_nodes = get_worker_nodes()
         logging.info("NODES: {}".format(worker_nodes))
@@ -654,8 +654,8 @@ def osd_encryption_verification():
                     )
                 )
 
-                logging.info("Waiting for 15 seconds")
-                time.sleep(15)
+                logging.info("Waiting for 5 seconds")
+                time.sleep(5)
 
                 cmd = "cryptsetup luksDump /dev/" + str(luks_device_name)
                 cmd_out = node_obj.exec_oc_debug_cmd(node=n, cmd_list=[cmd])
