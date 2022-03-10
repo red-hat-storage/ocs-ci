@@ -149,7 +149,7 @@ def get_deployments_having_label(label, namespace):
         label (str): label which deployments might have
         namespace (str): Namespace in which to be looked up
 
-    Return:
+    Returns:
         list: deployment OCP instances
     """
     ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
