@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
+    config,
 )
 from ocs_ci.helpers.helpers import (
     create_pods,
@@ -21,17 +22,17 @@ from ocs_ci.utility import kms
 log = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
-# if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-kmsprovider = constants.HPCS_KMS_PROVIDER
-argvalues = [
-    pytest.param("v1", kmsprovider),
-]
-# else:
-#   kmsprovider = constants.VAULT_KMS_PROVIDER
-#  argvalues=[
-#     pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2585")),
-#    pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2592")),
-# ]
+if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    kmsprovider = constants.HPCS_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider),
+    ]
+else:
+    kmsprovider = constants.VAULT_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2585")),
+        pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2592")),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -46,12 +47,6 @@ class TestRbdPvEncryption(ManageTest):
     Test to verify RBD PV encryption
 
     """
-
-    # set the KMS provider based on KMS_PROVIDER env value.
-    # if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-    #   kmsprovider = constants.HPCS_KMS_PROVIDER
-    # else:
-    #   kmsprovider = constants.VAULT_KMS_PROVIDER
 
     @pytest.fixture(autouse=True)
     def setup(

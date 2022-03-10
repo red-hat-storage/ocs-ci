@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     kms_config_required,
     skipif_managed_service,
+    config,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -22,17 +23,17 @@ from ocs_ci.utility import kms
 log = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
-# if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-kmsprovider = constants.HPCS_KMS_PROVIDER
-argvalues = [
-    pytest.param("v1", kmsprovider),
-]
-# else:
-#   kmsprovider = constants.VAULT_KMS_PROVIDER
-#  argvalues=[
-#     pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2650")),
-#    pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2651")),
-# ]
+if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    kmsprovider = constants.HPCS_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider),
+    ]
+else:
+    kmsprovider = constants.VAULT_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2650")),
+        pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2651")),
+    ]
 
 
 @tier1
@@ -49,12 +50,6 @@ class TestEncryptedRbdClone(ManageTest):
     Tests to verify PVC to PVC clone feature for encrypted RBD Block VolumeMode PVCs
 
     """
-
-    # set the KMS provider based on KMS_PROVIDER env value.
-    # if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-    #   kmsprovider = constants.HPCS_KMS_PROVIDER
-    # else:
-    #   kmsprovider = constants.VAULT_KMS_PROVIDER
 
     @pytest.fixture(autouse=True)
     def setup(

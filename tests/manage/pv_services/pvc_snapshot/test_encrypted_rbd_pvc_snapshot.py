@@ -26,17 +26,17 @@ from ocs_ci.utility import kms
 log = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
-# if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-kmsprovider = constants.HPCS_KMS_PROVIDER
-argvalues = [
-    pytest.param("v1", kmsprovider),
-]
-# else:
-#   kmsprovider = constants.VAULT_KMS_PROVIDER
-#  argvalues=[
-#    pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2612")),
-#    pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2613")),
-# ]
+if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    kmsprovider = constants.HPCS_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider),
+    ]
+else:
+    kmsprovider = constants.VAULT_KMS_PROVIDER
+    argvalues = [
+        pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2612")),
+        pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2613")),
+    ]
 
 
 @pytest.mark.parametrize(
