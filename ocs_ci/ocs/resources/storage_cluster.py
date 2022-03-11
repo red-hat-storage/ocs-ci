@@ -613,12 +613,12 @@ def osd_encryption_verification():
         osd_number_per_node = len(osd_node_names[worker_node]) - 1
         lsblk_output = osd_node_names[worker_node][-1]
         lsblk_output_split = lsblk_output.split()
-        logging.info(f"lsblk split:{lsblk_output_split}")
-        logging.info(f"osd_node_names dictionary: {osd_node_names}")
-        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
-        logging.info(f"osd_number_per_node = {osd_number_per_node}")
+        log.info(f"lsblk split:{lsblk_output_split}")
+        log.info(f"osd_node_names dictionary: {osd_node_names}")
+        log.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        log.info(f"osd_number_per_node = {osd_number_per_node}")
         if lsblk_output_split.count("crypt") != osd_number_per_node:
-            logging.error(
+            log.error(
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
@@ -630,7 +630,7 @@ def verify_kms_ca_only():
     without Client Certificate and without Client Private Key
 
     """
-    logging.info("Verify KMS deployment with only CA Certificate")
+    log.info("Verify KMS deployment with only CA Certificate")
     secret_names = get_secret_names()
     if (
         "ocs-kms-client-cert" in secret_names

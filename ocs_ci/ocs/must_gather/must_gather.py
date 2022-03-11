@@ -130,7 +130,7 @@ class MustGather(object):
             return
         pod_objs = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
         pod_names = []
-        logging.info("Get pod names on openshift-storage project")
+        logger.info("Get pod names on openshift-storage project")
         for pod in pod_objs:
             pattern = self.check_pod_name_pattern(pod.name)
             if pattern is False:
@@ -142,7 +142,7 @@ class MustGather(object):
                 break
 
         pod_files = []
-        logging.info("Get pod names on openshift-storage/pods directory")
+        logger.info("Get pod names on openshift-storage/pods directory")
         for pod_file in os.listdir(pod_path):
             pattern = self.check_pod_name_pattern(pod_file)
             if pattern is False:

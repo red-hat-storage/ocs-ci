@@ -357,16 +357,14 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
             if is_node_labeled(new_spun_node):
-                logging.info(
+                log.info(
                     f"node {new_spun_node} is already labeled with the OCS storage label"
                 )
             else:
                 node_obj.add_label(
                     resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
                 )
-                logging.info(
-                    f"Successfully labeled {new_spun_node} with OCS storage label"
-                )
+                log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
 
     return new_spun_nodes
 
@@ -417,7 +415,7 @@ def add_new_node_and_label_upi(
             node_obj.add_label(
                 resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
             )
-            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+            log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
 
 
@@ -1077,7 +1075,7 @@ def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
     node_obj = ocp.OCP(kind="node")
     for new_node_to_label in nodes:
         node_obj.add_label(resource_name=new_node_to_label.name, label=label)
-        logging.info(
+        log.info(
             f"Successfully labeled {new_node_to_label.name} " f"with OCS storage label"
         )
 
@@ -1306,9 +1304,9 @@ def taint_nodes(nodes, taint_label=None):
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
-            logging.info(f"Successfully tainted {node} with taint {taint_label}")
+            log.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
-            logging.info(f"{node} was not tainted - {e}")
+            log.info(f"{node} was not tainted - {e}")
 
 
 def check_taint_on_nodes(taint=None):

@@ -96,10 +96,10 @@ class TestAddNode(E2ETest):
 
         except (OCSWorkerScaleFailed, OSDScaleFailed, Exception) as ex:
             TestAddNode.skip_all = True
-            logging.warning(
+            logger.warning(
                 f"Due to Exception set TestAddNode.skip_all to {TestAddNode.skip_all}"
             )
-            logging.error(f"Cluster not in expected state. {ex}")
+            logger.error(f"Cluster not in expected state. {ex}")
 
     @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.polarion_id("OCS-609")
@@ -135,7 +135,7 @@ class TestAddNode(E2ETest):
 
         except UnexpectedBehaviour:
             TestAddNode.skip_all = True
-            logging.info("Cluster is not in expected state, unexpected behaviour")
+            logger.info("Cluster is not in expected state, unexpected behaviour")
             raise
 
     @ignore_leftovers

@@ -112,7 +112,7 @@ class TestClusterUtils(ManageTest):
     def test_get_user_key(self, user_resource):
         key = self.cluster_obj.get_user_key(self.username)
         assert key
-        logging.info(key)
+        log.info(key)
 
     def test_get_admin_key(self):
         """
@@ -123,19 +123,19 @@ class TestClusterUtils(ManageTest):
 
     def test_get_mon_info(self):
         for mon in self.cluster_obj.mons:
-            logging.info(mon.name)
-            logging.info(mon.port)
+            log.info(mon.name)
+            log.info(mon.port)
 
     def test_add_mon(self, mon_resource):
         cur_count = self.cluster_obj.mon_count
-        logging.info(f"current mon count = {cur_count}")
+        log.info(f"current mon count = {cur_count}")
         new_count = cur_count + 1
         self.cluster_obj.mon_change_count(new_count)
         assert new_count == self.cluster_obj.mon_count
 
     def test_add_mds(self, mds_resource):
         cur_count = int(self.cluster_obj.mds_count / 2)
-        logging.info(f"Current active count = {cur_count}")
+        log.info(f"Current active count = {cur_count}")
         new_count = cur_count + 1
         self.cluster_obj.mds_change_count(new_count)
         assert new_count * 2 == self.cluster_obj.mds_count

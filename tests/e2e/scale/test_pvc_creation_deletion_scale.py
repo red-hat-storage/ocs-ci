@@ -106,7 +106,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             )
         )
 
-        logging.info(f"Number of PVCs in Bound state {len(pvc_bound_list)}")
+        log.info(f"Number of PVCs in Bound state {len(pvc_bound_list)}")
 
         # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
@@ -122,7 +122,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in pvc_create_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(f"Create data present in {log_path}-creation-time.csv file")
+        log.info(f"Create data present in {log_path}-creation-time.csv file")
 
         # Get pv_name, require pv_name to fetch deletion time data from log
         pv_name_list = list()
@@ -155,9 +155,9 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        log.info(f"Delete data present in {log_path}-deletion-time.csv file")
         end_time = default_timer()
-        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
+        log.info(f"Elapsed time -- {end_time - self.start_time} seconds")
 
     @polarion_id("OCS-1885")
     @pytest.mark.usefixtures(namespace.__name__)
@@ -246,7 +246,7 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in fs_pvc_create_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(f"Create data present in {log_path}-creation-time.csv file")
+        log.info(f"Create data present in {log_path}-creation-time.csv file")
 
         # Get pv_name, require pv_name to fetch deletion time data from log
         rbd_pv_list, fs_pv_list = ([] for i in range(2))
@@ -282,6 +282,6 @@ class TestPVCCreationDeletionScale(E2ETest):
             csv_obj = csv.writer(fd)
             for k, v in fs_pvc_deletion_time.items():
                 csv_obj.writerow([k, v])
-        logging.info(f"Delete data present in {log_path}-deletion-time.csv file")
+        log.info(f"Delete data present in {log_path}-deletion-time.csv file")
         end_time = default_timer()
-        logging.info(f"Elapsed time -- {end_time - self.start_time} seconds")
+        log.info(f"Elapsed time -- {end_time - self.start_time} seconds")
