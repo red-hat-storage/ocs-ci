@@ -3,6 +3,7 @@ This module contains helpers functions needed for
 external cluster deployment.
 """
 
+import json
 import logging
 import re
 import tempfile
@@ -12,6 +13,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
+    ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
@@ -54,9 +56,6 @@ class ExternalCluster(object):
             ExternalClusterExporterRunFailed: If exporter script failed to run on external RHCS cluster
 
         """
-        # upload exporter script to external RHCS cluster
-        script_path = self.upload_exporter_script()
-
         # get rgw endpoint port
         rgw_endpoint_port = self.get_rgw_endpoint_api_port()
 
@@ -64,23 +63,8 @@ class ExternalCluster(object):
         rgw_endpoint = get_rgw_endpoint()
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
-        # get external RHCS rhel version
-        rhel_version = self.get_rhel_version()
-        python_version = "python3"
-        if version.get_semantic_version(rhel_version) < version.get_semantic_version(
-            "8"
-        ):
-            python_version = "python"
-
-        # run the exporter script on external RHCS cluster
-        cmd = (
-            f"{python_version} {script_path} --rbd-data-pool-name {defaults.RBD_NAME} "
-            f"--rgw-endpoint {rgw_endpoint_with_port}"
-        )
-        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
-        if retcode != 0:
-            logger.error(f"Failed to run {script_path}. Error: {err}")
-            raise ExternalClusterExporterRunFailed
+        params = f"--rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
+        out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
         external_cluster_details = encode(out)
@@ -139,6 +123,109 @@ class ExternalCluster(object):
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
         logger.debug(f"RHEL version on external RHCS cluster is {out}")
         return pattern.search(out).groups()[0]
+
+    def update_permission_caps(self, user=None):
+        """
+        Update permission caps on the external RHCS cluster
+        """
+        user = user if user else defaults.EXTERNAL_CLUSTER_USER
+        params = f"--upgrade --run-as-user={user}"
+        out = self.run_exporter_script(params=params)
+        logger.info(f"updated permissions for the user are set as {out}")
+
+    def run_exporter_script(self, params):
+        """
+        Runs the exporter script on RHCS cluster
+
+        Args:
+            params (str): Parameter to pass to exporter script
+
+        Returns:
+            str: output of exporter script
+
+        """
+        # upload exporter script to external RHCS cluster
+        script_path = self.upload_exporter_script()
+
+        # get external RHCS rhel version
+        rhel_version = self.get_rhel_version()
+        python_version = "python3"
+        if version.get_semantic_version(rhel_version) < version.get_semantic_version(
+            "8"
+        ):
+            python_version = "python"
+
+        # run the exporter script on external RHCS cluster
+        cmd = f"{python_version} {script_path} {params}"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(
+                f"Failed to run {script_path} with parameters {params}. Error: {err}"
+            )
+            raise ExternalClusterExporterRunFailed
+        return out
+
+    def create_object_store_user(self):
+        """
+        Create object store user on external cluster and update
+        access_key and secret_key to config
+        """
+        # check if object store user exists or not
+        user = defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
+        if self.is_object_store_user_exists(user):
+            logger.info(f"object store user {user} already exists in external cluster")
+            # get the access and secret key
+            access_key, secret_key = self.get_object_store_user_secrets(user)
+        else:
+            # create new object store user
+            logger.info(f"creating new object store user {user}")
+            cmd = (
+                f"radosgw-admin user create --uid {user} --display-name "
+                f'"Rook RGW Admin Ops user" --caps "buckets=*;users=*;usage=read;metadata=read;zone=read"'
+            )
+            retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+            if retcode != 0:
+                logger.error(f"Failed to create object store user. Error: {err}")
+                raise ExternalClusterObjectStoreUserCreationFailed
+
+            # get the access and secret key
+            objectstore_user_details = json.loads(out)
+            access_key = objectstore_user_details["keys"][0]["access_key"]
+            secret_key = objectstore_user_details["keys"][0]["secret_key"]
+
+        # update access_key and secret_key in config.EXTERNAL_MODE
+        config.EXTERNAL_MODE["access_key_rgw-admin-ops-user"] = access_key
+        config.EXTERNAL_MODE["secret_key_rgw-admin-ops-user"] = secret_key
+
+    def is_object_store_user_exists(self, user):
+        """
+        Checks whether user exists in external cluster
+
+        Returns:
+            bool: True if user exists, otherwise false
+
+        """
+        cmd = "radosgw-admin user list"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        objectstore_user_list = json.loads(out)
+        if user in objectstore_user_list:
+            return True
+
+    def get_object_store_user_secrets(self, user):
+        """
+        Get the access and secret key for user
+
+        Returns:
+            tuple: tuple which contains access_key and secret_key
+
+        """
+        cmd = f"radosgw-admin user info --uid {user}"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        user_details = json.loads(out)
+        return (
+            user_details["keys"][0]["access_key"],
+            user_details["keys"][0]["secret_key"],
+        )
 
 
 def generate_exporter_script():
