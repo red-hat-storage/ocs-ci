@@ -1,6 +1,7 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
+import time
 import logging
 import tempfile
 import re
@@ -79,7 +80,7 @@ class PillowFight(object):
             # change the name
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][2] = (
                 f"couchbase://cb-example-000{i}.cb-example."
-                f"couchbase-operator-namespace.svc:8091/default?select_bucket=true"
+                f"couchbase-operator-namespace.svc/default?select_bucket=true"
             )
             # num of items
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
@@ -91,6 +92,7 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
+            time.sleep(10)
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
