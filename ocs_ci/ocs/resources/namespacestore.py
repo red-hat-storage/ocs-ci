@@ -288,7 +288,11 @@ def oc_create_namespacestore(
         },
     }
 
-    if nss_tup[3] and platform.lower() == constants.NAMESPACE_FILESYSTEM:
+    if (
+        platform.lower() == constants.NAMESPACE_FILESYSTEM
+        and len(nss_tup) == 4
+        and nss_tup[3]
+    ):
         NSS_MAPPING[platform.lower()]["nsfs"]["fsBackend"] = nss_tup[3]
 
     nss_data["spec"] = NSS_MAPPING[platform.lower()]()

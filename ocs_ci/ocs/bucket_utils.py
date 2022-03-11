@@ -38,7 +38,11 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
 
     """
     api = "api" if api else ""
-    no_ssl = "--no-verify-ssl" if signed_request_creds.get("ssl") is False else ""
+    no_ssl = (
+        "--no-verify-ssl"
+        if signed_request_creds and signed_request_creds.get("ssl") is False
+        else ""
+    )
     if mcg_obj:
         if mcg_obj.region:
             region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
