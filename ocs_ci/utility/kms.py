@@ -90,7 +90,7 @@ class Vault(KMS):
         self.vault_policy_name = None
         self.vault_kube_auth_path = "kubernetes"
         self.vault_kube_auth_namespace = None
-        self.vault_cwd_kms_sa_name = None
+        self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
 
     def deploy(self):
         """
@@ -309,8 +309,9 @@ class Vault(KMS):
         """
         ocp_obj = ocp.OCP()
         cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
-        self.vault_cwd_kms_sa_name = sa_name
         ocp_obj.exec_oc_cmd(command=cmd)
+        self.vault_cwd_kms_sa_name = sa_name
+
         cmd = (
             f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
             "clusterrolebinding vault-tokenreview-binding "
@@ -1044,7 +1045,7 @@ class Vault(KMS):
         else:
             cmd = (
                 f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
-                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name} issuer={issuer}"
             )
         os.environ.pop("VAULT_FORMAT")
         proc = subprocess.run(

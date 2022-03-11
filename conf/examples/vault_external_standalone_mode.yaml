@@ -1,6 +1,5 @@
-#Example yaml for an external vault standalone OCS deployment
-
-
+---
+# Example yaml for an external vault standalone OCS deployment
 ENV_DATA:
   encryption_at_rest: true
   vault_deploy_mode: external
@@ -29,5 +28,5 @@ ENV_DATA:
   VAULT_BACKEND_PATH: 'TEST_BACKEND_PATH'
   # Vault policy used by OCS
   VAULT_POLICY: 'TEST_POLICY'
-  #Vault authentication type (either token or kubernetes)
-  VAULT_AUTH_TYPE: token
+  # Vault authentication method
+  VAULT_AUTHE_METHOD: token
