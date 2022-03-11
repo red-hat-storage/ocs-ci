@@ -32,7 +32,7 @@ class TestPVCClonePerformance(PASTest):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
+        logger.info("Starting the test setup")
         super(TestPVCClonePerformance, self).setup()
         self.benchmark_name = "pvc_clone_permorance"
 

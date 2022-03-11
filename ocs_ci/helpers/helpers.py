@@ -1004,7 +1004,7 @@ def pull_images(image_name):
 
     node_objs = node.get_node_objs(node.get_worker_nodes())
     for node_obj in node_objs:
-        logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
+        logger.info(f'pulling image "{image_name}  " on node {node_obj.name}')
         assert node_obj.ocp.exec_oc_debug_cmd(
             node_obj.name, cmd_list=[f"podman pull {image_name}"]
         )
@@ -1551,7 +1551,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
 
         if no_data_list:
             # Clear and get CSI logs after 60secs
-            logging.info(f"PVC count without CSI create log data {len(no_data_list)}")
+            logger.info(f"PVC count without CSI create log data {len(no_data_list)}")
             logs.clear()
             time.sleep(wait_time)
             logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
@@ -1559,7 +1559,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             logs = logs.split("\n")
             loop_counter += 1
             if loop_counter >= 6:
-                logging.info("Waited for more than 6mins still no data")
+                logger.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pvc creation data in CSI logs for {no_data_list}"
                 )
@@ -1627,7 +1627,7 @@ def measure_pv_deletion_time_bulk(
 
         if no_data_list:
             # Clear and get CSI logs after 60secs
-            logging.info(f"PV count without CSI delete log data {len(no_data_list)}")
+            logger.info(f"PV count without CSI delete log data {len(no_data_list)}")
             logs.clear()
             time.sleep(wait_time)
             logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
@@ -1635,7 +1635,7 @@ def measure_pv_deletion_time_bulk(
             logs = logs.split("\n")
             loop_counter += 1
             if loop_counter >= 6:
-                logging.info("Waited for more than 6mins still no data")
+                logger.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pv deletion data in CSI logs for {no_data_list}"
                 )
@@ -2421,14 +2421,14 @@ def memory_leak_analysis(median_dict):
                 list = [i for i in list if i]
                 memory_leak_data.append(list[7])
         else:
-            logging.info(f"worker {worker} memory leak file not found")
+            logger.info(f"worker {worker} memory leak file not found")
             raise UnexpectedBehaviour
         number_of_lines = len(memory_leak_data) - 1
         # Get the start value form median_dict arg for respective worker
         start_value = median_dict[f"{worker}"]
         end_value = memory_leak_data[number_of_lines]
-        logging.info(f"Median value {start_value}")
-        logging.info(f"End value {end_value}")
+        logger.info(f"Median value {start_value}")
+        logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
             start_value = float(1024 ** 2 * float(start_value[:-1]))
@@ -2445,13 +2445,13 @@ def memory_leak_analysis(median_dict):
         # Calculate the percentage of diff between start and end value
         # Based on value decide TC pass or fail
         diff[worker] = ((end_value - start_value) / start_value) * 100
-        logging.info(f"Percentage diff in start and end value {diff[worker]}")
+        logger.info(f"Percentage diff in start and end value {diff[worker]}")
         if diff[worker] <= 20:
-            logging.info(f"No memory leak in worker {worker} passing the test")
+            logger.info(f"No memory leak in worker {worker} passing the test")
         else:
-            logging.info(f"There is a memory leak in worker {worker}")
-            logging.info(f"Memory median value start of the test {start_value}")
-            logging.info(f"Memory value end of the test {end_value}")
+            logger.info(f"There is a memory leak in worker {worker}")
+            logger.info(f"Memory median value start of the test {start_value}")
+            logger.info(f"Memory value end of the test {end_value}")
             raise UnexpectedBehaviour
 
 
@@ -2477,7 +2477,7 @@ def get_memory_leak_median_value():
                 list = [i for i in list if i]
                 memory_leak_data.append(list[7])
         else:
-            logging.info(f"worker {worker} memory leak file not found")
+            logger.info(f"worker {worker} memory leak file not found")
             raise UnexpectedBehaviour
         median_dict[f"{worker}"] = statistics.median(memory_leak_data)
     return median_dict
@@ -2799,7 +2799,7 @@ def collect_performance_stats(dir_name):
     external = config.DEPLOYMENT["external_mode"]
     if external:
         # Skip collecting performance_stats for external mode RHCS cluster
-        logging.info("Skipping status collection for external mode")
+        logger.info("Skipping status collection for external mode")
     else:
         ceph_obj = CephCluster()
 
@@ -3164,7 +3164,7 @@ def verify_pdb_mon(disruptions_allowed, max_unavailable_mon):
         bool: True if the expected pdb state equal to actual pdb state, False otherwise
 
     """
-    logging.info("Check mon pdb status")
+    logger.info("Check mon pdb status")
     mon_pdb = get_mon_pdb()
     result = True
     if disruptions_allowed != mon_pdb[0]:
