@@ -90,3 +90,31 @@ def remove_header_footer_from_key(key):
     if "-----END" in key_lines[-1]:
         key_lines = key_lines[:-1]
     return "".join(key_lines)
+
+
+def get_storage_provider_endpoint(cluster):
+    """
+    Get get_storage_provider_endpoint
+
+    Args:
+        cluster (str): cluster name
+
+    Returns:
+        str: value of storage provider endpoint
+
+    """
+
+    # TODO: p2 task to implement below functionality
+    #  Use multicluster implementation to use
+    #  kubeconfig as per cluster name and
+    #  extract value of storage_provider_endpoint
+    #  handle invalid cluster name in implementation
+    #  validate Return String storage provider endpoint:
+    #     1. raise Error if storage_provider_endpoint is
+    #        not found in cluster yaml
+    #     2. warning if storage cluster is not ready
+    #     and storage_provider_endpoint is available in
+    #     storagecluster yaml .
+    #  For now use hardcoded value from config with key
+    #  storage_provider_endpoint:
+    return config.DEPLOYMENT.get("storage_provider_endpoint", "")
