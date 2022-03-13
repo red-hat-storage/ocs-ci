@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, tier2
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 
@@ -15,18 +15,17 @@ class TestMultiCloud(MCGTest):
     Test the multi cloud functionality
     """
 
-    @tier1
     @pytest.mark.parametrize(
         argnames="backingstore_tup",
         argvalues=[
-            pytest.param(("cli", {"aws": [(1, "eu-central-1")]})),
-            pytest.param(("oc", {"aws": [(1, "eu-central-1")]})),
-            pytest.param(("cli", {"azure": [(1, None)]})),
-            pytest.param(("oc", {"azure": [(1, None)]})),
-            pytest.param(("cli", {"gcp": [(1, None)]})),
-            pytest.param(("oc", {"gcp": [(1, None)]})),
-            pytest.param(("cli", {"ibmcos": [(1, None)]})),
-            pytest.param(("oc", {"ibmcos": [(1, None)]})),
+            pytest.param(("cli", {"aws": [(1, "eu-central-1")]}), marks=tier2),
+            pytest.param(("oc", {"aws": [(1, "eu-central-1")]}), marks=tier1),
+            pytest.param(("cli", {"azure": [(1, None)]}), marks=tier1),
+            pytest.param(("oc", {"azure": [(1, None)]}), marks=tier2),
+            pytest.param(("cli", {"gcp": [(1, None)]}), marks=tier2),
+            pytest.param(("oc", {"gcp": [(1, None)]}), marks=tier2),
+            pytest.param(("cli", {"ibmcos": [(1, None)]}), marks=tier2),
+            pytest.param(("oc", {"ibmcos": [(1, None)]}), marks=tier2),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -54,14 +53,14 @@ class TestMultiCloud(MCGTest):
     @pytest.mark.parametrize(
         argnames="backingstore_tup",
         argvalues=[
-            pytest.param(("cli", {"aws": [(1, "eu-central-1")]})),
-            pytest.param(("oc", {"aws": [(1, "eu-central-1")]})),
-            pytest.param(("cli", {"azure": [(1, None)]})),
-            pytest.param(("oc", {"azure": [(1, None)]})),
-            pytest.param(("cli", {"gcp": [(1, None)]})),
-            pytest.param(("oc", {"gcp": [(1, None)]})),
-            pytest.param(("cli", {"ibmcos": [(1, None)]})),
-            pytest.param(("oc", {"ibmcos": [(1, None)]})),
+            pytest.param(("cli", {"aws": [(1, "eu-central-1")]}), marks=tier2),
+            pytest.param(("oc", {"aws": [(1, "eu-central-1")]}), marks=tier1),
+            pytest.param(("cli", {"azure": [(1, None)]}), marks=tier1),
+            pytest.param(("oc", {"azure": [(1, None)]}), marks=tier2),
+            pytest.param(("cli", {"gcp": [(1, None)]}), marks=tier2),
+            pytest.param(("oc", {"gcp": [(1, None)]}), marks=tier2),
+            pytest.param(("cli", {"ibmcos": [(1, None)]}), marks=tier2),
+            pytest.param(("oc", {"ibmcos": [(1, None)]}), marks=tier2),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
