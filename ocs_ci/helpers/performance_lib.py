@@ -1,13 +1,28 @@
+import json
 import os
 import logging
 import subprocess
+import time
 from datetime import datetime
+
+import re
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
+DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
+interface_data = {
+    constants.CEPHBLOCKPOOL: {
+        "prov": "csi-rbdplugin-provisioner",
+        "csi_cnt": "csi-rbdplugin",
+    },
+    constants.CEPHFILESYSTEM: {
+        "prov": "csi-cephfsplugin-provisioner",
+        "csi_cnt": "csi-cephfsplugin",
+    },
+}
 
 
 def write_fio_on_pod(pod_obj, file_size):
@@ -154,12 +169,7 @@ def get_logfile_names(interface):
     if "Error in command" in pods:
         raise Exception("Can not get csi controller pod")
 
-    provisioning_name = "csi-cephfsplugin-provisioner"
-    if (
-        interface == constants.CEPHBLOCKPOOL
-        or interface == constants.CEPHBLOCKPOOL_THICK
-    ):
-        provisioning_name = "csi-rbdplugin-provisioner"
+    provisioning_name = interface_data[interface]["prov"]
 
     for line in pods:
         if provisioning_name in line:
@@ -262,14 +272,9 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
 
     pv_name = pvc_obj.backed_pv
 
-    cnt_names = {
-        constants.CEPHFILESYSTEM: "csi-cephfsplugin",
-        constants.CEPHBLOCKPOOL: "csi-rbdplugin",
-    }
-
     # Reading the CSI provisioner logs
     log_names = get_logfile_names(interface)
-    logs = read_csi_logs(log_names, cnt_names[interface], start_time)
+    logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
 
     st = None
     et = None
@@ -375,3 +380,210 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
         f"CSI time for {operation} bulk of {len(pvc_objs)} pvcs is {total_time} seconds"
     )
     return total_time
+
+
+def extruct_timestamp_from_log(line):
+    """
+    Excructing from the log line the timestamp of a message. adidng the current year
+    since it is not exists in the log line.
+
+    Args:
+
+        line (str): a log line.
+
+    Return:
+         str: string of the timestamp from the log line.
+
+    """
+    this_year = str(datetime.now().year)
+    mon_day = " ".join(line.split(" ")[0:2])
+    results = f"{this_year} {mon_day}"
+    logger.debug(f"The Results timestamp is : {results}")
+    return results
+
+
+def calculate_operation_time(name, times):
+    """
+    Calculation the total time in seconds.
+
+    Args:
+        name (str): The name of object to calculate the time - for logging only
+        times (dict): Dictioanry of {'start': datetime, 'end': datetime, 'total': int}
+
+    Return:
+        float: the number of seconds between start time to end time.
+    """
+    if times["start"] is None or times["end"] is None:
+        err_msg = f"Start or End time for {name} didn't found in the log"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+    st = datetime.strptime(times["start"], DATE_TIME_FORMAT)
+    logger.debug(f"Start time is {times['start']} - {st} seconds")
+    et = datetime.strptime(times["end"], DATE_TIME_FORMAT)
+    logger.debug(f"End time is {times['end']} - {et} seconds")
+
+    # incase of start time is befor midnight and end time is after
+    if et < st:
+        et += 86400  # Total seconds in a day : 24H * 60Min * 60Sc.
+    total_time = float("{:.3f}".format((et - st).total_seconds()))
+    logger.debug(f"Total Time is : {total_time} Seconds")
+    return total_time
+
+
+def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op="all"):
+    """
+    Get the starting/ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        start_time (time): the starttime of the test to reduce log size reading
+        time_type (str): the type of time to mesure : csi / total / all (csi & total)
+        op (str) : the operation to mesure : create / delete / all (create & delete)
+
+    Returns:
+        dictioanry: all creation and deletion times for each pvc.
+
+    """
+
+    log_names = get_logfile_names(interface)
+
+    if time_type.lower() in ["all", "total"]:
+        logger.info("Reading the Provisioner logs")
+        prov_logs = read_csi_logs(log_names, "csi-provisioner", start_time)
+    if time_type.lower() in ["all", "csi"]:
+        logger.info("Reading the CSI only logs")
+        csi_logs = read_csi_logs(
+            log_names, interface_data[interface]["csi_cnt"], start_time
+        )
+
+    # Initializing the results dictionary
+    results = {}
+    for i in range(0, len(pvc_name)):
+        results[pvc_name[i].name] = {
+            "create": {"start": None, "end": None, "time": None},
+            "delete": {"start": None, "end": None, "time": None},
+            "csi_create": {"start": None, "end": None, "time": None},
+            "csi_delete": {"start": None, "end": None, "time": None},
+        }
+    # Getting times from Provisioner log - if needed
+    if prov_logs:
+        for sublog in prov_logs:
+            for line in sublog:
+                for i in range(0, len(pvc_name)):
+                    name = pvc_name[i].name
+                    pv_name = pvc_name[i].backed_pv
+                    if op in ["all", "create"]:
+                        if re.search(f"provision.*{name}.*started", line):
+                            results[name]["create"][
+                                "start"
+                            ] = extruct_timestamp_from_log(line)
+                        if re.search(f"provision.*{name}.*succeeded", line):
+                            results[name]["create"]["end"] = extruct_timestamp_from_log(
+                                line
+                            )
+                            results[name]["create"]["time"] = calculate_operation_time(
+                                name, results[name]["create"]
+                            )
+                    if op in ["all", "delete"]:
+                        if re.search(f'delete "{pv_name}": started', line):
+                            results[name]["delete"][
+                                "start"
+                            ] = extruct_timestamp_from_log(line)
+                        if re.search(f'delete "{pv_name}": succeeded', line):
+                            results[name]["delete"]["end"] = extruct_timestamp_from_log(
+                                line
+                            )
+                            results[name]["delete"]["time"] = calculate_operation_time(
+                                name, results[name]["delete"]
+                            )
+
+    # Getting times from CSI log - if needed
+    del_pv_names = []
+    for i in range(0, len(pvc_name)):
+        del_pv_names.append("")
+
+    if csi_logs:
+        for sublog in csi_logs:
+            for line in sublog:
+                for i in range(0, len(pvc_name)):
+                    name = pvc_name[i].name
+                    pv_name = pvc_name[i].backed_pv
+
+                    if "generated volume id" in line.lower() and pv_name in line:
+                        del_pv_names[i] = line.split("(")[1].split(")")[0]
+                    if op in ["all", "create"]:
+                        if f"Req-ID: {pv_name} GRPC call:" in line:
+                            results[name]["csi_create"][
+                                "start"
+                            ] = extruct_timestamp_from_log(line)
+                        if f"Req-ID: {pv_name} GRPC response:" in line:
+                            results[name]["csi_create"][
+                                "end"
+                            ] = extruct_timestamp_from_log(line)
+                            results[name]["csi_create"][
+                                "time"
+                            ] = calculate_operation_time(
+                                name, results[name]["csi_create"]
+                            )
+                    if op in ["all", "delete"]:
+                        if del_pv_names[i]:
+                            if f"Req-ID: {del_pv_names[i]} GRPC call:" in line:
+                                results[name]["csi_delete"][
+                                    "start"
+                                ] = extruct_timestamp_from_log(line)
+                            if f"Req-ID: {del_pv_names[i]} GRPC response:" in line:
+                                results[name]["csi_delete"][
+                                    "end"
+                                ] = extruct_timestamp_from_log(line)
+                                results[name]["csi_delete"][
+                                    "time"
+                                ] = calculate_operation_time(
+                                    name, results[name]["csi_delete"]
+                                )
+
+    logger.debug(f"All results are : {json.dumps(results, indent=3)}")
+    return results
+
+
+def wait_for_resource_bulk_status(
+    resource, resource_count, namespace, status, timeout=60, sleep_time=3
+):
+    """
+    Waiting for bulk of resources (from the same type) to reach the desire status
+
+    Args:
+        resource (str): the resoure type to wait for
+        resource_count (int):  the number of rusource to wait for - to wait for deleteion
+            of resources, this should be '0'
+        namespace (str): the namespace where the resources should be
+        status (str): the status of the resources to be in.
+        timeout (int): how much time to wait for the resources (in sec.)- default is 1 Minute
+        sleep_time (int): how much time to wait between each iteration check - default is 3 sec.
+
+    Return:
+        bool : 'True' if all resources reach the desire state
+
+    Raise:
+        Exception : in case of not all resources reach the desire state.
+
+    """
+    while timeout >= 0:
+        results = 0
+        for line in run_oc_command(f"get {resource}", namespace=namespace):
+            if status in line:
+                results += 1
+        if results == resource_count:
+            return True
+        else:
+            logger.info(
+                f"{results} {resource} out of {resource_count} are in {status} state !"
+            )
+            logger.info(f"wait {sleep_time} sec for next iteration")
+            time.sleep(sleep_time)
+            timeout -= sleep_time
+
+    err_msg = f"{resource.upper()} failed reaching {status} on time"
+    logger.error(err_msg)
+    raise Exception(err_msg)
