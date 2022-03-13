@@ -4523,19 +4523,3 @@ def vault_tenant_sa_setup_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
-
-
-@pytest.fixture(scope="function", autouse=True)
-def collect_mg_rules():
-    config.REPORTING["ocs_must_gather_collection"] = True
-    config.REPORTING["ocp_must_gather_collection"] = False
-
-
-@pytest.fixture()
-def disable_ocs_mg_collection_on_failure():
-    config.REPORTING["ocs_must_gather_collection"] = False
-
-
-@pytest.fixture()
-def enable_ocp_mg_collection_on_failure():
-    config.REPORTING["ocp_must_gather_collection"] = True
