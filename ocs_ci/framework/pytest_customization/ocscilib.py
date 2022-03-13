@@ -622,8 +622,14 @@ def pytest_runtest_makereport(item, call):
     # we only look at actual failing test calls, not setup/teardown
     if rep.failed and ocsci_config.RUN.get("cli_params").get("collect-logs"):
         test_case_name = item.name
-        ocp_logs_collection = ocsci_config.REPORTING.get("ocp_must_gather_collection")
-        ocs_logs_collection = ocsci_config.REPORTING.get("ocs_must_gather_collection")
+        ocp_logs_collection = (
+            True if any(x in item.location[0] for x in ["ecosystem"]) else False
+        )
+        ocs_logs_collection = (
+            False
+            if any(x in item.location[0] for x in ["_ui", "must_gather"])
+            else True
+        )
         mcg_logs_collection = (
             True if any(x in item.location[0] for x in ["mcg", "ecosystem"]) else False
         )
