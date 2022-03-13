@@ -295,6 +295,9 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
                 failure_domain, new_ocs_node
             )
+            assert (
+                self.osd_worker_node
+            ), "Didn't find another osd node in the same rack or zone"
         else:
             osd_node_names = get_osd_running_nodes()
             self.osd_worker_node = get_node_objs(osd_node_names)[0]

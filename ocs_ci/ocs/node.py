@@ -2213,6 +2213,7 @@ def get_other_worker_nodes_in_same_rack_or_zone(
 
     """
     node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    log.info(f"The node {node_obj.name} rack or zone is {node_rack_or_zone}")
     wnode_names = node_names_to_search or get_worker_nodes()
     other_wnode_names = [name for name in wnode_names if name != node_obj.name]
     other_wnodes = get_node_objs(other_wnode_names)
@@ -2222,6 +2223,9 @@ def get_other_worker_nodes_in_same_rack_or_zone(
         for wnode in other_wnodes
         if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
     ]
+    log.info(
+        f"other worker nodes in the same rack or zone are: {other_wnodes_in_same_rack_or_zone}"
+    )
     return other_wnodes_in_same_rack_or_zone
 
 
@@ -2240,6 +2244,7 @@ def get_another_osd_node_in_same_rack_or_zone(
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The osd node in the same rack or zone of the given node.
+            If not found, it returns None.
 
     """
     osd_node_names = get_osd_running_nodes()
