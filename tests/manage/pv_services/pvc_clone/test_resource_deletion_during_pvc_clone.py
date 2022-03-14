@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     skipif_ocp_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers import disruption_helpers
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4c
+@skipif_managed_service
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @ignore_leftover_label(constants.drain_canary_pod_label)
