@@ -80,7 +80,7 @@ class DeploymentFactory(object):
 
             self.cls_map["rhv_ipi"] = RHVIPI
         elif self.deployment_platform == constants.ACM_OCP_DEPLOYMENT:
-            from .acm import OCPDeployWithACM
+            from .multicluster_deployment import OCPDeployWithACM
 
             self.cls_map["acm_ocp_deploy"] = OCPDeployWithACM
 
