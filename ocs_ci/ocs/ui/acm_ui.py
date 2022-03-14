@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 
 
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
@@ -10,6 +11,7 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
     get_running_cluster_id,
     expose_ocp_version,
+    run_cmd,
 )
 from ocs_ci.ocs.constants import (
     PLATFORM_XPATH_MAP,
@@ -20,7 +22,9 @@ from ocs_ci.ocs.constants import (
     SSH_PUB_KEY,
     ACM_OCP_RELEASE_IMG_URL_PREFIX,
     ACM_VSPHERE_NETWORK,
-    ACM_CLUSTER_DEPLOY_WAIT_TIME,
+    ACM_CLUSTER_DEPLOY_TIMEOUT,
+    ACM_CLUSTER_DEPLOYMENT_LABEL_KEY,
+    ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY,
 )
 from ocs_ci.framework import config
 
@@ -137,6 +141,13 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         self.cluster_conf = cluster_conf
         self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
         self.cluster_path = self.cluster_conf.ENV_DATA["cluster_path"]
+        self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
+        self.deployment_status = None
+        self.cluster_deploy_timeout = self.cluster_conf.ENV_DATA(
+            "cluster_deploy_timeout", ACM_CLUSTER_DEPLOY_TIMEOUT
+        )
+        self.deployment_failed_reason = None
+        self.deployment_start_time = 0
 
     def create_cluster_prereq(self):
         raise NotImplementedError("Child class has to implement this method")
@@ -174,6 +185,99 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
             self.platform_credential_name,
         )
         self.do_click(locator=credential)
+
+    def goto_cluster_details_page(self):
+        self.navigate_clusters_page()
+        locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
+        self.do_click(locator=locator)
+        self.do_click(locator=self.acm_page_nav["cc_cluster_details_page"])
+
+    def get_deployment_status(self):
+        self.goto_cluster_details_page()
+        if self.acm_cluster_status_creating():
+            self.deployment_status = "creating"
+        elif self.acm_cluster_status_ready():
+            self.deployment_status = "ready"
+        elif self.acm_cluster_status_failed():
+            self.deployment_status = "failed"
+        else:
+            self.deployment_status = "unknown"
+
+        elapsed_time = int(time.time() - self.deployment_start_time)
+        if elapsed_time > self.cluster_deploy_timeout:
+            if self.deployment_status == "creating":
+                self.deployment_status = "failed"
+                self.deployment_failed_reason = "deploy_timeout"
+
+    def wait_for_cluster_create(self):
+
+        # Wait for status creating
+        staus_check_timeout = 300
+        while (
+            not self.acm_cluster_status_ready(staus_check_timeout)
+            and self.cluster_deploy_timeout >= 1
+        ):
+            self.cluster_deploy_timeout -= staus_check_timeout
+            if self.acm_cluster_status_creating():
+                log.info(f"Cluster {self.cluster_name} is in 'Creating' phase")
+            else:
+                self.acm_bailout_if_failed()
+        if self.acm_cluster_status_ready():
+            log.info(
+                f"Cluster create successful, Cluster {self.cluster_name} is in 'Ready' state"
+            )
+
+    def acm_bailout_if_failed(self):
+        if self.acm_cluster_status_failed():
+            raise ACMClusterDeployException("Deployment is in 'FAILED' state")
+        return
+
+    def acm_cluster_status_failed(self, timeout=5):
+        status_xpath = format_locator(
+            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH),
+            "Failed",
+        )
+        return self.wait_until_expected_text_is_found(status_xpath, self.By.XPATH)
+
+    def acm_cluster_status_ready(self, timeout=300):
+        status_xpath = format_locator(
+            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH), "Ready"
+        )
+        return self.wait_until_expected_text_is_found(status_xpath, timeout=timeout)
+
+    def acm_cluster_status_creating(self, timeout=300):
+        status_xpath = self.acm_page_nav["cc_cluster_status_page_status_creating"]
+        return self.check_element_presence(status_xpath, timeout)
+
+    def download_cluster_conf_files(self):
+        """
+        Download install-config and kubeconfig to cluster dir
+
+        """
+        if not os.path.exists(os.path.expanduser(f"{self.cluster_path}")):
+            os.mkdir(os.path.expanduser(f"{self.cluster_path}"))
+
+        # create auth dir inside cluster dir
+        auth_dir = os.path.join(os.path.expanduser(f"{self.cluster_path}"), "auth")
+        if not os.path.exists(auth_dir):
+            os.mkdir(auth_dir)
+
+        self.download_kubeconfig(auth_dir)
+
+    def download_kubeconfig(self, authdir):
+        get_kubeconf_secret_cmd = (
+            f"$(oc get secret -o name -n {self.cluster_name} "
+            f"-l {ACM_CLUSTER_DEPLOYMENT_LABEL_KEY}={self.cluster_name} "
+            f"-l {ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY}=kubeconfig)"
+        )
+        extract_cmd = (
+            f"oc extract -n {self.cluster_name} "
+            f"{get_kubeconf_secret_cmd} "
+            f"--to={authdir} --confirm"
+        )
+        run_cmd(extract_cmd)
+        if not os.path.exists(os.path.join(authdir, "kubeconfig")):
+            raise ACMClusterDeployException("Could not find the kubeconfig")
 
     def create_cluster(self, cluster_config=None):
         """
@@ -293,7 +397,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.click_next_button()
         self.do_click(locator=self.acm_page_nav["cc_provider_creds_vsphere_add_button"])
         credential_table_entry = format_locator(
-            self.acm_page_nav["cc_cred_table_entry"], self.platform_credential_name
+            self.acm_page_nav["cc_table_entry"], self.platform_credential_name
         )
         if not self.check_element_presence(credential_table_entry):
             raise ACMClusterDeployException("Could not create credentials for vsphere")
@@ -301,6 +405,15 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             log.info(
                 f"vsphere credential successfully created {self.platform_credential_name}"
             )
+        # Get the ips in prereq itself
+        from ocs_ci.deployment import vmware
+
+        # Switch context to cluster which we are about to create
+        prev_ctx = config.cur_index
+        config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
+        self.ips = vmware.assign_ips(2)
+        vmware.create_dns_records(self.ips)
+        config.switch_ctx(prev_ctx)
 
     def create_cluster(self):
         """
@@ -311,6 +424,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         4. Proxy
         5. Automation
         6. Review
+
+        Raises:
+            ACMClusterDeployException: If deployment failed for the cluster
 
         """
         self.click_platform_and_credentials()
@@ -328,59 +444,27 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # We are at Review page
         # Click on create
         self.do_click(locator=self.acm_page_nav["cc_create_button"])
+        self.deployment_start_time = time.time()
         # We will be redirect to 'Details' page which has cluster deployment progress
-        try:
-            self.wait_for_cluster_create()
-        except ACMClusterDeployException:
-            log.error(
-                f"Failed to create OCP cluster {self.cluster_conf.ENV_DATA['cluster_name']}"
-            )
-            raise
-        # Download kubeconfig and install-config file
-        self.download_cluster_conf_files()
-
-    def wait_for_cluster_create(self):
-        cluster_deploy_wait_time = self.cluster_conf.ENV_DATA(
-            "cluster_deploy_wait_time", ACM_CLUSTER_DEPLOY_WAIT_TIME
-        )
-
-        # Wait for status creating
-        staus_check_timeout = 300
-        while (
-            not self.acm_cluster_status_ready(staus_check_timeout)
-            and cluster_deploy_wait_time >= 1
-        ):
-            cluster_deploy_wait_time -= staus_check_timeout
-            if self.acm_cluster_status_creating():
-                log.info(f"Cluster {self.cluster_name} is in 'Creating' phase")
-            else:
-                self.acm_bailout_if_failed()
-        if self.acm_cluster_status_ready():
-            log.info(
-                f"Cluster create successful, Cluster {self.cluster_name} is in 'Ready' state"
-            )
-
-    def acm_bailout_if_failed(self):
-        if self.acm_cluster_status_failed():
-            raise ACMClusterDeployException("Deployment is in 'FAILED' state")
-        return
-
-    def acm_cluster_status_failed(self, timeout=5):
-        status_xpath = format_locator(
-            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH),
-            "Failed",
-        )
-        return self.wait_until_expected_text_is_found(status_xpath, self.By.XPATH)
-
-    def acm_cluster_status_ready(self, timeout=300):
-        status_xpath = format_locator(
-            (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH), "Ready"
-        )
-        return self.wait_until_expected_text_is_found(status_xpath, timeout=timeout)
-
-    def acm_cluster_status_creating(self, timeout=300):
-        status_xpath = self.acm_page_nav["cc_cluster_status_page_status_creating"]
-        return self.check_element_presence(status_xpath, timeout)
+        if self.deploy_sync_mode == "sync":
+            try:
+                self.wait_for_cluster_create()
+            except ACMClusterDeployException:
+                log.error(
+                    f"Failed to create OCP cluster {self.cluster_conf.ENV_DATA['cluster_name']}"
+                )
+                raise
+            # Download kubeconfig and install-config file
+            self.download_cluster_conf_files()
+        else:
+            # Async mode of deployment, so just return to caller
+            # we will just wait for status 'Creating' and then return
+            if not self.acm_cluster_status_creating(timeout=600):
+                raise ACMClusterDeployException(
+                    f"Cluster {self.cluster_name} didn't reach 'Creating' phase"
+                )
+            self.deployment_status = "Creating"
+            return
 
     def fill_network_info(self):
         """
@@ -389,16 +473,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         2. API VIP
         3. Ingress VIP
         """
-        from ocs_ci.deployment import vmware
-
-        # Switch context to cluster which we are about to create
-        prev_ctx = config.cur_index
-        config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
-        self.ips = vmware.assign_ips(2)
-        vmware.create_dns_records(self.ips)
-        self.vsphere_network = config.ENV_DATA.get("vm_network", ACM_VSPHERE_NETWORK)
-        config.switch_ctx(prev_ctx)
-
+        self.vsphere_network = self.cluster_conf.ENV_DATA.get(
+            "vm_network", ACM_VSPHERE_NETWORK
+        )
         vsphere_network = {
             self.acm_page_nav["cc_vsphere_network_name"]: self.vsphere_network,
             self.acm_page_nav["cc_api_vip"]: f"{self.ips[0]}",
@@ -430,38 +507,8 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
         return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}{vers}"
 
-    def download_cluster_conf_files(self):
-        """
-        Download install-config and kubeconfig to cluster dir
 
-        """
-        if not os.path.exists(os.path.expanduser(f"{self.cluster_path}")):
-            os.mkdir(os.path.expanduser(f"{self.cluster_path}"))
-
-        # create auth dir inside cluster dir
-        auth_dir = os.path.join(os.path.expanduser(f"{self.cluster_path}"), "auth")
-        if not os.path.exists(auth_dir):
-            os.mkdir(auth_dir)
-
-        self.do_click(
-            self.acm_page_nav["cc_cluster_status_page_download_config_dropdown"]
-        )
-        # Get kubeconfig
-        self.do_click(
-            self.acm_page_nav["cc_cluster_status_page_download_config_kubeconfig"]
-        )
-        # Get install-config
-        self.do_click(
-            self.acm_page_nav["cc_cluster_status_page_download_config_dropdown"]
-        )
-        self.do_click(
-            self.acm_page_nav["cc_cluster_status_page_download_install_config"]
-        )
-
-        # Todo: Move browser downloaded config files to cluster dirs
-
-
-class dispatcher(object):
+class ACMOCPDeploymentFactory(object):
     def __init__(self):
         # All platform specific classes should have map here
         self.platform_map = {"vsphereipi": ACMOCPPlatformVsphereIPI}
@@ -471,4 +518,4 @@ class dispatcher(object):
             f"{cluster_config.ENV_DATA['platform']}"
             f"{cluster_config.ENV_DATA['deployment_type']}"
         )
-        return self.platform_map[platform_deployment]
+        return self.platform_map[platform_deployment](cluster_config)

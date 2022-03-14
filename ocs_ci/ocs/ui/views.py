@@ -540,7 +540,8 @@ acm_configuration = {
         "//a[normalize-space()='kubeconfig']",
         By.XPATH,
     ),
-    "cc_cred_table_entry": ("//a[normalize-space()={}]", By.XPATH),
+    "cc_table_entry": ("//a[normalize-space()={}]", By.XPATH),
+    "cc_cluster_details_page": ("//div[text()='Details']", By.XPATH),
 }
 
 add_capacity = {

@@ -13,7 +13,10 @@ class DeploymentFactory(object):
     """
 
     def __init__(self):
-        self.deployment_platform = config.ENV_DATA["platform"].lower()
+        if config.ENV_DATA.get("acm_ocp_deploy"):
+            self.deployment_platform = constants.ACM_OCP_DEPLOYMENT
+        else:
+            self.deployment_platform = config.ENV_DATA["platform"].lower()
         self.cls_map = {}
         # A map of all existing deployments and respective classes
         # should be put here, but only in the condition if that platform is used.
@@ -76,6 +79,10 @@ class DeploymentFactory(object):
             from .rhv import RHVIPI
 
             self.cls_map["rhv_ipi"] = RHVIPI
+        elif self.deployment_platform == constants.ACM_OCP_DEPLOYMENT:
+            from .acm import OCPDeployWithACM
+
+            self.cls_map["acm_ocp_deploy"] = OCPDeployWithACM
 
     def get_deployment(self):
         """
@@ -84,6 +91,9 @@ class DeploymentFactory(object):
         deployment_platform may look like 'aws', 'vmware', 'baremetal'
         deployment_type may be like 'ipi' or 'upi'
         """
+        if config.ENV_DATA.get("acm_ocp_deployment"):
+            logger.info("Deployment will be done through ACM platform")
+            return self.cls_map[constants.ACM_OCP_DEPLOYMENT]()
         deployment_type = config.ENV_DATA["deployment_type"]
         flexy_deployment = config.ENV_DATA["flexy_deployment"]
         deployment_cls_key = (

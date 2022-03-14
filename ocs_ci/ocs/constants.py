@@ -772,6 +772,7 @@ IBM_PLATFORM = "ibm"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
+ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
     BAREMETAL_PLATFORM,
@@ -1676,7 +1677,9 @@ ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp_"
 # example release image url : quay.io/openshift-release-dev/ocp-release:4.9.23-x86_64
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "quay.io/openshift-release-dev/"
 ACM_VSPHERE_NETWORK = "VM Network"
-ACM_CLUSTER_DEPLOY_WAIT_TIME = 2700  # 45 minutes
+ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
+ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
+ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
