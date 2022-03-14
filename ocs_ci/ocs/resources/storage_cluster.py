@@ -638,8 +638,6 @@ def osd_encryption_verification():
             luks_devices = get_encrypted_osd_devices(node_obj, node)
             for luks_device_name in luks_devices:
                 luks_device_name = luks_device_name.strip()
-                if luks_device_name == "":
-                    continue
                 log.info(
                     f"Checking luks header label on Luks device {luks_device_name} for node {node}"
                 )
