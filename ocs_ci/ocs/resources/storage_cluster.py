@@ -4,7 +4,6 @@ StorageCluster related functionalities
 import logging
 import tempfile
 import yaml
-import time
 
 from jsonschema import validate
 
@@ -34,7 +33,8 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.node import (
     get_osds_per_node,
     add_new_disk_for_vsphere,
-    get_worker_nodes,
+    get_osd_running_nodes,
+    get_encrypted_osd_devices,
 )
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
@@ -630,46 +630,33 @@ def osd_encryption_verification():
 
     if ocs_version > version.VERSION_4_6:
         log.info("Verify luks header label for encrypted devices")
-        worker_nodes = get_worker_nodes()
-        logging.info("NODES: {}".format(worker_nodes))
+        worker_nodes = get_osd_running_nodes()
         failures = 0
         failure_message = ""
         node_obj = OCP(kind="node")
 
-        for n in worker_nodes:
-            luks_devices = node_obj.exec_oc_debug_cmd(
-                node=n,
-                cmd_list=[
-                    "lsblk -o NAME,TYPE,FSTYPE | grep -E 'disk.*crypto_LUKS' | awk '{print $1}'"
-                ],
-            ).split("\n")
-
+        for node in worker_nodes:
+            luks_devices = get_encrypted_osd_devices(node_obj, node)
             for luks_device_name in luks_devices:
                 luks_device_name = luks_device_name.strip()
                 if luks_device_name == "":
                     continue
-                logging.info(
-                    "Checking luks header label on Luks device {} for node {}".format(
-                        luks_device_name, n
-                    )
+                log.info(
+                    f"Checking luks header label on Luks device {luks_device_name} for node {node}"
                 )
-
-                logging.info("Waiting for 5 seconds")
-                time.sleep(5)
-
                 cmd = "cryptsetup luksDump /dev/" + str(luks_device_name)
-                cmd_out = node_obj.exec_oc_debug_cmd(node=n, cmd_list=[cmd])
+                cmd_out = node_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
 
                 if "(no label)" in str(cmd_out) or "(no subsystem)" in str(cmd_out):
                     failures += 1
-                    failure_message += "\nNo label found on Luks header information for node {}\n".format(
-                        n
+                    failure_message += (
+                        f"\nNo label found on Luks header information for node {node}\n"
                     )
 
         if failures != 0:
-            logging.error(failure_message)
+            log.error(failure_message)
             raise ValueError("Luks header label is not found")
-        logging.info("Luks header info found for all the encrypted osds")
+        log.info("Luks header info found for all the encrypted osds")
 
 
 def verify_kms_ca_only():

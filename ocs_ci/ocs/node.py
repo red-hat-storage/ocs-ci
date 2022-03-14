@@ -1993,3 +1993,24 @@ def add_new_nodes_and_label_after_node_failure_ipi(
     """
     machine.change_current_replica_count_to_ready_replica_count(machineset_name)
     return add_new_node_and_label_it(machineset_name, num_nodes, mark_for_ocs_label)
+
+
+def get_encrypted_osd_devices(node_obj, node):
+    """
+    Returns list of encrypted osd names as output for a node
+
+    Args:
+        node_obj: OCP object of kind node
+        node: node name
+
+    Returns:
+        List of encrypted osd device names
+    """
+    luks_devices_out = node_obj.exec_oc_debug_cmd(
+        node=node,
+        cmd_list=[
+            "lsblk -o NAME,TYPE,FSTYPE | grep -E 'disk.*crypto_LUKS' | awk '{print $1}'"
+        ],
+    ).split("\n")
+    luks_devices = [device for device in luks_devices_out if device != ""]
+    return luks_devices
