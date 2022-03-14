@@ -132,18 +132,16 @@ def add_capacity_setup(add_nodes):
         num_of_expected_wnodes = 6
         wnodes = get_worker_nodes()
         num_of_wnodes = len(wnodes)
-        logging.info(
+        log.info(
             f"We have {number_of_osd_pods_before} OSDs in the cluster, "
             f"and {num_of_wnodes} worker nodes in the cluster"
         )
         if num_of_wnodes < num_of_expected_wnodes:
             num_of_wnodes_to_add = num_of_expected_wnodes - num_of_wnodes
-            logging.info(
-                f"Adding more {num_of_wnodes_to_add} worker nodes to the cluster"
-            )
+            log.info(f"Adding more {num_of_wnodes_to_add} worker nodes to the cluster")
             add_nodes(ocs_nodes=True, node_count=num_of_wnodes_to_add)
 
         wnodes_not_in_ocs = get_worker_nodes_not_in_ocs()
         if wnodes_not_in_ocs:
-            logging.info("Label the worker nodes that are not in OCS")
+            log.info("Label the worker nodes that are not in OCS")
             label_nodes(wnodes_not_in_ocs)

@@ -303,3 +303,75 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
 
     logger.info(f"CSI time for pvc {pvc_obj.name} is {total_time} seconds")
     return total_time
+
+
+def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
+    """
+
+    Measure PVC time (create / delete) in the CSI driver
+
+    Args:
+        interface (str) : an interface (RBD or CephFS) to run on
+        pvc_objs (list) : list of the PVC objects which we want to mesure
+        operation (str): which operation to mesure - 'create' / 'delete'
+        start_time (str): Formatted time from which and on to search the relevant logs
+
+    Returns:
+        (float): time in seconds which took the CSI to hendale the PVC
+
+    """
+
+    st = []
+    et = []
+
+    cnt_names = {
+        constants.CEPHFILESYSTEM: "csi-cephfsplugin",
+        constants.CEPHBLOCKPOOL: "csi-rbdplugin",
+    }
+
+    # Reading the CSI provisioner logs
+    log_names = get_logfile_names(interface)
+    logs = read_csi_logs(log_names, cnt_names[interface], start_time)
+
+    for pvc in pvc_objs:
+        pv_name = pvc.backed_pv
+        single_st = None
+        single_et = None
+
+        for sublog in logs:
+            for line in sublog:
+                if (
+                    operation == "delete"
+                    and "generated volume id" in line.lower()
+                    and pv_name in line
+                ):
+                    pv_name = line.split("(")[1].split(")")[0]
+                if f"Req-ID: {pv_name} GRPC call:" in line:
+                    single_st = string_to_time(line.split(" ")[1])
+                if f"Req-ID: {pv_name} GRPC response:" in line:
+                    single_et = string_to_time(line.split(" ")[1])
+
+        if single_st is None:
+            err_msg = f"Can not find CSI start time of {pvc.name}"
+            logger.error(err_msg)
+            raise Exception(err_msg)
+
+        if single_et is None:
+            err_msg = f"Can not find CSI end time of {pvc.name}"
+            logger.error(err_msg)
+            raise Exception(err_msg)
+
+        st.append(single_st)
+        et.append(single_et)
+
+    st.sort()
+    et.sort()
+    total_time = (et[-1] - st[0]).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
+    logger.info(
+        f"CSI time for {operation} bulk of {len(pvc_objs)} pvcs is {total_time} seconds"
+    )
+    return total_time

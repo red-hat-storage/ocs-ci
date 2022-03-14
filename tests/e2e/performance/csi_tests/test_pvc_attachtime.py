@@ -1,11 +1,14 @@
+"""
+Testing the POD start time.
+In this test we are creating a PVC, then creating a POD which attache to this PVC.
+the time is mesure from the POD yaml file : started_time - creation_time.
+"""
 import logging
+import os
 import pytest
 import statistics
-from uuid import uuid4
 
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import performance
-from ocs_ci.helpers.helpers import get_full_test_logs_path, pod_start_time
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
@@ -41,9 +44,6 @@ class ResultsAnalyse(PerfResult):
         self.es_connect()
 
 
-SKIP_REASON = "The test is unstable and so skipping it until it is fixed"
-
-
 @performance
 class TestPodStartTime(PASTest):
     """
@@ -57,25 +57,77 @@ class TestPodStartTime(PASTest):
         log.info("Starting the test setup")
         super(TestPodStartTime, self).setup()
         self.benchmark_name = "pvc_attach_time"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
+
+        # Pull the perf image to the nodes before the test is starting
+        helpers.pull_images(constants.PERF_IMAGE)
+
+        # Run the test in its own project (namespace)
+        self.create_test_project()
+
+        # Initialize some lists used in the test.
+        self.pod_result_list = []
+        self.start_time_dict_list = []
+        self.pvc_list = []
+
+        # The maximum acceptable attach time in sec.
+        self.acceptable_time = 30
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+        log.info("Starting the test cleanup")
+
+        # Delete All created pods
+        log.info("Delete all pods.....")
+        for pod in self.pod_result_list:
+            pod.delete()
+
+        # Felete All created pvcs
+        log.info("Delete all pvcs.....")
+        for pvc in self.pvc_list:
+            pvc.delete()
+
+        # Deleting the namespace used by the test
+        self.delete_test_project()
+
+        super(TestPodStartTime, self).teardown()
+
+    def run(self):
+        """
+        Running the test
+        """
+        for i in range(self.samples_num):
+
+            # Creating PVC to attache POD to it
+            log.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
+            pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name, size=self.pvc_size, namespace=self.namespace
+            )
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
+            self.pvc_list.append(pvc_obj)
+            log.info(f"{self.msg_prefix} PVC number {i + 1} was successfully created .")
+
+            # Create a POD and attache it the the PVC
+            try:
+                pod_obj = helpers.create_pod(
+                    interface_type=self.interface,
+                    pvc_name=pvc_obj.name,
+                    namespace=self.namespace,
+                    pod_dict_path=constants.PERF_POD_YAML,
+                )
+                helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+                pod_obj.reload()
+            except Exception as e:
+                log.error(
+                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
+                )
+                raise ex.PodNotCreated("Pod on PVC was not created.")
+            self.pod_result_list.append(pod_obj)
+
+            # Get the POD start time including the attache time
+            self.start_time_dict_list.append(helpers.pod_start_time(pod_obj))
 
     def init_full_results(self, full_results):
         """
@@ -91,63 +143,10 @@ class TestPodStartTime(PASTest):
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
         full_results.add_key("index", full_results.new_index)
+        full_results.add_key("storageclass", self.sc)
+        full_results.add_key("samples_number", self.samples_num)
+        full_results.add_key("pvc_size", self.pvc_size)
         return full_results
-
-    @pytest.fixture()
-    def pod_obj_list(
-        self,
-        interface,
-        storageclass_factory,
-        pod_factory,
-        pvc_factory,
-        teardown_factory,
-        samples_num,
-        pvc_size,
-    ):
-        """
-        Prepare sample pods for the test
-
-        Returns:
-            pod obj: List of pod instances
-
-        """
-        self.interface = interface
-        pod_result_list = []
-
-        self.msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
-        self.samples_num = samples_num
-        self.pvc_size = pvc_size
-
-        if self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc_obj = storageclass_factory(
-                interface=constants.CEPHBLOCKPOOL,
-                new_rbd_pool=True,
-                rbd_thick_provision=True,
-            )
-        else:
-            self.sc_obj = storageclass_factory(self.interface)
-
-        for i in range(samples_num):
-            logging.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
-            pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            teardown_factory(pvc_obj)
-            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
-            helpers.wait_for_resource_state(
-                pvc_obj, constants.STATUS_BOUND, timeout=timeout
-            )
-            pvc_obj.reload()
-
-            logging.info(
-                f"{self.msg_prefix} PVC number {i + 1} was successfully created ."
-            )
-
-            pod_obj = pod_factory(
-                interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
-            )
-            teardown_factory(pod_obj)
-            pod_result_list.append(pod_obj)
-
-        return pod_result_list
 
     @pytest.mark.parametrize(
         argnames=["interface", "samples_num", "pvc_size"],
@@ -160,38 +159,37 @@ class TestPodStartTime(PASTest):
                 *[constants.CEPHFILESYSTEM, 5, 5],
                 marks=pytest.mark.polarion_id("OCS-2043"),
             ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
-                marks=[
-                    pytest.mark.skip(SKIP_REASON),
-                    pytest.mark.polarion_id("OCS-2630"),
-                ],
-            ),
         ],
     )
-    def test_pod_start_time(self, pod_obj_list):
+    def test_pod_start_time(
+        self,
+        interface,
+        storageclass_factory,
+        samples_num,
+        pvc_size,
+    ):
         """
         Test to log pod start times for all the sampled pods
         """
-        # Getting the test start time
-        self.test_start_time = PASTest.get_time()
 
-        # Start of the actual test
-        start_time_dict_list = []
-        for pod in pod_obj_list:
-            start_time_dict_list.append(pod_start_time(pod))
+        self.interface = interface
+        self.samples_num = samples_num
+        self.pvc_size = pvc_size
+        self.sc_obj = storageclass_factory(self.interface)
+        self.msg_prefix = f"Interface: {self.interface}, PVC size: {self.pvc_size}."
 
-        # Getting the full path for the test logs
-        self.full_log_path = get_full_test_logs_path(cname=self)
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
-        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
-        self.full_log_path += f"-{self.sc}"
-        log.info(f"Logs file path name is : {self.full_log_path}")
-        self.results_path = get_full_test_logs_path(cname=self)
+
+        self.results_path = os.path.join("/", *self.results_path, "test_pod_start_time")
+
+        # Getting the test start time
+        self.test_start_time = self.get_time()
+
+        # The actual test start here
+        self.run()
 
         # Collecting environment information
         self.get_env_info()
@@ -200,44 +198,42 @@ class TestPodStartTime(PASTest):
         self.full_results = self.init_full_results(
             ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
         )
-        self.full_results.add_key("storageclass", self.sc)
 
-        time_measures = [t["web-server"] for t in start_time_dict_list]
+        # Verify that all sample are in the acceptable time range,
+        time_measures = [t["performance"] for t in self.start_time_dict_list]
         for index, start_time in enumerate(time_measures):
-            logging.info(
+            log.info(
                 f"{self.msg_prefix} pod number {index} start time: {start_time} seconds"
             )
-            if start_time > 30:
+            if start_time > self.acceptable_time:
                 raise ex.PerformanceException(
                     f"{self.msg_prefix} Pod number {index} start time is {start_time},"
-                    f"which is greater than 30 seconds"
+                    f"which is greater than {self.acceptable_time} seconds"
                 )
-        self.full_results.add_key("attach_time", time_measures)
+        self.full_results.all_results["attach_time"] = time_measures
 
+        # Calculating the attache average time, and the STD between all samples.
         average = statistics.mean(time_measures)
-        logging.info(
+        log.info(
             f"{self.msg_prefix} The average time for the sampled {len(time_measures)} pods is {average} seconds."
         )
         self.full_results.add_key("attach_time_average", average)
 
         st_deviation = statistics.stdev(time_measures)
         st_deviation_percent = st_deviation / average * 100.0
-        logging.info(
+        log.info(
             f"{self.msg_prefix} The standard deviation percent for the sampled {len(time_measures)} pods"
             f" is {st_deviation_percent}"
         )
         self.full_results.add_key("attach_time_stdev_percent", st_deviation_percent)
 
         # Getting the test end time
-        self.test_end_time = PASTest.get_time()
+        self.test_end_time = self.get_time()
 
         # Add the test time to the ES report
         self.full_results.add_key(
             "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
-
-        self.full_results.add_key("samples_number", self.samples_num)
-        self.full_results.add_key("pvc_size", self.pvc_size)
 
         # Write the test results into the ES server
         if self.full_results.es_write():

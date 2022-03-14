@@ -21,18 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 @performance
-class TestPVCSingleClonePerformance(PASTest):
+class TestPVCClonePerformance(PASTest):
     """
     Test to verify clone creation and deletion performance for PVC with data written to it.
-    Performance is this test is measured by collecting clone creation/deletion speed.
+    Performance is this test is measured by collecting clone creation/deletion time and speed
+    for 10 clone samples.
     """
 
     def setup(self):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
-        super(TestPVCSingleClonePerformance, self).setup()
+        logger.info("Starting the test setup")
+        super(TestPVCClonePerformance, self).setup()
         self.benchmark_name = "pvc_clone_permorance"
 
     @pytest.fixture()
@@ -106,10 +107,10 @@ class TestPVCSingleClonePerformance(PASTest):
     ):
         """
         Write data (60% of PVC capacity) to the PVC created in setup
-        Create single clone for an existing pvc,
-        Measure clone creation time and speed
+        Create clones for an existing pvc,
+        Measure clones average creation time and speed
         Delete the created clone
-        Measure clone deletion time and speed
+        Measure clone average deletion time and speed
         Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
         """
 
@@ -117,7 +118,7 @@ class TestPVCSingleClonePerformance(PASTest):
 
         performance_lib.write_fio_on_pod(self.pod_object, file_size_for_io)
 
-        max_num_of_clones = 1
+        max_num_of_clones = 10
         clone_creation_measures = []
         csi_clone_creation_measures = []
         clones_list = []
@@ -130,7 +131,6 @@ class TestPVCSingleClonePerformance(PASTest):
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
         file_size_mb = convert_device_size(file_size, "MB")
 
-        # creating single clone ( or many one by one if max_mum_of_clones > 1)
         logger.info(
             f"Start creating {max_num_of_clones} clones on {interface_type} PVC of size {pvc_size} GB."
         )

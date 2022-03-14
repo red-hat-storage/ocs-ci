@@ -92,3 +92,21 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_BACKEND": "kv-v2",
     }
 }
+VAULT_TENANT_SA_CONNECTION_CONF = {
+    "1-vault": {
+        "encryptionKMSType": "vaulttenantsa",
+        "vaultAddress": "https://vault.qe.rh-ocs.com:8200",
+        "vaultAuthPath": "",
+        "vaultAuthNamespace": "",
+        "vaultNamespace": "",
+        "vaultBackendPath": "kv-v2",
+        "vaultCAFromSecret": "ocs-kms-ca-secret",
+        "vaultClientCertFromSecret": "ocs-kms-client-cert",
+        "vaultClientCertKeyFromSecret": "ocs-kms-client-key",
+        "vaultBackend": "kv-v2",
+    }
+}
+
+# External cluster username
+EXTERNAL_CLUSTER_USER = "client.healthchecker"
+EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
