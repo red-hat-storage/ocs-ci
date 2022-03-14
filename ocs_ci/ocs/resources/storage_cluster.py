@@ -8,7 +8,7 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
@@ -634,7 +634,6 @@ def osd_encryption_verification():
         failures = 0
         failure_message = ""
         node_obj = OCP(kind="node")
-
         for node in worker_nodes:
             luks_devices = get_encrypted_osd_devices(node_obj, node)
             for luks_device_name in luks_devices:
@@ -1045,9 +1044,9 @@ def verify_managed_service_resources():
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for secret_name in {
-        constants.MANAGED_SMTP_SECRET,
-        constants.MANAGED_PAGERDUTY_SECRET,
-        constants.MANAGED_DEADMANSSNITCH_SECRET,
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name
