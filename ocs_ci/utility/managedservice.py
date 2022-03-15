@@ -24,6 +24,7 @@ def generate_onboarding_token():
 
     Returns:
         string: Onboarding token
+
     """
     logger.debug("Generate onboarding token for ODF to ODF deployment")
     ticketgen_script_path = os.path.join(constants.DATA_DIR, "ticketgen.sh")
@@ -66,3 +67,22 @@ def generate_onboarding_token():
             f"stdout: {ticketgen_output}"
         )
     return ticketgen_output
+
+
+def remove_header_footer_from_key(key):
+    """
+    This function will remove header and footer from key (like:
+    -----BEGIN RSA PRIVATE KEY-----
+    -----END RSA PRIVATE KEY-----
+    ) and return the key on one line.
+
+    Returns:
+        string: one line key string without header and footer
+
+    """
+    key_lines = key.strip().split("\n")
+    if "-----BEGIN" in key_lines[0]:
+        key_lines = key_lines[1:]
+    if "-----END" in key_lines[-1]:
+        key_lines = key_lines[:-1]
+    return "".join(key_lines)
