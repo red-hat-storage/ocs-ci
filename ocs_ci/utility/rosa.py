@@ -46,15 +46,22 @@ def create_cluster(cluster_name, version):
     region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
+    multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
+        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
+    if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
+        subnet_id = get_providers_subnet(region, provider_name)
+        cmd = f"{cmd} --subnet-ids {subnet_id}"
+
     utils.run_cmd(cmd)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        4000, 30, ocm.get_cluster_details, cluster_name
+        4500, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
@@ -69,6 +76,28 @@ def create_cluster(cluster_name, version):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
+
+
+def get_providers_subnet(region, cluster_name):
+    """
+    Get the cluster's subnet id of existing cluster
+
+    Args:
+        region (str):  aws region of cluster
+        cluster_name (str): Cluster name
+    returns:
+        string of space separated subnet ids
+
+
+    """
+    subnets = config.ENV_DATA.get("subnet_id", "")
+    # TODO:  This is Temporary function Fix to get subnet ids from config and
+    # its actual implementation shall be done using aws API
+    # In manual method we use below command to get the subnet id
+    # subnet_cmd = (f"/usr/bin/aws --region {region} ec2 describe-subnets"
+    #               f" --filters Name=tag:Name,Values={cluster_name}*"
+    #               f" --output text | grep subnet |awk '{print $15}'")
+    return subnets
 
 
 def get_latest_rosa_version(version):
@@ -190,7 +219,7 @@ def install_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
@@ -225,7 +254,7 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(

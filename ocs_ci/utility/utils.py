@@ -1,4 +1,5 @@
 from functools import reduce
+import base64
 import io
 import json
 import logging
@@ -1762,16 +1763,25 @@ def get_running_ocp_version(separator=None):
         return get_ocp_version(seperator=char)
 
 
-def get_ocp_repo():
+def get_ocp_repo(rhel_major_version=None):
     """
     Get ocp repo file, name will be generated dynamically based on
     ocp version.
+
+    Args:
+        rhel_major_version (int): Major version of RHEL. If not specified it will
+            take major version from config.ENV_DATA["rhel_version"]
 
     Returns:
         string : Path to ocp repo file
 
     """
-    repo_path = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
+    rhel_version = (
+        rhel_major_version or Version.coerce(config.ENV_DATA["rhel_version"]).major
+    )
+    repo_path = os.path.join(
+        constants.REPO_DIR, f"ocp_{get_ocp_version('_')}_rhel{rhel_version}.repo"
+    )
     path = os.path.expanduser(repo_path)
     assert os.path.exists(path), f"OCP repo file {path} doesn't exists!"
     return path
@@ -2419,6 +2429,7 @@ def create_rhelpod(namespace, pod_name, timeout=300):
     # importing here to avoid dependencies
     from ocs_ci.helpers import helpers
 
+    # TODO: This method should be updated to add argument to change RHEL version
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
@@ -3252,6 +3263,8 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
         timeout (int): Time in seconds to wait
 
     """
+    log.info("Sleeping for 60 sec to start update machineconfigpool status")
+    time.sleep(60)
     # importing here to avoid dependencies
     from ocs_ci.ocs import ocp
 
@@ -3303,8 +3316,6 @@ def configure_chrony_and_wait_for_machineconfig_status(
         chrony_obj = OCS(**chrony_data)
         chrony_obj.create()
 
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
@@ -3570,8 +3581,58 @@ def add_chrony_to_ocp_deployment():
 
 
 def enable_huge_pages():
+    """
+    Applies huge pages
+
+    """
     log.info("Enabling huge pages.")
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+
+
+def disable_huge_pages():
+    """
+    Removes huge pages
+
+    """
+    log.info("Disabling huge pages.")
+    exec_cmd(f"oc delete -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config to be ready")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+
+
+def encode(message):
+    """
+    Encodes the message in base64
+
+    Args:
+        message (str/list): message to encode
+
+    Returns:
+        str: encoded message in base64
+
+    """
+    message_bytes = message.encode("ascii")
+    encoded_base64_bytes = base64.b64encode(message_bytes)
+    encoded_message = encoded_base64_bytes.decode("ascii")
+    return encoded_message
+
+
+def decode(encoded_message):
+    """
+    Decodes the message in base64
+
+    Args:
+        encoded_message (str): encoded message
+
+    Returns:
+        str: decoded message
+
+    """
+    encoded_message_bytes = encoded_message.encode("ascii")
+    decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
+    decoded_message = decoded_base64_bytes.decode("ascii")
+    return decoded_message

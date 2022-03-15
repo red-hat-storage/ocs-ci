@@ -7,13 +7,11 @@ import os
 import pytest
 import pathlib
 import time
-from uuid import uuid4
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, polarion_id
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants, scale_lib
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.perftests import PASTest
@@ -40,18 +38,9 @@ class TestBulkPodAttachPerformance(PASTest):
         super(TestBulkPodAttachPerformance, self).setup()
         self.benchmark_name = "bulk_pod_attach_time"
 
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
+        # Pulling the pod image to the worker node, so pull image will not calculate
+        # in the total attach time
+        helpers.pull_images(constants.PERF_IMAGE)
 
     @pytest.fixture()
     def base_setup(self, project_factory, interface_type, storageclass_factory):
@@ -78,19 +67,15 @@ class TestBulkPodAttachPerformance(PASTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 120],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 240],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 120],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 240],
-                marks=[pytest.mark.performance],
             ),
         ],
     )

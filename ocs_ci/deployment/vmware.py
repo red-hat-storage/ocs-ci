@@ -29,6 +29,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -732,6 +733,15 @@ class VSPHEREUPI(VSPHEREBASE):
         target_str = '"keep_on_remove": false,'
         logger.debug(f"changing state from {str_to_modify} to {target_str}")
         replace_content_in_file(terraform_tfstate, str_to_modify, target_str)
+
+        # remove csi users in case of external deployment
+        if config.DEPLOYMENT["external_mode"]:
+            logger.debug("deleting csi users")
+            toolbox = pod.get_ceph_tools_pod()
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))

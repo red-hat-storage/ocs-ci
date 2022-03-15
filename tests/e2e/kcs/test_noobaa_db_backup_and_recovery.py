@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
     tier3,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     skipif_ocs_version,
     skipif_external_mode,
 )
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2605")
 @pytest.mark.bugzilla("1924047")
 @skipif_ocs_version("<4.6")
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_external_mode
 class TestNoobaaBackupAndRecovery(E2ETest):
     """

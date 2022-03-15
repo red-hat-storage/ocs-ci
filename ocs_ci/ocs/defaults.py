@@ -24,6 +24,7 @@ KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+RBD_NAME = "rbd"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
@@ -91,3 +92,21 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_BACKEND": "kv-v2",
     }
 }
+VAULT_TENANT_SA_CONNECTION_CONF = {
+    "1-vault": {
+        "encryptionKMSType": "vaulttenantsa",
+        "vaultAddress": "https://vault.qe.rh-ocs.com:8200",
+        "vaultAuthPath": "",
+        "vaultAuthNamespace": "",
+        "vaultNamespace": "",
+        "vaultBackendPath": "kv-v2",
+        "vaultCAFromSecret": "ocs-kms-ca-secret",
+        "vaultClientCertFromSecret": "ocs-kms-client-cert",
+        "vaultClientCertKeyFromSecret": "ocs-kms-client-key",
+        "vaultBackend": "kv-v2",
+    }
+}
+
+# External cluster username
+EXTERNAL_CLUSTER_USER = "client.healthchecker"
+EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"

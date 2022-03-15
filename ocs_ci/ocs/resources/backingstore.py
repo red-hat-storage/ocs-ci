@@ -84,12 +84,13 @@ class BackingStore:
         def _oc_deletion_flow():
             try:
                 OCP(
-                    kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+                    kind=constants.BACKINGSTORE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 ).delete(resource_name=self.name)
                 return True
             except CommandFailed as e:
                 if "not found" in e.args[0].lower():
-                    log.warning(f"Namespacestore {self.name} was already deleted.")
+                    log.warning(f"Backingstore {self.name} was already deleted.")
                     return True
                 elif all(
                     err in e.args[0]

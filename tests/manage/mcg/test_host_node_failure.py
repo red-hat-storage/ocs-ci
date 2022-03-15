@@ -8,8 +8,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_ocs_version,
     skipif_vsphere_ipi,
-    tier4,
-    tier4a,
+    tier4b,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.helpers.helpers import (
@@ -29,8 +28,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
+@tier4b
 @bugzilla("1853638")
 @ignore_leftovers
 @skipif_vsphere_ipi

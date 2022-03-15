@@ -32,6 +32,7 @@ from ocs_ci.utility.utils import (
     delete_file,
     get_cluster_name,
     get_infra_id,
+    get_ocp_repo,
     run_cmd,
     TimeoutSampler,
     get_ocp_version,
@@ -473,12 +474,12 @@ class AWSUPI(AWSBase):
         """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get("num_workers", 3))
-        logging.info(f"Creating {num_workers} RHEL workers")
+        logger.info(f"Creating {num_workers} RHEL workers")
         rhel_version = config.ENV_DATA["rhel_version"]
         rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         for i in range(num_workers):
             self.gather_worker_data(f"no{i}")
-            logging.info(f"Creating {i + 1}/{num_workers} worker")
+            logger.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
@@ -514,7 +515,7 @@ class AWSUPI(AWSBase):
                     {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
                 ],
             )
-            logging.info(self.worker_iam_role)
+            logger.info(self.worker_iam_role)
             self.client.associate_iam_instance_profile(
                 IamInstanceProfile=self.worker_iam_role,
                 InstanceId=inst_id,
@@ -533,6 +534,9 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
+        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
+        # different version of RHEL for running openshift ansible playbook, we need
+        # to update this method!
         rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name)
         timeout = 4000  # For ansible-playbook
 
@@ -540,11 +544,22 @@ class AWSUPI(AWSBase):
         pem_src_path = "~/.ssh/openshift-dev.pem"
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
-        repo_dst_path = "/etc/yum.repos.d/"
-        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
-        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
-        repo_file = os.path.basename(repo)
-        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+        repo_dst_path = constants.YUM_REPOS_PATH
+        # Ansible playbook and dependency is described in the documentation to run
+        # on RHEL7 node
+        # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
+        repo_rhel_ansible = get_ocp_repo(
+            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
+        )
+        repo = get_ocp_repo()
+        diff_rhel = repo != repo_rhel_ansible
+        pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
+        if diff_rhel:
+            repo_dst_path = constants.POD_UPLOADPATH
+            pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+            repo_file = os.path.basename(repo)
+        else:
+            repo_file = os.path.basename(repo_rhel_ansible)
         # prepare credential files for mirror.openshift.com
         with prepare_mirror_openshift_credential_files() as (
             mirror_user_file,
@@ -576,7 +591,7 @@ class AWSUPI(AWSBase):
             rhel_pod_obj.exec_cmd_on_node(
                 host,
                 pem_dst_path,
-                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
+                f"sudo mv {os.path.join(constants.RHEL_TMP_PATH, repo_file)} {constants.YUM_REPOS_PATH}",
                 user=self.rhel_worker_user,
             )
             for file_name in (
@@ -683,7 +698,7 @@ class AWSUPI(AWSBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -731,12 +746,12 @@ class AWSUPI(AWSBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)

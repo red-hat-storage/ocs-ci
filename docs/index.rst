@@ -32,6 +32,7 @@ and functionality using AWS and other supported platforms.
    workarounds.md
    release_guidelines.md
    usecases/index.rst
+   multicluster_test_example.md
 
 
 Indices and tables

@@ -49,7 +49,7 @@ class TestIOPerformance(ManageTest):
         """
         Test IO
         """
-        logging.info(
+        logger.info(
             f"Running FIO with:\nsize: {size}\njobs: {jobs}\n"
             f"runtime: {runtime}\nIO depth: {depth}\n"
         )
@@ -61,12 +61,12 @@ class TestIOPerformance(ManageTest):
             runtime=runtime,
             depth=depth,
         )
-        logging.info("Waiting for results")
+        logger.info("Waiting for results")
         fio_result = self.pod_obj.get_fio_results()
-        logging.info("IOPs after FIO:")
+        logger.info("IOPs after FIO:")
         reads = fio_result.get("jobs")[0].get("read").get("iops")
         writes = fio_result.get("jobs")[0].get("write").get("iops")
         w_bw = fio_result.get("jobs")[0].get("write").get("bw")
         r_bw = fio_result.get("jobs")[0].get("read").get("bw")
-        logging.info(f"Read: {reads} IOPS , {r_bw} MiB/Sec")
-        logging.info(f"Write: {writes} IOPS , {w_bw} MiB/Sec")
+        logger.info(f"Read: {reads} IOPS , {r_bw} MiB/Sec")
+        logger.info(f"Write: {writes} IOPS , {w_bw} MiB/Sec")

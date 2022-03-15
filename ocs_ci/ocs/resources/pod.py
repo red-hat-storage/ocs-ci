@@ -798,10 +798,10 @@ def get_fio_rw_iops(pod_obj):
         pod_obj (Pod): The object of the pod
     """
     fio_result = pod_obj.get_fio_results()
-    logging.info(f"FIO output: {fio_result}")
-    logging.info("IOPs after FIO:")
-    logging.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
-    logging.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
+    logger.info(f"FIO output: {fio_result}")
+    logger.info("IOPs after FIO:")
+    logger.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
+    logger.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
 
 
 def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
@@ -1574,10 +1574,10 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
                 pod.status() in status_options for pod in new_osd_pods
             ]
             if any(new_osd_pods_come_up):
-                logging.info("One or more of the new osd pods has started to come up")
+                logger.info("One or more of the new osd pods has started to come up")
                 break
     except TimeoutExpiredError:
-        logging.warning("None of the new osd pods reached the desired status")
+        logger.warning("None of the new osd pods reached the desired status")
 
 
 def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
@@ -1598,7 +1598,7 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             and "rook-ceph-drain-canary" not in p.name
         ):
             restart_dict[p.name] = int(ocp_pod_obj.get_resource(p.name, "RESTARTS"))
-    logging.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
+    logger.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
     return restart_dict
 
 
@@ -1644,7 +1644,7 @@ def check_pods_in_running_state(
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if status not in "Running":
-                logging.error(
+                logger.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
                 )
                 ret_val = False
@@ -1706,11 +1706,11 @@ def wait_for_pods_to_be_running(
         ):
             # Check if all the pods in running state
             if pods_running:
-                logging.info("All the pods reached status running!")
+                logger.info("All the pods reached status running!")
                 return True
 
     except TimeoutExpiredError:
-        logging.warning(
+        logger.warning(
             f"Not all the pods reached status running " f"after {timeout} seconds"
         )
         return False
@@ -1769,7 +1769,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         ):
             if osd_removal_pod_names:
                 osd_removal_pod_name = osd_removal_pod_names[0]
-                logging.info(f"Found pod {osd_removal_pod_name}")
+                logger.info(f"Found pod {osd_removal_pod_name}")
                 return osd_removal_pod_name
 
     except TimeoutExpiredError:
@@ -2183,7 +2183,7 @@ def wait_for_change_in_pods_statuses(
                     )
                     return True
     except TimeoutExpiredError:
-        logging.info(f"The status of the pods did not change after {timeout} seconds")
+        logger.info(f"The status of the pods did not change after {timeout} seconds")
         return False
 
 

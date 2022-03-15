@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
 )
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -51,7 +52,7 @@ class BaseUI:
 
     """
 
-    def __init__(self, driver):
+    def __init__(self, driver: WebDriver):
         self.driver = driver
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
@@ -381,7 +382,7 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
@@ -451,7 +452,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=25, sleep_time=10)
+        self.page_has_loaded(retries=25)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
@@ -706,6 +707,9 @@ def login_ui(console_url=None):
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
             chrome_options.add_argument("--allow-insecure-localhost")
+            if config.ENV_DATA.get("import_clusters_to_acm"):
+                # Dev shm should be disabled when sending big amonut characters, like the cert sections of a kubeconfig
+                chrome_options.add_argument("--disable-dev-shm-usage")
             capabilities = chrome_options.to_capabilities()
             capabilities["acceptInsecureCerts"] = True
 
@@ -772,11 +776,16 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
-    if config.ENV_DATA["flexy_deployment"]:
+    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
+        "import_clusters_to_acm"
+    ):
         try:
             element = wait.until(
                 ec.element_to_be_clickable(
-                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
                 )
             )
             element.click()

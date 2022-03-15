@@ -14,6 +14,7 @@ import base64
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
@@ -198,6 +199,15 @@ class Deployment(object):
             setup_netsplit(
                 tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
             )
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if (
+            config.ENV_DATA.get("deploy_acm_hub_cluster")
+            and ocp_version >= version.VERSION_4_9
+        ):
+            try:
+                self.deploy_acm_hub()
+            except Exception as e:
+                logger.error(e)
 
         # Multicluster operations
         if config.multicluster:
@@ -942,6 +952,18 @@ class Deployment(object):
         # Set rook log level
         self.set_rook_log_level()
 
+        # get external cluster details
+        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
+            "ip_address"
+        ]
+        user = config.EXTERNAL_MODE["login"]["username"]
+        password = config.EXTERNAL_MODE["login"]["password"]
+        external_cluster = ExternalCluster(host, user, password)
+        external_cluster.get_external_cluster_details()
+
+        # get admin keyring
+        external_cluster.get_admin_keyring()
+
         # Create secret for external cluster
         create_external_secret()
 
@@ -1142,6 +1164,72 @@ class Deployment(object):
             f"--request-timeout=120s"
         )
 
+    def deploy_acm_hub(self):
+        """
+        Handle ACM HUB deployment
+        """
+        channel = config.ENV_DATA.get("acm_hub_channel")
+        logger.info("Creating ACM HUB namespace")
+        acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
+        acm_hub_namespace_yaml_data["metadata"]["name"] = constants.ACM_HUB_NAMESPACE
+        acm_hub_namespace_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_hub_namespace_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            acm_hub_namespace_yaml_data, acm_hub_namespace_manifest.name
+        )
+        run_cmd(f"oc create -f {acm_hub_namespace_manifest.name}")
+
+        logger.info("Creating OperationGroup for ACM deployment")
+        package_manifest = PackageManifest(
+            resource_name=constants.ACM_HUB_OPERATOR_NAME,
+        )
+
+        run_cmd(
+            f"oc create -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+        )
+
+        logger.info("Creating ACM HUB Subscription")
+        acm_hub_subscription_yaml_data = templating.load_yaml(
+            constants.ACM_HUB_SUBSCRIPTION_YAML
+        )
+        acm_hub_subscription_yaml_data["spec"]["channel"] = channel
+        acm_hub_subscription_yaml_data["spec"][
+            "startingCSV"
+        ] = package_manifest.get_current_csv(
+            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        )
+
+        acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_hub_subscription_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
+        )
+        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        logger.info("Sleeping for 90 seconds after subscribing to ACM")
+        time.sleep(90)
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=constants.ACM_HUB_NAMESPACE)
+        csv.wait_for_phase("Succeeded", timeout=720)
+        logger.info("ACM HUB Operator Deployment Succeeded")
+        logger.info("Creating MultiCluster Hub")
+        run_cmd(
+            f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+        )
+        acm_mch = ocp.OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB,
+            namespace=constants.ACM_HUB_NAMESPACE,
+        )
+        acm_mch.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            column="STATUS",
+            timeout=720,
+            sleep=5,
+        )
+        logger.info("MultiClusterHub Deployment Succeeded")
+
 
 def create_ocs_secret(namespace):
     """
@@ -1192,8 +1280,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "}}}'"
         )
         run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
-        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        time.sleep(60)
         wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)

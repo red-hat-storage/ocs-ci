@@ -118,5 +118,5 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-        logging.info("Deleting Resources using sanity helpers")
+        log.info("Deleting Resources using sanity helpers")
         self.sanity_helpers.delete_resources()

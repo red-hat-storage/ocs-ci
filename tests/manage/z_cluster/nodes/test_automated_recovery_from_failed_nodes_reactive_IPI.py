@@ -1,7 +1,6 @@
 import logging
 import pytest
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
     tier4b,
     ManageTest,
@@ -36,7 +35,6 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@tier4
 @tier4b
 @ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
@@ -202,7 +200,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
 
 @ignore_leftovers
-@tier4
 @tier4a
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):

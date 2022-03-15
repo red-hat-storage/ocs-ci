@@ -336,7 +336,7 @@ def create_custom_machineset(
                 ms_obj = OCS(**machineset_yaml)
                 ms_obj.create()
                 if check_machineset_exists(f"{cls_id}-{role}-{aws_zone}"):
-                    logging.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
+                    log.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
                     return f"{cls_id}-{role}-{aws_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
@@ -448,7 +448,7 @@ def create_custom_machineset(
                 ms_obj = OCS(**machineset_yaml)
                 ms_obj.create()
                 if check_machineset_exists(f"{cls_id}-{role}-{az_zone}"):
-                    logging.info(f"Machineset {cls_id}-{role}-{az_zone} created")
+                    log.info(f"Machineset {cls_id}-{role}-{az_zone} created")
                     return f"{cls_id}-{role}-{az_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
@@ -547,7 +547,7 @@ def create_custom_machineset(
             ms_obj = OCS(**machineset_yaml)
             ms_obj.create()
             if check_machineset_exists(f"{cls_id}-{role}-{zone}"):
-                logging.info(f"Machineset {cls_id}-{role}-{zone} created")
+                log.info(f"Machineset {cls_id}-{role}-{zone} created")
                 return f"{cls_id}-{role}-{zone}"
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
@@ -675,7 +675,7 @@ def create_custom_machineset(
             ms_obj = OCS(**machineset_yaml)
             ms_obj.create()
             if check_machineset_exists(f"{cls_id}-{role}"):
-                logging.info(f"Machineset {cls_id}-{role} created")
+                log.info(f"Machineset {cls_id}-{role} created")
                 return f"{cls_id}-{role}"
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
@@ -763,7 +763,7 @@ def delete_custom_machineset(machine_set):
     ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
     ocp.exec_oc_cmd(f"delete machineset {machine_set}")
     if not check_machineset_exists(machine_set):
-        logging.info(f"Machineset {machine_set} deleted")
+        log.info(f"Machineset {machine_set} deleted")
     else:
         raise UnexpectedBehaviour(f"Machineset {machine_set} not deleted")
 

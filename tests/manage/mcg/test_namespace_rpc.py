@@ -10,7 +10,7 @@ import pytest
 from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     tier1,
     tier2,
     tier3,
@@ -27,7 +27,7 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")
 class TestNamespace(MCGTest):

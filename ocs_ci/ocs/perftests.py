@@ -3,6 +3,7 @@ import time
 import logging
 import os
 import re
+from uuid import uuid4
 
 import requests
 import json
@@ -11,19 +12,20 @@ from elasticsearch import Elasticsearch, exceptions as esexp
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed, MissingRequiredConfigKeyError
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +46,6 @@ class PASTest(BaseTest):
             name (str): The test name that will use in the performance dashboard
         """
         log.info("Setting up test environment")
-        self.crd_data = None  # place holder for Benchmark CDR data
         self.es = None  # place holder for the incluster deployment elasticsearch
         self.es_backup = None  # place holder for the elasticsearch backup
         self.main_es = None  # place holder for the main elasticsearch object
@@ -52,15 +53,29 @@ class PASTest(BaseTest):
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
         self.pod_obj = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
+        self.initialize_test_crd()
 
         # Place holders for test results file (all sub-tests together)
-        self.results_path = ""
         self.results_file = ""
 
+        # All tests need a uuid for the ES results, benchmark-operator base test
+        # will overrite it with uuid pulling from the benchmark pod
+        self.uuid = uuid4().hex
+
         # Getting the full path for the test logs
-        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split("]")[0]
-        self.full_log_path = self.full_log_path.replace("::", "/").replace("[", "-")
+        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split(" ")[0]
+        self.full_log_path = (
+            self.full_log_path.replace("::", "/").replace("[", "-").replace("]", "")
+        )
+        self.full_log_path = os.path.join(ocsci_log_path(), self.full_log_path)
         log.info(f"Logs file path name is : {self.full_log_path}")
+
+        # Getting the results path as a list
+        self.results_path = self.full_log_path.split("/")
+        self.results_path.pop()
+
+        # List of test(s) for checking the results
+        self.workloads = []
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
@@ -105,6 +120,30 @@ class PASTest(BaseTest):
                 time.sleep(120)
                 still_going_down = True
         log.info("Storage usage was cleandup")
+
+    def initialize_test_crd(self):
+        """
+        Initializing the test CRD file.
+        this include the Elasticsearch info, cluster name and user name which run the test
+        """
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",  # place holde only will be change in the test.
+                "clustername": "test_cluster",  # place holde only will be change in the test.
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
 
     def create_new_pool(self, pool_name):
         """
@@ -598,15 +637,23 @@ class PASTest(BaseTest):
             log.error(f"OS error: {err}")
 
     @staticmethod
-    def get_time():
+    def get_time(time_format=None):
         """
-        Getting the current GMT time in a specific format for the ES report
+        Getting the current GMT time in a specific format for the ES report,
+        or for seeking in the containers log
+
+        Args:
+            time_format (str): which thime format to return - None / CSI
 
         Returns:
             str : current date and time in formatted way
 
         """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        formated = "%Y-%m-%dT%H:%M:%SGMT"
+        if time_format and time_format.lower() == "csi":
+            formated = "%Y-%m-%dT%H:%M:%SZ"
+
+        return time.strftime(formated, time.gmtime())
 
     def check_tests_results(self):
         """
@@ -706,14 +753,31 @@ class PASTest(BaseTest):
         elif encrypt:
             platform = f"{platform}-Enc"
 
-        # Check if compression is enabled
-        my_obj = OCP(
-            kind="cephblockpool", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        for pool in my_obj.data.get("items"):
-            if pool.get("spec").get("compressionMode", None) is not None:
-                platform = f"{platform}-CMP"
-                break
+        # Check the base storageclass on AWS
+        if self.environment.get("platform").upper() == "AWS":
+            osd_pod_list = pod.get_osd_pods()
+            osd_pod = osd_pod_list[0].pod_data["metadata"]["name"]
+            osd_pod_obj = OCP(
+                kind="POD",
+                resource_name=osd_pod,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            log.info(f"The First OSD pod nams is {osd_pod}")
+
+            osd_pvc_name = osd_pod_obj.get()["spec"]["initContainers"][0][
+                "volumeDevices"
+            ][0]["name"]
+            log.info(f"The First OSD name is : {osd_pvc_name}")
+            osd_pvc_obj = OCP(
+                kind="PersistentVolumeClaim",
+                resource_name=osd_pvc_name,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+
+            odf_back_storage = osd_pvc_obj.get()["spec"]["storageClassName"]
+            log.info(f"The ODF deployment use {odf_back_storage} as back storage")
+            if odf_back_storage != "gp2":
+                platform = f"{platform}-{odf_back_storage}"
 
         if self.dev_mode:
             port = "8181"
@@ -754,3 +818,64 @@ class PASTest(BaseTest):
             log.error(f"Can not push results into the performance Dashboard! [{ex}]")
 
         db.cleanup()
+
+    def add_test_to_results_check(self, test, test_count, test_name):
+        """
+        Adding test information to list of test(s) that we want to check the results
+        and push them to the dashboard.
+
+        Args:
+            test (str): the name of the test function that we want to check
+            test_count (int): number of test(s) that need to run - according to parametize
+            test_name (str): the test name in the Performance dashboard
+
+        """
+        self.workloads.append(
+            {"name": test, "tests": test_count, "test_name": test_name}
+        )
+
+    def check_results_and_push_to_dashboard(self):
+        """
+        Checking test(s) results - that all test(s) are finished OK, and push
+        the results into the performance dashboard
+
+        """
+
+        for wl in self.workloads:
+            self.number_of_tests = wl["tests"]
+
+            self.results_file = os.path.join(
+                "/", *self.results_path, wl["name"], "all_results.txt"
+            )
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
+
+    def create_test_project(self):
+        """
+        Creating new project (namespace) for performance test
+        """
+        self.namespace = "pas-test-namespace"
+        log.info(f"Creating new namespace ({self.namespace}) for the test")
+        try:
+            self.proj = helpers.create_project(project_name=self.namespace)
+        except CommandFailed as ex:
+            if str(ex).find("(AlreadyExists)"):
+                log.warning("The namespace already exists !")
+            log.error("Cannot create new project")
+            raise CommandFailed(f"{self.namespace} was not created")
+
+    def delete_test_project(self):
+        """
+        Deleting the performance test project (namespace)
+        """
+        log.info(f"Deleting the test namespace : {self.namespace}")
+        switch_to_default_rook_cluster_project()
+        try:
+            self.proj.delete(resource_name=self.namespace)
+            self.proj.wait_for_delete(
+                resource_name=self.namespace, timeout=60, sleep=10
+            )
+        except CommandFailed:
+            log.error(f"Cannot delete project {self.namespace}")
+            raise CommandFailed(f"{self.namespace} was not created")
