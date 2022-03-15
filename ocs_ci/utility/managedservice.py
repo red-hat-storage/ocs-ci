@@ -22,6 +22,10 @@ def generate_onboarding_token():
         temporary file.
     3. Run ticketgen.sh script to generate Onboarding token.
 
+    Raises:
+        CommandFailed: In case the script ticketgen.sh fails.
+        ConfigurationError: when AUTH["managed_service"]["private_key"] not is not defined
+
     Returns:
         string: Onboarding token
 
