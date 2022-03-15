@@ -13,7 +13,3 @@ ENV_DATA:
   VAULT_SKIP_VERIFY: false
   VAULT_AUTH_METHOD: kubernetes
   VAULT_BACKEND: v1
-
-REPORTING:
-  polarion:
-    deployment_id: #To do

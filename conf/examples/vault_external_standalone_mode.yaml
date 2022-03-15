@@ -29,4 +29,4 @@ ENV_DATA:
   # Vault policy used by OCS
   VAULT_POLICY: 'TEST_POLICY'
   # Vault authentication method
-  VAULT_AUTHE_METHOD: token
+  VAULT_AUTH_METHOD: token

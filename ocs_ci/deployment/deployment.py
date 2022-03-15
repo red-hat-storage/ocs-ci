@@ -868,7 +868,7 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
-            if ocs_version > version.VERSION_4_10:
+            if ocs_version >= version.VERSION_4_10:
                 cluster_data["spec"]["encryption"] = {
                     "clusterWide": True,
                 }

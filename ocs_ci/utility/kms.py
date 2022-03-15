@@ -311,6 +311,7 @@ class Vault(KMS):
         cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
         ocp_obj.exec_oc_cmd(command=cmd)
         self.vault_cwd_kms_sa_name = sa_name
+        logger.info(f"Created serviceaccount {sa_name}")
 
         cmd = (
             f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
@@ -319,6 +320,7 @@ class Vault(KMS):
             f"--serviceaccount={constants.OPENSHIFT_STORAGE_NAMESPACE}:{sa_name}"
         )
         ocp_obj.exec_oc_cmd(command=cmd)
+        logger.info("Created the clusterrolebinding vault-tokenreview-binding")
 
     def create_ocs_vault_resources(self):
         """
@@ -331,6 +333,7 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.create_ocs_vault_cert_resources()
 
+        # Create resource and configure kubernetes auth method
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
             self.create_ocs_kube_auth_resources()
@@ -372,7 +375,6 @@ class Vault(KMS):
         if config.ENV_DATA.get("use_vault_namespace"):
             connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
-        connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             connection_data["data"][
                 "VAULT_AUTH_KUBERNETES_ROLE"
@@ -1008,11 +1010,6 @@ class Vault(KMS):
         # get cluster API endpoint
         k8s_host = run_cmd(cmd="oc whoami --show-server").strip()
 
-        # get issuer
-        issuer = run_cmd(
-            cmd="oc get authentication.config cluster -o template='{{ .spec.serviceAccountIssuer }}'"
-        )
-
         # enable kubernetes auth method
         if auth_path and auth_namespace:
             self.vault_kube_auth_path = auth_path
@@ -1040,13 +1037,13 @@ class Vault(KMS):
             cmd = (
                 f"vault write -namespace={self.vault_kube_auth_namespace} "
                 f"auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
-                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name} issuer={issuer}"
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
             )
         # Configure kubernetes auth method
         else:
             cmd = (
                 f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
-                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name} issuer={issuer}"
+                f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
             )
         os.environ.pop("VAULT_FORMAT")
         proc = subprocess.run(
