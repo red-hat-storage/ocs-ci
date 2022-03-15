@@ -333,7 +333,7 @@ class TestNamespace(MCGTest):
             amount=3,
         )
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-2258")
     @on_prem_platform_required
     def test_distribution_of_objects_in_ns_bucket_crd(
