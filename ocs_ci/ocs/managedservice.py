@@ -61,16 +61,15 @@ def disable_odf_operator_and_update_pull_secret():
     )
     logger.info("Update pull secret")
     pull_secret = exec_cmd("oc get -n openshift-config secret/pull-secret -o json")
-    pull_secret = oc.exec_oc_cmd("get -n openshift-config secret/pull-secret")
+    pull_secret = oc.exec_oc_cmd("get -n openshift-config secret/pull-secret -o yaml")
     secret_data = pull_secret["data"][".dockerconfigjson"]
     secret_data = base64.b64decode(secret_data).decode()
-    rhceph_dev_key = config["AUTH"]["quay-rhceph-dev-auth"]
-    secret_data.append(
-        f""""quay.io/rhceph-dev": \\{
-      "auth": "{rhceph_dev_key}",
-      "email": ""
-    \\}"""
+    rhceph_dev_key = config.AUTH["quay-rhceph-dev-auth"]
+    secret_data = secret_data[0:-1]
+    secret_data += (
+        f', "quay.io/rhceph-dev": {{"auth": "{rhceph_dev_key}", "email": ""}}}}'
     )
+    secret_data = str.encode(secret_data)
     with tempfile.NamedTemporaryFile() as secret_file:
         secret_file.write(secret_data)
         secret_file.flush()
@@ -79,14 +78,19 @@ def disable_odf_operator_and_update_pull_secret():
         )
 
     logger.info("Create a catalogSource using the ocs-registry image")
-    olm_data = request.get(
+    olm_data = requests.get(
         "http://perf1.perf.lab.eng.bos.redhat.com/shberry/odfodf/files/olm.yaml"
     )
-    olm_data = list(yaml.safe_load_all(olm_data))
+    olm_data = list(yaml.safe_load_all(olm_data.text))
+    image = (
+        config.DEPLOYMENT.get("ocs_registry_image")
+        or "quay.io/rhceph-dev/ocs-registry:latest-stable-4.10"
+    )
     with tempfile.NamedTemporaryFile() as olm_file:
         for olm_yaml in olm_data:
+            olm_file.write(str.encode("---\n"))
             if olm_yaml.get("spec").get("image"):
-                olm_yaml["spec"]["image"] = "quay.io/rhceph-dev/ocs-registry:4.10.0-171"
-            olm_file.write(yaml.dump(olm_yaml))
+                olm_yaml["spec"]["image"] = image
+            olm_file.write(str.encode(yaml.dump(olm_yaml)))
         olm_file.flush()
-        exec_cmd("oc create -f {olm_file.name}")
+        exec_cmd(f"oc create -f {olm_file.name}")
