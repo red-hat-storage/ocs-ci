@@ -4504,7 +4504,7 @@ def vault_tenant_sa_setup_factory(request):
             else:
                 vault.kmsid = "vault-tenant-sa"
                 vault.create_vault_csi_kms_connection_details(
-                    kv_version=kv_version, kms_auth_type=constants.VAULT_TENANT_SA
+                    kv_version=kv_version, vault_auth_method=constants.VAULT_TENANT_SA
                 )
         return vault
 

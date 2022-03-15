@@ -73,7 +73,7 @@ class Vault(KMS):
         self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
-        self.kms_auth_type = constants.VAULT_TOKEN
+        self.vault_auth_method = constants.VAULT_TOKEN
         self.ca_cert_name = None
         self.client_cert_name = None
         self.client_key_name = None
@@ -331,7 +331,8 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.create_ocs_vault_cert_resources()
 
-        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == "kubernetes":
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
+            self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
             self.create_ocs_kube_auth_resources()
             self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
             self.create_vault_kube_auth_role(
@@ -359,7 +360,7 @@ class Vault(KMS):
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
-        connection_data["data"]["VAULT_AUTH_METHOD"] = os.environ["VAULT_AUTH_TYPE"]
+        connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
@@ -372,10 +373,10 @@ class Vault(KMS):
             connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
-        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == "kubernetes":
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             connection_data["data"][
                 "VAULT_AUTH_KUBERNETES_ROLE"
-            ] = constants.VAULT_AUTH_KUBERNETES_ROLE
+            ] = constants.VAULT_KUBERNETES_AUTH_ROLE
         else:
             connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
         self.create_resource(connection_data, prefix="kmsconnection")
@@ -811,7 +812,7 @@ class Vault(KMS):
     def create_vault_csi_kms_connection_details(
         self,
         kv_version,
-        kms_auth_type=constants.VAULT_TOKEN,
+        vault_auth_method=constants.VAULT_TOKEN,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     ):
         """
@@ -823,7 +824,7 @@ class Vault(KMS):
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
         )
-        if kms_auth_type == constants.VAULT_TOKEN:
+        if vault_auth_method == constants.VAULT_TOKEN:
             conn_str = csi_kms_conn_details["data"]["1-vault"]
             buf = json.loads(conn_str)
             buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
