@@ -202,6 +202,9 @@ ENV_DATA:
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
 
+  #Managed service - Managed StorageCluster size in TiB
+  size: '1'
+
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true

@@ -13,9 +13,12 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
+    ConfigurationError,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+from ocs_ci.utility.managedservice import remove_header_footer_from_key
+
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -221,6 +224,7 @@ def install_odf_addon(cluster):
     """
     addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
@@ -231,6 +235,18 @@ def install_odf_addon(cluster):
         cmd = cmd + f" --notification-email-1 {notification_email_1}"
     if notification_email_2:
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
+    if cluster_type.lower() == "provider":
+        public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+        if not public_key:
+            raise ConfigurationError(
+                "Public key for Managed Service not defined.\n"
+                "Expected following configuration in auth.yaml file:\n"
+                "managed_service:\n"
+                '  private_key: "..."\n'
+                '  public_key: "..."'
+            )
+        public_key_only = remove_header_footer_from_key(public_key)
+        cmd += f' --onboarding-validation-key "{public_key_only}"'
 
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
