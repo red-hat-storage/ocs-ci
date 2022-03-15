@@ -720,7 +720,8 @@ class Vault(KMS):
             # get vault path
             self.get_vault_backend_path()
             # from token secret get token
-            self.get_vault_path_token()
+            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
+                self.get_vault_path_token()
             # from token get policy
             if not self.cluster_id:
                 self.cluster_id = get_running_cluster_id()
