@@ -10,6 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
@@ -97,9 +98,16 @@ class DeploymentUI(PageNavigator):
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
-            self.do_click(
-                self.dep_loc["choose_local_storage_version"], enable_screenshot=True
-            )
+            ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
+            if ocp_ga_version:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
+                )
+            else:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version_non_ga"],
+                    enable_screenshot=True,
+                )
 
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"], enable_screenshot=True)
