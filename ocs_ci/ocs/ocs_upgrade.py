@@ -13,6 +13,7 @@ from ocs_ci.deployment.deployment import (
     Deployment,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
+from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -35,6 +36,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import (
+    decode,
     exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -539,6 +541,14 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+    # create external cluster object
+    if config.DEPLOYMENT["external_mode"]:
+        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
+            "ip_address"
+        ]
+        user = config.EXTERNAL_MODE["login"]["username"]
+        password = config.EXTERNAL_MODE["login"]["password"]
+        external_cluster = ExternalCluster(host, user, password)
 
     # For external cluster , create the secrets if upgraded version is 4.8
     if (
@@ -546,6 +556,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         and original_ocs_version == "4.7"
         and upgrade_version == "4.8"
     ):
+        external_cluster.create_object_store_user()
         access_key = config.EXTERNAL_MODE.get("access_key_rgw-admin-ops-user", "")
         secret_key = config.EXTERNAL_MODE.get("secret_key_rgw-admin-ops-user", "")
         if not (access_key and secret_key):
@@ -652,6 +663,30 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         upgrade_ocs.get_parsed_versions()[1],
         upgrade_ocs.version_before_upgrade,
     )
+
+    # update external secrets
+    if config.DEPLOYMENT["external_mode"]:
+        external_cluster.update_permission_caps()
+        external_cluster.get_external_cluster_details()
+
+        # update the external cluster details in secrets
+        log.info("updating external cluster secret")
+        external_cluster_details = NamedTemporaryFile(
+            mode="w+",
+            prefix="external-cluster-details-",
+            delete=False,
+        )
+        with open(external_cluster_details.name, "w") as fd:
+            decoded_external_cluster_details = decode(
+                config.EXTERNAL_MODE["external_cluster_details"]
+            )
+            fd.write(decoded_external_cluster_details)
+        cmd = (
+            f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"--from-file=external_cluster_details={external_cluster_details.name}"
+        )
+        exec_cmd(cmd)
+
     ocs_install_verification(
         timeout=600,
         skip_osd_distribution_check=True,

@@ -7,6 +7,7 @@ import datetime
 import logging
 import tempfile
 import time
+import os
 
 # 3ed party modules
 import json
@@ -19,15 +20,18 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     performance,
 )
+
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources import ocs
-from ocs_ci.framework.testlib import ignore_leftovers
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +61,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         super(TestPvcMultiSnapshotPerformance, self).setup()
 
+        self.total_creation_time = 0
+        self.total_creation_speed = 0
+
         # Getting the total Storage capacity
         try:
             self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
@@ -75,8 +82,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             self.proj = helpers.create_project(project_name=self.nss_name)
         except CommandFailed as ex:
             if str(ex).find("(AlreadyExists)"):
-                log.warning("The Namespace is Already Exists !")
-            log.error("Can not create new project")
+                log.warning("The namespace is already exists !")
+            log.error("Cannot create new project")
             raise CommandFailed(f"{self.nss_name} was not created")
 
         # Initialize a general Snapshot object to use in the test
@@ -102,7 +109,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
         except KeyError:
             log.error(
-                f"Can not found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
+                f"Cannot found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
             )
 
         # Getting the list of all snapshots
@@ -123,7 +130,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             try:
                 self.snapshot.delete(resource_name=snap_name)
             except Exception as err:
-                log.error(f"Can not delete {snap_name} : {err}")
+                log.error(f"Cannot delete {snap_name} : {err}")
 
         # Deleting the pod which wrote data to the pvc
         log.info(f"Deleting the test POD : {self.pod_obj.name}")
@@ -132,7 +139,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info("Wait until the pod is deleted.")
             self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
         except Exception as ex:
-            log.error(f"Can not delete the test pod : {ex}")
+            log.error(f"Cannot delete the test pod : {ex}")
 
         # Deleting the PVC which used in the test.
         log.info(f"Delete the PVC : {self.pvc_obj.name}")
@@ -141,14 +148,14 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info("Wait until the pvc is deleted.")
             self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
         except Exception as ex:
-            log.error(f"Can not delete the test pvc : {ex}")
+            log.error(f"Cannot delete the test pvc : {ex}")
 
         # Delete the backend PV of the PVC
         log.info(f"Try to delete the backend PV : {pv}")
         try:
             run_oc_command(f"delete pv {pv}")
         except Exception as ex:
-            err_msg = f"can not delete PV {pv} - [{ex}]"
+            err_msg = f"cannot delete PV {pv} - [{ex}]"
             log.error(err_msg)
 
         # Deleting the StorageClass used in the test
@@ -194,7 +201,32 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(f"Can not delete project {self.nss_name}")
             raise CommandFailed(f"{self.nss_name} was not created")
 
+        # After deleteing all data from the cluster, we need to wait until it will re-balnce
+        ceph_health_check(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
+        )
+
         super(TestPvcMultiSnapshotPerformance, self).teardown()
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an empty FIOResultsAnalyse object
+
+        Returns:
+            FIOResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("index", full_results.new_index)
+        full_results.add_key("snapshot_num", self.num_of_snaps)
+        full_results.add_key("pvc_size", self.pvc_size)
+        full_results.add_key("storageclass", self.sc_name.split("-")[-1])
+        full_results.add_key("dataset", self.capacity_to_use)
+        return full_results
 
     def get_csi_pod(self, namespace):
         """
@@ -362,7 +394,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         if snap_con_name:
             return self.get_creation_time(snap_name, snap_con_name, UTC_datetime)
         else:
-            err_msg = "Snapshot did not created on time"
+            err_msg = "Snapshot was not created on time"
             log.error(err_msg)
             raise TimeoutError(err_msg)
 
@@ -462,6 +494,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             # Taking Snapshot of the PVC
             ct = self.create_snapshot(test_num)
             speed = self.filesize / ct
+            self.total_creation_time += ct
+            self.total_creation_speed += speed
+
             results.append({"Snap Num": test_num, "time": ct, "speed": speed})
             log.info(
                 f"Results for snapshot number {test_num} are : "
@@ -471,7 +506,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         log.debug(f"All results are : {json.dumps(results, indent=3)}")
         return results
 
-    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-2623")
     @pytest.mark.parametrize(
         argnames=["interface_type", "snap_number"],
@@ -504,6 +538,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             StorageNotSufficientException: in case of not enough capacity
 
         """
+
+        # Getting the full path for the test logs
+        self.results_path = get_full_test_logs_path(cname=self)
+        self.full_log_path = f"{self.results_path}-{interface_type}-{snap_number}"
+        log.info(f"Logs file path name is : {self.full_log_path}")
+        log.info(f"Reslut path is : {self.results_path}")
 
         self.num_of_snaps = snap_number
         if self.dev_mode:
@@ -612,7 +652,47 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         self.get_log_names()
         self.build_fio_command()
+        self.start_time = self.get_time()
 
-        self.run()
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid, self.crd_data, self.full_log_path, "multiple_snapshots"
+            )
+        )
+        full_results.all_results = self.run()
+        self.end_time = self.get_time()
+        full_results.add_key(
+            "avg_creation_time",
+            f"{float(self.total_creation_time / self.num_of_snaps):.2f}",
+        )
+        full_results.add_key(
+            "avg_creation_speed",
+            f"{float(self.total_creation_speed / self.num_of_snaps):.2f}",
+        )
+        full_results.add_key(
+            "test_time", {"start": self.start_time, "end": self.end_time}
+        )
 
-        # TODO: push all results to elasticsearch server
+        # Writing the analyzed test results to the Elastic-Search server
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_pvc_multiple_snapshot_performance_results(self):
+        """
+        This is not a test - it only check that previous test completed and finish
+        as expected with reporting the full results (links in the ES) of previous 2 tests
+        """
+        self.number_of_tests = 2
+        results_path = get_full_test_logs_path(
+            cname=self, fname="test_pvc_multiple_snapshot_performance"
+        )
+        self.results_file = os.path.join(results_path, "all_results.txt")
+        log.info(f"Check results in {self.results_file}.")
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name="PVC Multiple Snapshots Creation")

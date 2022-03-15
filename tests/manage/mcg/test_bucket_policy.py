@@ -38,14 +38,14 @@ from ocs_ci.ocs.constants import (
     bucket_version_action_list,
     object_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
     """

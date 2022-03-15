@@ -1,6 +1,8 @@
 apiVersion: v1
 data:
   1-vault: '{"KMS_PROVIDER":"vaulttokens","KMS_SERVICE_NAME":"vault","VAULT_ADDR":"https://vault.qe.rh-ocs.com:8200","VAULT_BACKEND_PATH":"kv-v2","VAULT_CACERT":"ocs-kms-ca-secret","VAULT_TLS_SERVER_NAME":"","VAULT_NAMESPACE":"","VAULT_TOKEN_NAME":"ocs-kms-token","VAULT_CACERT_FILE":"fullchain.pem","VAULT_CLIENT_CERT_FILE":"cert.pem","VAULT_CLIENT_KEY_FILE":"privkey.pem","VAULT_BACKEND": "kv"}'
+  vault-tenant-sa: '{"encryptionKMSType": "vaulttenantsa", "vaultAddress": "https://vault.qe.rh-ocs.com:8200","vaultAuthPath": "","vaultAuthNamespace": "","vaultNamespace": "","vaultBackendPath": "kv-v2","vaultCAFromSecret": "ocs-kms-ca-secret","vaultClientCertFromSecret": "ocs-kms-client-cert","vaultClientCertKeyFromSecret": "ocs-kms-client-key"}'
+
 kind: ConfigMap
 metadata:
   name: csi-kms-connection-details

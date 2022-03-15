@@ -9,10 +9,9 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
-    tier4,
-    tier4a,
+    tier4c,
     tier3,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -30,8 +29,6 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
-@tier4
-@tier4a
 @ignore_leftovers()
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
@@ -52,6 +49,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
+    @tier4c
     @pytest.mark.parametrize(
         argnames=["resource_to_delete"],
         argvalues=[
@@ -81,6 +79,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
     @pytest.mark.parametrize(
@@ -116,6 +115,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier3
     @pytest.mark.parametrize(
         argnames=["pod_to_drain"],
         argvalues=[
@@ -230,7 +230,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     @tier3
     @pytest.mark.polarion_id("OCS-2513")
     @marks.bugzilla("1903573")
-    @skipif_openshift_dedicated
+    @skipif_managed_service
     @skipif_ocs_version("<4.7")
     def test_db_scc(self, teardown):
         """

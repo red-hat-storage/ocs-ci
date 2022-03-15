@@ -3,8 +3,14 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import tier1, ManageTest, acceptance
+from ocs_ci.framework.testlib import (
+    tier1,
+    ManageTest,
+    acceptance,
+    skipif_managed_service,
+)
 from ocs_ci.ocs import constants, node
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
@@ -22,7 +28,8 @@ log = logging.getLogger(__name__)
             constants.RECLAIM_POLICY_DELETE, marks=pytest.mark.polarion_id("OCS-751")
         ),
         pytest.param(
-            constants.RECLAIM_POLICY_RETAIN, marks=pytest.mark.polarion_id("OCS-750")
+            constants.RECLAIM_POLICY_RETAIN,
+            marks=[pytest.mark.polarion_id("OCS-750"), skipif_managed_service],
         ),
     ],
 )
@@ -43,11 +50,15 @@ class TestRawBlockPV(ManageTest):
     @pytest.fixture()
     def storageclass(self, storageclass_factory, reclaim_policy):
         """
-        Create storage class with reclaim policy
+        Create storage class if reclaim policy is not "Delete"
         """
         self.reclaim_policy = reclaim_policy
-        self.sc_obj = storageclass_factory(
-            interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy
+        self.sc_obj = (
+            default_storage_class(constants.CEPHBLOCKPOOL)
+            if reclaim_policy == constants.RECLAIM_POLICY_DELETE
+            else storageclass_factory(
+                interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy
+            )
         )
 
     @property
@@ -59,7 +70,7 @@ class TestRawBlockPV(ManageTest):
         pvcs = list()
         size_mb = "500Mi"
         size_gb = "10Gi"
-        if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             size_tb = str(convert_device_size("50Gi", "TB")) + "Ti"
         else:
             size_tb = "1Ti"
@@ -106,21 +117,21 @@ class TestRawBlockPV(ManageTest):
 
         with ThreadPoolExecutor() as p:
             for pod in pvc_mb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
                     size=f"{random.randint(10,200)}M",
                 )
             for pod in pvc_gb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
                     size=f"{random.randint(1,5)}G",
                 )
             for pod in pvc_tb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,

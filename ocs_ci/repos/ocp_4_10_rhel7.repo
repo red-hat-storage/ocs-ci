@@ -1,3 +1,4 @@
+# This file is mainly for ansible pod for adding RHEL nodes.
 [openshift]
 name=RHopenshift
 baseurl=https://mirror.openshift.com/enterprise/all/4.10/latest/x86_64/os/

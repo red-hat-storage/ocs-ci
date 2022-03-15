@@ -182,6 +182,12 @@ higher priority).
 * `ignition_data_encoding` - Encoding type used for the ignition config data
 * `device_size` - Size (in GB) to use for storage device sets
 * `rhel_workers` - Use RHEL workers instead of RHCOS, for UPI deployments (Default: false)
+* `rhel_version` - For AWS UPI deployment over RHEL. Based on this value we
+  will select one of rhelX.Y RHEL AMI mentioned below. (e.g 7.9 or 8.4)
+* `rhel_version_for_ansible` - This RHEL version will be used for running
+  ansible playbook for adding RHEL nodes.
+* `rhelX.Y_worker_ami` - AMI to use for AWS deployment over RHEL X.Y worker nodes
+  (X.Y replace with valid version e.g 7.9: rhel7.9_worker_ami).
 * `rhcos_ami` - AMI to use for RHCOS workers, for UPI deployments
 * `skip_ntp_configuration` - Skip NTP configuration during flexy deployment (Default: false)
 * `encryption_at_rest` - Enable encryption at rest (OCS >= 4.6 only) (Default: false)

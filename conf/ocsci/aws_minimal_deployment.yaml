@@ -3,6 +3,7 @@
 # 8CPU per worker node
 DEPLOYMENT:
   allow_lower_instance_requirements: true
+  ui_deployment: True
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'

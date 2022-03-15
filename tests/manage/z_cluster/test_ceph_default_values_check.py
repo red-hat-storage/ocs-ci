@@ -112,8 +112,10 @@ class TestCephDefaultValuesCheck(ManageTest):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version == version.VERSION_4_8:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
-        elif ocs_version >= version.VERSION_4_9:
+        elif ocs_version == version.VERSION_4_9:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
+        elif ocs_version >= version.VERSION_4_10:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
@@ -142,4 +144,38 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
         log.info(
             f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
+        )
+
+    @bugzilla("2012930")
+    @post_ocs_upgrade
+    @pytest.mark.polarion_id("OCS-2739")
+    def test_noobaa_postgres_cm_post_ocs_upgrade(self):
+        """
+        Validate noobaa postgres configmap post OCS upgrade
+
+        """
+        cm_obj = OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
+        config_data = config_data.split("\n")
+        config_data = config_data[5:]
+        log.info(
+            "Validating that the values configured in noobaa-postgres configmap "
+            "match the ones stored in ocs-ci"
+        )
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version <= version.VERSION_4_9:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
+            stored_values.remove("")
+        elif ocs_version >= version.VERSION_4_10:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_10.split("\n")
+            stored_values.remove("")
+        assert collections.Counter(config_data) == collections.Counter(stored_values), (
+            f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
+            f"is different than the expected. Please inform OCS-QE about this discrepancy. "
+            f"The expected values are:\n{stored_values}\n"
+            f"The cluster's existing values are:{config_data}"
         )

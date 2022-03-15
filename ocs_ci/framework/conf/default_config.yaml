@@ -100,6 +100,7 @@ DEPLOYMENT:
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -188,6 +189,18 @@ ENV_DATA:
   enable_console_plugin: true
   # MCG only deployment
   mcg_only_deployment: false
+  # RHEL VERSIONS:
+  # Once we will change this version to something which will not be supported on different
+  # OCP version, we need to make sure to put rhel_version to the all ocp related version config files
+  rhel_version: "8.4"
+  # This RHEL version will be used for running ansible playbook for adding RHEL nodes
+  rhel_version_for_ansible: 7
+  rhel7.9_worker_ami: 'ami-058a93d58c5797698'
+  rhel8.4_worker_ami: 'ami-074bab065c112399f'
+  cluster_type: ""
+
+  # ACM HUB deployment
+  deploy_acm_hub_cluster: false
 
 # This section is related to upgrade
 UPGRADE:
@@ -238,7 +251,7 @@ PERF:
   # There is a Lab ES for development testing - combine with --dev-mode argument
   dev_lab_es: true
   # The Dev. Lab ES information:  IP / Port
-  dev_es_server: "10.0.144.152"
+  dev_es_server: "10.0.144.103"
   dev_es_port: 9200
   dashboard_cred: "data/perfdash"
 
@@ -249,3 +262,10 @@ COMPONENTS:
   disable_noobaa: False
   disable_cephfs: False
   disable_blockpools: False
+
+# All Multicluster stuff here
+MULTICLUSTER:
+  # Index of this cluster Config in a list of cluster Configs
+  multicluster_index: 0
+  acm_cluster: False
+  primary_cluster: False

@@ -176,7 +176,7 @@ class TestFIOBenchmark(PASTest):
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 500:
-            self.filesize = int(ceph_capacity * 0.008)
+            self.filesize = int(ceph_capacity * 0.0415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
@@ -199,7 +199,6 @@ class TestFIOBenchmark(PASTest):
         """
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-            self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
         if io_pattern == "random":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = [
                 "randwrite",
@@ -319,7 +318,7 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime)
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=36000)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
@@ -602,8 +601,12 @@ class TestFIOBenchmark(PASTest):
         """
 
         workloads = [
-            {"name": "test_fio_workload_simple", "tests": 4},
-            {"name": "test_fio_compressed_workload", "tests": 6},
+            {"name": "test_fio_workload_simple", "tests": 4, "test_name": "FIO"},
+            {
+                "name": "test_fio_compressed_workload",
+                "tests": 6,
+                "test_name": "FIO-Compress",
+            },
         ]
         for wl in workloads:
             self.number_of_tests = wl["tests"]
@@ -611,4 +614,4 @@ class TestFIOBenchmark(PASTest):
             self.results_file = os.path.join(self.results_path, "all_results.txt")
             log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
             self.check_tests_results()
-            self.push_to_dashboard(test_name=self.benchmark_name)
+            self.push_to_dashboard(test_name=wl["test_name"])

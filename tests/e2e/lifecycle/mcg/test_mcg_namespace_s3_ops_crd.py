@@ -7,7 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -111,7 +111,7 @@ def multipart_setup(pod_obj):
 
 
 @pytest.mark.polarion_id("OCS-2296")
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
 @tier2

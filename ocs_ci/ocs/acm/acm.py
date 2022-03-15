@@ -1,21 +1,23 @@
 import logging
 import time
+import os
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
     ACM_MANAGED_CLUSTERS,
     ACM_PAGE_TITLE,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import MultiClusterConfig
+from ocs_ci.framework import config
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
-
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +49,6 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["choose_kubeconfig"])
         log.info(f"Coping Kubeconfig {kubeconfig_location}")
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
-        log.info(kubeconfig_to_import)
-        self.do_click(self.page_nav["Kubeconfig_text"])
         for line in kubeconfig_to_import:
             self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
             time.sleep(2)
@@ -62,6 +62,8 @@ class AcmAddClusters(AcmPageNavigator):
         Args:
             cluster_name: (str): cluster name to import
             kubeconfig_location: (str): kubeconfig location
+        Returns:
+            None, but exits if sample object is not None using TimeoutSampler
 
         """
 
@@ -76,8 +78,153 @@ class AcmAddClusters(AcmPageNavigator):
         ):
             if sample:
                 log.info(f"Cluster: {cluster_name} successfully imported")
+                return
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
+
+    def install_submariner_ui(self):
+        """
+        Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        """
+
+        self.navigate_clusters_page()
+        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        log.info("Click on Cluster sets")
+        self.do_click(self.page_nav["cluster-sets"])
+        self.page_has_loaded(retries=15, sleep_time=5)
+        log.info("Click on Create cluster set")
+        self.do_click(self.page_nav["create-cluster-set"])
+        global cluster_set_name
+        cluster_set_name = create_unique_resource_name("submariner", "clusterset")
+        log.info(f"Send Cluster set name '{cluster_set_name}'")
+        self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
+        log.info("Click on Create")
+        self.do_click(self.page_nav["click-create"], enable_screenshot=True)
+        time.sleep(1)
+        log.info("Click on Manage resource assignments")
+        self.do_click(
+            self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
+        )
+
+        log.info(f"Search and select cluster '{cluster_name_a}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
+        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
+        log.info("Clear search by clicking on cross mark")
+        self.do_click(self.page_nav["clear-search"])
+        log.info(f"Search and select cluster '{cluster_name_b}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_b)
+        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
+        log.info("Clear search by clicking on cross mark [2]")
+        self.do_click(self.page_nav["clear-search"])
+        log.info("Click on 'Review'")
+        self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
+        log.info("Click on 'Save' to confirm the changes")
+        self.do_click(self.page_nav["confirm-btn"], enable_screenshot=True)
+        time.sleep(3)
+        log.info("Click on 'Submariner add-ons' tab")
+        self.do_click(self.page_nav["submariner-tab"])
+        log.info("Click on 'Install Submariner add-ons' button")
+        self.do_click(self.page_nav["install-submariner-btn"])
+        log.info("Click on 'Target clusters'")
+        self.do_click(self.page_nav["target-clusters"])
+        log.info(f"Select 1st cluster which is {cluster_name_a}")
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-name-selection"],
+                string_to_insert=cluster_name_a,
+            )
+        )
+        log.info(f"Select 2nd cluster which is {cluster_name_b}")
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-name-selection"],
+                string_to_insert=cluster_name_b,
+            ),
+            enable_screenshot=True,
+        )
+        log.info("Click on Next button")
+        self.do_click(self.page_nav["next-btn"])
+        log.info("Click on 'Enable NAT-T' to uncheck it")
+        self.do_click(self.page_nav["nat-t-checkbox"])
+        log.info(
+            "Increase the gateway count to 3 by clicking twice on the gateway count add button"
+        )
+        self.do_click(self.page_nav["gateway-count-btn"])
+        self.do_click(self.page_nav["gateway-count-btn"])
+        log.info("Click on Next button")
+        self.do_click(self.page_nav["next-btn"])
+        log.info("Click on 'Enable NAT-T' to uncheck it [2]")
+        self.do_click(self.page_nav["nat-t-checkbox"])
+        log.info(
+            "Increase the gateway count to 3 by clicking twice on the gateway count add button [2]"
+        )
+        self.do_click(self.page_nav["gateway-count-btn"])
+        self.do_click(self.page_nav["gateway-count-btn"])
+        log.info("Click on Next button [2]")
+        self.do_click(self.page_nav["next-btn"])
+        self.take_screenshot()
+        log.info("Click on 'Install'")
+        self.do_click(self.page_nav["install-btn"])
+
+    def submariner_validation_ui(self):
+        """
+        Checks available status of imported clusters after submariner creation
+
+        """
+
+        self.navigate_clusters_page()
+        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        log.info("Click on Cluster sets")
+        self.do_click(self.page_nav["cluster-sets"])
+        self.page_has_loaded(retries=15, sleep_time=5)
+        log.info("Click on the cluster set created")
+        self.do_click(
+            format_locator(
+                locator=self.page_nav["cluster-set-selection"],
+                string_to_insert=cluster_set_name,
+            )
+        )
+        log.info("Click on 'Submariner add-ons' tab")
+        self.do_click(self.page_nav["submariner-tab"])
+        log.info("Checking connection status of both the imported clusters")
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-1"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-2"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        log.info("Checking agent status of both the imported clusters")
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["agent-status-1"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["agent-status-2"],
+            expected_text="Healthy",
+            timeout=600,
+        )
+        log.info("Checking if nodes of both the imported clusters are labeled or not")
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["node-label-1"],
+            expected_text="Nodes labeled",
+            timeout=600,
+        )
+        self.wait_until_expected_text_is_found(
+            locator=self.page_nav["node-label-2"],
+            expected_text="Nodes labeled",
+            timeout=600,
+        )
+        self.take_screenshot()
+        log.info("Submariner add-ons creation is successful")
 
 
 def copy_kubeconfig(file):
@@ -172,9 +319,11 @@ def validate_cluster_import(cluster_name):
     Assert:
         All conditions of selected managed cluster should be "True", Failed otherwise
 
+    Return:
+        True, if not AssertionError
     """
-    oc_obj = OCP()
-    log.debug({oc_obj.get(resource_name=ACM_MANAGED_CLUSTERS)})
+    config.switch_ctx(0)
+    oc_obj = OCP(kind=ACM_MANAGED_CLUSTERS)
     conditions = oc_obj.exec_oc_cmd(
         f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"
     )
@@ -187,30 +336,25 @@ def validate_cluster_import(cluster_name):
             dict_status.get("status") == "True"
         ), f"Status is not True, but: {dict_status.get('status')}"
 
+    # Return true if Assertion error was not raised:
+    return True
+
 
 def get_clusters_env():
     """
     Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup
-
+        Returns after execution with cluster index zero as default context
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
     """
-    config = MultiClusterConfig()
-    clusters_env = dict()
-    config.switch_ctx(index=0)
-    clusters_env["kubeconfig_hub_location"] = config.ENV_DATA.get("kubeconfig_location")
-    clusters_env["hub_cluster_name"] = config.ENV_DATA.get("cluster_name")
-    config.switch_ctx(index=1)
-    clusters_env["kubeconfig_cl_a_location"] = config.ENV_DATA.get(
-        "kubeconfig_location"
-    )
-    clusters_env["cl_a_cluster_name"] = config.ENV_DATA.get("cluster_name")
-    config.switch_ctx(index=2)
-    clusters_env["kubeconfig_cl_b_location"] = config.ENV_DATA.get(
-        "kubeconfig_location"
-    )
-    clusters_env["cl_b_cluster_name"] = config.ENV_DATA.get("cluster_name")
+    clusters_env = {}
+    for index in range(config.nclusters):
+        config.switch_ctx(index=index)
+        clusters_env[f"kubeconfig_location_c{index}"] = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        clusters_env[f"cluster_name_{index}"] = config.ENV_DATA["cluster_name"]
 
     config.switch_ctx(index=0)
 
@@ -224,10 +368,12 @@ def import_clusters_with_acm():
     """
     clusters_env = get_clusters_env()
     log.info(clusters_env)
-    kubeconfig_a = clusters_env.get("kubeconfig_cl_a_location")
-    kubeconfig_b = clusters_env.get("kubeconfig_cl_b_location")
-    cluster_name_a = clusters_env.get("cl_a_cluster_name")
-    cluster_name_b = clusters_env.get("cl_b_cluster_name")
+    kubeconfig_a = clusters_env.get("kubeconfig_location_c1")
+    kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
+    global cluster_name_a
+    cluster_name_a = clusters_env.get("cluster_name_1")
+    global cluster_name_b
+    cluster_name_b = clusters_env.get("cluster_name_2")
     verify_running_acm()
     driver = login_to_acm()
     acm_nav = AcmAddClusters(driver)

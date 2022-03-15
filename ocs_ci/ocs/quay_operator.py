@@ -1,16 +1,21 @@
 import logging
 from time import sleep
+import requests
 
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.helpers import (
+    storagecluster_independent_check,
+    create_unique_resource_name,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, run_cmd
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd, exec_cmd
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +28,18 @@ class QuayOperator(object):
 
     def __init__(self):
         """
-        Initializer function
+        Quay operator initializer function
 
         """
         self.namespace = constants.OPENSHIFT_OPERATORS
+        self.ocp_obj = ocp.OCP(namespace=self.namespace)
         self.quay_operator = None
         self.quay_registry = None
+        self.quay_registry_secret = None
         self.quay_pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
         self.quay_registry_name = ""
         self.quay_operator_csv = ""
+        self.quay_registry_secret_name = ""
         self.sc_default = False
         self.sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -77,8 +85,21 @@ class QuayOperator(object):
                 f"--request-timeout=120s"
             )
             self.sc_default = True
+        self.quay_registry_secret_name = create_unique_resource_name(
+            "quay-user", "secret"
+        )
+        logger.info(
+            f"Creating Quay registry config for super-user access: {self.quay_registry_secret_name}"
+        )
+        self.quay_registry_secret = self.ocp_obj.exec_oc_cmd(
+            command=f"create secret generic --from-file config.yaml={constants.QUAY_SUPER_USER} "
+            f"{self.quay_registry_secret_name}"
+        )
         quay_registry_data = templating.load_yaml(file=constants.QUAY_REGISTRY)
         self.quay_registry_name = quay_registry_data["metadata"]["name"]
+        quay_registry_data["spec"][
+            "configBundleSecret"
+        ] = self.quay_registry_secret_name
         self.quay_registry = OCS(**quay_registry_data)
         logger.info(f"Creating Quay registry: {self.quay_registry.name}")
         self.quay_registry.create()
@@ -117,6 +138,13 @@ class QuayOperator(object):
             else False
         )
 
+    def get_quay_endpoint(self):
+        """
+        Returns quay endpoint
+
+        """
+        return self.quay_registry.get().get("status").get("registryEndpoint")
+
     def teardown(self):
         """
         Quay operator teardown
@@ -129,12 +157,154 @@ class QuayOperator(object):
                 f"-p {patch} "
                 f"--request-timeout=120s"
             )
+        if self.quay_registry_secret:
+            self.ocp_obj.exec_oc_cmd(f"delete secret {self.quay_registry_secret_name}")
         if self.quay_registry:
             self.quay_registry.delete()
         if self.quay_operator:
             self.quay_operator.delete()
         if self.quay_operator_csv:
-            exec_cmd(
-                f"oc delete {constants.CLUSTER_SERVICE_VERSION} "
-                f"{self.quay_operator_csv} -n {self.namespace}"
+            self.ocp_obj.exec_oc_cmd(
+                f"delete {constants.CLUSTER_SERVICE_VERSION} "
+                f"{self.quay_operator_csv}"
             )
+
+
+def get_super_user_token(endpoint):
+    """
+    Gets the initialized super user token.
+    This is one time, cant get the token again once initialized.
+
+    Args:
+        endpoint (str): Quay Endpoint url
+
+    Returns:
+        str: Super user token
+    """
+    data = (
+        f'{{"username": "{constants.QUAY_SUPERUSER}", "password": "{constants.QUAY_PW}", '
+        f'"email": "quayadmin@example.com", "access_token": true}}'
+    )
+    r = requests.post(
+        f"{endpoint}/{constants.QUAY_USER_INIT}",
+        headers={"content-type": "application/json"},
+        data=data,
+        verify=False,
+    )
+    return r.json()["access_token"]
+
+
+def check_super_user(endpoint, token):
+    """
+    Validates the super user based on the token
+
+    Args:
+        endpoint (str): Quay Endpoint url
+        token (str): Super user token
+
+    Returns:
+        bool: True in case token is from a super user
+    """
+    r = requests.get(
+        f"{endpoint}/{constants.QUAY_USER_GET}",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        verify=False,
+    )
+    return True if r.json()["users"][0]["super_user"] else False
+
+
+def create_quay_org(endpoint, token, org_name):
+    """
+    Creates an organization in quay
+
+    Args:
+        endpoint (str): Quay endpoint url
+        token (str): Super user token
+        org_name (str): Organization name
+
+    Returns:
+        bool: True in case org creation is successful
+    """
+    data = f'{{"recaptcha_response": "string", "name": "{org_name}", "email": "{org_name}@test.com"}}'
+    r = requests.post(
+        f"{endpoint}/{constants.QUAY_ORG_POST}",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        data=data,
+        verify=False,
+    )
+    return True if "Created" in r.json() else False
+
+
+def create_quay_repository(
+    endpoint, token, repo_name, org_name, description="new_repo"
+):
+    """
+    Creates a quay repository
+
+    Args:
+        endpoint (str): Quay Endpoint url
+        token (str): Super user token
+        org_name (str): Organization name
+        repo_name (str): Repository name
+        description (str): Description of the repo
+
+    Returns:
+        bool: True in case repo creation is successful
+    """
+    data = (
+        f'{{"namespace": "{org_name}", "repository": "{repo_name}", '
+        f'"description":"{description}", "visibility": "public"}}'
+    )
+    r = requests.post(
+        f"{endpoint}/{constants.QUAY_REPO_POST}",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        data=data,
+        verify=False,
+    )
+    return True if "Created" in r.json() else False
+
+
+def delete_quay_repository(endpoint, token, org_name, repo_name):
+    """
+    Deletes the quay repository
+
+    Args:
+        endpoint (str): Quay Endpoint url
+        token (str): Super user token
+        org_name (str): Organization name
+        repo_name (str): Repository name
+
+    Returns:
+        bool: True in case repo is delete successfully
+    """
+    r = requests.delete(
+        f"{endpoint}/{constants.QUAY_REPO_POST}/{org_name}/{repo_name}",
+        headers={
+            "content-type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        verify=False,
+    )
+    return True if "204" in str(r.status_code) else False
+
+
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
+def quay_super_user_login(endpoint_url):
+    """
+    Logins in to quay endpoint
+
+    Args:
+        endpoint_url (str): External endpoint of quay
+    """
+    exec_cmd(
+        f"podman login {endpoint_url} -u {constants.QUAY_SUPERUSER} -p {constants.QUAY_PW} --tls-verify=false"
+    )

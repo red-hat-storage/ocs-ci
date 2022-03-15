@@ -748,6 +748,7 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
@@ -763,7 +764,7 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
+    if ocs_version == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
@@ -778,6 +779,13 @@ def setup_ceph_toolbox(force_setup=False):
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
             env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
             # replace secret
             env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
@@ -1227,3 +1235,34 @@ def enable_console_plugin():
             f" --type json -p {patch}"
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+
+def get_non_acm_cluster_config():
+    """
+    Get a list of non-acm cluster's config objects
+
+    Returns:
+        list: of cluster config objects
+
+    """
+    non_acm_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i == ocsci_config.get_acm_index():
+            continue
+        else:
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+
+def get_primary_cluster_config():
+    """
+    Get the primary cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["primary_cluster"]:
+            return cluster

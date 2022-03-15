@@ -48,7 +48,7 @@ class TestCheckTolerationForCephCsiDriverDs(ManageTest):
                         )
                         continue
                 except Exception as e:
-                    logging.info(f"Plugin pod was not found on {node_obj.name} - {e}")
+                    logger.info(f"Plugin pod was not found on {node_obj.name} - {e}")
 
         # Creates app-pods on app-nodes
         for node in app_nodes:

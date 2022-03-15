@@ -10,7 +10,7 @@ login = {
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
-    "flexy_kubeadmin": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
+    "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
 }
 
 deployment = {
@@ -139,11 +139,14 @@ deployment_4_9 = {
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
 deployment_4_10 = {
     "mcg_only_option_4_10": ("//span[text()='MultiCloud Object Gateway']", By.XPATH),
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
+    "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
+    "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -288,6 +291,8 @@ pvc = {
     ),
     "confirm_pvc_deletion": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
+    "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
 }
 
 pvc_4_7 = {
@@ -364,13 +369,18 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
+    "drop_down_projects": (
+        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
 }
 
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
-    "Infrastructure": ("//button[text()='Infrastructure']", By.XPATH),
+    "Infrastructure": ("//button[normalize-space()='Infrastructure']", By.XPATH),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
     "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
     "Automation_page": ("Automation", By.LINK_TEXT),
@@ -382,8 +392,138 @@ acm_page_nav = {
     "Import_cluster_enter_name": ("clusterName", By.ID),
     "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
-    "Kubeconfig_text": ('textarea[label="Kubeconfig"]', By.CSS_SELECTOR),
+    "Kubeconfig_text": ("kubeConfigEntry", By.ID),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
+}
+
+acm_configuration = {
+    "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
+    "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "cluster-set-name": (
+        "input[placeholder='Enter cluster set name']",
+        By.CSS_SELECTOR,
+    ),
+    "click-create": ("button[type='submit']", By.CSS_SELECTOR),
+    "click-manage-resource-assignments": (
+        "//button[normalize-space()='Manage resource assignments']",
+        By.XPATH,
+    ),
+    "select-all-assignments": ("input[aria-label='Select all']", By.CSS_SELECTOR),
+    "click-local-cluster": (
+        "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
+        By.XPATH,
+    ),
+    "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
+    "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
+    "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
+    "review-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "confirm-btn": ("button[type='submit']", By.CSS_SELECTOR),
+    "cluster-set-status": ("//span[@class='pf-c-modal-box__title-text']", By.XPATH),
+    "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
+    "install-submariner-btn": (
+        "//button[normalize-space()='Install Submariner add-ons']",
+        By.XPATH,
+    ),
+    "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
+    "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
+    "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
+    "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
+    "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
+    "connection-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[1]",
+        By.XPATH,
+    ),
+    "connection-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[3]",
+        By.XPATH,
+    ),
+    "agent-status-1": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[2]",
+        By.XPATH,
+    ),
+    "agent-status-2": (
+        "(//button[@type='button'][normalize-space()='Healthy'])[4]",
+        By.XPATH,
+    ),
+    "node-label-1": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[1]",
+        By.XPATH,
+    ),
+    "node-label-2": (
+        "(//button[@type='button'][normalize-space()='Nodes labeled'])[2]",
+        By.XPATH,
+    ),
+    "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
+    "cc_create_cluster": ("createCluster", By.ID),
+    "cc_provider_vmware_vsphere": ("//*[@id='vmware-vsphere']", By.XPATH),
+    "cc_cluster_name": ("//input[@id='eman']", By.XPATH),
+    "cc_base_dns_domain": ("//input[@id='baseDomain']", By.XPATH),
+    "cc_openshift_release_image": ("//input[@id='imageSet']", By.XPATH),
+    "cc_vsphere_network_name": ("//input[@id='networkType']", By.XPATH),
+    "cc_api_vip": ("//input[@id='apiVIP']", By.XPATH),
+    "cc_ingress_vip": ("//input[@id='ingressVIP']", By.XPATH),
+    "cc_next_page_button": ("//button[normalize-space()='Next']", By.XPATH),
+    "cc_create_button": ("//button[normalize-space()='Create']", By.XPATH),
+    "cc_cluster_details": ("//div[contains(text(),'Cluster details')]", By.XPATH),
+    "cc_node_pools": ("//div[contains(text(),'Node pools')]", By.XPATH),
+    "cc_networks": ("//div[contains(text(),'Networks')]", By.XPATH),
+    "cc_proxy": ("//div[contains(text(),'Proxy')]", By.XPATH),
+    "cc_review": ("//button[normalize-space()='Review']", By.XPATH),
+    "cc_infrastructure_provider_creds_dropdown": (
+        "input[placeholder='Select a credential']",
+        By.CSS_SELECTOR,
+    ),
+    "cc_infrastructure_provider_creds_select_creds": (
+        "//button[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "cc_provider_credentials": ("//div[@id='add-provider-connection']", By.XPATH),
+    "cc_provider_creds_vsphere": (
+        "//div[@id='vmw']//div[@class='pf-c-tile__header pf-m-stacked']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_cred_name": ("//input[@id='credentialsName']", By.XPATH),
+    "cc_provider_creds_vsphere_cred_namespace": (
+        "//input[@id='namespaceName-input-toggle-select-typeahead']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
+    "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
+    "cc_provider_creds_vsphere_username": ("//input[@id='username']", By.XPATH),
+    "cc_provider_creds_vsphere_password": ("//input[@id='password']", By.XPATH),
+    "cc_provider_creds_vsphere_rootca": ("//textarea[@id='cacertificate']", By.XPATH),
+    "cc_provider_creds_vsphere_clustername": ("//input[@id='cluster']", By.XPATH),
+    "cc_provider_creds_vsphere_dc": ("//input[@id='datacenter']", By.XPATH),
+    "cc_provider_creds_vsphere_datastore": (
+        "//input[@id='defaultDatastore']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_pullsecret": ("//textarea[@id='pullSecret']", By.XPATH),
+    "cc_provider_creds_vsphere_ssh_privkey": (
+        "//textarea[@id='ssh-privatekey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_ssh_pubkey": (
+        "//textarea[@id='ssh-publickey']",
+        By.XPATH,
+    ),
+    "cc_provider_creds_vsphere_add_button": (
+        "//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_config": (
+        "//button[@id='download-configuration']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_install_config": (
+        "//a[normalize-space()='install-config']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status_failed": (
+        "//button[normalize-space()='Failed']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
@@ -411,6 +551,8 @@ add_capacity = {
     ),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
+    "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -608,6 +750,9 @@ locators = {
             **deployment_4_9,
             **deployment_4_10,
         },
+        "add_capacity": add_capacity,
+        "validation": {**validation, **validation_4_8, **validation_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.9": {
         "login": login,
@@ -615,7 +760,7 @@ locators = {
         "deployment": {**deployment, **deployment_4_7, **deployment_4_9},
         "generic": generic_locators,
         "validation": {**validation, **validation_4_8, **validation_4_9},
-        "acm_page": acm_page_nav,
+        "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },

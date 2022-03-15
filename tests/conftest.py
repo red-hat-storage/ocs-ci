@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -68,7 +70,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
-from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
@@ -134,6 +136,15 @@ class OCSLogFormatter(logging.Formatter):
             "- %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
+
+
+def pytest_assertrepr_compare(config, op, left, right):
+    """
+    Log error message for a failed assert, so that it's possible to locate a
+    moment of the failure in test logs. Returns None so that it won't actually
+    change assert explanation.
+    """
+    log.error("'assert %s %s %s' failed", left, op, right)
 
 
 def pytest_logger_config(logger_config):
@@ -211,7 +222,7 @@ def pytest_collection_modifyitems(session, items):
                     items.remove(item)
             if skipif_no_kms_marker:
                 try:
-                    if not is_kms_enabled():
+                    if not is_kms_enabled(dont_raise=True):
                         log.info(
                             f"Test: {item} it will be skipped because the OCS cluster"
                             f" has not configured cluster-wide encryption with KMS"
@@ -357,7 +368,8 @@ def log_ocs_version(cluster):
     elif skip_ocs_deployment:
         log.info("Skipping version reporting since OCS deployment is skipped.")
         return
-    cluster_version, image_dict = get_ocs_version()
+    cluster_version = get_ocp_version_dict()
+    image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
     )
@@ -376,33 +388,33 @@ def pagerduty_service(request):
         str: PagerDuty service json
 
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        pagerduty_api = pagerduty.PagerDutyAPI()
-        payload = pagerduty_api.get_service_dict()
-        service_response = pagerduty_api.create("services", payload=payload)
-        msg = f"Request {service_response.request.url} failed"
-        assert service_response.ok, msg
-        service = service_response.json().get("service")
-
-        def teardown():
-            """
-            Delete the service at the end of test run
-            """
-            service_id = service["id"]
-            log.info(f"Deleting service with id {service_id}")
-            delete_response = pagerduty_api.delete(f"services/{service_id}")
-            msg = f"Deletion of service {service_id} failed"
-            assert delete_response.ok, msg
-
-        request.addfinalizer(teardown)
-        return service
-    else:
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
         log.info(
             "PagerDuty service is not created because "
             f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
             "is not used"
         )
         return None
+
+    pagerduty_api = pagerduty.PagerDutyAPI()
+    payload = pagerduty_api.get_service_dict()
+    service_response = pagerduty_api.create("services", payload=payload)
+    msg = f"Request {service_response.request.url} failed: {service_response.text}"
+    assert service_response.ok, msg
+    service = service_response.json().get("service")
+
+    def teardown():
+        """
+        Delete the service at the end of test run
+        """
+        service_id = service["id"]
+        log.info(f"Deleting service with id {service_id}")
+        delete_response = pagerduty_api.delete(f"services/{service_id}")
+        msg = f"Deletion of service {service_id} failed"
+        assert delete_response.ok, msg
+
+    request.addfinalizer(teardown)
+    return service
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -414,34 +426,40 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        service_id = pagerduty_service["id"]
-        pagerduty_api = pagerduty.PagerDutyAPI()
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
+        # this is used only for managed service platforms
+        return
 
-        log.info(
-            "Looking if Prometheus integration for pagerduty service with id "
-            f"{service_id} exists"
-        )
-        integration_key = None
-        for integration in pagerduty_service.get("integrations"):
-            if integration["summary"] == "Prometheus":
-                log.info(
-                    "Prometheus integration already exists. "
-                    "Skipping creation of new one."
-                )
-                integration_key = integration["integration_key"]
-                break
+    service_id = pagerduty_service["id"]
+    pagerduty_api = pagerduty.PagerDutyAPI()
 
-        if not integration_key:
-            payload = pagerduty_api.get_integration_dict("Prometheus")
-            integration_response = pagerduty_api.create(
-                f"services/{service_id}/integrations", payload=payload
+    log.info(
+        "Looking if Prometheus integration for pagerduty service with id "
+        f"{service_id} exists"
+    )
+    integration_key = None
+    for integration in pagerduty_service.get("integrations"):
+        if integration["summary"] == "Prometheus":
+            log.info(
+                "Prometheus integration already exists. "
+                "Skipping creation of new one."
             )
-            msg = f"Request {integration_response.request.url} failed"
-            assert integration_response.ok, msg
-            integration = integration_response.json().get("integration")
             integration_key = integration["integration_key"]
-        pagerduty.set_pagerduty_integration_secret(integration_key)
+            break
+
+    if not integration_key:
+        payload = pagerduty_api.get_integration_dict("Prometheus")
+        integration_response = pagerduty_api.create(
+            f"services/{service_id}/integrations", payload=payload
+        )
+        msg = (
+            f"Request {integration_response.request.url} failed: "
+            f"{integration_response.text}"
+        )
+        assert integration_response.ok, msg
+        integration = integration_response.json().get("integration")
+        integration_key = integration["integration_key"]
+    pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
@@ -1317,6 +1335,13 @@ def health_checker(request, tier_marks_name):
         log.info("Skipping health checks for development mode")
         return
 
+    if config.multicluster:
+        if (
+            config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            == config.get_acm_index()
+        ):
+            return
+
     def finalizer():
         if not skipped:
             try:
@@ -2081,7 +2106,7 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         log.warning("As openshift dedicated is used, no MCG resource is returned")
         return None
 
@@ -3977,7 +4002,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
     """
     instances = []
 
-    def factory(pvc_size_new, pgsql):
+    def factory(pvc_size_new, pgsql, sc_name=None):
         """
         Args:
             pvc_size_new (int): Resize/Expand the pvc size
@@ -3994,11 +4019,15 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         snapshots = multi_snapshot_factory(pvc_obj=postgres_pvcs_obj)
         log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
-        restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=snapshots)
+        restored_pvc_objs = multi_snapshot_restore_factory(
+            snapshot_obj=snapshots, storageclass=sc_name
+        )
         log.info("Created new PVCs from all the snapshots")
 
         cloned_pvcs = multi_pvc_clone_factory(
-            pvc_obj=restored_pvc_objs, volume_mode=constants.VOLUME_MODE_FILESYSTEM
+            pvc_obj=restored_pvc_objs,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+            storageclass=sc_name,
         )
         log.info("Created new PVCs from all restored volumes")
 
@@ -4020,7 +4049,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         )
 
         new_restored_pvc_objs = multi_snapshot_restore_factory(
-            snapshot_obj=new_snapshots
+            snapshot_obj=new_snapshots, storageclass=sc_name
         )
         log.info("Created new PVCs from all the snapshots and in Bound state")
         # Attach a new pgsql pod restored pvcs
@@ -4096,6 +4125,22 @@ def setup_ui_fixture(request):
     return driver
 
 
+@pytest.fixture(scope="function")
+def setup_acm_ui(request):
+    return setup_acm_ui_fixture(request)
+
+
+def setup_acm_ui_fixture(request):
+    driver = login_to_acm()
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
+
+
 @pytest.fixture(scope="session", autouse=True)
 def load_cluster_info_file(request):
     """
@@ -4110,7 +4155,6 @@ def load_cluster_info_file(request):
 def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
-
     """
     vault = KMS.Vault()
 
@@ -4118,10 +4162,8 @@ def pv_encryption_kms_setup_factory(request):
         """
         Args:
             kv_version(str): KV version to be used, either v1 or v2
-
         Returns:
             object: Vault(KMS) object
-
         """
         vault.gather_init_vault_conf()
         vault.update_vault_env_vars()
@@ -4181,7 +4223,6 @@ def pv_encryption_kms_setup_factory(request):
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(vault.kmsid)
-        # Delete the resources in vault
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
         vault.remove_vault_namespace()
@@ -4365,6 +4406,127 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                     f"Could not delete storageclass {instances.name} from UI."
                     f"Deleted from CLI"
                 )
+
+    request.addfinalizer(finalizer)
+    return
+
+
+@pytest.fixture()
+def vault_tenant_sa_setup_factory(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap for
+    vault tenant sa method of PV encryption
+
+    """
+    vault = KMS.Vault()
+
+    def factory(
+        kv_version,
+        use_auth_path=False,
+        use_namespace=True,
+        use_backend=False,
+    ):
+        """
+        Args:
+            kv_version (str): KV version to be used, either v1 or v2
+            use_auth_path (bool): Use a non-default auth path (used with kubernetes auth method)
+            use_namespace (bool): Use namespace in Vault
+            use_backend (bool): Specify VaultBackend variable in the configmap when set to True
+
+        Returns:
+            object: Vault(KMS) object
+
+        """
+        vault.gather_init_vault_conf()
+        vault.update_vault_env_vars()
+
+        # Check if cert secrets already exist, if not create cert resources
+        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        try:
+            ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                vault.create_ocs_vault_cert_resources()
+
+        # Create vault namespace, backend path and policy in vault
+        vault_resource_name = create_unique_resource_name("test", "vault")
+
+        if use_namespace:
+            vault.vault_create_namespace(namespace=vault_resource_name)
+
+        vault.vault_create_backend_path(
+            backend_path=vault_resource_name, kv_version=kv_version
+        )
+        vault.vault_create_policy(policy_name=vault_resource_name)
+        vault.kmsid = vault_resource_name
+
+        vault.create_token_reviewer_resources()
+        if use_auth_path and use_namespace:
+            vault.vault_kube_auth_setup(
+                auth_path=vault_resource_name, auth_namespace=vault_resource_name
+            )
+        elif use_auth_path:
+            vault.vault_kube_auth_setup(auth_path=vault_resource_name)
+        elif use_namespace:
+            vault.vault_kube_auth_setup(auth_namespace=vault_resource_name)
+        else:
+            vault.vault_kube_auth_setup()
+
+        # If csi-kms-connection-details exists, edit the configmap to add new vault config
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            vdict = copy.deepcopy(defaults.VAULT_TENANT_SA_CONNECTION_CONF)
+            for key in vdict.keys():
+                old_key = key
+            vdict[vault.kmsid] = vdict.pop(old_key)
+            vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
+            if use_namespace:
+                vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
+                vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
+            else:
+                vdict[vault.kmsid].pop("vaultNamespace")
+                vdict[vault.kmsid].pop("vaultAuthNamespace")
+            if use_auth_path:
+                vdict[vault.kmsid]["vaultAuthPath"] = vault_resource_name
+            else:
+                vdict[vault.kmsid].pop("vaultAuthPath")
+            if use_backend:
+                if kv_version == "v1":
+                    vdict[vault.kmsid]["vaultBackend"] = "kv"
+                else:
+                    vdict[vault.kmsid]["vaultBackend"] = "kv-v2"
+            else:
+                vdict[vault.kmsid].pop("vaultBackend")
+            KMS.update_csi_kms_vault_connection_details(vdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                vault.kmsid = "vault-tenant-sa"
+                vault.create_vault_csi_kms_connection_details(
+                    kv_version=kv_version, kms_auth_type=constants.VAULT_TENANT_SA
+                )
+        return vault
+
+    def finalizer():
+        """
+        Cleanup for vault resources and csi-kms-connection-details configMap
+
+        """
+        vault.remove_vault_backend_path()
+        vault.remove_vault_policy()
+        if "VAULT_NAMESPACE" in os.environ:
+            vault.remove_vault_namespace()
+        KMS.remove_token_reviewer_resources()
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(vault.kmsid)
 
     request.addfinalizer(finalizer)
     return factory

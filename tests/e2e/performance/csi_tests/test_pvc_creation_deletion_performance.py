@@ -1,6 +1,6 @@
 """
 Test to verify performance of PVC creation and deletion
-for RBD, CephFS and RBD-Thick interfaces
+for RBD and CephFS interfaces
 """
 import time
 import logging
@@ -69,14 +69,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pod_factory: A fixture to create new pod
         """
         self.interface = interface_type
-        if self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc_obj = storageclass_factory(
-                interface=constants.CEPHBLOCKPOOL,
-                new_rbd_pool=True,
-                rbd_thick_provision=True,
-            )
-        else:
-            self.sc_obj = storageclass_factory(self.interface)
+        self.sc_obj = storageclass_factory(self.interface)
         self.pod_factory = pod_factory
 
     @pytest.fixture()
@@ -109,39 +102,21 @@ class TestPVCCreationDeletionPerformance(PASTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "5Gi"],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "15Gi"],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, "25Gi"],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "5Gi"],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "15Gi"],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, "25Gi"],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "5Gi"],
-                marks=[pytest.mark.performance_extended],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "15Gi"],
-                marks=[pytest.mark.performance_extended],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK, "25Gi"],
-                marks=[pytest.mark.performance_extended],
             ),
         ],
     )
@@ -161,8 +136,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
-        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}-{pvc_size}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
@@ -181,17 +154,16 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.full_results.add_key("pvc_size", pvc_size)
         num_of_samples = 5
-        accepted_creation_time = (
-            600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 1
-        )
+        if self.dev_mode:
+            num_of_samples = 2
 
-        # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs and for RBD Thick is 5 secs
+        accepted_creation_time = 1
+
+        # accepted deletion time for RBD is 1 sec, for CephFS is 2 secs
         if self.interface == constants.CEPHFILESYSTEM:
             accepted_deletion_time = 2
         elif self.interface == constants.CEPHBLOCKPOOL:
             accepted_deletion_time = 1
-        else:
-            accepted_deletion_time = 5
 
         self.full_results.add_key("samples", num_of_samples)
 
@@ -199,14 +171,16 @@ class TestPVCCreationDeletionPerformance(PASTest):
         accepted_deletion_deviation_percent = 50
 
         creation_time_measures = []
+        csi_creation_times = []
         deletion_time_measures = []
+        csi_deletion_times = []
         msg_prefix = f"Interface: {self.interface}, PVC size: {pvc_size}."
 
         for i in range(num_of_samples):
-            logging.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
+            log.info(f"{msg_prefix} Start creating PVC number {i + 1}.")
             start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
-            timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+            timeout = 60
             helpers.wait_for_resource_state(
                 pvc_obj, constants.STATUS_BOUND, timeout=timeout
             )
@@ -216,7 +190,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 self.interface, pvc_obj.name, start_time
             )
 
-            logging.info(
+            log.info(
                 f"{msg_prefix} PVC number {i + 1} was created in {creation_time} seconds."
             )
             if creation_time > accepted_creation_time:
@@ -225,6 +199,11 @@ class TestPVCCreationDeletionPerformance(PASTest):
                     f"{accepted_creation_time} seconds."
                 )
             creation_time_measures.append(creation_time)
+            csi_creation_times.append(
+                performance_lib.csi_pvc_time_measure(
+                    self.interface, pvc_obj, "create", start_time
+                )
+            )
 
             pv_name = pvc_obj.backed_pv
             pvc_reclaim_policy = pvc_obj.reclaim_policy
@@ -232,7 +211,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pod_obj = self.write_file_on_pvc(pvc_obj)
             pod_obj.delete(wait=True)
             teardown_factory(pvc_obj)
-            logging.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
+            log.info(f"{msg_prefix} Start deleting PVC number {i + 1}")
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 pvc_obj.delete()
                 pvc_obj.ocp.wait_for_delete(pvc_obj.name)
@@ -240,7 +219,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 deletion_time = helpers.measure_pvc_deletion_time(
                     self.interface, pv_name
                 )
-                logging.info(
+                log.info(
                     f"{msg_prefix} PVC number {i + 1} was deleted in {deletion_time} seconds."
                 )
                 if deletion_time > accepted_deletion_time:
@@ -249,8 +228,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
                         f"{accepted_deletion_time} seconds."
                     )
                 deletion_time_measures.append(deletion_time)
+                csi_deletion_times.append(
+                    performance_lib.csi_pvc_time_measure(
+                        self.interface, pvc_obj, "delete", start_time
+                    )
+                )
+
             else:
-                logging.info(
+                log.info(
                     f"Reclaim policy of the PVC {pvc_obj.name} is not Delete;"
                     f" therefore not measuring deletion time for this PVC."
                 )
@@ -262,6 +247,15 @@ class TestPVCCreationDeletionPerformance(PASTest):
             msg_prefix,
         )
         self.full_results.add_key("creation-time", creation_average)
+
+        csi_creation_average = self.process_time_measurements(
+            "csi-creation",
+            csi_creation_times,
+            accepted_creation_deviation_percent,
+            msg_prefix,
+        )
+        self.full_results.add_key("csi_creation_time", csi_creation_average)
+
         deletion_average = self.process_time_measurements(
             "deletion",
             deletion_time_measures,
@@ -269,8 +263,19 @@ class TestPVCCreationDeletionPerformance(PASTest):
             msg_prefix,
         )
         self.full_results.add_key("deletion-time", deletion_average)
+
+        csi_deletion_average = self.process_time_measurements(
+            "csi-deletion",
+            csi_deletion_times,
+            accepted_deletion_deviation_percent,
+            msg_prefix,
+        )
+        self.full_results.add_key("csi_deletion_time", csi_deletion_average)
+
         self.full_results.all_results["creation"] = creation_time_measures
         self.full_results.all_results["deletion"] = deletion_time_measures
+        self.full_results.all_results["csi_creation"] = csi_creation_times
+        self.full_results.all_results["csi_deletion"] = csi_deletion_times
         self.end_time = time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
@@ -285,7 +290,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def test_pvc_creation_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (4)
+        and reporting the full results (links in the ES) of previous tests (6)
         """
 
         self.results_path = get_full_test_logs_path(
@@ -293,15 +298,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         self.results_file = os.path.join(self.results_path, "all_results.txt")
         log.info(f"Check results in {self.results_file}")
-        self.number_of_tests = 3
-        log.info("Check results for 'performance_extended' marker (3 tests)")
-        try:
-            self.check_tests_results()
-        except ex.BenchmarkTestFailed:
-            log.info("Look like performance_extended was not triggered")
-            log.info("Check results for 'performance' marker (9 tests)")
-            self.number_of_tests = 9
-            self.check_tests_results()
+        self.number_of_tests = 6
+        log.info("Check results for 'performance_extended' marker (6 tests)")
+        self.check_tests_results()
         self.push_to_dashboard(test_name="PVC Create-Delete")
 
     def process_time_measurements(
@@ -327,22 +326,19 @@ class TestPVCCreationDeletionPerformance(PASTest):
             f"PVCs is {average} seconds."
         )
 
-        if self.interface == constants.CEPHBLOCKPOOL_THICK:
-            st_deviation = statistics.stdev(time_measures)
-            st_deviation_percent = st_deviation / average * 100.0
-            if st_deviation_percent > accepted_deviation_percent:
-                log.error(
-                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
-                    f"PVCs is {st_deviation_percent}% which is bigger than accepted {accepted_deviation_percent}."
-                )
-            else:
-                log.info(
-                    f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
-                    f"PVCs is {st_deviation_percent}% and is within the accepted range."
-                )
-            self.full_results.add_key(
-                f"{action_name}_deviation_pct", st_deviation_percent
+        st_deviation = statistics.stdev(time_measures)
+        st_deviation_percent = st_deviation / average * 100.0
+        if st_deviation_percent > accepted_deviation_percent:
+            log.error(
+                f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                f"PVCs is {st_deviation_percent}% which is bigger than accepted {accepted_deviation_percent}."
             )
+        else:
+            log.info(
+                f"{msg_prefix} The standard deviation percent for {action_name} of {len(time_measures)} sampled "
+                f"PVCs is {st_deviation_percent}% and is within the accepted range."
+            )
+        self.full_results.add_key(f"{action_name}_deviation_pct", st_deviation_percent)
 
         return average
 
@@ -381,15 +377,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
-                marks=[pytest.mark.performance],
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL_THICK],
-                marks=[pytest.mark.performance_extended],
             ),
         ],
     )
@@ -424,7 +414,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pvc_obj.reload()
             teardown_factory(pvc_obj)
 
-        timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
+        timeout = 60
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
@@ -486,16 +476,14 @@ class TestPVCCreationDeletionPerformance(PASTest):
                     f"greater than {accepted_pvc_deletion_time} seconds"
                 )
 
-        logging.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
+        log.info(f"{msg_prefix} {number_of_pvcs} PVCs deletion times are:")
         for name, a_time in pvc_deletion_time.items():
-            logging.info(f"{name} deletion time is: {a_time} seconds")
+            log.info(f"{name} deletion time is: {a_time} seconds")
 
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
         elif self.interface == constants.CEPHFILESYSTEM:
             self.sc = "CephFS"
-        elif self.interface == constants.CEPHBLOCKPOOL_THICK:
-            self.sc = "RBD-Thick"
 
         full_log_path = get_full_test_logs_path(cname=self) + f"-{self.sc}-{pvc_size}"
         self.results_path = get_full_test_logs_path(cname=self)
@@ -528,9 +516,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def test_multiple_pvc_deletion_results(self):
         """
         This is not a test - it is only check that previous test ran and finish as expected
-        and reporting the full results (links in the ES) of previous tests (3)
+        and reporting the full results (links in the ES) of previous tests (2)
         """
-        self.number_of_tests = 3
+        self.number_of_tests = 2
         results_path = get_full_test_logs_path(
             cname=self, fname="test_multiple_pvc_deletion_measurement_performance"
         )

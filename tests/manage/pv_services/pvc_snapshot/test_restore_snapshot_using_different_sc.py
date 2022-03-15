@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocp_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@skipif_managed_service
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @pytest.mark.polarion_id("OCS-2424")

@@ -145,7 +145,7 @@ def destroy_cluster(cluster):
     cluster_details = get_cluster_details(cluster)
     cluster_id = cluster_details.get("id")
     cmd = f"ocm delete /api/clusters_mgmt/v1/clusters/{cluster_id}"
-    run_cmd(cmd)
+    run_cmd(cmd, timeout=900)
 
 
 def list_cluster():

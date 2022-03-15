@@ -120,6 +120,20 @@ def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     return run_command(command, out_format="list")
 
 
+def string_to_time(time_string):
+    """
+    Converting string which present a time stamp to a time object
+
+    Args:
+        time_string (str): the string to convert
+
+    Return:
+        datetime : a time object
+
+    """
+    return datetime.strptime(time_string, "%H:%M:%S.%f")
+
+
 def get_logfile_names(interface):
     """
     Finds names for log files pods in which logs for pvc creation are located
@@ -155,6 +169,30 @@ def get_logfile_names(interface):
     return log_names
 
 
+def read_csi_logs(log_names, container_name, start_time):
+    """
+    Reading specific CSI logs starting on a specific time
+
+    Args:
+        log_names (list): list of pods to read log from them
+        container_name (str): the name of the specific container in the pod
+        start_time (time): the time stamp which will use as starting point in the log
+
+    Returns:
+        list : list of lines from all logs
+
+    """
+    logs = []
+    for l in log_names:
+        logs.append(
+            run_oc_command(
+                f"logs {l} -c {container_name} --since-time={start_time}",
+                "openshift-storage",
+            )
+        )
+    return logs
+
+
 def measure_pvc_creation_time(interface, pvc_name, start_time):
     """
 
@@ -170,16 +208,7 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
 
     """
     log_names = get_logfile_names(interface)
-    logs = []
-    for l in log_names:
-        logs.append(
-            run_oc_command(
-                f"logs {l} -c csi-provisioner --since-time={start_time}",
-                "openshift-storage",
-            )
-        )
-
-    format = "%H:%M:%S.%f"
+    logs = read_csi_logs(log_names, "csi-provisioner", start_time)
 
     st = None
     et = None
@@ -194,11 +223,9 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
                 and pvc_name in line
                 and "started" in line
             ):
-                st = line.split(" ")[1]
-                st = datetime.strptime(st, format)
+                st = string_to_time(line.split(" ")[1])
             elif "provision" in line and pvc_name in line and "succeeded" in line:
-                et = line.split(" ")[1]
-                et = datetime.strptime(et, format)
+                et = string_to_time(line.split(" ")[1])
 
     if st is None:
         logger.error(f"Can not find start time of {pvc_name}")
@@ -208,7 +235,143 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
         logger.error(f"Can not find end time of {pvc_name}")
         raise Exception(f"Can not find end time of {pvc_name}")
 
+    total_time = (et - st).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
+    logger.info(f"Creation time for pvc {pvc_name} is {total_time} seconds")
+    return total_time
+
+
+def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
+    """
+
+    Measure PVC time (create / delete) in the CSI driver
+
+    Args:
+        interface (str) : an interface (RBD or CephFS) to run on
+        pvc_obj (PVC) : the PVC object which we want to mesure
+        operation (str): which operation to mesure - 'create' / 'delete'
+        start_time (str): Formatted time from which and on to search the relevant logs
+
+    Returns:
+        (float): time in seconds which took the CSI to hendale the PVC
+
+    """
+
+    pv_name = pvc_obj.backed_pv
+
+    cnt_names = {
+        constants.CEPHFILESYSTEM: "csi-cephfsplugin",
+        constants.CEPHBLOCKPOOL: "csi-rbdplugin",
+    }
+
+    # Reading the CSI provisioner logs
+    log_names = get_logfile_names(interface)
+    logs = read_csi_logs(log_names, cnt_names[interface], start_time)
+
+    st = None
+    et = None
+    for sublog in logs:
+        for line in sublog:
+            if (
+                operation == "delete"
+                and "generated volume id" in line.lower()
+                and pv_name in line
+            ):
+                pv_name = line.split("(")[1].split(")")[0]
+            if f"Req-ID: {pv_name} GRPC call:" in line:
+                st = string_to_time(line.split(" ")[1])
+            if f"Req-ID: {pv_name} GRPC response:" in line:
+                et = string_to_time(line.split(" ")[1])
+
+    if st is None:
+        err_msg = f"Can not find CSI start time of {pvc_obj.name}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    if et is None:
+        err_msg = f"Can not find CSI end time of {pvc_obj.name}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    total_time = (et - st).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
+    logger.info(f"CSI time for pvc {pvc_obj.name} is {total_time} seconds")
+    return total_time
+
+
+def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
+    """
+
+    Measure PVC time (create / delete) in the CSI driver
+
+    Args:
+        interface (str) : an interface (RBD or CephFS) to run on
+        pvc_objs (list) : list of the PVC objects which we want to mesure
+        operation (str): which operation to mesure - 'create' / 'delete'
+        start_time (str): Formatted time from which and on to search the relevant logs
+
+    Returns:
+        (float): time in seconds which took the CSI to hendale the PVC
+
+    """
+
+    st = []
+    et = []
+
+    cnt_names = {
+        constants.CEPHFILESYSTEM: "csi-cephfsplugin",
+        constants.CEPHBLOCKPOOL: "csi-rbdplugin",
+    }
+
+    # Reading the CSI provisioner logs
+    log_names = get_logfile_names(interface)
+    logs = read_csi_logs(log_names, cnt_names[interface], start_time)
+
+    for pvc in pvc_objs:
+        pv_name = pvc.backed_pv
+        single_st = None
+        single_et = None
+
+        for sublog in logs:
+            for line in sublog:
+                if (
+                    operation == "delete"
+                    and "generated volume id" in line.lower()
+                    and pv_name in line
+                ):
+                    pv_name = line.split("(")[1].split(")")[0]
+                if f"Req-ID: {pv_name} GRPC call:" in line:
+                    single_st = string_to_time(line.split(" ")[1])
+                if f"Req-ID: {pv_name} GRPC response:" in line:
+                    single_et = string_to_time(line.split(" ")[1])
+
+        if single_st is None:
+            err_msg = f"Can not find CSI start time of {pvc.name}"
+            logger.error(err_msg)
+            raise Exception(err_msg)
+
+        if single_et is None:
+            err_msg = f"Can not find CSI end time of {pvc.name}"
+            logger.error(err_msg)
+            raise Exception(err_msg)
+
+        st.append(single_st)
+        et.append(single_et)
+
+    st.sort()
+    et.sort()
+    total_time = (et[-1] - st[0]).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
     logger.info(
-        f"Creation time (in seconds) for pvc {pvc_name} is {(et - st).total_seconds()}"
+        f"CSI time for {operation} bulk of {len(pvc_objs)} pvcs is {total_time} seconds"
     )
-    return (et - st).total_seconds()
+    return total_time
