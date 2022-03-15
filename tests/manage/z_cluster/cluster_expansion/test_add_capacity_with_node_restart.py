@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
     indirect=["workload_storageutilization_rbd"],
 )
 @ignore_leftovers
-@tier4a
+@tier4b
 class TestAddCapacityNodeRestart(ManageTest):
     """
     Test add capacity when one of the worker nodes got restart
