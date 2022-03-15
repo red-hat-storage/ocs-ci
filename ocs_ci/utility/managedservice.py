@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
 from ocs_ci.utility.utils import download_file, exec_cmd
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,14 @@ def generate_onboarding_token():
     # save private key to temp file
     logger.debug("Prepare temporary file with private key")
     private_key = config.AUTH.get("managed_service", {}).get("private_key", "")
+    if not private_key:
+        raise ConfigurationError(
+            "Private key for Managed Service not defined.\n"
+            "Expected following configuration in auth.yaml file:\n"
+            "managed_service:\n"
+            '  private_key: "..."\n'
+            '  public_key: "..."'
+        )
     with NamedTemporaryFile(
         mode="w", prefix="private", suffix=".pem", delete=True
     ) as key_file:
