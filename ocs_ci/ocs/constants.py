@@ -963,9 +963,11 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
-MANAGED_SMTP_SECRET = "ocs-converged-smtp"
-MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
-MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
+# Names of Managed Service secrets are derived from addon name
+# Following secret strings contain only suffix
+MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
+MANAGED_PAGERDUTY_SECRET_SUFFIX = "-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = "-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
@@ -1368,7 +1370,7 @@ AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
 # Cosbench constants
 COSBENCH = "cosbench"
 COSBENCH_PROJECT = "cosbench-project"
-
+COSBENCH_IMAGE = "quay.io/ocsci/cosbench:latest"
 COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
 COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
 COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
@@ -1380,6 +1382,14 @@ QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
 QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
 QUAY_SUPER_USER = os.path.join(QUAY_DIR, "quay_super_user_config.yaml")
 QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
+
+# Quay operator registry API
+QUAY_SUPERUSER = "quayadmin"
+QUAY_PW = "quaypass123"
+QUAY_USER_INIT = "api/v1/user/initialize"
+QUAY_USER_GET = "api/v1/superuser/users/"
+QUAY_ORG_POST = "api/v1/organization/"
+QUAY_REPO_POST = "api/v1/repository"
 
 # logreader workload deployment yaml files
 LOGWRITER_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "logwriter")

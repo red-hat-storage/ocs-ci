@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
-    tier4a,
+    tier4b,
     on_prem_platform_required,
     skipif_external_mode,
     skipif_vsphere_ipi,
@@ -31,7 +31,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
 @pytest.mark.bugzilla("1852983")

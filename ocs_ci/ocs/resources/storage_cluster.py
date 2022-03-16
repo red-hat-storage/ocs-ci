@@ -8,7 +8,7 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
@@ -1010,9 +1010,9 @@ def verify_managed_service_resources():
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for secret_name in {
-        constants.MANAGED_SMTP_SECRET,
-        constants.MANAGED_PAGERDUTY_SECRET,
-        constants.MANAGED_DEADMANSSNITCH_SECRET,
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name
