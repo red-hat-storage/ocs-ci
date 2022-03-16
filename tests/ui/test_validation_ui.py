@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ui,
 )
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
 
@@ -20,6 +21,7 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
+    @blue_squad
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui):
         """
@@ -40,6 +42,7 @@ class TestUserInterfaceValidation(object):
     @tier1
     @skipif_ui_not_support("validation")
     @skipif_ocs_version("<4.9")
+    @blue_squad
     def test_odf_storagesystems_ui(self, setup_ui):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9

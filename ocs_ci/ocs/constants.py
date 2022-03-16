@@ -1458,7 +1458,6 @@ SQUADS = {
     "Magenta": ["/workloads/", "/flowtest/", "/lifecycle/", "/kcs/", "/system_test/"],
     "Grey": ["/performance/"],
     "Orange": ["/scale/"],
-    "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
 }
 
