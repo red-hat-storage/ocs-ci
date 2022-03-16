@@ -12,7 +12,7 @@ and with consideration of the entire project.
 import os
 
 # Logging
-LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
+LOG_FORMAT = f"%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s - [{}]"
 
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -90,7 +90,6 @@ STATUS_BOUND = "Bound"
 STATUS_RELEASED = "Released"
 STATUS_COMPLETED = "Completed"
 STATUS_ERROR = "Error"
-STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
@@ -114,7 +113,6 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
-JOB = "Job"
 STORAGECLASS = "StorageClass"
 STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
@@ -158,7 +156,6 @@ SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
-CLUSTER_SERVICE_VERSION = "csv"
 
 # Other
 SECRET = "Secret"
