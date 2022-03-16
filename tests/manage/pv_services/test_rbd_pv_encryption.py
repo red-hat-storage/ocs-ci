@@ -51,6 +51,7 @@ class TestRbdPvEncryption(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
+        kv_version,
         pv_encryption_kms_setup_factory,
     ):
         """
@@ -58,7 +59,7 @@ class TestRbdPvEncryption(ManageTest):
 
         """
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory()
+        self.kms = pv_encryption_kms_setup_factory(kv_version)
         log.info("csi-kms-connection-details setup successful")
 
     @tier1
@@ -87,8 +88,8 @@ class TestRbdPvEncryption(ManageTest):
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Create ceph-csi-kms-token in the tenant namespace
-            self.vault.vault_path_token = self.vault.generate_vault_token()
-            self.vault.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+            self.kms.vault_path_token = self.kms.generate_vault_token()
+            self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
         # Create RBD PVCs with volume mode Block
         pvc_size = 5
@@ -125,7 +126,7 @@ class TestRbdPvEncryption(ManageTest):
             if kms_provider == constants.VAULT_KMS_PROVIDER:
                 # Check if encryption key is created in Vault
                 if kms.is_key_present_in_path(
-                    key=vol_handle, path=self.vault.vault_backend_path
+                    key=vol_handle, path=self.kms.vault_backend_path
                 ):
                     log.info(f"Vault: Found key for {pvc_obj.name}")
                 else:
@@ -171,7 +172,7 @@ class TestRbdPvEncryption(ManageTest):
             if kv_version == "v1":
                 for vol_handle in vol_handles:
                     if not kms.is_key_present_in_path(
-                        key=vol_handle, path=self.vault.vault_backend_path
+                        key=vol_handle, path=self.kms.vault_backend_path
                     ):
                         log.info(f"Vault: Key deleted for {vol_handle}")
                     else:

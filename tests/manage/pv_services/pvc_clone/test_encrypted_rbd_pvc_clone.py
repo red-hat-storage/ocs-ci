@@ -54,6 +54,7 @@ class TestEncryptedRbdClone(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
+        kv_version,
         kms_provider,
         pv_encryption_kms_setup_factory,
         project_factory,
@@ -67,7 +68,7 @@ class TestEncryptedRbdClone(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory()
+        self.kms = pv_encryption_kms_setup_factory(kv_version)
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
