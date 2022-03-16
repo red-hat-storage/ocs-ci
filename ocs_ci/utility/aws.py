@@ -721,6 +721,25 @@ class AWS(object):
         self.ec2_client.delete_security_group(GroupId=security_group_id)
         logger.info(f"Security group {security_group_id} deleted")
 
+    def add_rule_to_security_group(self, ip_permissions, security_group_id):
+        """
+        Add a new ingress rule to a security with provided security_group_id.
+
+        Args:
+            ip_permissions (list): list of dictionaries containing definition
+                of the rule. for more information:
+                https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#securitygroup
+            security_group_id (str): Id of selected security group
+
+        Returns:
+            dict: AWS response from the request.
+                dict['Return'] should be True if request succeeded
+
+        """
+        return self.ec2_client.authorize_security_group_ingress(
+            GroupId=security_group_id, IpPermissions=ip_permissions
+        )
+
     def store_security_groups_for_instances(self, instances_id):
         """
         Stored all security groups attached to selected ec2 instances
