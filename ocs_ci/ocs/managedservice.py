@@ -57,13 +57,8 @@ def disable_odf_operator_and_update_pull_secret():
     """
     oc = ocp.OCP(kind=constants.SECRET, namespace="openshift-config")
     logger.info("Disable odf operator")
-    exec_cmd(
-        'oc patch operatorhub.config.openshift.io/cluster -p=\'{"spec":{"sources":'
-        '[{"disabled":true,"name":"redhat-operators"}]}}\' --type=merge'
-    )
     disable_specific_source("redhat-operators")
     logger.info("Update pull secret")
-    pull_secret = exec_cmd("oc get -n openshift-config secret/pull-secret -o json")
     pull_secret = oc.exec_oc_cmd("get -n openshift-config secret/pull-secret -o yaml")
     secret_data = pull_secret["data"][".dockerconfigjson"]
     secret_data = base64.b64decode(secret_data).decode()
