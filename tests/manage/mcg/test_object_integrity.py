@@ -49,19 +49,19 @@ class TestObjectIntegrity(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -79,7 +79,7 @@ class TestObjectIntegrity(MCGTest):
                         ]
                     },
                 },
-                marks=[tier1, skipif_ocs_version("<4.7")],
+                marks=[tier2, skipif_ocs_version("<4.7")],
             ),
         ],
         ids=[
@@ -119,86 +119,6 @@ class TestObjectIntegrity(MCGTest):
                 result_object_path=f"{result_dir}/{obj}",
                 awscli_pod=awscli_pod,
             ), "Checksum comparison between original and result object failed"
-
-    @pytest.mark.parametrize(
-        argnames="amount,file_type",
-        argvalues=[
-            pytest.param(
-                *[1, "large"],
-                marks=[pytest.mark.polarion_id("OCS-1944"), tier2, FILESIZE_SKIP],
-            ),
-            pytest.param(
-                *[100, "large"],
-                marks=[pytest.mark.polarion_id("OCS-1946"), tier3, FILESIZE_SKIP],
-            ),
-            pytest.param(
-                *[1, "small"], marks=[pytest.mark.polarion_id("OCS-1950"), tier2]
-            ),
-            pytest.param(
-                *[1000, "small"],
-                marks=[pytest.mark.polarion_id("OCS-1951"), tier3, RUNTIME_SKIP],
-            ),
-            pytest.param(
-                *[100, "large_small"],
-                marks=[pytest.mark.polarion_id("OCS-1952"), tier3, FILESIZE_SKIP],
-            ),
-        ],
-    )
-    def test_check_multi_object_integrity(
-        self, mcg_obj, awscli_pod, bucket_factory, amount, file_type
-    ):
-        """
-        Test write multiple files to bucket and check integrity
-        """
-        original_dir = "/original"
-        result_dir = "/result"
-        if file_type == "large":
-            public_bucket = PUBLIC_BUCKET
-            obj_key = LARGE_FILE_KEY
-        elif file_type == "small":
-            public_bucket = constants.TEST_FILES_BUCKET
-            obj_key = "random1.txt"
-        elif file_type == "large_small":
-            public_bucket = PUBLIC_BUCKET
-            obj_key = LARGE_FILE_KEY.rsplit("/", 1)[0]
-
-        # Download the file to pod
-        awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
-        public_s3_client = retrieve_anon_s3_resource().meta.client
-        download_files = []
-        # Use obj_key as prefix to download multiple files for large_small
-        # case, it also works with single file
-        for obj in public_s3_client.list_objects(
-            Bucket=public_bucket, Prefix=obj_key
-        ).get("Contents"):
-            # Skip the extra file in large file type
-            if file_type == "large" and obj["Key"] != obj_key:
-                continue
-            logger.info(f'Downloading {obj["Key"]} from AWS bucket {public_bucket}')
-            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
-            awscli_pod.exec_cmd_on_pod(
-                command=craft_s3_command(download_obj_cmd), out_yaml_format=False
-            )
-            download_files.append(obj["Key"].split("/")[-1])
-
-        # Write downloaded objects to the new bucket and check integrity
-        bucketname = bucket_factory(1)[0].name
-        base_path = f"s3://{bucketname}"
-        for i in range(amount):
-            full_object_path = base_path + f"/{i}/"
-            sync_object_directory(awscli_pod, original_dir, full_object_path, mcg_obj)
-
-            # Retrieve all objects from MCG bucket to result dir in Pod
-            logger.info("Downloading objects from MCG bucket to awscli pod")
-            sync_object_directory(awscli_pod, full_object_path, result_dir, mcg_obj)
-
-            # Checksum is compared between original and result object
-            for obj in download_files:
-                assert verify_s3_object_integrity(
-                    original_object_path=f"{original_dir}/{obj}",
-                    result_object_path=f"{result_dir}/{obj}",
-                    awscli_pod=awscli_pod,
-                ), "Checksum comparison between original and result object failed"
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
