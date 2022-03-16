@@ -2,11 +2,13 @@ import logging
 import os
 import stat
 
+from botocore.exceptions import ClientError
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
+from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.utils import download_file, exec_cmd
 
 logger = logging.getLogger(__name__)
@@ -90,3 +92,56 @@ def remove_header_footer_from_key(key):
     if "-----END" in key_lines[-1]:
         key_lines = key_lines[:-1]
     return "".join(key_lines)
+
+
+def set_ingress_rules_for_provider():
+    """
+    Modify the security group of provider cluster’s worker security group id
+    to allow host networking on specified ports.
+
+    """
+    aws = AWS()
+    logger.info("Get worker nodes security group IDs for a cluster")
+    security_groups = [
+        group["GroupId"]
+        for group in aws.ec2_client.describe_security_groups()["SecurityGroups"]
+        if group["GroupName"].startswith(config.ENV_DATA["cluster_name"])
+        and "worker" in group["GroupName"]
+    ]
+    if not security_groups:
+        raise ValueError("No security group found")
+    logger.info(f"Modify security groups: {security_groups}")
+    for security_group_id in security_groups:
+        ip_permissions = [
+            {
+                "FromPort": 6789,
+                "ToPort": 6789,
+                "IpProtocol": "tcp",
+            },
+            {
+                "FromPort": 3300,
+                "ToPort": 3300,
+                "IpProtocol": "tcp",
+            },
+            {
+                "FromPort": 6800,
+                "ToPort": 7300,
+                "IpProtocol": "tcp",
+            },
+            {
+                "FromPort": 9283,
+                "ToPort": 9283,
+                "IpProtocol": "tcp",
+            },
+            {
+                "FromPort": 31659,
+                "ToPort": 31659,
+                "IpProtocol": "tcp",
+            },
+        ]
+        rule = aws.add_rule_to_security_group(ip_permissions, security_group_id)
+        if not rule["Returns"]:
+            raise ClientError(
+                "There was a problem with modifying security group "
+                f"{security_group_id}: {rule}"
+            )
