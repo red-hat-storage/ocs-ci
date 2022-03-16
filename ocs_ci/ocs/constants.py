@@ -1469,7 +1469,6 @@ VAULT_DEFAULT_POLICY_PREFIX = "rook"
 VAULT_DEFAULT_NAMESPACE_PREFIX = "ocs-namespace"
 VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
-HPCS_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"

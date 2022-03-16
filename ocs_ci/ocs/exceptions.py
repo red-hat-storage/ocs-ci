@@ -364,7 +364,7 @@ class VaultOperationError(Exception):
     pass
 
 
-class HpcsDeploymentError(Exception):
+class HPCSDeploymentError(Exception):
     pass
 
 

@@ -1,6 +1,6 @@
 """
 This module contains KMS related class and methods
-currently supported KMSs: Vault and Hpcs
+currently supported KMSs: Vault and HPCS
 
 """
 import logging
@@ -24,7 +24,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
     KMSConnectionDetailsError,
-    HpcsDeploymentError,
+    HPCSDeploymentError,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
@@ -59,6 +59,22 @@ class KMS(object):
 
     def create_csi_kms_resources(self):
         raise NotImplementedError("Child class should implement this method")
+
+    def create_resource(self, resource_data, prefix=None):
+        """
+        Given a dictionary of resource data, this function will
+        creates oc resource
+
+        Args:
+            resource_data (dict): yaml dictionary for resource
+            prefix (str): prefix for NamedTemporaryFile
+
+        """
+        resource_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix=prefix, delete=False
+        )
+        templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
+        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
 
 
 class Vault(KMS):
@@ -336,22 +352,6 @@ class Vault(KMS):
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
         connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
         self.create_resource(connection_data, prefix="kmsconnection")
-
-    def create_resource(self, resource_data, prefix=None):
-        """
-        Given a dictionary of resource data, this function will
-        creates oc resource
-
-        Args:
-            resource_data (dict): yaml dictionary for resource
-            prefix (str): prefix for NamedTemporaryFile
-
-        """
-        resource_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix=prefix, delete=False
-        )
-        templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
-        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
 
     def vault_unseal(self):
         """
@@ -1041,15 +1041,15 @@ class Vault(KMS):
             logger.info(f"Role {role_name} created successfully")
 
 
-class Hpcs(KMS):
+class HPCS(KMS):
     """
     A class which handles deployment and other
-    configs related to hpcs
+    configs related to HPCS
 
     """
 
     def __init__(self):
-        super().__init__("hpcs")
+        super().__init__("HPCS")
         self.ibm_kp_service_instance_id = None
         self.ibm_kp_secret_name = None
         self.kms_service_name = None
@@ -1070,7 +1070,7 @@ class Hpcs(KMS):
         if self.hpcs_deploy_mode == "external":
             self.deploy_hpcs_external()
         else:
-            raise HpcsDeploymentError("Not a supported hpcs deployment mode")
+            raise HPCSDeploymentError("Not a supported HPCS deployment mode")
 
     def deploy_hpcs_external(self):
         """
@@ -1122,22 +1122,6 @@ class Hpcs(KMS):
         ] = self.ibm_kp_service_instance_id
         connection_data["data"]["IBM_KP_TOKEN_URL"] = self.ibm_kp_token_url
         self.create_resource(connection_data, prefix="kmsconnection")
-
-    def create_resource(self, resource_data, prefix=None):
-        """
-        Given a dictionary of resource data, this function will
-        creates oc resource
-
-        Args:
-            resource_data (dict): yaml dictionary for resource
-            prefix (str): prefix for NamedTemporaryFile
-
-        """
-        resource_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix=prefix, delete=False
-        )
-        templating.dump_data_to_temp_yaml(resource_data, resource_data_yaml.name)
-        run_cmd(f"oc create -f {resource_data_yaml.name}", timeout=300)
 
     def delete_resource(self, resource_name, resource_type, resource_namespace):
         """
@@ -1210,7 +1194,7 @@ class Hpcs(KMS):
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
 
 
-kms_map = {"vault": Vault, "hpcs": Hpcs}
+kms_map = {"vault": Vault, "hpcs": HPCS}
 
 
 def update_csi_kms_vault_connection_details(update_config):

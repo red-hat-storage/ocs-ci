@@ -4242,15 +4242,16 @@ def pv_encryption_hpcs_setup_factory(request):
     Create hpcs resources and setup csi-kms-connection-details configMap
 
     """
-    hpcs = KMS.Hpcs()
+    hpcs = KMS.HPCS()
 
     def factory(kv_version):
         """
         Args:
             kv_version(str): KV version to be used
         Returns:
-            object: Hpcs(KMS) object
-
+            object: HPCS(KMS) object
+        Raises:
+            CommandFailed: if fails to get csi-kms-connection-details configmap
         """
         hpcs.gather_init_hpcs_conf()
 
