@@ -209,5 +209,32 @@ class MultiClusterConfig:
         # because its a common arg
         self.switch_ctx(self.cluster_ctx.ENV_DATA["default_cluster_context_index"])
 
+    def get_provider_index(self):
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_type"] == "provider":
+                return i
+
+    def get_consumer_index(self):
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_type"] == "consumer":
+                return i
+
+    def get_consumer_index_by_name(self, cluster_name):
+        for i, cluster in enumerate(self.clusters):
+            if (
+                cluster.ENV_DATA["cluster_type"] == "consumer"
+                and cluster.ENV_DATA["cluster_name"] == cluster_name
+            ):
+                return i
+
+    def switch_to_provider(self):
+        self.switch_ctx(self.get_provider_index())
+
+    def switch_to_consumer(self, consumer_name=None):
+        if consumer_name:
+            self.switch_ctx(self.get_consumer_index_by_name(consumer_name))
+        else:
+            self.switch_ctx(self.get_consumer_index())
+
 
 config = MultiClusterConfig()
