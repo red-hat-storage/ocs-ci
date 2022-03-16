@@ -42,7 +42,8 @@ def setup_local_storage(storageclass):
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
     ocp_ga_version = get_ocp_ga_version(ocp_version)
-    create_optional_operators_catalogsource_non_ga()
+    if not ocp_ga_version:
+        create_optional_operators_catalogsource_non_ga()
 
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
