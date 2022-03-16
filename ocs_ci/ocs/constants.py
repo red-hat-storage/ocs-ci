@@ -12,7 +12,7 @@ and with consideration of the entire project.
 import os
 
 # Logging
-LOG_FORMAT = f"%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s - [{}]"
+LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
