@@ -513,9 +513,14 @@ class ACMOCPDeploymentFactory(object):
         # All platform specific classes should have map here
         self.platform_map = {"vsphereipi": ACMOCPPlatformVsphereIPI}
 
-    def get_platform_instance(self, cluster_config):
+    def get_platform_instance(self, driver, cluster_config):
+        """
+        Args:
+            driver: selenium UI driver object
+            cluster_config (dict): Cluster Config object
+        """
         platform_deployment = (
             f"{cluster_config.ENV_DATA['platform']}"
             f"{cluster_config.ENV_DATA['deployment_type']}"
         )
-        return self.platform_map[platform_deployment](cluster_config)
+        return self.platform_map[platform_deployment](driver, cluster_config)
