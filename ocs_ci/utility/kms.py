@@ -626,7 +626,7 @@ class Vault(KMS):
         Get the policy name based on token from vault
 
         """
-        self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
+        # self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
             cmd = f"vault token lookup {self.vault_path_token}"
             out = subprocess.check_output(shlex.split(cmd))
