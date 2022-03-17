@@ -161,6 +161,9 @@ def retrieve_anon_s3_resource():
 def copy_objects(
     podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
 ):
+    """
+    Copies a object onto a bucket using s3 cp command
+    """
     logger.info(f"Copying object {src_obj} to {target}")
     retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
@@ -187,6 +190,9 @@ def copy_objects(
 def copy_random_individual_objects(
     podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
 ):
+    """
+    Generates random objects and then copies them individually one after the other
+    """
     logger.info(f"create objects in {file_dir}")
     podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
     object_files = write_random_objects_in_pod(
@@ -204,6 +210,9 @@ def copy_random_individual_objects(
 
 
 def list_obc_objects(podobj, target, s3_obj=None, signed_request_creds=None):
+    """
+    Lists objects in a bucket using S3 ls command
+    """
     logger.info(f"List objects in {target}")
     retrieve_cmd = f"ls {target}"
     if s3_obj:
