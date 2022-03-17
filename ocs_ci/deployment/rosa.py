@@ -13,7 +13,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_infra_id, get_ocp_version
+from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pvc
@@ -189,8 +189,10 @@ class ROSA(CloudDeploymentBase):
         """
         Update security group rules for HostNetwork
         """
-        cluster_id = get_infra_id(self.cluster_path)
-        worker_pattern = f"{cluster_id}-worker*"
+        infrastructure_id = ocp.OCP().exec_oc_cmd(
+            "get -o jsonpath='{.status.infrastructureName}{\"\n\"}' infrastructure cluster"
+        )
+        worker_pattern = f"{infrastructure_id}-worker*"
         worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
         security_groups = worker_instances[0]["security_groups"]
         sg_id = security_groups[0]["GroupId"]
