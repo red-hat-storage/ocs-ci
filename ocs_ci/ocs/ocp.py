@@ -137,7 +137,7 @@ class OCP(object):
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
-        if self.namespace:
+        if self.namespace and not command.find("-n "):
             oc_cmd += f"-n {self.namespace} "
 
         oc_cmd += command
