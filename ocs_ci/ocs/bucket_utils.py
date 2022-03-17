@@ -158,6 +158,73 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
+def copy_objects(
+    podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
+):
+    logger.info(f"Copying object {src_obj} to {target}")
+    retrieve_cmd = f"cp {src_obj} {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    out = podobj.exec_cmd_on_pod(
+        command=craft_s3_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    )
+    return out
+
+
+def copy_random_individual_objects(
+    podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
+):
+    logger.info(f"create objects in {file_dir}")
+    podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
+    object_files = write_random_objects_in_pod(
+        podobj, pattern=pattern, file_dir=file_dir, amount=amount
+    )
+    objects_to_upload = [obj for obj in object_files]
+    out = ""
+    for obj in objects_to_upload:
+        src_obj = f"{file_dir}/{obj}"
+        out = copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
+        if "An error occurred (QuotaExceeded)" in out:
+            return out
+        logger.info(f"Copied {src_obj}")
+    return out
+
+
+def list_obc_objects(podobj, target, s3_obj=None, signed_request_creds=None):
+    logger.info(f"List objects in {target}")
+    retrieve_cmd = f"ls {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    return podobj.exec_cmd_on_pod(
+        command=craft_s3_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+    )
+
+
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
     """
     Syncs objects between a target and source directories

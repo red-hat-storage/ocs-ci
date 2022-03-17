@@ -458,7 +458,10 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         (str) Decoded stdout of command
     """
     completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
-    return mask_secrets(completed_process.stdout.decode(), secrets)
+    if completed_process.returncode:
+        return mask_secrets(completed_process.stderr.decode(), secrets)
+    else:
+        return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
 def run_cmd_interactive(cmd, prompts_answers, timeout=300):
