@@ -76,10 +76,15 @@ class MustGather(object):
         Validate the file is not empty
 
         """
+        if self.type_log != "OTHERS":
+            return
         for path, subdirs, files in os.walk(self.root):
             for file in files:
                 file_path = os.path.join(path, file)
-                if Path(file_path).stat().st_size == 0:
+                if (
+                    Path(file_path).stat().st_size == 0
+                    and "noobaa-db-pg-0-init.log" not in file_path
+                ):
                     logger.error(f"log file {file} empty!")
                     self.empty_files.append(file)
 
@@ -93,8 +98,6 @@ class MustGather(object):
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
-            elif Path(file_path).stat().st_size == 0:
-                self.empty_files.append(file)
             elif re.search(r"\.yaml$", file):
                 with open(file_path, "r") as f:
                     if "kind" not in f.read().lower():
