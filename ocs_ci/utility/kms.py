@@ -73,7 +73,7 @@ class Vault(KMS):
         self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
-        self.vault_auth_method = constants.VAULT_TOKEN
+        self.vault_auth_method = constants.VAULT_TOKEN_AUTH
         self.ca_cert_name = None
         self.client_cert_name = None
         self.client_key_name = None
@@ -89,6 +89,7 @@ class Vault(KMS):
         self.vault_path_token = None
         self.vault_policy_name = None
         self.vault_kube_auth_path = "kubernetes"
+        self.vault_kube_auth_role = constants.VAULT_KUBERNETES_AUTH_ROLE
         self.vault_kube_auth_namespace = None
         self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
 
@@ -340,7 +341,7 @@ class Vault(KMS):
             self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
             self.create_vault_kube_auth_role(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                role_name="odf-rook-ceph-op",
+                role_name=self.vault_kube_auth_role,
                 sa_name="rook-ceph-system,rook-ceph-osd,noobaa",
             )
             self.create_vault_kube_auth_role(
@@ -621,14 +622,33 @@ class Vault(KMS):
             self.vault_path_token = base64.b64decode(token).decode()
             logger.info(f"Setting vault_path_token = {self.vault_path_token}")
 
+    def get_vault_kube_auth_role(self):
+        """
+        Fetch the role name from ocs-kms-connection-details configmap
+
+        """
+        if not self.vault_kube_auth_role:
+            ocs_kms_configmap = ocp.OCP(
+                kind="ConfigMap",
+                resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            self.vault_kube_auth_role = ocs_kms_configmap.get().get("data")[
+                "VAULT_AUTH_KUBERNETES_ROLE"
+            ]
+            logger.info(f"Setting vault_kube_auth_role = {self.vault_kube_auth_role}")
+
     def get_vault_policy(self):
         """
         Get the policy name based on token from vault
 
         """
-        # self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
+        self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
-            cmd = f"vault token lookup {self.vault_path_token}"
+            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
+                cmd = f"vault token lookup {self.vault_path_token}"
+            else:
+                cmd = f"vault read auth/{self.vault_kube_auth_path}/role/{self.vault_kube_auth_role}"
             out = subprocess.check_output(shlex.split(cmd))
             json_out = json.loads(out)
             logger.info(json_out)
@@ -722,6 +742,8 @@ class Vault(KMS):
             # from token secret get token
             if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
                 self.get_vault_path_token()
+            else:
+                self.get_vault_kube_auth_role()
             # from token get policy
             if not self.cluster_id:
                 self.cluster_id = get_running_cluster_id()
