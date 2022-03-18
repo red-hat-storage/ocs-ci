@@ -1300,7 +1300,7 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     launch_url = config.REPORTING.get("rp_launch_url")
     if launch_url:
         record_testsuite_property("rp_launch_url", launch_url)
-    # add merkers as separated property
+    # add markers as separated property
     markers = config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
 
