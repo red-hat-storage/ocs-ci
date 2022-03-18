@@ -190,7 +190,7 @@ class ROSA(CloudDeploymentBase):
         Update security group rules for HostNetwork
         """
         infrastructure_id = ocp.OCP().exec_oc_cmd(
-            "get -o jsonpath='{.status.infrastructureName}{\"\n\"}' infrastructure cluster"
+            "get -o jsonpath='{.status.infrastructureName}{\"\\n\"}' infrastructure cluster"
         )
         worker_pattern = f"{infrastructure_id}-worker*"
         worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
