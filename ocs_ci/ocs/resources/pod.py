@@ -2287,8 +2287,6 @@ def check_pods_in_statuses(
         Boolean: True, if the pods are in the expected statuses. False, otherwise
 
     """
-    ret_val = True
-
     if pod_names:
         list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
     else:
@@ -2306,10 +2304,10 @@ def check_pods_in_statuses(
             logger.warning(
                 f"The pod {p.name} is in {status} state, and not in the expected statuses {expected_statuses}"
             )
-            ret_val = False
+            return False
 
     logger.info(f"All the pods reached the expected statuses {expected_statuses}")
-    return ret_val
+    return True
 
 
 def wait_for_pods_to_be_in_statuses(

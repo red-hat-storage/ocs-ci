@@ -2092,12 +2092,87 @@ def verify_worker_nodes_security_groups():
     TO DO: We may need to modify the steps, but for now this will suffice.
 
     """
-    res = True
     wnodes = get_nodes(constants.WORKER_MACHINE)
     for wnode in wnodes:
         if not check_node_ip_equal_to_associated_pods_ips(wnode):
             log.warning(f"The node {wnode.name} security groups is not set correctly")
-            res = False
+            return False
 
     log.info("All the worker nodes security groups are set correctly")
-    return res
+    return True
+
+
+def wait_for_osd_ids_come_up_on_node(
+    node_name, expected_osd_ids, timeout=180, sleep=10
+):
+    """
+    Wait for the expected osd ids to come up on a node
+
+    Args:
+        node_name (str): The node name
+        expected_osd_ids (list): The list of the expected osd ids to come up on the node
+        timeout (int): Time to wait for the osd ids to come up on the node
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, the osd ids to come up on the node. False, otherwise
+
+    """
+    try:
+        for osd_ids in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_node_osd_ids,
+            node_name=node_name,
+        ):
+            log.info(f"the current node {node_name} osd ids are: {osd_ids}")
+            if osd_ids == expected_osd_ids:
+                log.info(
+                    f"The node {node_name} has the expected osd ids {expected_osd_ids}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The node {node_name} didn't have the expected osd ids {expected_osd_ids}"
+        )
+
+    return False
+
+
+def wait_for_all_osd_ids_come_up_on_nodes(
+    expected_osd_ids_per_node, timeout=360, sleep=20
+):
+    """
+    Wait for all the expected osd ids to come up on their associated nodes
+
+    Args:
+        expected_osd_ids_per_node (dict): The expected osd ids per node
+        timeout (int): Time to wait for all the expected osd ids to come up on
+            their associated nodes
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, if all the expected osd ids come up on their associated nodes.
+            False, otherwise
+
+    """
+    try:
+        for osd_ids_per_node in TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=get_osd_ids_per_node
+        ):
+            log.info(f"the current osd ids per node: {osd_ids_per_node}")
+            if osd_ids_per_node == expected_osd_ids_per_node:
+                log.info(
+                    f"The osd ids per node reached the expected values: "
+                    f"{expected_osd_ids_per_node}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The osd ids per node didn't reach the expected values: "
+            f"{expected_osd_ids_per_node}"
+        )
+
+    return False
