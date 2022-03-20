@@ -291,6 +291,10 @@ NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
 NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
+CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
+CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
+    "app=ceph-object-controller-detect-version"
+)
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
