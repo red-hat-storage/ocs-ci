@@ -1,28 +1,44 @@
 import logging
 
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    managed_service_required,
+)
+from ocs_ci.ocs import constants, managed_service
 
-from ocs_ci.framework.testlib import managed_service_required
-from ocs_ci.ocs.perftests import PASTest
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @managed_service_required
-class TestAcceptanceManagedService(PASTest):
+class TestAcceptanceManagedService(ManageTest):
     """
     Test Acceptance Managed Service
 
     """
 
-    def test_acceptance_managed_service(self, workload_storageutilization_05p_rbd):
-        """
-        test_acceptance_managed_service
+    def test_acceptance_managed_service(
+        self, pvc_factory, pod_factory, storageclass_factory, teardown_factory
+    ):
+        managed_service.rwo_dynamic_pvc(
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
+            interface_type=constants.CEPHFILESYSTEM,
+            storageclass_factory=storageclass_factory,
+            reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+            pvc_size=1,
+        )
 
-        """
-        for cluster_name, fio_results in workload_storageutilization_05p_rbd.items():
-            msg = "fio report should be available"
-            assert fio_results["result"] is not None, f"cluster {cluster_name}-{msg}"
-            fio = fio_results["result"]["fio"]
-            assert len(fio["jobs"]) == 1, "single fio job was executed"
-            msg = "no errors should be reported by fio when writing data"
-            assert fio["jobs"][0]["error"] == 0, msg
+        managed_service.pvc_to_pvc_clone(
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
+            teardown_factory=teardown_factory,
+            interface_type=constants.CEPHFILESYSTEM,
+        )
+
+        managed_service.pvc_snapshot(
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
+            teardown_factory=teardown_factory,
+            interface=constants.CEPHFILESYSTEM,
+        )
