@@ -67,7 +67,7 @@ class HsBench(object):
             deploy_pod_status=constants.STATUS_COMPLETED,
         )
 
-    def install_hsbench(self, timeout=2400):
+    def install_hsbench(self, timeout=4200):
         """
         Install HotSauce S3 benchmark:
         https://github.com/markhpc/hsbench

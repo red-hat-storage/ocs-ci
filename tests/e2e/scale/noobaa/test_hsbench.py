@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(autouse=True)
 def hsbenchs3(request):
 
     hsbenchs3 = hsbench.HsBench()
@@ -25,7 +25,7 @@ def hsbenchs3(request):
     return hsbenchs3
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(autouse=True)
 def s3bench(request):
 
     s3bench = hsbench.HsBench()
@@ -87,7 +87,8 @@ class TestHsBench(E2ETest):
         * Post writing objects verify OBC creation
         """
         # Create an Object bucket
-        object_bucket = bucket_factory(amount=1, interface="OC")[0]
+        object_bucket = bucket_factory(amount=1, interface="OC", verify_health=False)[0]
+        object_bucket.verify_health(timeout=180)
 
         # Write 700k objects to the object bucket
         s3bench.run_benchmark(
@@ -99,4 +100,5 @@ class TestHsBench(E2ETest):
         )
 
         # Create new OBC and verify it is bound
-        bucket_factory(interface="OC")
+        bucket = bucket_factory(interface="OC", verify_health=False)[0]
+        bucket.verify_health(timeout=180)
