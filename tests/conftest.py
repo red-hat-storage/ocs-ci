@@ -4167,10 +4167,11 @@ def pv_encryption_vault_setup_factory(request):
     """
     vault = KMS.Vault()
 
-    def factory(kv_version):
+    def factory(kv_version, use_vault_namespace=False):
         """
         Args:
             kv_version(str): KV version to be used, either v1 or v2
+            use_vault_namespace (bool): True, to use vault namespace
         Returns:
             object: Vault(KMS) object
         """
@@ -4189,7 +4190,8 @@ def pv_encryption_vault_setup_factory(request):
 
         # Create vault namespace, backend path and policy in vault
         vault_resource_name = create_unique_resource_name("test", "vault")
-        vault.vault_create_namespace(namespace=vault_resource_name)
+        if use_vault_namespace:
+            vault.vault_create_namespace(namespace=vault_resource_name)
         vault.vault_create_backend_path(
             backend_path=vault_resource_name, kv_version=kv_version
         )
@@ -4208,7 +4210,8 @@ def pv_encryption_vault_setup_factory(request):
                 old_key = key
             vdict[new_kmsid] = vdict.pop(old_key)
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
-            vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+            if use_vault_namespace:
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
             vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
