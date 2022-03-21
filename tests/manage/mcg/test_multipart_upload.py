@@ -14,7 +14,11 @@ from ocs_ci.ocs.bucket_utils import (
     complete_multipart_upload,
     sync_object_directory,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, tier3, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    tier3,
+    bugzilla,
+)
 
 logger = logging.getLogger(__name__)
 
