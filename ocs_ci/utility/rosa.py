@@ -10,6 +10,7 @@ import os
 import re
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
@@ -233,9 +234,19 @@ def install_odf_addon(cluster):
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
 
     utils.run_cmd(cmd)
+    counter = 0
     for addon_info in utils.TimeoutSampler(
         4000, 30, get_addon_info, cluster, addon_name
     ):
+        # HACK: this is a hack done in order to mitigate
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2066211
+        if config.ENV_DATA.get("cluster_type", "").lower() == "provider":
+            counter += 1
+            if counter == 5:
+                patch = ' \'{"spec": {"sourceNamespace":"openshift-storage"}}\' '
+                ocp.OCP(namespace=self.namespace).exec_oc_cmd(
+                    f"patch sub odf-csi-addons-operator -n openshift-storage -p {patch}"
+                )
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "ready" in addon_info:
             logger.info(f"Addon {addon_name} was installed")
