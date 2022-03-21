@@ -252,6 +252,10 @@ class ExternalClusterExporterRunFailed(Exception):
     pass
 
 
+class ExternalClusterObjectStoreUserCreationFailed(Exception):
+    pass
+
+
 class ExternalClusterRGWEndPointMissing(Exception):
     pass
 
@@ -357,6 +361,10 @@ class VaultDeploymentError(Exception):
 
 
 class VaultOperationError(Exception):
+    pass
+
+
+class HPCSDeploymentError(Exception):
     pass
 
 

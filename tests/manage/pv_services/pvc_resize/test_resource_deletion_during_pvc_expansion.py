@@ -6,10 +6,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
-    tier4,
-    tier4b,
+    tier4c,
     ignore_leftover_label,
     skipif_upgraded_from,
+    skipif_managed_service,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers import disruption_helpers
@@ -17,8 +17,8 @@ from ocs_ci.helpers import disruption_helpers
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4b
+@tier4c
+@skipif_managed_service
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 @ignore_leftover_label(constants.drain_canary_pod_label)

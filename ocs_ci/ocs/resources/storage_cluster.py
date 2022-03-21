@@ -8,7 +8,7 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
@@ -613,12 +613,12 @@ def osd_encryption_verification():
         osd_number_per_node = len(osd_node_names[worker_node]) - 1
         lsblk_output = osd_node_names[worker_node][-1]
         lsblk_output_split = lsblk_output.split()
-        logging.info(f"lsblk split:{lsblk_output_split}")
-        logging.info(f"osd_node_names dictionary: {osd_node_names}")
-        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
-        logging.info(f"osd_number_per_node = {osd_number_per_node}")
+        log.info(f"lsblk split:{lsblk_output_split}")
+        log.info(f"osd_node_names dictionary: {osd_node_names}")
+        log.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        log.info(f"osd_number_per_node = {osd_number_per_node}")
         if lsblk_output_split.count("crypt") != osd_number_per_node:
-            logging.error(
+            log.error(
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
@@ -630,7 +630,7 @@ def verify_kms_ca_only():
     without Client Certificate and without Client Private Key
 
     """
-    logging.info("Verify KMS deployment with only CA Certificate")
+    log.info("Verify KMS deployment with only CA Certificate")
     secret_names = get_secret_names()
     if (
         "ocs-kms-client-cert" in secret_names
@@ -1010,9 +1010,9 @@ def verify_managed_service_resources():
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for secret_name in {
-        constants.MANAGED_SMTP_SECRET,
-        constants.MANAGED_PAGERDUTY_SECRET,
-        constants.MANAGED_DEADMANSSNITCH_SECRET,
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name

@@ -3,7 +3,7 @@ import pytest
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.testlib import ignore_leftovers, tier4a
+from ocs_ci.framework.testlib import ignore_leftovers, tier4c
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -17,9 +17,11 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import node
 
+logger = logging.getLogger(__name__)
+
 
 @ignore_leftovers
-@tier4a
+@tier4c
 class TestAddCapacityWithResourceDelete:
     """
     Test add capacity when one of the resources gets deleted
@@ -47,20 +49,20 @@ class TestAddCapacityWithResourceDelete:
             num_of_expected_wnodes = 6
             wnodes = node.get_worker_nodes()
             num_of_wnodes = len(wnodes)
-            logging.info(
+            logger.info(
                 f"We have {number_of_osd_pods_before} OSDs in the cluster, "
                 f"and {num_of_wnodes} worker nodes in the cluster"
             )
             if num_of_wnodes < num_of_expected_wnodes:
                 num_of_wnodes_to_add = num_of_expected_wnodes - num_of_wnodes
-                logging.info(
+                logger.info(
                     f"Adding more {num_of_wnodes_to_add} worker nodes to the cluster"
                 )
                 add_nodes(ocs_nodes=False, node_count=num_of_wnodes_to_add)
 
             wnodes_not_in_ocs = node.get_worker_nodes_not_in_ocs()
             if wnodes_not_in_ocs:
-                logging.info("Label the worker nodes that are not in OCS")
+                logger.info("Label the worker nodes that are not in OCS")
                 node.label_nodes(wnodes_not_in_ocs)
 
     def kill_resource_repeatedly(self, resource_name, resource_id, max_iterations=30):
@@ -77,17 +79,17 @@ class TestAddCapacityWithResourceDelete:
         d = Disruptions()
 
         for i in range(max_iterations):
-            logging.info(
+            logger.info(
                 f"iteration {i}: Delete resource {resource_name} with id {resource_id}"
             )
             d.set_resource(resource_name)
             d.delete_resource(resource_id)
             if self.new_pods_in_status_running:
-                logging.info("New osd pods reached status running")
+                logger.info("New osd pods reached status running")
                 break
 
         if not self.new_pods_in_status_running:
-            logging.warning(
+            logger.warning(
                 f"New osd pods didn't reach status running after {max_iterations} iterations"
             )
 
@@ -100,7 +102,7 @@ class TestAddCapacityWithResourceDelete:
             storagedeviceset_count (int): the number of storage device set in the cluster
 
         """
-        logging.info("starting function 'wait_for_osd_pods_to_be_running'")
+        logger.info("starting function 'wait_for_osd_pods_to_be_running'")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         if is_flexible_scaling_enabled():
             replica_count = 1
@@ -153,7 +155,7 @@ class TestAddCapacityWithResourceDelete:
 
         """
         used_percentage = get_percent_used_capacity()
-        logging.info(
+        logger.info(
             f"storageutilization is completed. used capacity = {used_percentage}"
         )
 
@@ -166,15 +168,15 @@ class TestAddCapacityWithResourceDelete:
         self.new_pods_in_status_running = False
 
         osd_size = storage_cluster.get_osd_size()
-        logging.info(f"Adding one new set of OSDs. osd size = {osd_size}")
+        logger.info(f"Adding one new set of OSDs. osd size = {osd_size}")
         storagedeviceset_count = storage_cluster.add_capacity(osd_size)
-        logging.info("Adding one new set of OSDs was issued without problems")
+        logger.info("Adding one new set of OSDs was issued without problems")
 
         # Wait for new osd's to come up. After the first new osd in status Init - delete the resource.
         # After deleting the resource we expect that all the new osd's will be in status running,
         # and the delete resource will be also in status running.
         pod_helpers.wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before)
-        logging.info(
+        logger.info(
             f"Delete a {resource_name} pod while storage capacity is getting increased"
         )
         if is_kill_resource_repeatedly:
@@ -188,8 +190,6 @@ class TestAddCapacityWithResourceDelete:
             self.wait_for_osd_pods_to_be_running(storagedeviceset_count)
 
         self.new_pods_in_status_running = True
-        logging.info(
-            "Finished verifying add capacity when one of the pods gets deleted"
-        )
-        logging.info("Waiting for ceph health check to finished...")
+        logger.info("Finished verifying add capacity when one of the pods gets deleted")
+        logger.info("Waiting for ceph health check to finished...")
         check_ceph_health_after_add_capacity()

@@ -192,7 +192,7 @@ ENV_DATA:
   # RHEL VERSIONS:
   # Once we will change this version to something which will not be supported on different
   # OCP version, we need to make sure to put rhel_version to the all ocp related version config files
-  rhel_version: "7.9"
+  rhel_version: "8.4"
   # This RHEL version will be used for running ansible playbook for adding RHEL nodes
   rhel_version_for_ansible: 7
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'

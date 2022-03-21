@@ -1,0 +1,11 @@
+---
+DEPLOYMENT:
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.11"
+  default_latest_tag: 'latest-stable-4.11'
+  ocs_csv_channel: "stable-4.11"
+  default_ocp_version: '4.11'
+ENV_DATA:
+  ocs_version: '4.11'
+REPORTING:
+  default_ocs_must_gather_latest_tag: 'latest-4.11'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"

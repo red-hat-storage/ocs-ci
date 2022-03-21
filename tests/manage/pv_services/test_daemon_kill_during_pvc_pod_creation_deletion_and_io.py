@@ -6,7 +6,13 @@ from time import sleep
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, polarion_id
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4,
+    tier4c,
+    polarion_id,
+    skipif_managed_service,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import delete_pvcs
@@ -32,6 +38,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@skipif_managed_service
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
     """
     Kill ceph daemon while creation/deletion of PVCs, and pods are progressing

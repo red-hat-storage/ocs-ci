@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
     E2ETest,
-    tier4a,
+    tier4c,
     ignore_leftovers,
     bugzilla,
 )
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
-@tier4a
+@tier4c
 @ignore_leftovers
 @skipif_external_mode
 class TestPvcCreationAfterDelMonService(E2ETest):
