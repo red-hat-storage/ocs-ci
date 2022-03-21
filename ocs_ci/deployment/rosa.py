@@ -268,9 +268,10 @@ class ROSA(CloudDeploymentBase):
         """
         Due to bug in odf-csi-addons-operator there needs to be done following
         prior to provider addon installation:
-            1. Create a ROSA or OSD cluster
-            2. Create openshift-storage namespace
-            3. Create catalogSource in openshift-storage namespace
+
+        1. Create a ROSA or OSD cluster
+        2. Create openshift-storage namespace
+        3. Create catalogSource in openshift-storage namespace
 
         Note: This is a hack and should be removed when installation is fixed
         """
