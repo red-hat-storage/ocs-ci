@@ -283,7 +283,7 @@ class TestAdmissionWebhooks(MCGTest):
         self, bucket_factory_session, bucketclass_dict
     ):
         """
-        Test that store deletion fails when there are buckets attached to it
+        Verify that store deletion fails when there are buckets attached to it
         """
         try:
             if "backingstore_dict" in bucketclass_dict:
@@ -329,7 +329,7 @@ class TestAdmissionWebhooks(MCGTest):
     )
     def test_store_target_bucket_change(self, bucket_factory_session, bucketclass_dict):
         """
-        Test that store deletion fails when there are buckets attached to it
+        Verify that store target bucket changing is blocked
         """
         if "backingstore_dict" in bucketclass_dict:
             store_name = (
@@ -365,7 +365,7 @@ class TestAdmissionWebhooks(MCGTest):
 
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """
-        Test that store deletion fails when there are buckets attached to it
+        Verify that PVPool downscaling is blocked
         """
         pv_backingstore = backingstore_factory_session(
             "oc",
