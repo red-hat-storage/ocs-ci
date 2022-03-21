@@ -283,6 +283,6 @@ class ROSA(CloudDeploymentBase):
             constants.PROVIDER_CATALOGSOURCE_YAML, **catalogsource_data
         )
         with tempfile.NamedTemporaryFile() as catalogsource_file:
-            catalogsource_file.write(str.encode(json.dumps(catalogsource_yaml)))
+            yaml.dump(catalogsource_yaml, catalogsource_file.name)
             catalogsource_file.flush()
             oc.create(yaml_file=catalogsource_file.name)
