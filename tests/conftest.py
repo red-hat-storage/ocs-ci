@@ -1,5 +1,5 @@
+import base64
 import copy
-import json
 import logging
 import os
 import random
@@ -4601,10 +4601,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
     created_accounts = []
 
     def mcg_account_factory_implementation(
-        email,
         name,
-        has_login,
-        s3_access,
         allowed_buckets,
         default_resource,
         uid=None,
@@ -4617,15 +4614,13 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         Create a new MCG account with the given parameters
 
         Args:
-            email (str): Email address of the user
-            name (str): Name of the user
-            has_login (bool): Whether the user has a login
-            s3_access (bool): Whether the user has access to S3
-            allowed_buckets (str): Comma separated list of allowed buckets
+            name (str): Name of the user; Has to be RFC 1123 compliant
+            allowed_buckets (str|dict): Comma separated list of allowed buckets,
+            or a dict stating {'full_permission': True}
             default_resource (str): Default resource for the user
             uid (str): UID of the user
             gid (str): GID of the user
-            new_buckets_path (str): Path to the new buckets
+            new_buckets_path (str): The FS path in which new buckets will be created
             nsfs_only (bool): Whether the user has access to NSFS only
 
         Returns:
@@ -4636,43 +4631,52 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
-        params = {
-            "email": email,
-            "name": name,
-            "has_login": has_login,
-            "s3_access": s3_access,
-            "allowed_buckets": allowed_buckets,
-            "default_resource": default_resource,
-        }
-        if None not in (uid, gid, new_buckets_path, nsfs_only):
-            params["nsfs_account_config"] = {
-                "uid": uid,
-                "gid": gid,
-                "new_buckets_path": new_buckets_path,
-                "nsfs_only": nsfs_only,
-            }
-        log.info(f"Creating MCG account with params: {params}")
-        acc_creation_resp = mcg_obj_session.send_rpc_query(
-            "account_api", "create_account", params
+        cli_cmd = "".join(
+            (
+                f"account create {name}",
+                f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
+                if type(allowed_buckets) in (list, tuple)
+                else "",
+                " --full_permission=" + "True"
+                if type(allowed_buckets) is dict
+                and allowed_buckets.get("full_permission")
+                else "False",
+                f" --default_resource {default_resource}" if default_resource else "",
+                f" --uid {uid}" if uid else "",
+                f" --gid {gid}" if gid else "",
+                f" --new_buckets_path {new_buckets_path}" if new_buckets_path else "",
+                f" --nsfs_only={nsfs_only}" if type(nsfs_only) is bool else "",
+                " --nsfs_account_config=" + "True" if uid else "False",
+            )
         )
+        acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
+        created_accounts.append(name)
         # Verify that the account was created successfuly and that the response contains the needed data
         assert (
-            "access_key" in acc_creation_resp.text
-        ), f"Did not find access_key in account creation response. Response: {acc_creation_resp.text}"
-        access_keys = json.loads(acc_creation_resp.text)["reply"]["access_keys"][0]
+            "access_key" in str(acc_creation_process_output).lower()
+        ), f"Did not find access_key in account creation response. Response: {str(acc_creation_process_output)}"
+
+        acc_secret_dict = OCP(
+            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+        ).get(f"noobaa-account-{name}")
         return {
-            "access_key_id": access_keys["access_key"],
-            "access_key": access_keys["secret_key"],
+            "access_key_id": base64.b64decode(
+                acc_secret_dict.get("data").get("AWS_ACCESS_KEY_ID")
+            ).decode("utf-8"),
+            "access_key": base64.b64decode(
+                acc_secret_dict.get("data").get("AWS_SECRET_ACCESS_KEY")
+            ).decode("utf-8"),
             "endpoint": mcg_obj_session.s3_endpoint,
             "ssl": ssl,
         }
 
     def mcg_account_factory_cleanup():
-        for account_email in created_accounts:
-            log.info(f"Deleting MCG account {account_email}")
-            mcg_obj_session.send_rpc_query(
-                "account_api", "delete_account", {"email": account_email}
+        for acc_name in created_accounts:
+            log.info(f"Deleting MCG account {acc_name}")
+            deletion_process_output = mcg_obj_session.exec_mcg_cmd(
+                f"account delete {acc_name}"
             )
+            assert "Deleted" in str(deletion_process_output)
 
     request.addfinalizer(mcg_account_factory_cleanup)
     return mcg_account_factory_implementation
@@ -4705,7 +4709,6 @@ def nsfs_bucket_factory_fixture(
     mcg_account_factory,
     bucket_factory,
 ):
-    created_accounts = []
     created_rpc_buckets = []
 
     def nsfs_bucket_factory_implementation(nsfs_obj):
@@ -4749,16 +4752,8 @@ def nsfs_bucket_factory_fixture(
         )
         nsfs_obj.interface_pod = nsfs_interface_pod
         # Create a new MCG account
-        acc_email = (
-            create_unique_resource_name("account", "mcg").replace("-", "")
-            + "@redhat.qe"
-        )
-        created_accounts.append(acc_email)
         nsfs_obj.s3_creds = mcg_account_factory(
-            acc_email,
-            "NSFS IntegrityTest",
-            False,
-            True,
+            "nsfs-integrity-test",
             {"full_permission": True},
             nsfs_obj.nss.name,
             nsfs_obj.uid,
