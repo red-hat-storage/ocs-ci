@@ -73,19 +73,19 @@ def cluster_copy_ops(copy_pod):
     logger.info(f"#### md5sum obtained for pod: {copy_pod.name} is {md5sum_val_got}")
     logger.info(f"#### Expected was: {md5sum_val_expected}")
     if md5sum_val_got != md5sum_val_expected:
-        logging.info(
+        logger.info(
             f"***** md5sum check FAILED. expected: {md5sum_val_expected}, but got {md5sum_val_got}"
         )
         cmd = "" + "ls -lR /mnt" + ""
         output = copy_pod.exec_sh_cmd_on_pod(cmd, sh="bash")
-        logging.info(f"ls -lR /mnt output = {output}")
+        logger.info(f"ls -lR /mnt output = {output}")
         return False
 
-    logging.info("#### Data Integrity check passed")
+    logger.info("#### Data Integrity check passed")
 
     # Remove the directories - clean up
     cmd = f"rm -rf /mnt/{dir_name}/copy_dir1"
-    logging.info(f"#### command to remove = {cmd}")
+    logger.info(f"#### command to remove = {cmd}")
     copy_pod.exec_sh_cmd_on_pod(cmd, sh="bash")
 
     return True
@@ -120,7 +120,7 @@ class ClusterFiller:
             target_dir_name = "/mnt/cluster_fillup0_" + uuid4().hex
             mkdir_cmd = "" + "mkdir " + target_dir_name + ""
             fill_pod.exec_sh_cmd_on_pod(mkdir_cmd, sh="bash")
-            logging.info(
+            logger.info(
                 f"#### Created the dir {target_dir_name} on pod {fill_pod.name}"
             )
             tee_cmd = (
@@ -130,19 +130,19 @@ class ClusterFiller:
                 + "/ceph.tar.gz{1..30} < /mnt/ceph.tar.gz >/dev/null &"
                 + ""
             )
-            logging.info(
+            logger.info(
                 f"#### Executing {tee_cmd} to fill the cluster space from pod {fill_pod.name}"
             )
             fill_pod.exec_sh_cmd_on_pod(tee_cmd, sh="bash")
-            logging.info(f"#### Executed command {tee_cmd}")
+            logger.info(f"#### Executed command {tee_cmd}")
 
     def cluster_filler(self):
         curl_cmd = (
             f""" curl {constants.REMOTE_FILE_URL} --output {constants.FILE_PATH} """
         )
-        logging.info("downloading......")
+        logger.info("downloading......")
         run_cmd(cmd=curl_cmd)
-        logging.info("finished")
+        logger.info("finished")
         with ThreadPoolExecutor() as executor:
             for pod in self.pods_to_fill:
                 executor.submit(
@@ -152,21 +152,21 @@ class ClusterFiller:
                     "/mnt/",
                     namespace=self.namespace,
                 )
-                logging.info(f"### initiated downloader for {pod.name}")
+                logger.info(f"### initiated downloader for {pod.name}")
 
         filler_executor = ThreadPoolExecutor()
         while not self.cluster_filled:
             for copy_iter in range(self.concurrent_copies):
                 for each_pod in self.pods_to_fill:
                     self.used_capacity = get_percent_used_capacity()
-                    logging.info(f"### used capacity %age = {self.used_capacity}")
+                    logger.info(f"### used capacity %age = {self.used_capacity}")
                     if self.used_capacity <= self.percent_required_filled:
                         filler_executor.submit(self.filler, each_pod)
-                        logging.info(
+                        logger.info(
                             f"#### Ran copy operation on pod {each_pod.name}. copy_iter # {copy_iter}"
                         )
                     else:
-                        logging.info(
+                        logger.info(
                             f"############ Cluster filled to the expected capacity "
                             f"{self.percent_required_filled}"
                         )

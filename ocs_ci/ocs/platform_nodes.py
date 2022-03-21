@@ -1002,7 +1002,7 @@ class AWSNodes(NodesBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -1050,12 +1050,12 @@ class AWSNodes(NodesBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)
@@ -1375,7 +1375,7 @@ class AWSUPINode(AWSNodes):
                 {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
             ],
         )
-        logging.info(self.worker_iam_role)
+        logger.info(self.worker_iam_role)
         self.client.associate_iam_instance_profile(
             IamInstanceProfile=self.worker_iam_role,
             InstanceId=inst_id,
@@ -1509,12 +1509,12 @@ class VSPHEREUPINode(VMWareNodes):
         logger.debug("Updating terraform variables")
         compute_str = "compute_count ="
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
         # backup the terraform variable file
         original_file = f"{self.terraform_var}_{int(time.time())}"
         shutil.copyfile(self.terraform_var, original_file)
-        logging.info(f"original terraform file: {original_file}")
+        logger.info(f"original terraform file: {original_file}")
 
         replace_content_in_file(
             self.terraform_var,
@@ -1534,7 +1534,7 @@ class VSPHEREUPINode(VMWareNodes):
             if self.folder_structure
             else constants.INSTALLER_MACHINE_CONF
         )
-        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        logger.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
         replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations

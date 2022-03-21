@@ -230,17 +230,17 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
     degraded = True
     for i in health_conditions:
         if {("type", "Available"), ("status", "True")}.issubset(set(i.items())):
-            logging.info("Prometheus cluster available value is set true")
+            logger.info("Prometheus cluster available value is set true")
             available = True
         if {("status", "False"), ("type", "Degraded")}.issubset(set(i.items())):
-            logging.info("Prometheus cluster degraded value is set false")
+            logger.info("Prometheus cluster degraded value is set false")
             degraded = False
 
     if available and not degraded:
-        logging.info("Prometheus health cluster is OK")
+        logger.info("Prometheus health cluster is OK")
         return True
 
-    logging.error(f"Prometheus cluster is degraded {health_conditions}")
+    logger.error(f"Prometheus cluster is degraded {health_conditions}")
     return False
 
 

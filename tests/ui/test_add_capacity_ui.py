@@ -30,7 +30,7 @@ class TestAddCapacityUI(object):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         def finalizer():
-            logging.info("Perform Ceph health checks after 'add capacity'")
+            logger.info("Perform Ceph health checks after 'add capacity'")
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -55,7 +55,7 @@ class TestAddCapacityUI(object):
         infra_ui_obj = AddReplaceDeviceUI(setup_ui)
         infra_ui_obj.add_capacity_ui()
 
-        logging.info("Wait for osd pods to be in Running state")
+        logger.info("Wait for osd pods to be in Running state")
         for osd_pods in TimeoutSampler(
             timeout=600,
             sleep=10,

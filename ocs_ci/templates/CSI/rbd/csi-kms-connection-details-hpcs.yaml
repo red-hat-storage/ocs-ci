@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  1-hpcs: '{"KMS_PROVIDER":"ibmkeyprotect","KMS_SERVICE_NAME":"1-hpcs","IBM_KP_SERVICE_INSTANCE_ID":"<ibm_kp_service_instance_id>","IBM_KP_SECRET_NAME":"ibm-kp-kms-test-secret","IBM_KP_BASE_URL":"<ibm_kp_base_url>","IBM_KP_TOKEN_URL":"https://iam.cloud.ibm.com/oidc/token"}'
+kind: ConfigMap
+metadata:
+  name: csi-kms-connection-details
+  namespace: openshift-storage

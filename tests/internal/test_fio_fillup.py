@@ -52,17 +52,17 @@ class TestPVCFillup(BaseTest):
         # Calculation the amount of data to write
         filesize = int(pvc_size * 1024 * (int(percentage) / 100))
 
-        logging.info(
+        logger.info(
             f"Going to run on PVC of {pvc_size} GB and will fill up {percentage} %"
         )
-        logging.info(f"the filesize will be {filesize} MB")
+        logger.info(f"the filesize will be {filesize} MB")
         self.pod_obj.fillup_fs(
             size=filesize,
         )
-        logging.info("Waiting for results")
+        logger.info("Waiting for results")
 
         # Getting the FIO output and verify all data was written
         fio_result = self.pod_obj.get_fio_results()
         writes = int(fio_result.get("jobs")[0].get("write").get("io_kbytes") / 1024)
-        logging.info(f"Total Write: {writes} MB")
+        logger.info(f"Total Write: {writes} MB")
         assert filesize <= writes, "Not all required data was written"

@@ -83,15 +83,15 @@ class CephCluster(object):
         try:
             self.cephfs_config = self.CEPHFS.get().get("items")[0]
         except IndexError as e:
-            logging.warning(e)
-            logging.warning("No CephFS found")
+            logger.warning(e)
+            logger.warning("No CephFS found")
             self.cephfs_config = None
 
         try:
             self.rbd_config = self.RBD.get().get("items")[0]
         except IndexError as e:
-            logging.warning(e)
-            logging.warning("No RBD found")
+            logger.warning(e)
+            logger.warning("No RBD found")
             self.rbd_config = None
 
         self._cluster_name = self.cluster_resource_config.get("metadata").get("name")
@@ -134,8 +134,8 @@ class CephCluster(object):
         self.rgw_count = 0
         self._mcg_obj = None
         self.scan_cluster()
-        logging.info(f"Number of mons = {self.mon_count}")
-        logging.info(f"Number of mds = {self.mds_count}")
+        logger.info(f"Number of mons = {self.mon_count}")
+        logger.info(f"Number of mds = {self.mds_count}")
 
         self.used_space = 0
 
@@ -187,8 +187,8 @@ class CephCluster(object):
                 self.cephfs = ocs.OCS(**self.cephfs_config)
                 self.cephfs.reload()
             except IndexError as e:
-                logging.warning(e)
-                logging.warning("No CephFS found")
+                logger.warning(e)
+                logger.warning("No CephFS found")
 
         self.mon_count = len(self.mons)
         self.mds_count = len(self.mdss)
@@ -214,7 +214,7 @@ class CephCluster(object):
         port = container[0]["ports"][0]["containerPort"]
         # Dynamically added attribute 'port'
         pod.port = port
-        logging.info(f"port={pod.port}")
+        logger.info(f"port={pod.port}")
         return pod
 
     def is_health_ok(self):
@@ -446,7 +446,7 @@ class CephCluster(object):
         # As of now ceph auth command gives output to stderr
         # To be handled
         out = self.toolbox.exec_cmd_on_pod(cmd)
-        logging.info(type(out))
+        logger.info(type(out))
         return self.get_user_key(username)
 
     def get_mons_from_cluster(self):
@@ -479,7 +479,7 @@ class CephCluster(object):
             resource_count=after_delete_mon_count,
             selector="app=rook-ceph-mon",
         )
-        logging.info(f"Removed the mon {random_mon} from the cluster")
+        logger.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
 
     @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
@@ -619,7 +619,7 @@ class CephCluster(object):
         iops_in_cluster = self.get_ceph_cluster_iops()
         osd_iops_limit = iops_per_osd * osd_count
         iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
-        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        logger.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
         return iops_percentage
 
     def get_cluster_throughput(self):
@@ -661,7 +661,7 @@ class CephCluster(object):
         throughput_percentage = (
             throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD
         ) * 100
-        logging.info(
+        logger.info(
             f"The throughput percentage of the cluster is {throughput_percentage}%"
         )
         return throughput_percentage
@@ -718,7 +718,7 @@ class CephCluster(object):
                 timeout=timeout, sleep=10, func=self.get_rebalance_status
             ):
                 if rebalance:
-                    logging.info("Re-balance is completed")
+                    logger.info("Re-balance is completed")
                     return True
         except exceptions.TimeoutExpiredError:
             logger.error(
@@ -1416,10 +1416,10 @@ def get_pg_balancer_status():
     # Check 'mode' is 'upmap', based on suggestion from Ceph QE
     # TODO: Revisit this if mode needs change.
     if output["active"] and output["mode"] == "upmap":
-        logging.info("PG balancer is active and mode is upmap")
+        logger.info("PG balancer is active and mode is upmap")
         return True
     else:
-        logging.error("PG balancer is not active")
+        logger.error("PG balancer is not active")
         return False
 
 
@@ -1442,24 +1442,24 @@ def validate_pg_balancer():
         for key, value in osd_dict.items():
             diff = abs(value - osd_avg_pg_value)
             if diff <= 10:
-                logging.info(f"{key} PG difference {diff} is acceptable")
+                logger.info(f"{key} PG difference {diff} is acceptable")
             else:
-                logging.error(f"{key} PG difference {diff} is not acceptable")
+                logger.error(f"{key} PG difference {diff} is not acceptable")
                 osd_pg_value_flag = False
         if osd_pg_value_flag and eval <= 0.025:
-            logging.info(
+            logger.info(
                 f"Eval value is {eval} and pg distribution "
                 f"average difference is <=10 which is acceptable"
             )
             return True
         else:
-            logging.error(
+            logger.error(
                 f"Eval value is {eval} and pg distribution "
                 f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
-        logging.info("pg_balancer is not active")
+        logger.info("pg_balancer is not active")
 
 
 def get_percent_used_capacity():
@@ -1589,7 +1589,7 @@ def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
     for rack in racks:
         hosts = get_child_nodes_osd_tree(rack, osd_tree)
         if len(hosts) != number_of_hosts_expected:
-            logging.error(
+            logger.error(
                 f"Number of hosts under rack {rack} "
                 f"is not matching the expected ={number_of_hosts_expected} "
             )
@@ -1650,16 +1650,16 @@ def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     region = osd_tree["nodes"][0]["children"]
     zones = get_child_nodes_osd_tree(region[0], osd_tree)
     racks = get_child_nodes_osd_tree(zones[0], osd_tree)
-    logging.info(f"racks = {racks}")
+    logger.info(f"racks = {racks}")
     if len(racks) != 3:
-        logging.error(f"Expected 3 racks but got {len(racks)}")
+        logger.error(f"Expected 3 racks but got {len(racks)}")
     for each_rack in racks:
         hosts_in_each_rack = get_child_nodes_osd_tree(each_rack, osd_tree)
         if len(hosts_in_each_rack) != number_of_osds / 3:  # 3 is replica_factor
-            logging.error("number of hosts in rack is incorrect")
+            logger.error("number of hosts in rack is incorrect")
             return False
         else:
-            logging.info(f"adding host...{hosts_in_each_rack}")
+            logger.info(f"adding host...{hosts_in_each_rack}")
             all_hosts.append(hosts_in_each_rack)
     all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
 

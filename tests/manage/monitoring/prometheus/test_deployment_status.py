@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4, tier4a, bugzilla
+from ocs_ci.framework.testlib import tier4c, bugzilla
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -10,8 +10,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
+@tier4c
 @pytest.mark.polarion_id("OCS-1052")
 def test_ceph_manager_stopped(measure_stop_ceph_mgr):
     """
@@ -39,8 +38,7 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
     )
 
 
-@tier4
-@tier4a
+@tier4c
 @pytest.mark.polarion_id("OCS-904")
 def test_ceph_monitor_stopped(measure_stop_ceph_mon):
     """
@@ -78,8 +76,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
         )
 
 
-@tier4
-@tier4a
+@tier4c
 @bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
@@ -108,8 +105,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
     )
 
 
-@tier4
-@tier4a
+@tier4c
 @pytest.mark.polarion_id("OCS-900")
 def test_ceph_osd_stopped(measure_stop_ceph_osd):
     """

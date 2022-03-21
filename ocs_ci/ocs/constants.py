@@ -90,7 +90,6 @@ STATUS_BOUND = "Bound"
 STATUS_RELEASED = "Released"
 STATUS_COMPLETED = "Completed"
 STATUS_ERROR = "Error"
-STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
@@ -114,7 +113,6 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
-JOB = "Job"
 STORAGECLASS = "StorageClass"
 STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
@@ -158,7 +156,6 @@ SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
-CLUSTER_SERVICE_VERSION = "csv"
 
 # Other
 SECRET = "Secret"
@@ -603,8 +600,26 @@ EXTERNAL_VAULT_CSI_KMS_TOKEN = os.path.join(TEMPLATE_CSI_RBD_DIR, "csi-kms-secre
 EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details.yaml"
 )
+RBD_CSI_VAULT_TOKEN_REVIEWER = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "rbd-csi-vault-token-reviewer.yaml"
+)
+RBD_CSI_VAULT_TENANT_SA = os.path.join(TEMPLATE_CSI_RBD_DIR, "tenant-sa.yaml")
+RBD_CSI_VAULT_TENANT_CONFIGMAP = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "tenant-vault-configmap.yaml"
+)
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
+)
+# External hpcs kms yamls
+EXTERNAL_HPCS_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "hpcs")
+EXTERNAL_HPCS_KMS_CONNECTION_DETAILS = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details-hpcs.yaml"
+)
+EXTERNAL_IBM_KP_KMS_SECRET = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ibm-kp-kms-secret.yaml"
 )
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
@@ -960,9 +975,11 @@ NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore
 NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
 EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
 OCS_SECRET = "ocs-secret"
-MANAGED_SMTP_SECRET = "ocs-converged-smtp"
-MANAGED_PAGERDUTY_SECRET = "ocs-converged-pagerduty"
-MANAGED_DEADMANSSNITCH_SECRET = "ocs-converged-deadmanssnitch"
+# Names of Managed Service secrets are derived from addon name
+# Following secret strings contain only suffix
+MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
+MANAGED_PAGERDUTY_SECRET_SUFFIX = "-pagerduty"
+MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = "-deadmanssnitch"
 
 # JSON Schema
 OSD_TREE_ROOT = {
@@ -1365,7 +1382,7 @@ AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
 # Cosbench constants
 COSBENCH = "cosbench"
 COSBENCH_PROJECT = "cosbench-project"
-
+COSBENCH_IMAGE = "quay.io/ocsci/cosbench:latest"
 COSBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cosbench")
 COSBENCH_POD = os.path.join(COSBENCH_DIR, "cosbench_pod.yaml")
 COSBENCH_CONFIGMAP = os.path.join(COSBENCH_DIR, "cosbench_configmap.yaml")
@@ -1377,6 +1394,14 @@ QUAY_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "quay")
 QUAY_SUB = os.path.join(QUAY_DIR, "quay_subscription.yaml")
 QUAY_SUPER_USER = os.path.join(QUAY_DIR, "quay_super_user_config.yaml")
 QUAY_REGISTRY = os.path.join(QUAY_DIR, "quay_registry.yaml")
+
+# Quay operator registry API
+QUAY_SUPERUSER = "quayadmin"
+QUAY_PW = "quaypass123"
+QUAY_USER_INIT = "api/v1/user/initialize"
+QUAY_USER_GET = "api/v1/superuser/users/"
+QUAY_ORG_POST = "api/v1/organization/"
+QUAY_REPO_POST = "api/v1/repository"
 
 # logreader workload deployment yaml files
 LOGWRITER_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "logwriter")
@@ -1448,6 +1473,7 @@ VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"
+HPCS_KMS_PROVIDER = "hpcs"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
@@ -1496,6 +1522,18 @@ mon_data_avail_warn = 15
 osd_memory_target_cgroup_limit_ratio = 0.5
 """
 
+ROOK_CEPH_CONFIG_VALUES_410 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+"""
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
@@ -1509,6 +1547,23 @@ debug_crush = 20
 # Values from configmap noobaa-postgres-config
 NOOBAA_POSTGRES_TUNING_VALUES = """
 max_connections = 300
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 300
+work_mem = 1747kB
+min_wal_size = 2GB
+max_wal_size = 8GB
+shared_preload_libraries = 'pg_stat_statements'
+"""
+
+# Values from configmap noobaa-postgres-config wrt OCP version 4.10 and above
+NOOBAA_POSTGRES_TUNING_VALUES_4_10 = """
+max_connections = 600
 shared_buffers = 1GB
 effective_cache_size = 3GB
 maintenance_work_mem = 256MB
@@ -1601,3 +1656,8 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
+
+# Vault encryption KMS types
+VAULT_TOKEN = "vaulttokens"
+VAULT_TENANT_SA = "vaulttenantsa"
+RBD_CSI_VAULT_TOKEN_REVIEWER_NAME = "rbd-csi-vault-token-review"

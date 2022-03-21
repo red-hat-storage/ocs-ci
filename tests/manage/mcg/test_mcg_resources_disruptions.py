@@ -9,8 +9,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
-    tier4,
-    tier4a,
+    tier4c,
     tier3,
     skipif_managed_service,
 )
@@ -30,8 +29,6 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
-@tier4
-@tier4a
 @ignore_leftovers()
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
@@ -52,6 +49,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
+    @tier4c
     @pytest.mark.parametrize(
         argnames=["resource_to_delete"],
         argvalues=[
@@ -81,6 +79,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
     @pytest.mark.parametrize(
@@ -116,6 +115,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier3
     @pytest.mark.parametrize(
         argnames=["pod_to_drain"],
         argvalues=[

@@ -748,6 +748,7 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
@@ -763,7 +764,7 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
+    if ocs_version == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
@@ -778,6 +779,13 @@ def setup_ceph_toolbox(force_setup=False):
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
             env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
             # replace secret
             env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]

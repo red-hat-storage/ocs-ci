@@ -119,7 +119,7 @@ class FioPodScale(object):
         if pvc_count > 1200:
             raise UnexpectedBehaviour("Kube_job batch count should be lesser than 1200")
 
-        logging.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
+        logger.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
@@ -303,7 +303,7 @@ class FioPodScale(object):
         # Continue to iterate till the scale pvc limit is reached
         while True:
             if actual_itr_counter == expected_itr_counter:
-                logging.info(
+                logger.info(
                     f"Scaled {scale_pvc_count} PVCs and created "
                     f"{scale_pvc_count/pvc_per_pod_count} PODs"
                 )
@@ -322,12 +322,12 @@ class FioPodScale(object):
                     io_runtime=io_runtime,
                     pvc_size=pvc_size,
                 )
-                logging.info(
+                logger.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
                     f"{len(pod_running)} PODs in interation {actual_itr_counter}"
                 )
 
-        logging.info(
+        logger.info(
             f"Scaled {actual_itr_counter * min_pvc_count} PVC's and Created "
             f"{int(actual_itr_counter * (min_pvc_count/pvc_per_pod_count))} PODs"
         )
@@ -344,7 +344,7 @@ class FioPodScale(object):
 
         """
 
-        logging.info(f"PVC size is expanding to {pvc_new_size}Gi")
+        logger.info(f"PVC size is expanding to {pvc_new_size}Gi")
         kube_job_objs = self.kube_job_pvc_list
 
         for kube_job in kube_job_objs:
@@ -453,9 +453,9 @@ def check_enough_resource_available_in_workers(ms_name=None, pod_dict_path=None)
                 expected_count=140,
                 role_type="app,worker",
             ):
-                logging.info("Nodes added for app pod creation")
+                logger.info("Nodes added for app pod creation")
             else:
-                logging.info("Existing resource are enough to create more pods")
+                logger.info("Existing resource are enough to create more pods")
         else:
             if add_worker_based_on_cpu_utilization(
                 machineset_name=ms_name,
@@ -463,9 +463,9 @@ def check_enough_resource_available_in_workers(ms_name=None, pod_dict_path=None)
                 expected_percent=59,
                 role_type="app,worker",
             ):
-                logging.info("Nodes added for app pod creation")
+                logger.info("Nodes added for app pod creation")
             else:
-                logging.info("Existing resource are enough to create more pods")
+                logger.info("Existing resource are enough to create more pods")
     elif (
         config.ENV_DATA["deployment_type"] == "upi"
         and config.ENV_DATA["platform"].lower() == "vsphere"
@@ -522,7 +522,7 @@ def add_worker_based_on_cpu_utilization(
                 machine.wait_for_new_node_to_be_ready(name)
             return True
         else:
-            logging.info(f"Enough resource available for more pod creation {uti_dict}")
+            logger.info(f"Enough resource available for more pod creation {uti_dict}")
             return False
     elif (
         config.ENV_DATA["deployment_type"] == "upi"
@@ -578,7 +578,7 @@ def add_worker_based_on_pods_count_per_node(
                 machine.wait_for_new_node_to_be_ready(name)
             return True
         else:
-            logging.info(
+            logger.info(
                 f"Enough pods can be created with available nodes {pod_count_dict}"
             )
             return False
@@ -642,7 +642,7 @@ def get_size_based_on_cls_usage(custom_size_dict=None):
         size = size_dict["usage_80_85"]
     else:
         size = size_dict["usage_above_85"]
-        logging.warning(f"One of the OSD is near full {temp}% utilized")
+        logger.warning(f"One of the OSD is near full {temp}% utilized")
     return size
 
 
@@ -683,7 +683,7 @@ def get_rate_based_on_cls_iops(custom_iops_dict=None, osd_size=2048):
     elif 80 < (iops * 100) <= 95:
         rate_param = iops_dict["usage_80%_95%"]
     else:
-        logging.warning(f"Cluster iops utilization is more than {iops * 100} percent")
+        logger.warning(f"Cluster iops utilization is more than {iops * 100} percent")
         raise UnavailableResourceException(
             "Overall Cluster utilization is more than 95%"
         )
@@ -775,17 +775,17 @@ def check_and_add_enough_worker(worker_count):
                     label_value="app-scale",
                 )
     scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
-    logging.info(f"Print existing scale worker {scale_worker_list}")
+    logger.info(f"Print existing scale worker {scale_worker_list}")
 
     # Check if there is enough nodes to continue scaling of app pods
     if len(scale_worker_list) >= worker_count:
-        logging.info(
+        logger.info(
             f"Setup has expected worker count {worker_count} "
             "to continue scale of pods"
         )
         return False
     else:
-        logging.info(
+        logger.info(
             "There is no enough worker in the setup, will add enough worker "
             "for the automation supported platforms"
         )
@@ -1062,7 +1062,7 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
                 "After 40sec machineconfigpool not in Updating state"
             )
         else:
-            logging.info("Sleep 5secs for updating status change")
+            logger.info("Sleep 5secs for updating status change")
             timout_counter += 1
             time.sleep(5)
 
@@ -1179,7 +1179,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_pvc):
             status = job_get_output["items"][i]["status"]["phase"]
-            logging.info(
+            logger.info(
                 f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}"
             )
             if status != "Bound":
@@ -1195,7 +1195,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
-                assert logging.error(
+                assert logger.error(
                     f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_bound_list}"
                 )
                 break
@@ -1204,7 +1204,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         elif not len(pvc_not_bound_list):
             for i in range(no_of_pvc):
                 pvc_bound_list.append(job_get_output["items"][i]["metadata"]["name"])
-            logging.info("All PVCs in Bound state")
+            logger.info("All PVCs in Bound state")
             break
     return pvc_bound_list
 
@@ -1264,7 +1264,7 @@ def check_all_pod_reached_running_state_in_kube_job(
                 dc_pod = 1
             if pod_type:
                 status = job_get_output["items"][i]["status"]["phase"]
-                logging.info(
+                logger.info(
                     f"POD {job_get_output['items'][i]['metadata']['name']} status {status}"
                 )
                 if status != "Running":
@@ -1276,7 +1276,7 @@ def check_all_pod_reached_running_state_in_kube_job(
                 # availableReplicas, basically this will be 1 if pod is running and
                 # the value will be 0 in-case of pod not in running state
                 status = job_get_output["items"][i]["status"]["availableReplicas"]
-                logging.info(
+                logger.info(
                     f"DC Config {job_get_output['items'][i]['metadata']['name']} "
                     f"available running pods {status}"
                 )
@@ -1302,7 +1302,7 @@ def check_all_pod_reached_running_state_in_kube_job(
             # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
             if while_iteration_count >= 13:
-                assert logging.error(
+                assert logger.error(
                     f" Listed PODs took more than 390secs for Running {pod_not_running_list}"
                 )
                 break
@@ -1311,7 +1311,7 @@ def check_all_pod_reached_running_state_in_kube_job(
         elif not len(pod_not_running_list):
             for i in range(no_of_pod):
                 pod_running_list.append(job_get_output["items"][i]["metadata"]["name"])
-            logging.info("All PODs are in Running state")
+            logger.info("All PODs are in Running state")
             break
 
     return pod_running_list
@@ -1552,7 +1552,7 @@ def scale_ocs_node(node_count=3):
         # Get the node name of new spun node
         nodes_after_new_spun_node = get_worker_nodes()
         new_spun_node = list(set(nodes_after_new_spun_node) - set(initial_nodes))
-        logging.info(f"New spun node is {new_spun_node}")
+        logger.info(f"New spun node is {new_spun_node}")
 
         if not len(new_spun_node) == node_count:
             return False
@@ -1563,11 +1563,11 @@ def scale_ocs_node(node_count=3):
             node_obj.add_label(
                 resource_name=new_node, label=constants.OPERATOR_NODE_LABEL
             )
-            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+            logger.info(f"Successfully labeled {new_spun_node} with OCS storage label")
         return True
 
     else:
-        logging.error("Unsupported Platform, can't scale nodes")
+        logger.error("Unsupported Platform, can't scale nodes")
         return False
 
 
@@ -1631,13 +1631,13 @@ def validate_all_pvcs_and_check_state(namespace, pvc_scale_list):
 
     # Check status of PVCs scaled
     if not len(pvc_bound_list) == len(pvc_scale_list):
-        logging.error(
+        logger.error(
             f"PVC Bound count mismatch {len(pvc_not_bound_list)} PVCs not in Bound state"
             f" PVCs not in Bound state {pvc_not_bound_list}"
         )
         return False
     else:
-        logging.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
+        logger.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
         return True
 
 
@@ -1662,13 +1662,13 @@ def validate_all_pods_and_check_state(namespace, pod_scale_list):
             pod_running_list.append(pod_data["metadata"]["name"])
 
     if not len(pod_running_list) == len(pod_scale_list):
-        logging.error(
+        logger.error(
             f"POD Running count mismatch {len(pod_not_running_list)} PODs not in Running state "
             f"PODs not in Running state {pod_not_running_list}"
         )
         return False
     else:
-        logging.info(
+        logger.info(
             f"All the expected {len(pod_running_list)} PODs are in Running state"
         )
         return True
@@ -1686,7 +1686,7 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
 
     try:
         # Wait some time after rebooting node
-        logging.info(f"Waiting {wait_time} seconds...")
+        logger.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
 
         # Validate all nodes and services are in READY state and up
@@ -1712,7 +1712,7 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
         )(wait_for_nodes_status)(timeout=900)
         return True
     except Exception as e:
-        logging.warning(f"Exception in validate_node_and_oc_services {e}")
+        logger.warning(f"Exception in validate_node_and_oc_services {e}")
         return False
 
 
@@ -1745,7 +1745,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(0, no_of_pvc):
             pvc_size = job_get_output["items"][i]["status"]["capacity"]["storage"]
-            logging.info(
+            logger.info(
                 f"pvc {job_get_output['items'][i]['metadata']['name']} size {pvc_size}"
             )
             if pvc_size != f"{resize_value}Gi":
@@ -1761,7 +1761,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
             # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs size still not extended then there will be assert.
             if while_iteration_count >= 10:
-                assert logging.error(
+                assert logger.error(
                     f" Listed PVC size not expanded in {timeout*10} secs, PVCs {pvc_not_extended_list}"
                 )
                 break
@@ -1770,8 +1770,8 @@ def validate_all_expanded_pvc_size_in_kube_job(
         elif not len(pvc_not_extended_list):
             for i in range(no_of_pvc):
                 pvc_extended_list.append(job_get_output["items"][i]["metadata"]["name"])
-            logging.info("All PVCs Size are Extended")
-            logging.info(f"Verified: Size of all PVCs are expanded to {resize_value}G")
+            logger.info("All PVCs Size are Extended")
+            logger.info(f"Verified: Size of all PVCs are expanded to {resize_value}G")
             break
     return pvc_extended_list
 
@@ -1821,7 +1821,7 @@ def collect_scale_data_in_file(
             )
         )
 
-    logging.info(
+    logger.info(
         f"Running PODs count {len(pod_running_list)} & "
         f"Bound PVCs count {len(pvc_bound_list)} "
         f"in namespace {namespace}"

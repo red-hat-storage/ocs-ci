@@ -342,7 +342,6 @@ def pytest_configure(config):
             # Add OCS related versions to the html report and remove
             # extraneous metadata
             markers_arg = config.getoption("-m")
-
             # add logs url
             logs_url = ocsci_config.RUN.get("logs_url")
             if logs_url:
@@ -355,6 +354,12 @@ def pytest_configure(config):
                 log.info(
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
+                )
+                continue
+            elif markers_arg == "acm_import":
+                log.info(
+                    "Skipping auto pytest executions and version collecting because "
+                    "Import Clusters to ACM is performed."
                 )
                 continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
@@ -617,14 +622,26 @@ def pytest_runtest_makereport(item, call):
     # we only look at actual failing test calls, not setup/teardown
     if rep.failed and ocsci_config.RUN.get("cli_params").get("collect-logs"):
         test_case_name = item.name
-        ocp_logs_collection = True if rep.when == "call" else False
-        mcg = (
+        ocp_logs_collection = (
+            True
+            if any(x in item.location[0] for x in ["ecosystem", "e2e/performance"])
+            else False
+        )
+        ocs_logs_collection = (
+            False
+            if any(x in item.location[0] for x in ["_ui", "must_gather"])
+            else True
+        )
+        mcg_logs_collection = (
             True if any(x in item.location[0] for x in ["mcg", "ecosystem"]) else False
         )
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
                 collect_ocs_logs(
-                    dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg
+                    dir_name=test_case_name,
+                    ocp=ocp_logs_collection,
+                    ocs=ocs_logs_collection,
+                    mcg=mcg_logs_collection,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")

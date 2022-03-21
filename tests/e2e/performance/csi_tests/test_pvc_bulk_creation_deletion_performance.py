@@ -2,54 +2,55 @@
 Test to verify PVC creation performance
 """
 import logging
+import os
 import pytest
 import math
 import datetime
-import os
-from uuid import uuid4
 
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework import config
-from ocs_ci.framework.testlib import performance, polarion_id, bugzilla
-from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.framework.testlib import performance, polarion_id
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 
 log = logging.getLogger(__name__)
 
+Interface_Types = {constants.CEPHFILESYSTEM: "CephFS", constants.CEPHBLOCKPOOL: "RBD"}
+
 
 @performance
 class TestPVCCreationPerformance(PASTest):
+    """
+    Test to verify PVC creation and deletion performance
+    """
+
     def setup(self):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
+        log.info("Starting the test setup")
         super(TestPVCCreationPerformance, self).setup()
         self.benchmark_name = "pvc_creation_performance"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
+        # Create new project (namespace for the test)
+        self.create_test_project()
+        self.pvc_size = "1Gi"
+        self.pvc_objs = []
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+
+        log.info("Starting the test environment celanup")
+        # Delete All PVC (if exists)
+        for pvc_obj in self.pvc_objs:
+            pvc_obj.delete()
+        # Delete the test project (namespace)
+        self.delete_test_project()
+        super(TestPVCCreationPerformance, self).teardown()
 
     def init_full_results(self, full_results):
         """
@@ -65,69 +66,71 @@ class TestPVCCreationPerformance(PASTest):
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
         full_results.add_key("index", full_results.new_index)
+        full_results.add_key("interface", Interface_Types[self.interface])
+        full_results.add_key("pvc_size", self.pvc_size)
         return full_results
 
-    """
-    Test to verify PVC creation and deletion performance
-    """
-
-    pvc_size = "1Gi"
-
-    @pytest.fixture()
-    def base_setup(self, interface_type, storageclass_factory):
+    def pvc_bulk_create_and_wait_for_bound(self, bulk_size):
         """
-        A setup phase for the test
+        Creating a bulk of PVCs and wait until all of them are bounded
 
         Args:
-            interface_type: Interface type
-            storageclass_factory: A fixture to create everything needed for a
-                storageclass
-        """
-        self.interface = interface_type
-        self.sc_obj = storageclass_factory(self.interface)
+        bulk_size (int): the number of pvcs to create
 
-        if self.interface == constants.CEPHFILESYSTEM:
-            sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            sc = "RBD"
-
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{sc}"
-
-    @pytest.fixture()
-    def namespace(self, project_factory):
         """
-        Create a new project
+        self.pvc_objs, self.yaml_creation_dir = helpers.create_multiple_pvcs(
+            sc_name=self.sc_obj.name,
+            namespace=self.namespace,
+            number_of_pvc=bulk_size,
+            size=self.pvc_size,
+            burst=True,
+        )
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for pvc_obj in self.pvc_objs:
+                executor.submit(
+                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
+                )
+                executor.submit(pvc_obj.reload)
+
+    def get_bulk_creation_time(self):
         """
-        proj_obj = project_factory()
-        self.namespace = proj_obj.namespace
+        Getting the creation time for the pvcs (as bulk). this time is the total
+        time it took to create, from user Perspective.
+
+        Returns:
+
+            int : the total time in seconds
+
+        """
+        start_time = helpers.get_provision_time(
+            self.interface, self.pvc_objs, status="start"
+        )
+        end_time = helpers.get_provision_time(
+            self.interface, self.pvc_objs, status="end"
+        )
+        total_time = (end_time - start_time).total_seconds()
+        return total_time
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 60],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, 240],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 60],
-                marks=[pytest.mark.performance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 240],
-                marks=[pytest.mark.performance],
             ),
         ],
     )
-    @pytest.mark.usefixtures(base_setup.__name__)
-    @pytest.mark.usefixtures(namespace.__name__)
     @polarion_id("OCS-1620")
     def test_bulk_pvc_creation_deletion_measurement_performance(
-        self, teardown_factory, bulk_size
+        self, storageclass_factory, interface_type, bulk_size
     ):
 
         """
@@ -135,40 +138,30 @@ class TestPVCCreationPerformance(PASTest):
         and sends results to the Elastic Search DB
 
         Args:
-            teardown_factory: A fixture used when we want a new resource that was created during the tests
-                               to be removed in the teardown phase.
             bulk_size: Size of the bulk to be tested
         Returns:
 
         """
+        self.interface = interface_type
+        self.sc_obj = storageclass_factory(self.interface)
+
         bulk_creation_time_limit = bulk_size / 2
+
         log.info(f"Start creating new {bulk_size} PVCs")
 
-        pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
-            sc_name=self.sc_obj.name,
-            namespace=self.namespace,
-            number_of_pvc=bulk_size,
-            size=self.pvc_size,
-            burst=True,
-        )
-        logging.info(f"PVC creation dir is {yaml_creation_dir}")
+        # Getting the start time of the test.
+        self.test_start_time = self.get_time()
 
-        for pvc_obj in pvc_objs:
-            pvc_obj.reload()
-            teardown_factory(pvc_obj)
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
-                )
-                executor.submit(pvc_obj.reload)
+        # Run the Bulk Creation test
+        csi_bulk_start_time = self.get_time(time_format="csi")
+        self.pvc_bulk_create_and_wait_for_bound(bulk_size)
+        log.info(f"PVC creation dir is {self.yaml_creation_dir}")
 
-        start_time = helpers.get_provision_time(
-            self.interface, pvc_objs, status="start"
+        total_time = self.get_bulk_creation_time()
+        log.info(f"{bulk_size} Bulk PVCs creation time is {total_time} seconds.")
+        csi_creation_times = performance_lib.csi_bulk_pvc_time_measure(
+            self.interface, self.pvc_objs, "create", csi_bulk_start_time
         )
-        end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
-        total_time = (end_time - start_time).total_seconds()
-        logging.info(f"{bulk_size} Bulk PVCs creation time is {total_time} seconds.")
 
         if total_time > bulk_creation_time_limit:
             raise ex.PerformanceException(
@@ -176,15 +169,16 @@ class TestPVCCreationPerformance(PASTest):
                 f"greater than {bulk_creation_time_limit} seconds"
             )
 
+        # Run the Bulk Deletion test
         pv_names_list = []
-        for pvc_obj in pvc_objs:
+        for pvc_obj in self.pvc_objs:
             pv_names_list.append(pvc_obj.backed_pv)
 
-        logging.info(f"Starting to delete bulk of {bulk_size} PVCs")
+        log.info(f"Starting to delete bulk of {bulk_size} PVCs")
         helpers.delete_bulk_pvcs(
-            yaml_creation_dir, pv_names_list, namespace=self.namespace
+            self.yaml_creation_dir, pv_names_list, namespace=self.namespace
         )
-        logging.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
+        log.info(f"Deletion of bulk of {bulk_size} PVCs successfully completed")
 
         log_deletion_times = helpers.measure_pv_deletion_time_bulk(
             self.interface, pv_names_list, return_log_times=True
@@ -203,12 +197,27 @@ class TestPVCCreationPerformance(PASTest):
         )
 
         total_deletion_time = (end_deletion_time - start_deletion_time).total_seconds()
-        logging.info(
+        log.info(
             f"{bulk_size} Bulk PVCs deletion time is {total_deletion_time} seconds."
         )
 
-        self.results_path = get_full_test_logs_path(cname=self)
+        csi_deletion_times = performance_lib.csi_bulk_pvc_time_measure(
+            self.interface, self.pvc_objs, "delete", csi_bulk_start_time
+        )
+        # Getting the end time of the test
+        self.test_end_time = self.get_time()
+
+        # reset the list oc PVCs since thay was deleted, and do not need to be deleted
+        # in the teardown phase.
+        self.pvc_objs = []
+
         # Produce ES report
+        self.results_path = os.path.join(
+            "/",
+            *self.results_path,
+            "test_bulk_pvc_creation_deletion_measurement_performance",
+        )
+
         # Collecting environment information
         self.get_env_info()
 
@@ -222,11 +231,15 @@ class TestPVCCreationPerformance(PASTest):
             )
         )
 
-        full_results.add_key("interface", self.interface)
+        # Add the test time to the ES report
+        full_results.add_key(
+            "test_time", {"start": self.test_start_time, "end": self.test_end_time}
+        )
         full_results.add_key("bulk_size", bulk_size)
-        full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_pvc_creation_time", total_time)
+        full_results.add_key("bulk_pvc_csi_creation_time", csi_creation_times)
         full_results.add_key("bulk_pvc_deletion_time", total_deletion_time)
+        full_results.add_key("bulk_pvc_csi_deletion_time", csi_deletion_times)
 
         # Write the test results into the ES server
         if full_results.es_write():
@@ -236,105 +249,66 @@ class TestPVCCreationPerformance(PASTest):
             # Create text file with results of all subtest (4 - according to the parameters)
             self.write_result_to_file(res_link)
 
-    @pytest.fixture()
-    def base_setup_creation_after_deletion(
+    @polarion_id("OCS-1270")
+    def test_bulk_pvc_creation_after_deletion_performance(
         self, interface_iterate, storageclass_factory
     ):
-        """
-        A setup phase for the test
-
-        Args:
-            interface_iterate: A fixture to iterate over ceph interfaces
-            storageclass_factory: A fixture to create everything needed for a
-                storageclass
-        """
-        self.interface = interface_iterate
-        self.sc_obj = storageclass_factory(self.interface)
-
-        if self.interface == constants.CEPHFILESYSTEM:
-            sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            sc = "RBD"
-
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{sc}"
-
-    @pytest.mark.usefixtures(base_setup_creation_after_deletion.__name__)
-    @pytest.mark.usefixtures(namespace.__name__)
-    @polarion_id("OCS-1270")
-    @bugzilla("1741612")
-    def test_bulk_pvc_creation_after_deletion_performance(self, teardown_factory):
         """
         Measuring PVC creation time of bulk of 75% of initial PVC bulk (120) in the same
         rate after deleting ( serial deletion) 75% of the initial PVCs
         and sends results to the Elastic Search DB
 
-        Args:
-            teardown_factory: A fixture used when we want a new resource that was created during the tests
-                               to be removed in the teardown phase.
-        Returns:
-
         """
+        self.interface = interface_iterate
+        self.sc_obj = storageclass_factory(self.interface)
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
 
-        log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
-        pvc_objs, _ = helpers.create_multiple_pvcs(
-            sc_name=self.sc_obj.name,
-            namespace=self.namespace,
-            number_of_pvc=initial_number_of_pvcs,
-            size=self.pvc_size,
-            burst=True,
-        )
-        for pvc_obj in pvc_objs:
-            teardown_factory(pvc_obj)
-        with ThreadPoolExecutor() as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
-                )
+        # Getting the test start time
+        self.test_start_time = self.get_time()
 
-                executor.submit(pvc_obj.reload)
+        log.info(f"Start creating new {initial_number_of_pvcs} PVCs in a bulk")
+        self.pvc_bulk_create_and_wait_for_bound(initial_number_of_pvcs)
+
         log.info(f"Deleting 75% of the PVCs - {number_of_pvcs} PVCs")
         assert pvc.delete_pvcs(
-            pvc_objs[:number_of_pvcs], True
+            self.pvc_objs[:number_of_pvcs], True
         ), "Deletion of 75% of PVCs failed"
+        # save the list of pvcs which not deleted, for the teardown phase
+        original_pvcs = self.pvc_objs[number_of_pvcs:]
+
         log.info(f"Re-creating the {number_of_pvcs} PVCs")
-        pvc_objs, _ = helpers.create_multiple_pvcs(
-            sc_name=self.sc_obj.name,
-            namespace=self.namespace,
-            number_of_pvc=number_of_pvcs,
-            size=self.pvc_size,
-            burst=True,
-        )
-        start_time = helpers.get_provision_time(
-            self.interface, pvc_objs, status="start"
-        )
-        end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
-        total = end_time - start_time
-        total_time = total.total_seconds()
-        logging.info(
+        csi_bulk_start_time = self.get_time(time_format="csi")
+        self.pvc_bulk_create_and_wait_for_bound(number_of_pvcs)
+
+        # Get the bulk recraation time - total time.
+        total_time = self.get_bulk_creation_time()
+        log.info(
             f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
         )
 
-        for pvc_obj in pvc_objs:
-            teardown_factory(pvc_obj)
-        with ThreadPoolExecutor() as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
-                )
-
-                executor.submit(pvc_obj.reload)
         if total_time > 50:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
                 f"75% of PVCs) time is {total_time} and greater than 50 seconds."
             )
-        logging.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
+        log.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
 
-        self.results_path = get_full_test_logs_path(cname=self)
+        csi_creation_times = performance_lib.csi_bulk_pvc_time_measure(
+            self.interface, self.pvc_objs, "create", csi_bulk_start_time
+        )
+        # Getting the end time of the test
+        self.test_end_time = self.get_time()
+
+        # update the list of pvcs for the teardown process
+        self.pvc_objs += original_pvcs
+
         # Produce ES report
+        self.results_path = os.path.join(
+            "/",
+            *self.results_path,
+            "test_bulk_pvc_creation_after_deletion_performance",
+        )
         # Collecting environment information
         self.get_env_info()
 
@@ -348,12 +322,15 @@ class TestPVCCreationPerformance(PASTest):
             )
         )
 
-        full_results.add_key("interface", self.interface)
-        full_results.add_key("number_of_pvcs", number_of_pvcs)
-        full_results.add_key("pvc_size", self.pvc_size)
-        full_results.add_key("creation_after_deletion_time", total_time)
+        # Add the test time to the ES report
+        full_results.add_key(
+            "test_time", {"start": self.test_start_time, "end": self.test_end_time}
+        )
 
-        # Write the test results into the ES server
+        full_results.add_key("number_of_pvcs", number_of_pvcs)
+        full_results.add_key("creation_after_deletion_time", total_time)
+        full_results.add_key("creation_after_deletion_csi_time", csi_creation_times)
+
         # Write the test results into the ES server
         if full_results.es_write():
             res_link = full_results.results_link()
@@ -368,22 +345,14 @@ class TestPVCCreationPerformance(PASTest):
         and reporting the full results (links in the ES) of previous tests (4 + 2)
         """
 
-        workloads = [
-            {
-                "name": "test_bulk_pvc_creation_deletion_measurement_performance",
-                "tests": 4,
-                "test_name": "PVC Bulk Creation-Deletion",
-            },
-            {
-                "name": "test_bulk_pvc_creation_after_deletion_performance",
-                "tests": 2,
-                "test_name": "PVC Bulk Creation-After-Deletion",
-            },
-        ]
-        for wl in workloads:
-            self.number_of_tests = wl["tests"]
-            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
-            self.results_file = os.path.join(self.results_path, "all_results.txt")
-            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
-            self.check_tests_results()
-            self.push_to_dashboard(test_name=wl["test_name"])
+        self.add_test_to_results_check(
+            test="test_bulk_pvc_creation_deletion_measurement_performance",
+            test_count=4,
+            test_name="PVC Bulk Creation-Deletion",
+        )
+        self.add_test_to_results_check(
+            test="test_bulk_pvc_creation_after_deletion_performance",
+            test_count=2,
+            test_name="PVC Bulk Creation-After-Deletion",
+        )
+        self.check_results_and_push_to_dashboard()

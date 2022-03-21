@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     skipif_ibm_power,
 )
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4, tier4c
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import pod
@@ -17,8 +17,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
-@tier4
-@tier4c
+@tier4b
 @skipif_aws_i3
 @skipif_vsphere_ipi
 @skipif_ibm_power

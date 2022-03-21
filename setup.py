@@ -29,7 +29,7 @@ setup(
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
         'dataclasses==0.7;python_version < "3.7"',
-        "pytest-html==2.1.1",
+        "pytest-html==3.1.1",
         "bs4==0.0.1",
         "gspread==3.6.0",
         "oauth2client==4.1.3",
@@ -76,6 +76,7 @@ setup(
         "mysql-connector-python==8.0.27",
         "pytest-repeat",
         "pexpect>=4.8.0",
+        "yq==2.14.0",
     ],
     entry_points={
         "console_scripts": [
