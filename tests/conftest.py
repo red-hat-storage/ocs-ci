@@ -4152,6 +4152,19 @@ def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
     """
+
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
+
+
+def pv_encryption_vault_setup_factory(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap
+
+    """
     vault = KMS.Vault()
 
     def factory(kv_version):
@@ -4222,6 +4235,77 @@ def pv_encryption_kms_setup_factory(request):
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
         vault.remove_vault_namespace()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+def pv_encryption_hpcs_setup_factory(request):
+    """
+    Create hpcs resources and setup csi-kms-connection-details configMap
+
+    """
+    hpcs = KMS.HPCS()
+
+    def factory(kv_version):
+        """
+        Args:
+            kv_version(str): KV version to be used
+        Returns:
+            object: HPCS(KMS) object
+        Raises:
+            CommandFailed: if fails to get csi-kms-connection-details configmap
+        """
+        hpcs.gather_init_hpcs_conf()
+
+        # Create hpcs secret with a unique name otherwise raise error if it already exists.
+        hpcs.ibm_kp_secret_name = hpcs.create_ibm_kp_kms_secret()
+
+        # Create or update hpcs related confimap.
+        hpcs_resource_name = create_unique_resource_name("test", "hpcs")
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            new_kmsid = hpcs_resource_name
+            hdict = defaults.HPCS_CSI_CONNECTION_CONF
+            for key in hdict.keys():
+                old_key = key
+            hdict[new_kmsid] = hdict.pop(old_key)
+            hdict[new_kmsid][
+                "IBM_KP_SERVICE_INSTANCE_ID"
+            ] = hpcs.ibm_kp_service_instance_id
+            hdict[new_kmsid]["IBM_KP_SECRET_NAME"] = hpcs.ibm_kp_secret_name
+            hdict[new_kmsid]["IBM_KP_BASE_URL"] = hpcs.ibm_kp_base_url
+            hdict[new_kmsid]["IBM_KP_TOKEN_URL"] = hpcs.ibm_kp_token_url
+            hdict[new_kmsid]["KMS_SERVICE_NAME"] = new_kmsid
+            hpcs.kmsid = hpcs_resource_name
+            KMS.update_csi_kms_vault_connection_details(hdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                hpcs.kmsid = "1-hpcs"
+                hpcs.create_hpcs_csi_kms_connection_details()
+
+        return hpcs
+
+    def finalizer():
+        """
+        Remove the hpcs config from csi-kms-connection-details configMap
+
+        """
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(hpcs.kmsid)
+        # remove the kms secret created to store hpcs creds
+        hpcs.delete_resource(
+            hpcs.ibm_kp_secret_name,
+            "secret",
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
     request.addfinalizer(finalizer)
     return factory
