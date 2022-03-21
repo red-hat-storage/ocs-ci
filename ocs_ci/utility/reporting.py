@@ -3,6 +3,7 @@ from getpass import getuser
 
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ def get_rp_launch_attributes():
     rp_attrs["worker_instance_type"] = config.ENV_DATA.get("worker_instance_type")
     rp_attrs["ocp_version"] = get_ocp_version()
     rp_attrs["ocs_version"] = config.ENV_DATA.get("ocs_version")
+    rp_attrs["run_id"] = config.RUN.get("run_id")
     if config.DEPLOYMENT.get("ocs_registry_image"):
         ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
         rp_attrs["ocs_registry_image"] = ocs_registry_image
@@ -88,8 +90,24 @@ def get_rp_launch_description():
     description = ""
     display_name = config.REPORTING.get("display_name")
     if display_name:
-        description += f"Job name: {display_name}"
+        description += f"Job name: {display_name}\n"
     jenkins_job_url = config.RUN.get("jenkins_build_url")
     if jenkins_job_url:
-        description += f" Jenkins job: {jenkins_job_url}"
+        description += f"Jenkins job: {jenkins_job_url}\n"
+    logs_url = config.RUN.get("logs_url")
+    if logs_url:
+        description += f"Logs URL: {logs_url}\n"
     return description
+
+
+def update_live_must_gather_image():
+    """
+    Update live must gather image in the config.
+    """
+    odf_ocs = "odf" if get_semantic_ocs_version_from_config() >= VERSION_4_9 else "ocs"
+    must_gather_tag = f"v{config.ENV_DATA['ocs_version']}"
+    must_gather_image = config.REPORTING[f"{odf_ocs}_live_must_gather_image"]
+    live_must_gather_image = f"{must_gather_image}:{must_gather_tag}"
+    log.info(f"Setting live must gather image to: {live_must_gather_image}")
+    config.REPORTING["default_ocs_must_gather_latest_tag"] = must_gather_tag
+    config.REPORTING["ocs_must_gather_image"] = must_gather_image

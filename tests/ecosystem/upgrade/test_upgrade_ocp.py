@@ -161,5 +161,7 @@ class TestUpgradeOCP(ManageTest):
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
         new_ceph_cluster = CephCluster()
-        new_ceph_cluster.wait_for_rebalance(timeout=1800)
+        # Increased timeout because of this bug:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
+        new_ceph_cluster.wait_for_rebalance(timeout=3000)
         ceph_health_check(tries=90, delay=30)

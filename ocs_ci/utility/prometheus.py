@@ -388,10 +388,30 @@ class PrometheusAPI(object):
             verify=self._cacert,
             params=payload,
         )
+        if "Application is not available" in response.text:
+            logger.warning(f"There was an error in response: {response.text}")
+            logger.warning("Refreshing connection")
+            self.refresh_connection()
+            if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+                logger.warning("Generating new certificate")
+                self.generate_cert()
+            logger.warning("Connection refreshed - trying the query again")
+            response = requests.get(
+                self._endpoint + pattern,
+                headers=headers,
+                verify=self._cacert,
+                params=payload,
+            )
         return response
 
     def query(
-        self, query, timestamp=None, timeout=None, validate=True, mute_logs=False
+        self,
+        query,
+        timestamp=None,
+        timeout=None,
+        validate=True,
+        mute_logs=False,
+        log_debug=False,
     ):
         """
         Perform Prometheus `instant query`_. This is a simple wrapper over
@@ -407,6 +427,7 @@ class PrometheusAPI(object):
                 Optional, ``True`` is the default. Use ``False`` when you
                 expect query to fail eg. during negative testing.
             mute_logs (bool): True for muting the logs, False otherwise
+            log_debug (bool): True for logging in debug, False otherwise
 
         Returns:
             list: Result of the query (value(s) for a single timestamp)
@@ -422,7 +443,10 @@ class PrometheusAPI(object):
             query_payload["timeout"] = timeout
         # Log human readable summary of the query
         if not mute_logs:
-            logger.info(log_msg)
+            if log_debug:
+                logger.debug(log_msg)
+            else:
+                logger.info(log_msg)
         resp = self.get("query", payload=query_payload)
         try:
             content = yaml.safe_load(resp.content)
@@ -490,15 +514,20 @@ class PrometheusAPI(object):
                 sizes.append(len(metric["values"]))
             msg = "Metric sample series doesn't have the same size."
             assert all(size == sizes[0] for size in sizes), msg
-            # Check that we don't have holes in the response. If this fails,
-            # our Prometheus instance is missing some part of the data we are
-            # asking it about. For positive test cases, this is most likely a
-            # test blocker product bug.
-            start_dt = datetime.utcfromtimestamp(start)
-            end_dt = datetime.utcfromtimestamp(end)
-            duration = end_dt - start_dt
-            exp_samples = duration.seconds / step
-            assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
+            # Check if the query result is empty (which is a valid answer from
+            # validation standpoint).
+            if len(sizes) == 0:
+                logger.warning("prometheus query result is empty")
+            else:
+                # Check that we don't have holes in the response. If this
+                # fails, our Prometheus instance is missing some part of the
+                # data we are asking it about. For positive test cases, this is
+                # most likely a test blocker product bug.
+                start_dt = datetime.utcfromtimestamp(start)
+                end_dt = datetime.utcfromtimestamp(end)
+                duration = end_dt - start_dt
+                exp_samples = duration.seconds / step
+                assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
         # return actual result of the query
         return content["data"]["result"]
 

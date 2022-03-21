@@ -40,9 +40,12 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status(timeout=300)
 
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=tries)
-        if cluster_check:
-            self.ceph_cluster.cluster_health_check(timeout=60)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            ceph_health_check(
+                namespace=config.ENV_DATA["cluster_namespace"], tries=tries
+            )
+            if cluster_check:
+                self.ceph_cluster.cluster_health_check(timeout=60)
 
     def create_resources(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True
@@ -139,12 +142,16 @@ class Sanity:
 
         logger.info("All PVCs are deleted as expected")
 
-    def obc_put_obj_create_delete(self, mcg_obj, bucket_factory):
+    def obc_put_obj_create_delete(self, mcg_obj, bucket_factory, timeout=300):
         """
         Creates bucket then writes, reads and deletes objects
 
         """
-        bucket_name = bucket_factory(amount=1, interface="OC")[0].name
+        bucket_name = bucket_factory(
+            amount=1,
+            interface="OC",
+            timeout=timeout,
+        )[0].name
         self.obj_data = "A string data"
 
         for i in range(0, 30):

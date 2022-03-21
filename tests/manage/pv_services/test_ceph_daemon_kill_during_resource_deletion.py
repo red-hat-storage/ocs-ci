@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -30,8 +30,10 @@ from ocs_ci.helpers import disruption_helpers
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4b
+@pytest.mark.skip(
+    reason="This test is disabled because this scenario is covered in the "
+    "test test_daemon_kill_during_pvc_pod_creation_deletion_and_io.py"
+)
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_name"],
     argvalues=[
@@ -218,7 +220,12 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
         for pod_obj in self.pod_objs:
-            pod_obj.workload_setup(storage_type="fs")
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info["spec"]["volumeMode"] == "Block":
+                pod_obj.pvc.storage_type = "block"
+            else:
+                pod_obj.pvc.storage_type = "fs"
+            pod_obj.workload_setup(storage_type=pod_obj.pvc.storage_type)
         log.info("Setup for running IO is completed on pods")
 
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
@@ -230,7 +237,10 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
             else:
                 io_size = self.pvc_size - 1
             pod_obj.run_io(
-                storage_type="fs", size=f"{io_size}G", fio_filename=f"{pod_obj.name}_io"
+                storage_type=pod_obj.pvc.storage_type,
+                size=f"{io_size}G",
+                fio_filename=f"{pod_obj.name}_io",
+                end_fsync=1,
             )
         log.info("IO started on all pods.")
 

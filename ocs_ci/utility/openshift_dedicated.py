@@ -82,6 +82,24 @@ def download_ocm_cli():
     )
 
 
+def get_credentials(cluster):
+    """
+    Get json with cluster credentials
+
+    Args:
+        cluster (str): Cluster name.
+
+    Returns:
+        json: cluster credentials
+
+    """
+    cluster_details = get_cluster_details(cluster)
+    cluster_id = cluster_details.get("id")
+    cmd = f"ocm get /api/clusters_mgmt/v1/clusters/{cluster_id}/credentials"
+    out = run_cmd(cmd)
+    return json.loads(out)
+
+
 def get_kubeconfig(cluster, path):
     """
     Export kubeconfig to provided path.
@@ -94,13 +112,26 @@ def get_kubeconfig(cluster, path):
     path = os.path.expanduser(path)
     basepath = os.path.dirname(path)
     os.makedirs(basepath, exist_ok=True)
-    cluster_details = get_cluster_details(cluster)
-    cluster_id = cluster_details.get("id")
-    cmd = f"ocm get /api/clusters_mgmt/v1/clusters/{cluster_id}/credentials"
-    out = run_cmd(cmd)
-    credentials = json.loads(out)
+    credentials = get_credentials(cluster)
     with open(path, "w+") as fd:
         fd.write(credentials.get("kubeconfig"))
+
+
+def get_kubeadmin_password(cluster, path):
+    """
+    Export password for kubeadmin to provided path.
+
+    Args:
+        cluster (str): Cluster name.
+        path (str): Path where to create kubeadmin-password file.
+
+    """
+    path = os.path.expanduser(path)
+    basepath = os.path.dirname(path)
+    os.makedirs(basepath, exist_ok=True)
+    credentials = get_credentials(cluster)
+    with open(path, "w+") as fd:
+        fd.write(credentials.get("admin").get("password"))
 
 
 def destroy_cluster(cluster):
@@ -114,7 +145,7 @@ def destroy_cluster(cluster):
     cluster_details = get_cluster_details(cluster)
     cluster_id = cluster_details.get("id")
     cmd = f"ocm delete /api/clusters_mgmt/v1/clusters/{cluster_id}"
-    run_cmd(cmd)
+    run_cmd(cmd, timeout=900)
 
 
 def list_cluster():

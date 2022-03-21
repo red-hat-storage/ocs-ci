@@ -6,7 +6,6 @@ import re
 import tempfile
 
 import requests
-from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -57,14 +56,7 @@ def create_external_secret(ocs_version=None, apply=False):
     """
     ocs_version = ocs_version or config.ENV_DATA["ocs_version"]
     secret_data = templating.load_yaml(constants.EXTERNAL_CLUSTER_SECRET_YAML)
-    if Version.coerce(ocs_version) >= Version.coerce("4.8"):
-        external_cluster_details = config.EXTERNAL_MODE.get(
-            "external_cluster_details_ocs48", ""
-        )
-    else:
-        external_cluster_details = config.EXTERNAL_MODE.get(
-            "external_cluster_details", ""
-        )
+    external_cluster_details = config.EXTERNAL_MODE.get("external_cluster_details", "")
     if not external_cluster_details:
         raise ExternalClusterDetailsException("No external cluster data found")
     secret_data["data"]["external_cluster_details"] = external_cluster_details

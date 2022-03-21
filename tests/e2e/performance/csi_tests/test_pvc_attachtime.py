@@ -45,24 +45,6 @@ SKIP_REASON = "The test is unstable and so skipping it until it is fixed"
 
 
 @performance
-@pytest.mark.parametrize(
-    argnames=["interface", "samples_num", "pvc_size"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 5, 5], marks=pytest.mark.polarion_id("OCS-2044")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 5, 5], marks=pytest.mark.polarion_id("OCS-2043")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
-            marks=[
-                pytest.mark.skip(SKIP_REASON),
-                pytest.mark.polarion_id("OCS-2630"),
-            ],
-        ),
-    ],
-)
 class TestPodStartTime(PASTest):
     """
     Measure time to start pod with PVC attached
@@ -118,6 +100,7 @@ class TestPodStartTime(PASTest):
         storageclass_factory,
         pod_factory,
         pvc_factory,
+        teardown_factory,
         samples_num,
         pvc_size,
     ):
@@ -147,6 +130,7 @@ class TestPodStartTime(PASTest):
         for i in range(samples_num):
             logging.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
             pvc_obj = helpers.create_pvc(sc_name=self.sc_obj.name, size=pvc_size)
+            teardown_factory(pvc_obj)
             timeout = 600 if self.interface == constants.CEPHBLOCKPOOL_THICK else 60
             helpers.wait_for_resource_state(
                 pvc_obj, constants.STATUS_BOUND, timeout=timeout
@@ -160,11 +144,31 @@ class TestPodStartTime(PASTest):
             pod_obj = pod_factory(
                 interface=self.interface, pvc=pvc_obj, status=constants.STATUS_RUNNING
             )
-
+            teardown_factory(pod_obj)
             pod_result_list.append(pod_obj)
 
         return pod_result_list
 
+    @pytest.mark.parametrize(
+        argnames=["interface", "samples_num", "pvc_size"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, 5, 5],
+                marks=pytest.mark.polarion_id("OCS-2044"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, 5, 5],
+                marks=pytest.mark.polarion_id("OCS-2043"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_THICK, 5, 5],
+                marks=[
+                    pytest.mark.skip(SKIP_REASON),
+                    pytest.mark.polarion_id("OCS-2630"),
+                ],
+            ),
+        ],
+    )
     def test_pod_start_time(self, pod_obj_list):
         """
         Test to log pod start times for all the sampled pods
@@ -187,6 +191,7 @@ class TestPodStartTime(PASTest):
             self.sc = "RBD-Thick"
         self.full_log_path += f"-{self.sc}"
         log.info(f"Logs file path name is : {self.full_log_path}")
+        self.results_path = get_full_test_logs_path(cname=self)
 
         # Collecting environment information
         self.get_env_info()
@@ -235,9 +240,20 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key("pvc_size", self.pvc_size)
 
         # Write the test results into the ES server
-        self.full_results.es_write()
+        if self.full_results.es_write():
+            res_link = self.full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
 
-        # write the ES link to the test results in the test log.
-        log.info(
-            f"{self.msg_prefix} The Result can be found at : {self.full_results.results_link()}"
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
+
+    def test_pod_start_time_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (2)
+        """
+
+        self.add_test_to_results_check(
+            test="test_pod_start_time", test_count=2, test_name="PVC Attach Time"
         )
+        self.check_results_and_push_to_dashboard()

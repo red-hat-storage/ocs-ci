@@ -212,12 +212,9 @@ class PackageManifest(OCP):
             )
         install_plans.reverse()
         for ip in install_plans:
-            csv_names = ip["spec"]["clusterServiceVersionNames"]
-            if len(csv_names) != 1:
-                continue
-            csv_name = ip["spec"]["clusterServiceVersionNames"][0]
-            if pattern in csv_name and ip["spec"]["approved"]:
-                return csv_name
+            for csv_name in ip["spec"]["clusterServiceVersionNames"]:
+                if pattern in csv_name and ip["spec"]["approved"]:
+                    return csv_name
         raise CSVNotFound("No CSV found from approved install plans")
 
     def wait_for_resource(

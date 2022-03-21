@@ -5,6 +5,8 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocs_version,
+    kms_config_required,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
@@ -30,6 +32,8 @@ log = logging.getLogger(__name__)
     ],
 )
 @skipif_ocs_version("<4.7")
+@kms_config_required
+@skipif_managed_service
 class TestRbdPvEncryption(ManageTest):
     """
     Test to verify RBD PV encryption

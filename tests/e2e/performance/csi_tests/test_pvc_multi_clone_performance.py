@@ -3,16 +3,21 @@ import logging
 import os
 import tempfile
 import time
+from uuid import uuid4
+from ocs_ci.framework import config
+import statistics
 
 import yaml
 import pytest
 
+from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
-    E2ETest,
     performance,
 )
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.utils import ocsci_log_path
@@ -24,7 +29,50 @@ log = logging.getLogger(__name__)
 @performance
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
-class TestPvcMultiClonePerformance(E2ETest):
+class TestPvcMultiClonePerformance(PASTest):
+    def setup(self):
+        """
+        Setting up test parameters
+        """
+        logging.info("Starting the test setup")
+        super(TestPvcMultiClonePerformance, self).setup()
+        self.benchmark_name = "pvc_multi_clone_performance"
+        self.uuid = uuid4().hex
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",
+                "clustername": "test_cluster",
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
+
+    def init_full_results(self, full_results):
+        """
+        Initialize the full results object which will send to the ES server
+
+        Args:
+            full_results (obj): an FIOResultsAnalyse object
+
+        Returns:
+            FIOResultsAnalyse (obj): the input object fill with data
+
+        """
+        for key in self.environment:
+            full_results.add_key(key, self.environment[key])
+        full_results.add_key("index", full_results.new_index)
+        return full_results
+
     """
     Tests to measure PVC clones creation performance ( time and speed)
     The test is supposed to create the maximum number of clones for one PVC
@@ -81,6 +129,14 @@ class TestPvcMultiClonePerformance(E2ETest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
 
+        if self.interface == constants.CEPHFILESYSTEM:
+            sc = "CephFS"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            sc = "RBD"
+
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{sc}"
+
         self.pvc_obj = pvc_factory(
             interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
         )
@@ -129,6 +185,47 @@ class TestPvcMultiClonePerformance(E2ETest):
             log.info(
                 f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec."
             )
+
+        creation_time_list = [r["time"] for r in results]
+        average_creation_time = statistics.mean(creation_time_list)
+        log.info(f"Average creation time is  {average_creation_time} secs.")
+
+        creation_speed_list = [r["speed"] for r in results]
+        average_creation_speed = statistics.mean(creation_speed_list)
+        log.info(f"Average creation speed is  {average_creation_time} MB/sec.")
+
+        self.results_path = get_full_test_logs_path(cname=self)
+        # Produce ES report
+        # Collecting environment information
+        self.get_env_info()
+
+        # Initialize the results doc file.
+        full_results = self.init_full_results(
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "pvc_multiple_clone_measurement",
+            )
+        )
+
+        full_results.add_key("interface", self.interface)
+        full_results.add_key("clones_num", num_of_clones)
+        full_results.add_key("clone_size", pvc_size)
+        full_results.add_key("multi_clone_creation_time", creation_time_list)
+        full_results.add_key("multi_clone_creation_time_average", average_creation_time)
+        full_results.add_key("multi_clone_creation_speed", creation_speed_list)
+        full_results.add_key(
+            "multi_clone_creation_speed_average", average_creation_speed
+        )
+
+        # Write the test results into the ES server
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
 
     def build_params(self):
         log.info("Start building params")
@@ -250,3 +347,20 @@ class TestPvcMultiClonePerformance(E2ETest):
             raise Exception(
                 f"Clone {clone_name}  for {self.interface} interface was not created for 600 seconds"
             )
+
+    def test_multi_clone_performance_results(self):
+        """
+        This is not a test - it is only check that previous tests ran and finished as expected
+        and reporting the full results (links in the ES) of previous tests (2)
+        """
+
+        self.number_of_tests = 2
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_pvc_multiple_clone_performance"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        log.info(
+            f"Check results for test_pvc_multiple_clone_performance in : {self.results_file}"
+        )
+        self.check_tests_results()
+        self.push_to_dashboard(test_name="PVC Multi Clone Performance")

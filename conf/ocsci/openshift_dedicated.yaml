@@ -10,13 +10,15 @@ ENV_DATA:
   skip_ocs_deployment: true
 
 # AUTH:
-#  openshiftdedicated:
-#    token: OCM TOKEN KEY PLACEHOLDER
+#   pagerduty:
+#     api_key: PAGERDUTY API KEY PLACEHOLDER FOR MANAGED SERVICE
+#   openshiftdedicated:
+#     token: OCM TOKEN KEY PLACEHOLDER
 
 DEPLOYMENT:
   ocs_csv_channel: "alpha"
   force_download_ocm_cli: True
-  ocm_cli_version: '0.1.46'
+  ocm_cli_version: '0.1.60'
 
 # This is useful as a W/A for Openshift Dedicated, as there is an issue 
 # to use internal image for must gather

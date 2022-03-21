@@ -6,8 +6,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
     tier3,
-    skipif_openshift_dedicated,
-    skipif_ocs_version,
+    skipif_managed_service,
     skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -25,8 +24,8 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")
 @pytest.mark.bugzilla("1991361")
-@skipif_ocs_version("<4.9")
-@skipif_openshift_dedicated
+@pytest.mark.bugzilla("2019577")
+@skipif_managed_service
 @skipif_external_mode
 class TestNoobaaRebuild(E2ETest):
     """
@@ -143,7 +142,7 @@ class TestNoobaaRebuild(E2ETest):
         # Delete noobaa secrets
         logger.info("Deleting noobaa related secrets")
         dep_ocp.exec_oc_cmd(
-            "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server"
+            "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key"
         )
 
         # Scale back noobaa-operator deployment

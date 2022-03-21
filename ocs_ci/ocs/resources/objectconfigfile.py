@@ -18,13 +18,37 @@ Usage:
 
 import logging
 import os
-
+import time
 import yaml
 
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 
 
 logger = logging.getLogger(name=__file__)
+
+
+def link_spec_volume(spec_dict, volume_name, pvc_name):
+    """
+    Find volume of given name in given spec dict, and set given pvc name as
+    a pvc for the volume in the spec.
+
+    Args:
+        spec_dict (dict): dictionary with a container/template spec
+        volume_name (str): name of the volume in the spec dict to link
+        pvc_name (str): name of the target pvc (for the given volume)
+
+    Raises:
+        NotFoundError when given volume is not found in given spec
+    """
+    is_pvc_linked = False
+    for vol in spec_dict["volumes"]:
+        if vol["name"] == volume_name:
+            vol["persistentVolumeClaim"]["claimName"] = pvc_name
+            is_pvc_linked = True
+            break
+    if not is_pvc_linked:
+        raise NotFoundError("volume %s not found in given spec")
 
 
 class ObjectConfFile:
@@ -135,3 +159,56 @@ class ObjectConfFile:
         """
         out = self._run_command("get", namespace, out_yaml_format=True)
         return yaml.safe_load(out)
+
+    def describe(self, namespace=None):
+        """
+        Run ``oc describe`` on in this object file.
+
+        Args:
+            namespace (str): Name of the namespace where to deploy, overriding
+            self.project.namespace value (in a similar way how you can specify
+            any value to ``-n`` option of ``oc describe``.
+        """
+        return self._run_command("describe", namespace, out_yaml_format=False)
+
+    def wait_for_delete(self, resource_name="", timeout=60, sleep=3, namespace=None):
+        """
+        Wait for a resource to be deleted
+
+        Args:
+            resource_name (str): The name of the resource to wait
+                for (e.g.kube_obj_name)
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
+            namespace (str): Name of the namespace where to deploy, overriding
+                self.project.namespace value (in a similar way how you can specify
+                any value to ``-n`` option of ``oc get``.
+
+        Raises:
+            CommandFailed: If failed to verify the resource deletion
+            TimeoutError: If resource is not deleted within specified timeout
+
+        Returns:
+            bool: True in case resource deletion is successful
+
+        """
+
+        start_time = time.time()
+        while True:
+            try:
+                self.get(namespace=namespace)
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    logger.info(f"{resource_name} got deleted successfully")
+                    return True
+                else:
+                    raise ex
+
+            if timeout < (time.time() - start_time):
+                describe_out = self.describe(namespace=namespace)
+                msg = (
+                    f"Timeout when waiting for {resource_name} to delete. "
+                    f"Describe output: {describe_out}"
+                )
+                raise TimeoutError(msg)
+            time.sleep(sleep)

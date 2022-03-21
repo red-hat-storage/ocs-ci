@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -65,16 +66,18 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
-from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
     deployment_openshift_logging as ocp_logging_obj,
     ibmcloud,
     kms as KMS,
+    pagerduty,
     reporting,
     templating,
     users,
+    version,
 )
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
@@ -87,7 +90,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
-    get_running_ocp_version,
+    get_ocs_build_number,
     get_openshift_client,
     get_system_architecture,
     get_testrun_name,
@@ -114,7 +117,6 @@ from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase_new import CouchBase
@@ -130,6 +132,15 @@ class OCSLogFormatter(logging.Formatter):
             "- %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
+
+
+def pytest_assertrepr_compare(config, op, left, right):
+    """
+    Log error message for a failed assert, so that it's possible to locate a
+    moment of the failure in test logs. Returns None so that it won't actually
+    change assert explanation.
+    """
+    log.error("'assert %s %s %s' failed", left, op, right)
 
 
 def pytest_logger_config(logger_config):
@@ -168,7 +179,7 @@ def pytest_collection_modifyitems(session, items):
                     item.user_properties.append(("squad", squad))
                     break
 
-    if not (teardown or deploy or skip_ocs_deployment):
+    if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
@@ -353,13 +364,129 @@ def log_ocs_version(cluster):
     elif skip_ocs_deployment:
         log.info("Skipping version reporting since OCS deployment is skipped.")
         return
-    cluster_version, image_dict = get_ocs_version()
+    cluster_version = get_ocp_version_dict()
+    image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
     )
     with open(file_name, "w") as file_obj:
         report_ocs_version(cluster_version, image_dict, file_obj)
     log.info("human readable ocs version info written into %s", file_name)
+
+
+@pytest.fixture(scope="session")
+def pagerduty_service(request):
+    """
+    Create a Service in PagerDuty service. The service represents a cluster instance.
+    The service is deleted at the end of the test run.
+
+    Returns:
+        str: PagerDuty service json
+
+    """
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
+        log.info(
+            "PagerDuty service is not created because "
+            f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
+            "is not used"
+        )
+        return None
+
+    pagerduty_api = pagerduty.PagerDutyAPI()
+    payload = pagerduty_api.get_service_dict()
+    service_response = pagerduty_api.create("services", payload=payload)
+    msg = f"Request {service_response.request.url} failed: {service_response.text}"
+    assert service_response.ok, msg
+    service = service_response.json().get("service")
+
+    def teardown():
+        """
+        Delete the service at the end of test run
+        """
+        service_id = service["id"]
+        log.info(f"Deleting service with id {service_id}")
+        delete_response = pagerduty_api.delete(f"services/{service_id}")
+        msg = f"Deletion of service {service_id} failed"
+        assert delete_response.ok, msg
+
+    request.addfinalizer(teardown)
+    return service
+
+
+@pytest.fixture(scope="session", autouse=True)
+def pagerduty_integration(request, pagerduty_service):
+    """
+    Create a new Pagerduty integration for service from pagerduty_service
+    fixture if it doesn' exist. Update ocs-converged-pagerduty secret with
+    correct integration key. This is currently applicable only for ODF
+    Managed Service.
+
+    """
+    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
+        # this is used only for managed service platforms
+        return
+
+    service_id = pagerduty_service["id"]
+    pagerduty_api = pagerduty.PagerDutyAPI()
+
+    log.info(
+        "Looking if Prometheus integration for pagerduty service with id "
+        f"{service_id} exists"
+    )
+    integration_key = None
+    for integration in pagerduty_service.get("integrations"):
+        if integration["summary"] == "Prometheus":
+            log.info(
+                "Prometheus integration already exists. "
+                "Skipping creation of new one."
+            )
+            integration_key = integration["integration_key"]
+            break
+
+    if not integration_key:
+        payload = pagerduty_api.get_integration_dict("Prometheus")
+        integration_response = pagerduty_api.create(
+            f"services/{service_id}/integrations", payload=payload
+        )
+        msg = (
+            f"Request {integration_response.request.url} failed: "
+            f"{integration_response.text}"
+        )
+        assert integration_response.ok, msg
+        integration = integration_response.json().get("integration")
+        integration_key = integration["integration_key"]
+    pagerduty.set_pagerduty_integration_secret(integration_key)
+
+    def update_pagerduty_integration_secret():
+        """
+        Make sure that pagerduty secret is updated with correct integration
+        token. Check value of config.RUN['thread_pagerduty_secret_update']:
+            * required - secret is periodically updated to correct value
+            * not required - secret is not updated
+            * finished - thread is terminated
+
+        """
+        while config.RUN["thread_pagerduty_secret_update"] != "finished":
+            if config.RUN["thread_pagerduty_secret_update"] == "required":
+                pagerduty.set_pagerduty_integration_secret(integration_key)
+            time.sleep(60)
+
+    config.RUN["thread_pagerduty_secret_update"] = "not required"
+    thread = threading.Thread(
+        target=update_pagerduty_integration_secret,
+        name="thread_pagerduty_secret_update",
+    )
+
+    def finalizer():
+        """
+        Stop the thread that executed update_pagerduty_integration_secret()
+        """
+        config.RUN["thread_pagerduty_secret_update"] = "finished"
+        if thread:
+            thread.join()
+
+    request.addfinalizer(finalizer)
+    thread.start()
 
 
 @pytest.fixture(scope="class")
@@ -954,13 +1081,23 @@ def teardown_factory_fixture(request):
         """
         for instance in instances[::-1]:
             if not instance.is_deleted:
-                reclaim_policy = (
-                    instance.reclaim_policy if instance.kind == constants.PVC else None
-                )
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-                if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-                    helpers.validate_pv_delete(instance.backed_pv)
+                try:
+                    if (instance.kind == constants.PVC) and (instance.reclaim_policy):
+                        pass
+                    reclaim_policy = (
+                        instance.reclaim_policy
+                        if instance.kind == constants.PVC
+                        else None
+                    )
+                    instance.delete()
+                    instance.ocp.wait_for_delete(instance.name)
+                    if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
+                except CommandFailed as ex:
+                    log.warning(
+                        f"Resource is already in deleted state, skipping this step"
+                        f"Error: {ex}"
+                    )
 
     request.addfinalizer(finalizer)
     return factory
@@ -1186,16 +1323,26 @@ def tier_marks_name():
 def health_checker(request, tier_marks_name):
     skipped = False
     dev_mode = config.RUN["cli_params"].get("dev_mode")
+    mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
+    if mcg_only_deployment:
+        log.info("Skipping health checks for MCG only mode")
+        return
     if dev_mode:
         log.info("Skipping health checks for development mode")
         return
+
+    if config.multicluster:
+        if (
+            config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            == config.get_acm_index()
+        ):
+            return
 
     def finalizer():
         if not skipped:
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
                 if not (teardown or skip_ocs_deployment or mcg_only_deployment):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
@@ -1223,7 +1370,7 @@ def health_checker(request, tier_marks_name):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request, log_cli_level):
+def cluster(request, log_cli_level, record_testsuite_property):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
     Specific platform deployment classes will handle the fine details
@@ -1274,6 +1421,8 @@ def cluster(request, log_cli_level):
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
+    if not config.ENV_DATA["skip_ocs_deployment"]:
+        record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
 @pytest.fixture(scope="class")
@@ -1856,7 +2005,16 @@ def rgw_obj_fixture(request):
     rgw_deployments = get_deployments_having_label(
         label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    if rgw_deployments:
+    try:
+        storageclass = OCP(
+            kind=constants.STORAGECLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW,
+        ).get()
+    except CommandFailed:
+        storageclass = None
+
+    if rgw_deployments or storageclass:
         return RGW()
     else:
         return None
@@ -1944,7 +2102,7 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
-    if config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM:
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         log.warning("As openshift dedicated is used, no MCG resource is returned")
         return None
 
@@ -2256,7 +2414,7 @@ def bucket_factory_fixture(
             current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
-                created_bucket.verify_health()
+                created_bucket.verify_health(**kwargs)
 
         return current_call_created_buckets
 
@@ -2515,9 +2673,9 @@ def install_logging(request):
 
     log.info("Configuring Openshift-logging")
 
-    # Checks OCP version
-    ocp_version = get_running_ocp_version()
-    logging_channel = "stable" if ocp_version >= "4.7" else ocp_version
+    # Gets OCP version to align logging version to OCP version
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -3599,7 +3757,7 @@ def nb_ensure_endpoint_count(request):
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
-    if float(config.ENV_DATA["ocs_version"]) < 4.6:
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
         noobaa = OCP(kind="noobaa", namespace=namespace)
         resource = noobaa.get()["items"][0]
         endpoints = resource.get("spec", {}).get("endpoints", {})
@@ -3836,7 +3994,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
     """
     instances = []
 
-    def factory(pvc_size_new, pgsql):
+    def factory(pvc_size_new, pgsql, sc_name=None):
         """
         Args:
             pvc_size_new (int): Resize/Expand the pvc size
@@ -3853,11 +4011,15 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         snapshots = multi_snapshot_factory(pvc_obj=postgres_pvcs_obj)
         log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
 
-        restored_pvc_objs = multi_snapshot_restore_factory(snapshot_obj=snapshots)
+        restored_pvc_objs = multi_snapshot_restore_factory(
+            snapshot_obj=snapshots, storageclass=sc_name
+        )
         log.info("Created new PVCs from all the snapshots")
 
         cloned_pvcs = multi_pvc_clone_factory(
-            pvc_obj=restored_pvc_objs, volume_mode=constants.VOLUME_MODE_FILESYSTEM
+            pvc_obj=restored_pvc_objs,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+            storageclass=sc_name,
         )
         log.info("Created new PVCs from all restored volumes")
 
@@ -3879,7 +4041,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         )
 
         new_restored_pvc_objs = multi_snapshot_restore_factory(
-            snapshot_obj=new_snapshots
+            snapshot_obj=new_snapshots, storageclass=sc_name
         )
         log.info("Created new PVCs from all the snapshots and in Bound state")
         # Attach a new pgsql pod restored pvcs
@@ -3955,6 +4117,22 @@ def setup_ui_fixture(request):
     return driver
 
 
+@pytest.fixture(scope="function")
+def setup_acm_ui(request):
+    return setup_acm_ui_fixture(request)
+
+
+def setup_acm_ui_fixture(request):
+    driver = login_to_acm()
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return driver
+
+
 @pytest.fixture(scope="session", autouse=True)
 def load_cluster_info_file(request):
     """
@@ -3963,19 +4141,6 @@ def load_cluster_info_file(request):
     example related to disconnected cluster)
     """
     load_cluster_info()
-
-
-@pytest.fixture(scope="function")
-def ripsaw(request):
-    # Create benchmark Operator (formerly ripsaw)
-    ripsaw = RipSaw()
-
-    def teardown():
-        ripsaw.cleanup()
-        time.sleep(10)
-
-    request.addfinalizer(teardown)
-    return ripsaw
 
 
 @pytest.fixture(scope="function")

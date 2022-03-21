@@ -6,7 +6,6 @@ LSO ( local storage operator ) deployment.
 import json
 import logging
 import tempfile
-import time
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
@@ -88,8 +87,6 @@ def setup_local_storage(storageclass):
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status("all")
 
     logger.info("Retrieving local-storage-operator data from yaml")
@@ -201,6 +198,10 @@ def setup_local_storage(storageclass):
             "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
         )
         lvs_data["spec"]["storageClassName"] = storageclass
+
+        # set volumeMode to Filesystem for MCG only deployment
+        if config.ENV_DATA["mcg_only_deployment"]:
+            lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
 
         lvs_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="local_volume_set", delete=False

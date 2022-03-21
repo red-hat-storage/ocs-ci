@@ -7,7 +7,7 @@ from ocs_ci.ocs.resources.pod import (
     check_toleration_on_pods,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.node import taint_nodes, untaint_ocs_nodes, get_ocs_nodes
+from ocs_ci.ocs.node import taint_nodes, untaint_nodes, get_ocs_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class TestTaintAndTolerations(E2ETest):
         """
 
         def finalizer():
-            assert untaint_ocs_nodes(), "Failed to untaint"
+            assert untaint_nodes(), "Failed to untaint"
 
         request.addfinalizer(finalizer)
 

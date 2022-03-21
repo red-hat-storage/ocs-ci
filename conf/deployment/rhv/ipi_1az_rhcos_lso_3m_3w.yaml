@@ -13,7 +13,7 @@ ENV_DATA:
   master_num_cores: '2'
   master_num_sockets: '2'
   master_memory: '16384'
-  compute_memory: '65536'
+  compute_memory: '43008'
   local_storage_allow_rotational_disks: true
   # Following optional values can be passed to ocs-ci which will used when
   # attaching the disks to the VMs

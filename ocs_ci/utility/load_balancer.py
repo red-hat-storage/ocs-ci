@@ -110,7 +110,7 @@ class LoadBalancer(object):
             for node in nodes:
                 cmd = (
                     f"sudo sed -i '0,/.*:{port} check$/s/.*:{port} check$/        server "
-                    f"{node} {node}:80 check\\n&/' {constants.HAPROXY_LOCATION}"
+                    f"{node} {node}:{port} check\\n&/' {constants.HAPROXY_LOCATION}"
                 )
                 self.lb.exec_cmd(cmd)
 

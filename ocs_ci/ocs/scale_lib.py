@@ -979,7 +979,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, 900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -1327,6 +1327,7 @@ def attach_multiple_pvc_to_pod_dict(
     node_selector=None,
     io_runtime=None,
     io_size=None,
+    pod_yaml=constants.PERF_POD_YAML,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1343,6 +1344,7 @@ def attach_multiple_pvc_to_pod_dict(
             Example, {'nodetype': 'app-pod'}
         io_runtime (seconds): Runtime in Seconds to continue IO
         io_size (str value with M|K|G): io_size with respective unit
+        pod_yaml (dict): Pod yaml file dict
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1353,7 +1355,7 @@ def attach_multiple_pvc_to_pod_dict(
     for pvc_name in pvc_list:
         temp_list.append(pvc_name)
         if len(temp_list) == pvcs_per_pod:
-            pod_dict = constants.PERF_POD_YAML
+            pod_dict = pod_yaml
             pod_data = templating.load_yaml(pod_dict)
             pod_name = helpers.create_unique_resource_name("scale", "pod")
 
@@ -1451,9 +1453,10 @@ def attach_multiple_pvc_to_pod_dict(
                         "timeoutSeconds": 10,
                     }
                     pod_data["spec"]["containers"][0]["livenessProbe"] = liveness
-                    del pod_data["spec"]["containers"][0]["command"]
-                    del pod_data["spec"]["containers"][0]["stdin"]
-                    del pod_data["spec"]["containers"][0]["tty"]
+                    if pod_yaml == constants.PERF_POD_YAML:
+                        del pod_data["spec"]["containers"][0]["command"]
+                        del pod_data["spec"]["containers"][0]["stdin"]
+                        del pod_data["spec"]["containers"][0]["tty"]
                     flag = 0
 
                 if node_selector:
@@ -1539,7 +1542,7 @@ def scale_ocs_node(node_count=3):
         for ms in ms_name:
             process = threading.Thread(
                 target=machine_utils.wait_for_new_node_to_be_ready,
-                kwargs={"machine_set": ms.name},
+                kwargs={"machine_set": ms.name, "timeout": 900},
             )
             process.start()
             threads.append(process)

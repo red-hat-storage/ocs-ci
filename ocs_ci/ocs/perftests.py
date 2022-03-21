@@ -3,6 +3,7 @@ import time
 import logging
 import os
 import re
+from uuid import uuid4
 
 import requests
 import json
@@ -14,14 +15,16 @@ from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
+from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
-
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
+from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 
 log = logging.getLogger(__name__)
 
@@ -38,24 +41,48 @@ class PASTest(BaseTest):
         """
         Setting up the environment for each performance and scale test
 
+        Args:
+            name (str): The test name that will use in the performance dashboard
         """
         log.info("Setting up test environment")
-        self.crd_data = None  # place holder for Benchmark CDR data
+        self.es = None  # place holder for the incluster deployment elasticsearch
         self.es_backup = None  # place holder for the elasticsearch backup
         self.main_es = None  # place holder for the main elasticsearch object
         self.benchmark_obj = None  # place holder for the benchmark object
         self.client_pod = None  # Place holder for the client pod object
         self.dev_mode = config.RUN["cli_params"].get("dev_mode")
         self.pod_obj = OCP(kind="pod", namespace=benchmark_operator.BMO_NAME)
+        self.initialize_test_crd()
 
         # Place holders for test results file (all sub-tests together)
-        self.results_path = ""
         self.results_file = ""
+
+        # All tests need a uuid for the ES results, benchmark-operator base test
+        # will overrite it with uuid pulling from the benchmark pod
+        self.uuid = uuid4().hex
+
+        # Getting the full path for the test logs
+        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split(" ")[0]
+        self.full_log_path = (
+            self.full_log_path.replace("::", "/").replace("[", "-").replace("]", "")
+        )
+        self.full_log_path = os.path.join(ocsci_log_path(), self.full_log_path)
+        log.info(f"Logs file path name is : {self.full_log_path}")
+
+        # Getting the results path as a list
+        self.results_path = self.full_log_path.split("/")
+        self.results_path.pop()
+
+        # List of test(s) for checking the results
+        self.workloads = []
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
         self.environment = get_environment_info()
         self.environment["clusterID"] = get_running_cluster_id()
+
+        self.ceph_cluster = CephCluster()
+        self.used_capacity = self.get_cephfs_data()
 
         self.get_osd_info()
 
@@ -65,6 +92,119 @@ class PASTest(BaseTest):
     def teardown(self):
         if hasattr(self, "operator"):
             self.operator.cleanup()
+
+        now_data = self.get_cephfs_data()
+        # Wait 1 minutes for the backend deletion actually start.
+        log.info("Waiting for Ceph to finish cleaning up")
+        time.sleep(60)
+
+        # Quarry the storage usage every 2 Min. if no difference between two
+        # samples, the backend cleanup is done.
+        still_going_down = True
+        while still_going_down:
+            new_data = self.get_cephfs_data()
+            # no deletion operation is in progress
+            if abs(now_data - new_data) < 1:
+                still_going_down = False
+                # up to 2% inflation of usage is acceptable
+                if new_data > (self.used_capacity * 1.02):
+                    log.warning(
+                        f"usage capacity after the test ({new_data:.2f} GiB) "
+                        f"is more then in the begining of it ({self.used_capacity:.2f} GiB)"
+                    )
+            else:
+                log.info(f"Last usage : {now_data}, Current usage {new_data}")
+                now_data = new_data
+                log.info("Waiting for Ceph to finish cleaning up")
+                time.sleep(120)
+                still_going_down = True
+        log.info("Storage usage was cleandup")
+
+    def initialize_test_crd(self):
+        """
+        Initializing the test CRD file.
+        this include the Elasticsearch info, cluster name and user name which run the test
+        """
+        self.crd_data = {
+            "spec": {
+                "test_user": "Homer simpson",  # place holde only will be change in the test.
+                "clustername": "test_cluster",  # place holde only will be change in the test.
+                "elasticsearch": {
+                    "server": config.PERF.get("production_es_server"),
+                    "port": config.PERF.get("production_es_port"),
+                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                },
+            }
+        }
+        # during development use the dev ES so the data in the Production ES will be clean.
+        if self.dev_mode:
+            self.crd_data["spec"]["elasticsearch"] = {
+                "server": config.PERF.get("dev_es_server"),
+                "port": config.PERF.get("dev_es_port"),
+                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+            }
+
+    def create_new_pool(self, pool_name):
+        """
+        Creating new Storage pool for RBD / CephFS to use in a test so it can be
+        deleted in the end of the test for fast cleanup
+
+        Args:
+            pool_name (str):  the name of the pool to create
+
+        """
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.ceph_cluster.create_new_blockpool(pool_name=pool_name)
+            self.ceph_cluster.set_pgs(poolname=pool_name, pgs=128)
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.ceph_cluster.create_new_filesystem(fs_name=pool_name)
+            self.ceph_cluster.toolbox.exec_ceph_cmd(
+                f"ceph fs subvolumegroup create {pool_name} csi"
+            )
+            self.ceph_cluster.set_pgs(poolname=f"{pool_name}-data0", pgs=128)
+
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephblockpool", ratio=0.24
+        )
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephfilesystem-data0", ratio=0.24
+        )
+        return
+
+    def delete_ceph_pool(self, pool_name):
+        """
+        Delete Storage pool (RBD / CephFS) that was created for the test for
+        fast cleanup.
+
+        Args:
+            pool_name (str):  the name of the pool to be delete
+
+        """
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.ceph_cluster.delete_blockpool(pool_name=pool_name)
+        elif self.interface == constants.CEPHFILESYSTEM:
+            self.ceph_cluster.delete_filesystem(fs_name=pool_name)
+
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephblockpool", ratio=0.49
+        )
+        self.ceph_cluster.set_target_ratio(
+            poolname="ocs-storagecluster-cephfilesystem-data0", ratio=0.49
+        )
+        return
+
+    def get_cephfs_data(self):
+        """
+        Look through ceph pods and find space usage on all ceph pools
+
+        Returns:
+            int: total used capacity in GiB.
+        """
+        ceph_status = self.ceph_cluster.toolbox.exec_ceph_cmd(ceph_cmd="ceph df")
+        total_used = 0
+        for pool in ceph_status["pools"]:
+            total_used += pool["stats"]["bytes_used"]
+        return total_used / constants.GB
 
     def get_osd_info(self):
         """
@@ -116,17 +256,6 @@ class PASTest(BaseTest):
         """
         self.operator = benchmark_operator.BenchmarkOperator()
         self.operator.deploy()
-
-    def ripsaw_deploy(self, ripsaw):
-        """
-        Deploy the benchmark operator (formally ripsaw) CRD
-
-        Args:
-            ripsaw (obj): benchmark operator object
-
-        """
-        log.info("Deploying benchmark operator (ripsaw)")
-        ripsaw.apply_crd("resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml")
 
     def es_info_backup(self, elasticsearch):
         """
@@ -516,3 +645,199 @@ class PASTest(BaseTest):
 
         """
         return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+
+    def check_tests_results(self):
+        """
+        Check that all sub-tests (test multiplication by parameters) finished and
+        pushed the data to the ElastiSearch server.
+        It also generate the es link to push into the performance dashboard.
+        """
+
+        es_links = []
+        try:
+            with open(self.results_file, "r") as f:
+                data = f.read().split("\n")
+            data.pop()  # remove the last empty element
+            if len(data) != self.number_of_tests:
+                log.error("Not all tests finished")
+                raise exceptions.BenchmarkTestFailed()
+            else:
+                log.info("All test finished OK, and the results can be found at :")
+                for res in data:
+                    log.info(res)
+                    es_links.append(res)
+        except OSError as err:
+            log.error(f"OS error: {err}")
+            raise err
+
+        self.es_link = ",".join(es_links)
+
+    def push_to_dashboard(self, test_name):
+        """
+        Pushing the test results into the performance dashboard, if exist
+
+        Args:
+            test_name (str): the test name as defined in the performance dashboard
+
+        Returns:
+            None in case of pushing the results to the dashboard failed
+
+        """
+
+        try:
+            db = PerfDash()
+        except MissingRequiredConfigKeyError as ex:
+            log.error(
+                f"Results cannot be pushed to the performance dashboard, no connection [{ex}]"
+            )
+            return None
+
+        log.info(f"Full version is : {self.environment.get('ocs_build')}")
+        version = self.environment.get("ocs_build").split("-")[0]
+        try:
+            build = self.environment.get("ocs_build").split("-")[1]
+            build = build.split(".")[0]
+        except Exception:
+            build = "GA"
+
+        # Getting the topology from the cluster
+        az = node.get_odf_zone_count()
+        if az == 0:
+            az = 1
+        topology = f"{az}-AZ"
+
+        # Check if it is Arbiter cluster
+        my_obj = OCP(
+            kind="StorageCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        arbiter = (
+            my_obj.data.get("items")[0].get("spec").get("arbiter").get("enable", False)
+        )
+
+        if arbiter:
+            topology = "Strech-Arbiter"
+
+        # Check if run on LSO
+        try:
+            ns = OCP(kind="namespace", resource_name=defaults.LOCAL_STORAGE_NAMESPACE)
+            ns.get()
+            platform = f"{self.environment.get('platform')}-LSO"
+        except Exception:
+            platform = self.environment.get("platform")
+
+        # Check if encrypted cluster
+        encrypt = (
+            my_obj.data.get("items")[0]
+            .get("spec")
+            .get("encryption")
+            .get("enable", False)
+        )
+        kms = (
+            my_obj.data.get("items")[0]
+            .get("spec")
+            .get("encryption")
+            .get("kms")
+            .get("enable", False)
+        )
+        if kms:
+            platform = f"{platform}-KMS"
+        elif encrypt:
+            platform = f"{platform}-Enc"
+
+        # Check the base storageclass on AWS
+        if self.environment.get("platform").upper() == "AWS":
+            osd_pod_list = pod.get_osd_pods()
+            osd_pod = osd_pod_list[0].pod_data["metadata"]["name"]
+            osd_pod_obj = OCP(
+                kind="POD",
+                resource_name=osd_pod,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            log.info(f"The First OSD pod nams is {osd_pod}")
+
+            osd_pvc_name = osd_pod_obj.get()["spec"]["initContainers"][0][
+                "volumeDevices"
+            ][0]["name"]
+            log.info(f"The First OSD name is : {osd_pvc_name}")
+            osd_pvc_obj = OCP(
+                kind="PersistentVolumeClaim",
+                resource_name=osd_pvc_name,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+
+            odf_back_storage = osd_pvc_obj.get()["spec"]["storageClassName"]
+            log.info(f"The ODF deployment use {odf_back_storage} as back storage")
+            if odf_back_storage != "gp2":
+                platform = f"{platform}-{odf_back_storage}"
+
+        if self.dev_mode:
+            port = "8181"
+        else:
+            port = "8080"
+
+        try:
+            log.info(
+                "Trying to push :"
+                f"version={version},"
+                f"build={build},"
+                f"platform={platform},"
+                f"topology={topology},"
+                f"test={test_name},"
+                f"eslink={self.es_link}, logfile=None"
+            )
+
+            db.add_results(
+                version=version,
+                build=build,
+                platform=platform,
+                topology=topology,
+                test=test_name,
+                eslink=self.es_link,
+                logfile=None,
+            )
+            resultslink = (
+                f"http://{db.creds['host']}:{port}/index.php?"
+                f"version1={db.get_version_id(version)}"
+                f"&build1={db.get_build_id(version, build)}"
+                f"&platform1={db.get_platform_id(platform)}"
+                f"&az_topology1={db.get_topology_id(topology)}"
+                f"&test_name%5B%5D={db.get_test_id(test_name)}"
+                "&submit=Choose+options"
+            )
+            log.info(f"Full results report can be found at : {resultslink}")
+        except Exception as ex:
+            log.error(f"Can not push results into the performance Dashboard! [{ex}]")
+
+        db.cleanup()
+
+    def add_test_to_results_check(self, test, test_count, test_name):
+        """
+        Adding test information to list of test(s) that we want to check the results
+        and push them to the dashboard.
+
+        Args:
+            test (str): the name of the test function that we want to check
+            test_count (int): number of test(s) that need to run - according to parametize
+            test_name (str): the test name in the Performance dashboard
+
+        """
+        self.workloads.append(
+            {"name": test, "tests": test_count, "test_name": test_name}
+        )
+
+    def check_results_and_push_to_dashboard(self):
+        """
+        Checking test(s) results - that all test(s) are finished OK, and push
+        the results into the performance dashboard
+
+        """
+
+        for wl in self.workloads:
+            self.number_of_tests = wl["tests"]
+
+            self.results_file = os.path.join(
+                "/", *self.results_path, wl["name"], "all_results.txt"
+            )
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
