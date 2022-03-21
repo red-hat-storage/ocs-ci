@@ -24,6 +24,7 @@ from ocs_ci.ocs.constants import (
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
     MANAGED_SERVICE_PLATFORMS,
+    HPCS_KMS_PROVIDER,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -224,8 +225,19 @@ ms_consumer_required = pytest.mark.skipif(
 )
 
 kms_config_required = pytest.mark.skipif(
-    load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
-    reason="Vault config not found in auth.yaml",
+    (
+        config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
+        and load_auth_config().get("vault", {}).get("VAULT_ADDR") is None
+    )
+    or (
+        not (
+            config.ENV_DATA["KMS_PROVIDER"].lower() == HPCS_KMS_PROVIDER
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_10
+            and load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID")
+            is not None,
+        )
+    ),
+    reason="KMS config not found in auth.yaml",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
