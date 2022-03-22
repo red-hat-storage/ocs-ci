@@ -4522,14 +4522,14 @@ def vault_tenant_sa_setup_factory(request):
     def factory(
         kv_version,
         use_auth_path=False,
-        use_namespace=True,
+        use_vault_namespace=True,
         use_backend=False,
     ):
         """
         Args:
             kv_version (str): KV version to be used, either v1 or v2
             use_auth_path (bool): Use a non-default auth path (used with kubernetes auth method)
-            use_namespace (bool): Use namespace in Vault
+            use_vault_namespace (bool): Use namespace in Vault
             use_backend (bool): Specify VaultBackend variable in the configmap when set to True
 
         Returns:
@@ -4552,7 +4552,7 @@ def vault_tenant_sa_setup_factory(request):
         # Create vault namespace, backend path and policy in vault
         vault_resource_name = create_unique_resource_name("test", "vault")
 
-        if use_namespace:
+        if use_vault_namespace:
             vault.vault_create_namespace(namespace=vault_resource_name)
 
         vault.vault_create_backend_path(
@@ -4562,13 +4562,13 @@ def vault_tenant_sa_setup_factory(request):
         vault.kmsid = vault_resource_name
 
         vault.create_token_reviewer_resources()
-        if use_auth_path and use_namespace:
+        if use_auth_path and use_vault_namespace:
             vault.vault_kube_auth_setup(
                 auth_path=vault_resource_name, auth_namespace=vault_resource_name
             )
         elif use_auth_path:
             vault.vault_kube_auth_setup(auth_path=vault_resource_name)
-        elif use_namespace:
+        elif use_vault_namespace:
             vault.vault_kube_auth_setup(auth_namespace=vault_resource_name)
         else:
             vault.vault_kube_auth_setup()
@@ -4585,7 +4585,7 @@ def vault_tenant_sa_setup_factory(request):
                 old_key = key
             vdict[vault.kmsid] = vdict.pop(old_key)
             vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
-            if use_namespace:
+            if use_vault_namespace:
                 vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
                 vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
             else:
