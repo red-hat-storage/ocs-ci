@@ -13,7 +13,7 @@ class DeploymentFactory(object):
     """
 
     def __init__(self):
-        if config.ENV_DATA.get("acm_ocp_deploy"):
+        if config.ENV_DATA.get("acm_ocp_deployment"):
             self.deployment_platform = constants.ACM_OCP_DEPLOYMENT
         else:
             self.deployment_platform = config.ENV_DATA["platform"].lower()
@@ -82,7 +82,7 @@ class DeploymentFactory(object):
         elif self.deployment_platform == constants.ACM_OCP_DEPLOYMENT:
             from .multicluster_deployment import OCPDeployWithACM
 
-            self.cls_map["acm_ocp_deploy"] = OCPDeployWithACM
+            self.cls_map["acm_ocp_deployment"] = OCPDeployWithACM
 
     def get_deployment(self):
         """

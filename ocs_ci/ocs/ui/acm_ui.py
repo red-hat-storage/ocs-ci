@@ -2,6 +2,7 @@ import os
 import logging
 import time
 
+from selenium.webdriver.common.by import By
 
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
@@ -18,8 +19,6 @@ from ocs_ci.ocs.constants import (
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
     VSPHERE_CA_FILE_PATH,
     DATA_DIR,
-    SSH_PRIV_KEY,
-    SSH_PUB_KEY,
     ACM_OCP_RELEASE_IMG_URL_PREFIX,
     ACM_VSPHERE_NETWORK,
     ACM_CLUSTER_DEPLOY_TIMEOUT,
@@ -135,15 +134,15 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver, deployment_platform, cluster_conf):
+    def __init__(self, driver, platform, cluster_conf):
         super().__init__(driver)
-        self.platform = deployment_platform
+        self.platform = platform
         self.cluster_conf = cluster_conf
         self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
         self.cluster_path = self.cluster_conf.ENV_DATA["cluster_path"]
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.deployment_status = None
-        self.cluster_deploy_timeout = self.cluster_conf.ENV_DATA(
+        self.cluster_deploy_timeout = self.cluster_conf.ENV_DATA.get(
             "cluster_deploy_timeout", ACM_CLUSTER_DEPLOY_TIMEOUT
         )
         self.deployment_failed_reason = None
@@ -157,7 +156,7 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         # 'Import Cluster' buttons
         # Here we click on "Create Cluster" and we will be in create cluster page
         self.navigate_clusters_page()
-        self.do_click(locator=self.acm_page_nav["cc_create_cluster"])
+        self.do_click(locator=self.acm_page_nav["cc_create_cluster"], timeout=100)
 
     def click_next_button(self):
         self.do_click(self.acm_page_nav["cc_next_page_button"])
@@ -237,17 +236,17 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
             (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH),
             "Failed",
         )
-        return self.wait_until_expected_text_is_found(status_xpath, self.By.XPATH)
+        return self.check_element_presence((status_xpath[1], status_xpath[0]), timeout)
 
     def acm_cluster_status_ready(self, timeout=300):
         status_xpath = format_locator(
             (self.acm_page_nav["cc_cluster_status_page_status"], self.By.XPATH), "Ready"
         )
-        return self.wait_until_expected_text_is_found(status_xpath, timeout=timeout)
+        return self.check_element_presence((status_xpath[1], status_xpath[0]), timeout=timeout)
 
     def acm_cluster_status_creating(self, timeout=300):
         status_xpath = self.acm_page_nav["cc_cluster_status_page_status_creating"]
-        return self.check_element_presence(status_xpath, timeout)
+        return self.check_element_presence((status_xpath[1], status_xpath[0]), timeout)
 
     def download_cluster_conf_files(self):
         """
@@ -300,7 +299,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     def __init__(self, driver, cluster_conf=None):
         super().__init__(driver=driver, platform="vsphere", cluster_conf=cluster_conf)
-        self.platform_credential_name = cluster_conf.get(
+        self.platform_credential_name = cluster_conf.ENV_DATA.get(
             "platform_credential_name",
             f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{get_running_cluster_id()}",
         )
@@ -316,25 +315,31 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # Create vsphre credentials
         # Click on 'Add credential' in 'Infrastructure provider' page
         self.navigate_create_clusters_page()
-        self.do_click(locator=self.acm_page_nav[PLATFORM_XPATH_MAP[self.platform]])
+        self.do_click(locator=self.acm_page_nav[PLATFORM_XPATH_MAP[self.platform]], timeout=100)
 
         # "Basic vsphere credential info"
         # 1. credential name
         # 2. Namespace
         # 3. Base DNS domain
         self.do_click(locator=self.acm_page_nav["cc_provider_credentials"], timeout=100)
+        tabs = self.driver.window_handles
+        self.driver.switch_to_window(tabs[1])
         self.do_click(locator=self.acm_page_nav["cc_provider_creds_vsphere"])
 
         basic_cred_dict = {
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_cred_name"
             ]: self.platform_credential_name,
-            self.acm_page_nav["cc_provider_creds_vsphere_cred_namespace"]: "default",
             self.acm_page_nav[
                 "cc_provider_creds_vsphere_base_dns"
             ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
         }
         self.send_keys_multiple(basic_cred_dict)
+        # Credential Namespace is not a text box but a dropdown
+        self.do_click(
+            self.acm_page_nav["cc_provider_creds_vsphere_cred_namespace"]
+        )
+        self.do_click(self.acm_page_nav["cc_provider_creds_default_namespace"])
 
         # click on 'Next' button at the bottom
         self.click_next_button()
@@ -379,11 +384,17 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # 3. SSH Public key
         with open(os.path.join(DATA_DIR, "pull-secret"), "r") as fp:
             pull_secret = fp.read()
+        ssh_pub_key_path = os.path.expanduser(
+            self.cluster_conf.DEPLOYMENT['ssh_key']
+        )
+        ssh_priv_key_path = os.path.expanduser(
+            self.cluster_conf.DEPLOYMENT['ssh_key_private']
+        )
 
-        with open(SSH_PUB_KEY, "r") as fp:
+        with open(ssh_pub_key_path, "r") as fp:
             ssh_pub_key = fp.read()
 
-        with open(SSH_PRIV_KEY, "r") as fp:
+        with open(ssh_priv_key_path, "r") as fp:
             ssh_priv_key = fp.read()
 
         pull_secret_and_ssh = {
@@ -396,10 +407,16 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.send_keys_multiple(pull_secret_and_ssh)
         self.click_next_button()
         self.do_click(locator=self.acm_page_nav["cc_provider_creds_vsphere_add_button"])
+        # Go to credentials tab
+        self.do_click(locator=self.acm_page_nav['Credentials'])
         credential_table_entry = format_locator(
             self.acm_page_nav["cc_table_entry"], self.platform_credential_name
         )
-        if not self.check_element_presence(credential_table_entry):
+        log.info(f"LOCATOR={credential_table_entry[0]}")
+        #self.wait_for_visible_element((By.XPATH, credential_table_entry[0]))
+        #self.wait_for_visible_element(credential_table_entry)
+        #self.do_click(locator=credential_table_entry)
+        if not self.check_element_presence((By.XPATH, credential_table_entry[0]), timeout=20):
             raise ACMClusterDeployException("Could not create credentials for vsphere")
         else:
             log.info(
@@ -496,9 +513,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
             self.acm_page_nav[
                 "cc_cluster_name"
             ]: f"{self.cluster_conf.ENV_DATA['cluster_name']}",
-            self.acm_page_nav[
-                "cc_base_dns_domain"
-            ]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
+            #self.acm_page_nav[
+            #    "cc_base_dns_domain"
+            #]: f"{self.cluster_conf.ENV_DATA['base_domain']}",
             self.acm_page_nav["cc_openshift_release_image"]: f"{release_img}",
         }
         self.send_keys_multiple(cluster_details)

@@ -327,6 +327,17 @@ class BaseUI:
             logger.error("Expected element not found on UI")
             return False
 
+    def wait_for_visible_element(self, locator, timeout=20):
+        try:
+            ele = WebDriverWait(self.driver, timeout=timeout).until(ec.visibility_of_element_located(
+               locator))
+            logger.info("ELEMENT FOUND")
+            return True
+        except:
+            logger.warn("ELEMENT NOT FOUND")
+            return False
+            
+
 
 class PageNavigator(BaseUI):
     """

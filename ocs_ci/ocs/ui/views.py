@@ -488,6 +488,10 @@ acm_configuration = {
         "//input[@id='namespaceName-input-toggle-select-typeahead']",
         By.XPATH,
     ),
+    "cc_provider_creds_default_namespace": (
+        "//button[normalize-space()='default']",
+        By.XPATH
+    ),
     "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
     "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
     "cc_provider_creds_vsphere_username": ("//input[@id='username']", By.XPATH),
@@ -540,7 +544,7 @@ acm_configuration = {
         "//a[normalize-space()='kubeconfig']",
         By.XPATH,
     ),
-    "cc_table_entry": ("//a[normalize-space()={}]", By.XPATH),
+    "cc_table_entry": ("//a[normalize-space()='{}']", By.XPATH),
     "cc_cluster_details_page": ("//div[text()='Details']", By.XPATH),
 }
 
@@ -771,6 +775,7 @@ locators = {
         "add_capacity": add_capacity,
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "acm_page": {**acm_page_nav, **acm_configuration},
     },
     "4.9": {
         "login": login,

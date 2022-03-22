@@ -654,6 +654,7 @@ DR_AWS_S3_PROFILE_YAML = os.path.join(
 DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
+RDR_MODE = "regional-dr"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
@@ -1673,7 +1674,7 @@ PLATFORM_XPATH_MAP = {
     "baremetal": None,
     "azure": None,
 }
-ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp_"
+ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
 # example release image url : quay.io/openshift-release-dev/ocp-release:4.9.23-x86_64
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "quay.io/openshift-release-dev/"
 ACM_VSPHERE_NETWORK = "VM Network"
@@ -1682,5 +1683,3 @@ ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
-SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
-SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))

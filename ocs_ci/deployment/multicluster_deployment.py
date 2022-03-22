@@ -6,6 +6,7 @@ from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui import acm_ui
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.ocs.acm import acm
+from ocs_ci.ocs import constants
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class OCPDeployWithACM(Deployment):
         ACM cluster's context
         """
         super().__init__()
-        self.multicluster_mode = config.MULTCLUSTER.get("multicluster_mode", None)
+        self.multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
         # Used for housekeeping during multiple OCP cluster deployments
         self.deployment_cluster_list = list()
         # Whether to start deployment in asynchronous mode or synchronous mode
@@ -33,13 +34,14 @@ class OCPDeployWithACM(Deployment):
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.ui_driver = None
 
-    def do_deploy_ocp(self):
+    def do_deploy_ocp(self, log_cli_level='INFO'):
         """
         This function overrides the parent's function in order accomodate
         ACM based OCP cluster deployments
 
         """
-        if self.multicluster_mode == "regional_dr":
+        logger.info("INSIDE CHILD")
+        if self.multicluster_mode == constants.RDR_MODE:
             self.do_rdr_acm_ocp_deploy()
 
     def do_rdr_acm_ocp_deploy(self):
@@ -52,6 +54,10 @@ class OCPDeployWithACM(Deployment):
 
         if self.deploy_sync_mode == "async":
             rdr_clusters = get_non_acm_cluster_config()
+            for c in rdr_clusters:
+                logger.info(f"{c.ENV_DATA['cluster_name']}")
+                logger.info(f"{c.ENV_DATA['platform']}")
+                logger.info(f"{c.ENV_DATA['deployment_type']}")
             for cluster_conf in rdr_clusters:
                 deployer = factory.get_platform_instance(self.ui_driver, cluster_conf)
                 deployer.create_cluster_prereq()
@@ -92,7 +98,7 @@ class OCPDeployWithACM(Deployment):
             logger.error(f"{[c.cluster_name for c in failed_list]}")
             raise ACMClusterDeployException("one or more Cluster Deployment failed ")
 
-    def deploy_cluster(self):
+    def deploy_cluster(self, log_cli_level='INFO'):
         """
         We deploy new OCP clusters using ACM
         Note: Importing cluster through ACM has been implemented as part
@@ -100,4 +106,4 @@ class OCPDeployWithACM(Deployment):
 
         """
 
-        super().deploy_cluster()
+        super().deploy_cluster(log_cli_level=log_cli_level)
