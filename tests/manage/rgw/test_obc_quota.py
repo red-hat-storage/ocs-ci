@@ -21,7 +21,7 @@ class TestOBCQuota:
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
-                *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "2M"}],
+                *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "50M"}],
             ),
         ],
     )
@@ -61,6 +61,7 @@ class TestOBCQuota:
         ocp_obj.exec_oc_cmd(cmd)
         logger.info(f"Patched new quota to obc {bucket_name}")
 
+        # check if the new quota applied works
         amount = new_quota - int(quota["maxObjects"])
         test_dir = "/test_quota/objects_2"
         awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
