@@ -4237,7 +4237,8 @@ def pv_encryption_vault_setup_factory(request):
             KMS.remove_kmsid(vault.kmsid)
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
-        vault.remove_vault_namespace()
+        if vault.vault_namespace:
+            vault.remove_vault_namespace()
 
     request.addfinalizer(finalizer)
     return factory

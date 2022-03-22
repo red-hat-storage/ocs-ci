@@ -85,7 +85,7 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT": "ocs-kms-ca-secret",
         "VAULT_TLS_SERVER_NAME": "",
         "VAULT_NAMESPACE": "",
-        "VAULT_TOKEN_NAME": "ocs-kms-token",
+        "VAULT_TOKEN_NAME": "ceph-csi-kms-token",
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
