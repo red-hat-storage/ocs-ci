@@ -1997,7 +1997,7 @@ def add_new_nodes_and_label_after_node_failure_ipi(
 
 def get_encrypted_osd_devices(node_obj, node):
     """
-    Returns list of encrypted osd names as output for a node
+    Get osd encrypted device names of a node
 
     Args:
         node_obj: OCP object of kind node
