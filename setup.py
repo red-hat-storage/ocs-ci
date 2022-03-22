@@ -30,6 +30,7 @@ setup(
         "pytest-logger==0.5.1",
         'dataclasses==0.7;python_version < "3.7"',
         "pytest-html==3.1.1",
+        "pytest-metadata==1.11.0",
         "bs4==0.0.1",
         "gspread==3.6.0",
         "oauth2client==4.1.3",
