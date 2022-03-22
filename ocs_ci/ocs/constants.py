@@ -180,6 +180,9 @@ BOOTSTRAP_MACHINE = "bootstrap"
 INFRA_MACHINE = "infra"
 MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
+START = "START"
+END = "END"
+LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]

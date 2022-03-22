@@ -78,6 +78,7 @@ setup(
         "pytest-repeat",
         "pexpect>=4.8.0",
         "yq==2.14.0",
+        "psutil==5.9.0",
     ],
     entry_points={
         "console_scripts": [

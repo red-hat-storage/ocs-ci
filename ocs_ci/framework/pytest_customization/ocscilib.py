@@ -21,6 +21,8 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
+    END,
+    START,
     LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
@@ -41,6 +43,12 @@ from ocs_ci.utility.utils import (
     load_config_file,
 )
 from ocs_ci.utility.reporting import update_live_must_gather_image
+from ocs_ci.utility.memory import (
+    ConsumedRamLogEntry,
+    consumed_ram_log,
+    get_consumed_ram,
+    get_memory_consumption_report,
+)
 
 __all__ = [
     "pytest_addoption",
@@ -685,3 +693,29 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+def pytest_runtest_setup(item):
+    consumed_memory = get_consumed_ram()
+    log_entry = ConsumedRamLogEntry(item.nodeid, START, consumed_memory)
+    consumed_ram_log.append(log_entry)
+    # TODO: Change to debug level
+    log.info(
+        f"Consumed memory at the start of TC {item.nodeid}: {consumed_memory/1024/1024}MB"
+    )
+
+
+def pytest_runtest_teardown(item):
+    consumed_memory = get_consumed_ram()
+    log_entry = ConsumedRamLogEntry(item.nodeid, END, consumed_memory)
+    consumed_ram_log.append(log_entry)
+    # TODO: Change to debug level
+    log.info(
+        f"Consumed memory at the end of TC {item.nodeid}: {consumed_memory/1024/1024}MB"
+    )
+
+
+def pytest_terminal_summary(terminalreporter):
+    report_data = get_memory_consumption_report()
+    for line in report_data:
+        terminalreporter.write(f"{line}\n")
