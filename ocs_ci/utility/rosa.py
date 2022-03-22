@@ -245,7 +245,7 @@ def install_odf_addon(cluster):
             if counter == 5:
                 patch = ' \'{"spec": {"sourceNamespace":"openshift-storage"}}\' '
                 ocp.OCP(namespace="openshift-storage").exec_oc_cmd(
-                    f"patch sub odf-csi-addons-operator -n openshift-storage -p {patch}"
+                    f"patch sub odf-csi-addons-operator -p {patch} --type=merge"
                 )
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "ready" in addon_info:
