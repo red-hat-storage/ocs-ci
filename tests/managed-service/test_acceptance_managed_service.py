@@ -1,10 +1,12 @@
 import logging
+import threading
 
 from ocs_ci.framework.testlib import (
     ManageTest,
     managed_service_required,
 )
-from ocs_ci.ocs import constants, managed_service
+from ocs_ci.framework import config
+from ocs_ci.ocs import managed_service
 
 
 logger = logging.getLogger(__name__)
@@ -18,27 +20,26 @@ class TestAcceptanceManagedService(ManageTest):
     """
 
     def test_acceptance_managed_service(
-        self, pvc_factory, pod_factory, storageclass_factory, teardown_factory
+        self,
+        pvc_factory,
+        pod_factory,
+        storageclass_factory,
+        teardown_factory,
     ):
-        managed_service.rwo_dynamic_pvc(
-            pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
-            interface_type=constants.CEPHFILESYSTEM,
-            storageclass_factory=storageclass_factory,
-            reclaim_policy=constants.RECLAIM_POLICY_DELETE,
-            pvc_size=1,
-        )
+        thread_list = list()
+        for index in range(len(config.index_consumer_clusters)):
+            fixtures_dict = {
+                "pvc_factory": pvc_factory,
+                "pod_factory": pod_factory,
+                "storageclass_factory": storageclass_factory,
+                "teardown_factory": teardown_factory,
+                "index": index,
+            }
+            t = threading.Thread(target=managed_service.flow, kwargs=fixtures_dict)
+            thread_list.append(t)
 
-        managed_service.pvc_to_pvc_clone(
-            pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
-            teardown_factory=teardown_factory,
-            interface_type=constants.CEPHFILESYSTEM,
-        )
+        for thread in thread_list:
+            thread.start()
 
-        managed_service.pvc_snapshot(
-            pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
-            teardown_factory=teardown_factory,
-            interface=constants.CEPHFILESYSTEM,
-        )
+        for thread in thread_list:
+            thread.join()
