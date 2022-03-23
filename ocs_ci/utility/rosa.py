@@ -9,6 +9,8 @@ import logging
 import os
 import re
 
+import boto3
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import (
@@ -95,14 +97,12 @@ def get_providers_subnet(region, cluster_name):
 
 
     """
-    subnets = config.ENV_DATA.get("subnet_id", "")
-    # TODO:  This is Temporary function Fix to get subnet ids from config and
-    # its actual implementation shall be done using aws API
-    # In manual method we use below command to get the subnet id
-    # subnet_cmd = (f"/usr/bin/aws --region {region} ec2 describe-subnets"
-    #               f" --filters Name=tag:Name,Values={cluster_name}*"
-    #               f" --output text | grep subnet |awk '{print $15}'")
-    return subnets
+    ec2_client = boto3.client("ec2", region_name=region)
+    subnets = ec2_client.describe_subnets(
+        Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
+    )
+    subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+    return ",".join(subnet_ids)
 
 
 def get_latest_rosa_version(version):
