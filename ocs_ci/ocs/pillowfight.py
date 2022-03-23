@@ -1,6 +1,7 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
+import time
 import logging
 import tempfile
 import re
@@ -74,7 +75,7 @@ class PillowFight(object):
         self.replicas = replicas
         for i in range(self.replicas):
             # for basic-fillowfight.yaml
-            pfight = templating.load_yaml(constants.COUCHBASE_NEW_PILLOWFIGHT)
+            pfight = templating.load_yaml(constants.COUCHBASE_PILLOWFIGHT)
             pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
             # change the name
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][2] = (
@@ -91,6 +92,7 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
+            time.sleep(15)
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(

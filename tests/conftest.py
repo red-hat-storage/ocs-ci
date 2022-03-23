@@ -120,7 +120,7 @@ from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
-from ocs_ci.ocs.couchbase_new import CouchBase
+from ocs_ci.ocs.couchbase import CouchBase
 
 
 log = logging.getLogger(__name__)
@@ -2893,7 +2893,7 @@ def jenkins_factory_fixture(request):
 
 
 @pytest.fixture(scope="function")
-def couchbase_new_factory_fixture(request):
+def couchbase_factory_fixture(request):
     """
     Couchbase factory fixture using Couchbase operator
     """
