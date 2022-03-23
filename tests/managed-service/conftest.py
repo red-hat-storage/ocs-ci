@@ -7,7 +7,7 @@ from ocs_ci.framework import config
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function", autouse=True)
 def get_consumer_clusters():
     logger.info("Get Consumer Clusters on setup")
     consumer_clusters = list()

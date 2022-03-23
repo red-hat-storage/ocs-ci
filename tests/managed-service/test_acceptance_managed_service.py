@@ -1,5 +1,5 @@
 import logging
-import threading
+import multiprocessing
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -26,7 +26,7 @@ class TestAcceptanceManagedService(ManageTest):
         storageclass_factory,
         teardown_factory,
     ):
-        thread_list = list()
+        process_list = list()
         for index in range(len(config.index_consumer_clusters)):
             fixtures_dict = {
                 "pvc_factory": pvc_factory,
@@ -35,11 +35,13 @@ class TestAcceptanceManagedService(ManageTest):
                 "teardown_factory": teardown_factory,
                 "index": index,
             }
-            t = threading.Thread(target=managed_service.flow, kwargs=fixtures_dict)
-            thread_list.append(t)
+            p = multiprocessing.Process(
+                target=managed_service.flow, kwargs=fixtures_dict
+            )
+            process_list.append(p)
 
-        for thread in thread_list:
-            thread.start()
+        for process in process_list:
+            process.start()
 
-        for thread in thread_list:
-            thread.join()
+        for process in process_list:
+            process.join()
