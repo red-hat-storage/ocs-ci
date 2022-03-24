@@ -9,8 +9,6 @@ import logging
 import os
 import re
 
-import boto3
-
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import (
@@ -20,7 +18,7 @@ from ocs_ci.ocs.exceptions import (
     ConfigurationError,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
-from ocs_ci.utility import utils
+from ocs_ci.utility import AWS as AWSUtil, utils
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
 
 
@@ -62,7 +60,8 @@ def create_cluster(cluster_name, version):
         f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
-        subnet_id = get_providers_subnet(region, provider_name)
+        aws = AWSUtil()
+        subnet_id = aws.get_cluster_subnet_ids(provider_name)
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
     utils.run_cmd(cmd)
@@ -83,26 +82,6 @@ def create_cluster(cluster_name, version):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
-
-
-def get_providers_subnet(region, cluster_name):
-    """
-    Get the cluster's subnet id of existing cluster
-
-    Args:
-        region (str):  aws region of cluster
-        cluster_name (str): Cluster name
-    returns:
-        string of space separated subnet ids
-
-
-    """
-    ec2_client = boto3.client("ec2", region_name=region)
-    subnets = ec2_client.describe_subnets(
-        Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
-    )
-    subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
-    return ",".join(subnet_ids)
 
 
 def get_latest_rosa_version(version):

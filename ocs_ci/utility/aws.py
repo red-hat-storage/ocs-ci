@@ -457,6 +457,23 @@ class AWS(object):
             "Delete response for volume: %s is: %s", volume.volume_id, delete_response
         )
 
+    def get_cluster_subnet_ids(self, cluster_name):
+        """
+        Get the cluster's subnet ids of existing cluster
+
+        Args:
+            cluster_name (str): Cluster name
+
+        Returns:
+            string of space separated subnet ids
+
+        """
+        subnets = self.ec2_client.describe_subnets(
+            Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
+        )
+        subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+        return ",".join(subnet_ids)
+
     def detach_and_delete_volume(self, volume, timeout=120):
         """
         Detach volume if attached and then delete it from AWS
