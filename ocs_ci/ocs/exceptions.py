@@ -474,3 +474,7 @@ class BenchmarkTestFailed(Exception):
 
 class WrongVersionExpression(ValueError):
     pass
+
+
+class ClusterNotFoundException(Exception):
+    pass

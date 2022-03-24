@@ -2052,7 +2052,7 @@ def get_node_internal_ip(node_obj):
         node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
 
     Returns:
-        str: The node internal ip
+        str: The node internal ip or `None`
 
     """
     addresses = node_obj.get().get("status").get("addresses")

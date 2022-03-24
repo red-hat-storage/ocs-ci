@@ -10,11 +10,10 @@ from ocs_ci.framework.testlib import (
 )
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import machine, constants
+from ocs_ci.ocs import machine, constants, cephfs_workload
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     check_pods_after_node_replacement,
-    run_io_in_bg,
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -40,6 +39,16 @@ log = logging.getLogger(__name__)
 
 
 def get_node_pod_names_expect_to_terminate(node_name):
+    """
+    Get the node pod names expected to be in a Terminating state
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: list of the node pod names expected to be in a Terminating state
+
+    """
     node_rook_ceph_pod_names = get_node_rook_ceph_pod_names(node_name)
     return [
         pod_name
@@ -49,6 +58,13 @@ def get_node_pod_names_expect_to_terminate(node_name):
 
 
 def get_all_pod_names_expect_to_terminate():
+    """
+    Get the pod names of all the ocs nodes, that expected to be in a Terminating state
+
+    Returns:
+         list: list of the pod names of all the ocs nodes, that expected to be in a Terminating state
+
+    """
     ocs_nodes = get_ocs_nodes()
     pod_names_expect_to_terminate = []
     for n in ocs_nodes:
@@ -174,6 +190,13 @@ def check_automated_recovery_from_full_cluster_shutdown(nodes):
     log.info("The osd ids successfully come up on the osd nodes")
 
 
+FAILURE_TYPE_FUNC_CALL_DICT = {
+    "stopped_node": check_automated_recovery_from_stopped_node,
+    "terminate_node": check_automated_recovery_from_terminate_node,
+    "full_cluster_shutdown": check_automated_recovery_from_full_cluster_shutdown,
+}
+
+
 @ignore_leftovers
 @tier4
 @tier4a
@@ -215,11 +238,12 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
     def test_automated_recovery_from_failed_nodes_reactive_ms(
         self,
         nodes,
+        project,
+        tmp_path,
         pvc_factory,
         pod_factory,
         bucket_factory,
         rgw_bucket_factory,
-        dc_pod_factory,
         failure,
     ):
         """
@@ -228,25 +252,15 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             B) Automated recovery from termination of a worker node
             C) Automated recovery from full cluster shutdown
         """
-        # Create DC app pods
-        log.info("Creating DC based app pods and starting IO in background")
-        interface = constants.CEPHBLOCKPOOL
-        dc_pod_obj = []
-        for i in range(2):
-            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
-            run_io_in_bg(dc_pod, fedora_dc=True)
-            dc_pod_obj.append(dc_pod)
+
+        log_read_write = cephfs_workload.LogReaderWriterParallel(project, tmp_path)
+        log.info("Start read and write to cephfs on consumer")
+        log_read_write.log_reader_writer_parallel()
 
         config.switch_to_provider()
 
-        if failure == "stopped_node":
-            check_automated_recovery_from_stopped_node(nodes)
-        elif failure == "terminate_node":
-            check_automated_recovery_from_terminate_node(nodes)
-        elif failure == "full_cluster_shutdown":
-            check_automated_recovery_from_full_cluster_shutdown(nodes)
-        else:
-            pytest.skip(f"Didn't find any match test for the key failure = {failure}")
+        log.info("Start executing the node test function on the provider...")
+        FAILURE_TYPE_FUNC_CALL_DICT[failure](nodes)
 
         # Verification steps after the automated recovery.
         assert check_pods_after_node_replacement(), "Not all the pods are running"
@@ -255,6 +269,8 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         ), "Not all the worker nodes security groups set correctly"
 
         config.switch_to_consumer()
+        log.info("Fetch and validate data on consumer")
+        log_read_write.fetch_and_validate_data()
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")

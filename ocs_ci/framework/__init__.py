@@ -13,6 +13,7 @@ import yaml
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from ocs_ci.ocs.exceptions import ClusterNotFoundException
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
@@ -210,31 +211,79 @@ class MultiClusterConfig:
         self.switch_ctx(self.cluster_ctx.ENV_DATA["default_cluster_context_index"])
 
     def get_provider_index(self):
+        """
+        Get the provider cluster index
+
+        Returns:
+            int: the provider cluster index
+
+        """
         for i, cluster in enumerate(self.clusters):
             if cluster.ENV_DATA["cluster_type"] == "provider":
                 return i
 
-    def get_consumer_index(self):
+        raise ClusterNotFoundException("Didn't find the provider cluster")
+
+    def get_consumer_indexes_list(self):
+        """
+        Get the consumer cluster indexes
+
+        Returns:
+            list: the consumer cluster indexes
+
+        """
+        consumer_indexes_list = []
         for i, cluster in enumerate(self.clusters):
             if cluster.ENV_DATA["cluster_type"] == "consumer":
+                consumer_indexes_list.append(i)
+
+        if not consumer_indexes_list:
+            raise ClusterNotFoundException("Didn't find the consumer cluster")
+
+        return consumer_indexes_list
+
+    def get_cluster_index_by_name(self, cluster_name):
+        """
+        Get the cluster index by the cluster name
+
+        Returns:
+            int: The cluster index by the cluster name
+
+        """
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_name"] == cluster_name:
                 return i
 
-    def get_consumer_index_by_name(self, cluster_name):
-        for i, cluster in enumerate(self.clusters):
-            if (
-                cluster.ENV_DATA["cluster_type"] == "consumer"
-                and cluster.ENV_DATA["cluster_name"] == cluster_name
-            ):
-                return i
+        raise ClusterNotFoundException(f"Didn't find the cluster '{cluster_name}' ")
 
     def switch_to_provider(self):
+        """
+        Switch to the provider cluster
+
+        """
         self.switch_ctx(self.get_provider_index())
 
-    def switch_to_consumer(self, consumer_name=None):
-        if consumer_name:
-            self.switch_ctx(self.get_consumer_index_by_name(consumer_name))
-        else:
-            self.switch_ctx(self.get_consumer_index())
+    def switch_to_consumer(self, num_of_consumer=0):
+        """
+        Switch to one of the consumer clusters
+
+        Args:
+             num_of_consumer (int): The cluster index to switch to. The default consumer number
+                is 0 - which means it will switch to the first consumer.
+                1 - is the second, 2 - is the third, and so on.
+
+        """
+        self.switch_ctx(self.get_consumer_indexes_list()[num_of_consumer])
+
+    def switch_to_cluster_by_name(self, cluster_name):
+        """
+        Switch to the cluster by the cluster name
+
+        Args:
+            cluster_name (str): The cluster name to switch to
+
+        """
+        self.switch_ctx(self.get_cluster_index_by_name(cluster_name))
 
 
 config = MultiClusterConfig()
