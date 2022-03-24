@@ -14,25 +14,34 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
+
 from ocs_ci.ocs.exceptions import (
     KMSResourceCleaneupError,
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
+from semantic_version import Version
+
 
 log = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
     kmsprovider = constants.HPCS_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider"]
     argvalues = [
         pytest.param("v1", kmsprovider),
     ]
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
     argvalues = [
-        pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2650")),
-        pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2651")),
+        pytest.param(
+            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2650")
+        ),
+        pytest.param(
+            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2651")
+        ),
     ]
 
 
@@ -42,7 +51,7 @@ else:
 @kms_config_required
 @skipif_managed_service
 @pytest.mark.parametrize(
-    argnames=["kv_version", "kms_provider"],
+    argnames=argnames,
     argvalues=argvalues,
 )
 class TestEncryptedRbdClone(ManageTest):
@@ -56,6 +65,7 @@ class TestEncryptedRbdClone(ManageTest):
         self,
         kv_version,
         kms_provider,
+        use_vault_namespace,
         pv_encryption_kms_setup_factory,
         project_factory,
         multi_pvc_factory,
@@ -68,7 +78,7 @@ class TestEncryptedRbdClone(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version)
+        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
@@ -261,7 +271,9 @@ class TestEncryptedRbdClone(ManageTest):
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify if the keys for parent and cloned PVCs are deleted from Vault
-            if kv_version == "v1":
+            if kv_version == "v1" or Version.coerce(
+                config.ENV_DATA["ocs_version"]
+            ) >= Version.coerce("4.9"):
                 log.info(
                     "Verify whether the keys for cloned PVCs are deleted from vault"
                 )

@@ -18,25 +18,33 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
+from semantic_version import Version
+
 
 log = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
     kmsprovider = constants.HPCS_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider"]
     argvalues = [
         pytest.param("v1", kmsprovider),
     ]
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
     argvalues = [
-        pytest.param("v1", kmsprovider, marks=pytest.mark.polarion_id("OCS-2585")),
-        pytest.param("v2", kmsprovider, marks=pytest.mark.polarion_id("OCS-2592")),
+        pytest.param(
+            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
+        ),
+        pytest.param(
+            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
+        ),
     ]
 
 
 @pytest.mark.parametrize(
-    argnames=["kv_version", "kms_provider"],
+    argnames=argnames,
     argvalues=argvalues,
 )
 @skipif_ocs_version("<4.7")
@@ -52,6 +60,7 @@ class TestRbdPvEncryption(ManageTest):
     def setup(
         self,
         kv_version,
+        use_vault_namespace,
         pv_encryption_kms_setup_factory,
     ):
         """
@@ -59,7 +68,7 @@ class TestRbdPvEncryption(ManageTest):
 
         """
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version)
+        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
     @tier1
@@ -168,8 +177,10 @@ class TestRbdPvEncryption(ManageTest):
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
-            # Verify whether the key is deleted in Vault. Skip check for kv-v2 due to BZ#1979244
-            if kv_version == "v1":
+            # Verify whether the key is deleted in Vault
+            if kv_version == "v1" or Version.coerce(
+                config.ENV_DATA["ocs_version"]
+            ) >= Version.coerce("4.9"):
                 for vol_handle in vol_handles:
                     if not kms.is_key_present_in_path(
                         key=vol_handle, path=self.kms.vault_backend_path
