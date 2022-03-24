@@ -18,7 +18,8 @@ from ocs_ci.ocs.exceptions import (
     ConfigurationError,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
-from ocs_ci.utility import AWS as AWSUtil, utils
+from ocs_ci.utility import utils
+from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
 
 
