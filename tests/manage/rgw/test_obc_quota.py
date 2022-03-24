@@ -30,6 +30,7 @@ class TestOBCQuota:
         awscli_pod_session,
         rgw_bucket_factory,
         test_directory_setup,
+        mcg_obj_session,
         amount,
         interface,
         quota,
@@ -59,11 +60,13 @@ class TestOBCQuota:
             )
         except Exception as err:
             if err_msg in err.args[0]:
-                logging.info(f"Quota {quota} worked as expected!!")
+                logger.info(f"Quota {quota} worked as expected!!")
             else:
-                assert (
-                    False
-                ), "Quota didnt work!! Since more than maximum number of objects were written to the bucket!"
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+        else:
+            assert (
+                False
+            ), "Quota didnt work!! Since more than maximum number of objects were written to the bucket!"
 
         # Patch the OBC to change the quota
         new_quota = 4
@@ -75,18 +78,23 @@ class TestOBCQuota:
         # check if the new quota applied works
         amount = new_quota - int(quota["maxObjects"])
         awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
-        out = copy_random_individual_objects(
-            awscli_pod_session,
-            pattern="new-object-",
-            file_dir=test_dir,
-            target=full_bucket_path,
-            amount=amount,
-            s3_obj=obc_obj,
-            ignore_error=True,
-        )
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="new-object-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=amount,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except Exception as err:
+            if err_msg in err.args[0]:
+                assert False, f"New quota {new_quota_str} didn't get applied!!"
+            else:
+                logger.error("Copy objects to bucket failed unexpectedly!!")
+        else:
+            logger.info(f"New quota {new_quota_str} got applied!!")
+
         list_objs = list_obc_objects(awscli_pod_session, full_bucket_path, obc_obj)
         logger.info(f"List objects:\n {list_objs}")
-        assert (
-            "An error occurred (QuotaExceeded)" not in out
-        ), f"New quota {new_quota_str} didn't get applied!!"
-        logger.info(f"New quota {new_quota_str} got applied!!")

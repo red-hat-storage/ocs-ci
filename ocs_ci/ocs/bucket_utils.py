@@ -199,14 +199,12 @@ def copy_random_individual_objects(
         podobj, pattern=pattern, file_dir=file_dir, amount=amount
     )
     objects_to_upload = [obj for obj in object_files]
-    out = ""
     for obj in objects_to_upload:
         src_obj = f"{file_dir}/{obj}"
         out = copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
         if "An error occurred (QuotaExceeded)" in out:
             return out
         logger.info(f"Copied {src_obj}")
-    return out
 
 
 def list_obc_objects(podobj, target, s3_obj=None, signed_request_creds=None):
