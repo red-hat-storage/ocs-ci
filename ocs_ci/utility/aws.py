@@ -472,7 +472,7 @@ class AWS(object):
             Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
         )
         subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
-        return ",".join(subnet_ids)
+        return subnet_ids
 
     def detach_and_delete_volume(self, volume, timeout=120):
         """
