@@ -1,3 +1,0 @@
----
-DEPLOYMENT:
-  odf_compose_image: 'quay.io/rhceph-dev/odf4-odf-compose-operator-bundle-index:4.10.0-197'
