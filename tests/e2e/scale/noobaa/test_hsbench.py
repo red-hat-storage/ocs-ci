@@ -2,7 +2,7 @@ import logging
 import pytest
 from ocs_ci.ocs import hsbench
 from ocs_ci.utility import utils
-from ocs_ci.framework.testlib import E2ETest, scale
+from ocs_ci.framework.testlib import E2ETest, scale, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     bugzilla,
@@ -12,10 +12,13 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="function")
 def hsbenchs3(request):
 
     hsbenchs3 = hsbench.HsBench()
+    hsbenchs3.create_test_user()
+    hsbenchs3.create_resource_hsbench()
+    hsbenchs3.install_hsbench()
 
     def teardown():
         hsbenchs3.delete_test_user()
@@ -25,7 +28,7 @@ def hsbenchs3(request):
     return hsbenchs3
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="function")
 def s3bench(request):
 
     s3bench = hsbench.HsBench()
@@ -40,6 +43,7 @@ def s3bench(request):
 
 
 @scale
+@ignore_leftovers
 class TestHsBench(E2ETest):
     """
     Test writing one million S3 objects to a single bucket
@@ -55,14 +59,6 @@ class TestHsBench(E2ETest):
         * Install hs S3 benchmark
         * Run hs S3 benchmark to create 1M objects
         """
-        # Create RGW user
-        hsbenchs3.create_test_user()
-
-        # Create resource for hsbench
-        hsbenchs3.create_resource_hsbench()
-
-        # Install hsbench
-        hsbenchs3.install_hsbench()
 
         # Running hsbench
         hsbenchs3.run_benchmark(num_obj=1000000, timeout=7200)
