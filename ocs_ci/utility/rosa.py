@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
 
 
@@ -60,7 +61,8 @@ def create_cluster(cluster_name, version):
         f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
-        subnet_id = get_providers_subnet(region, provider_name)
+        aws = AWSUtil()
+        subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
     utils.run_cmd(cmd)
@@ -81,28 +83,6 @@ def create_cluster(cluster_name, version):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
-
-
-def get_providers_subnet(region, cluster_name):
-    """
-    Get the cluster's subnet id of existing cluster
-
-    Args:
-        region (str):  aws region of cluster
-        cluster_name (str): Cluster name
-    returns:
-        string of space separated subnet ids
-
-
-    """
-    subnets = config.ENV_DATA.get("subnet_id", "")
-    # TODO:  This is Temporary function Fix to get subnet ids from config and
-    # its actual implementation shall be done using aws API
-    # In manual method we use below command to get the subnet id
-    # subnet_cmd = (f"/usr/bin/aws --region {region} ec2 describe-subnets"
-    #               f" --filters Name=tag:Name,Values={cluster_name}*"
-    #               f" --output text | grep subnet |awk '{print $15}'")
-    return subnets
 
 
 def get_latest_rosa_version(version):
