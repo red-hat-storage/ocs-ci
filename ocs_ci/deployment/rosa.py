@@ -7,13 +7,11 @@ on Openshfit Dedicated Platform.
 
 import logging
 import os
-import tempfile
-import yaml
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import openshift_dedicated as ocm, rosa, templating
+from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
@@ -145,8 +143,6 @@ class ROSA(CloudDeploymentBase):
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
-        if config.ENV_DATA.get("cluster_type", "").lower() == "provider":
-            self.prepare_ocs_deployer_resources()
         rosa.install_odf_addon(self.cluster_name)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
         # Check for Ceph pods
@@ -263,27 +259,3 @@ class ROSA(CloudDeploymentBase):
                 },
             ],
         )
-
-    def prepare_ocs_deployer_resources(self):
-        """
-        Due to bug in odf-csi-addons-operator there needs to be done following
-        prior to provider addon installation:
-
-        1. Create a ROSA or OSD cluster
-        2. Create openshift-storage namespace
-        3. Create catalogSource in openshift-storage namespace
-
-        Note: This is a hack and should be removed when installation is fixed
-        """
-        oc = ocp.OCP()
-        logger.info("Create openshift-storage namespace")
-        oc.create(yaml_file=constants.PROVIDER_NAMESPACE_YAML)
-        logger.info("Create catalogSource in openshift-storage namespace")
-        catalogsource_data = {"image": config.DEPLOYMENT["odf_compose_image"]}
-        catalogsource_yaml = templating.generate_yaml_from_jinja2_template_with_data(
-            constants.PROVIDER_CATALOGSOURCE_YAML, **catalogsource_data
-        )
-        with tempfile.NamedTemporaryFile() as catalogsource_file:
-            catalogsource_file.write(str.encode(yaml.dump(catalogsource_yaml)))
-            catalogsource_file.flush()
-            oc.create(yaml_file=catalogsource_file.name)
