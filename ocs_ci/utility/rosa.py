@@ -128,7 +128,7 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
         f"rosa create account-roles --mode auto"
         f' --permissions-boundary "" --prefix {prefix}  --yes'
     )
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def create_operator_roles(cluster, prefix='""'):
@@ -145,7 +145,7 @@ def create_operator_roles(cluster, prefix='""'):
         f"rosa create operator-roles --cluster {cluster} --prefix {prefix}"
         f' --mode auto --permissions-boundary "" --yes'
     )
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def create_oidc_provider(cluster):
@@ -158,7 +158,7 @@ def create_oidc_provider(cluster):
 
     """
     cmd = f"rosa create oidc-provider --cluster {cluster} --mode auto --yes"
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def download_rosa_cli():
@@ -230,7 +230,7 @@ def install_odf_addon(cluster):
         public_key_only = remove_header_footer_from_key(public_key)
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
     counter = 0
     sub_updated = False
     for addon_info in utils.TimeoutSampler(
