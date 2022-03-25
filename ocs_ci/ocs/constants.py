@@ -548,13 +548,6 @@ OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
 
-PROVIDER_NAMESPACE_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "provider-namespace.yaml"
-)
-PROVIDER_CATALOGSOURCE_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "provider-catalogsource.yaml"
-)
-
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")
 CL_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-og.yaml")
