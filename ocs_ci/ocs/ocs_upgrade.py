@@ -16,7 +16,7 @@ from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
-from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
+from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, EXTERNAL_CLUSTER_USER
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -666,26 +666,30 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
 
     # update external secrets
     if config.DEPLOYMENT["external_mode"]:
-        external_cluster.update_permission_caps()
-        external_cluster.get_external_cluster_details()
+        upgrade_version = version.get_semantic_version(upgrade_version, True)
+        if upgrade_version >= version.VERSION_4_10:
+            external_cluster.update_permission_caps()
+        else:
+            external_cluster.update_permission_caps(EXTERNAL_CLUSTER_USER)
+            external_cluster.get_external_cluster_details()
 
-        # update the external cluster details in secrets
-        log.info("updating external cluster secret")
-        external_cluster_details = NamedTemporaryFile(
-            mode="w+",
-            prefix="external-cluster-details-",
-            delete=False,
-        )
-        with open(external_cluster_details.name, "w") as fd:
-            decoded_external_cluster_details = decode(
-                config.EXTERNAL_MODE["external_cluster_details"]
+            # update the external cluster details in secrets
+            log.info("updating external cluster secret")
+            external_cluster_details = NamedTemporaryFile(
+                mode="w+",
+                prefix="external-cluster-details-",
+                delete=False,
             )
-            fd.write(decoded_external_cluster_details)
-        cmd = (
-            f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
-            f"--from-file=external_cluster_details={external_cluster_details.name}"
-        )
-        exec_cmd(cmd)
+            with open(external_cluster_details.name, "w") as fd:
+                decoded_external_cluster_details = decode(
+                    config.EXTERNAL_MODE["external_cluster_details"]
+                )
+                fd.write(decoded_external_cluster_details)
+            cmd = (
+                f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+                f"--from-file=external_cluster_details={external_cluster_details.name}"
+            )
+            exec_cmd(cmd)
 
     ocs_install_verification(
         timeout=600,
