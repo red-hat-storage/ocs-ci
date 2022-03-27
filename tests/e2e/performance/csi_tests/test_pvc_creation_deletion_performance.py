@@ -305,7 +305,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         mesure_data = "create"
         rec_policy = performance_lib.run_oc_command(
-            f'oc get sc {Interface_Info[self.interface]["sc"]} -o jsonpath="'
+            f'get sc {Interface_Info[self.interface]["sc"]} -o jsonpath="'
             + '{.reclaimPolicy}"'
         )
         if rec_policy == constants.RECLAIM_POLICY_DELETE:
