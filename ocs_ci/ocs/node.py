@@ -2223,9 +2223,9 @@ def get_other_worker_nodes_in_same_rack_or_zone(
         for wnode in other_wnodes
         if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
     ]
-    log.info(
-        f"other worker nodes in the same rack or zone are: {other_wnodes_in_same_rack_or_zone}"
-    )
+
+    wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
+    log.info(f"other worker nodes in the same rack or zone are: {wnode_names}")
     return other_wnodes_in_same_rack_or_zone
 
 
@@ -2259,3 +2259,44 @@ def get_another_osd_node_in_same_rack_or_zone(
             break
 
     return osd_node_in_same_rack_or_zone
+
+
+def get_nodes_racks_or_zones(failure_domain, node_names):
+    """
+    Get the nodes racks or zones
+
+    failure_domain (str): The failure domain
+    node_names (list): The node names to get their racks or zones
+
+    Return:
+        list: The nodes racks or zones
+
+    """
+    node_objects = get_node_objs(node_names)
+    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+
+
+def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+    """
+    Wait for the nodes racks or zones to appear
+
+    Args:
+        failure_domain (str): The failure domain
+        node_names (list): The node names to get their racks or zones
+        timeout (int): The time to wait for the racks or zones to appear on the nodes
+
+    Raise:
+        TimeoutExpiredError: In case not all the nodes racks or zones appear in the given timeout
+
+    """
+    for nodes_racks_or_zones in TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nodes_racks_or_zones,
+        failure_domain=failure_domain,
+        node_names=node_names,
+    ):
+        log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
+        if all(nodes_racks_or_zones):
+            log.info("All the nodes racks or zones exist!")
+            break

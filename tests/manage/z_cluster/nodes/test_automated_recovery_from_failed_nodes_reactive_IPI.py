@@ -31,6 +31,7 @@ from ocs_ci.ocs.node import (
     add_new_nodes_and_label_after_node_failure_ipi,
     get_another_osd_node_in_same_rack_or_zone,
     get_node_pods,
+    wait_for_nodes_racks_or_zones,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -154,8 +155,11 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Add a new node and label it
         new_ocs_node_names = add_new_node_and_label_it(machineset_name)
-        new_ocs_node = get_node_objs(new_ocs_node_names)[0]
         failure_domain = get_failure_domain()
+        log.info("Wait for the nodes racks or zones to appear...")
+        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+
+        new_ocs_node = get_node_objs(new_ocs_node_names)[0]
         osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
             failure_domain, new_ocs_node, common_nodes
         )
@@ -287,10 +291,13 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         if additional_node:
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+            failure_domain = get_failure_domain()
+            log.info("Wait for the nodes racks or zones to appear...")
+            wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+
             new_ocs_node = get_node_objs(new_ocs_node_names)[0]
             log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
             self.extra_node = True
-            failure_domain = get_failure_domain()
             log.info("Get another OSD node in the same rack or zone...")
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
                 failure_domain, new_ocs_node
