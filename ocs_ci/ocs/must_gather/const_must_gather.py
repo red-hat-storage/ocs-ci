@@ -724,6 +724,9 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "NooBaaList_crs.yaml",
     "noobaa-scc-describe.txt",
     "obc_list",
+    "subscription",
+    "odf-csi-addons-operator.yaml",
+    "odf-operator.yaml",
 ]
 
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
