@@ -272,6 +272,7 @@ class Cosbench(object):
         timeout=300,
         extend_objects=None,
         validate=True,
+        result=True,
     ):
         """
         Creates and runs main Cosbench workload.
@@ -294,6 +295,7 @@ class Cosbench(object):
             validate (bool): Validates whether each stage is completed
             extend_objects (int): Extends the total number of objects to prevent overlap.
                                   Use only for Write and Delete operations.
+            result (bool): Get performance results when running workload is completed.
 
         Returns:
             Tuple[str, str]: Workload xml and its name
@@ -372,6 +374,15 @@ class Cosbench(object):
         if validate:
             self.validate_workload(
                 workload_id=self.workload_id, workload_name=workload_name
+            )
+        else:
+            return self.workload_id, workload_name
+
+        if result:
+            self.get_performance_result(
+                workload_id=self.workload_id,
+                workload_name=workload_name,
+                size=size,
             )
         else:
             return self.workload_id, workload_name
@@ -590,3 +601,42 @@ class Cosbench(object):
         self.cosbench_config.delete()
         self.ns_obj.delete_project(self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
+
+    def get_performance_result(self, workload_name, workload_id, size):
+        workload_file = self.get_result_csv(
+            workload_id=workload_id, workload_name=workload_name
+        )
+        throughput_data = {}
+        bandwidth_data = {}
+        with open(workload_file, "r") as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            if header is not None:
+                for row in reader:
+                    op_type = row[1]
+                    throughput = row[13]
+                    bandwidth = row[14]
+                    throughput_data[op_type] = throughput
+                    bandwidth_data[op_type] = bandwidth
+            else:
+                raise UnexpectedBehaviour(
+                    f"Workload csv is incorrect/malformed. Dumping csv {reader}"
+                )
+        # Store throughput data on csv file
+        log_path = f"{self.cosbench_dir}"
+        with open(f"{log_path}/{workload_name}-{size}-throughput.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in throughput_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Throughput data present in {log_path}/{workload_name}-{size}-throughput.csv"
+        )
+
+        # Store bandwidth data on csv file
+        with open(f"{log_path}/{workload_name}-{size}-bandwidth.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in bandwidth_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
+        )
