@@ -726,6 +726,7 @@ ALERT_BUCKETERRORSTATE = "NooBaaBucketErrorState"
 ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
 ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
 ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
+ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
@@ -934,6 +935,9 @@ VM_RHEL_USER = "test"
 
 # playbooks
 SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
+
+# annotations
+REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
