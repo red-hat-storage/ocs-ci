@@ -110,6 +110,20 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
             sub_obj.patch(params=param, format_type="merge")
 
+        # Add tolerations to the ocsinitializations.ocs.openshift.io
+        param = (
+            '{"spec":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}'
+        )
+        # for ocsini in ocsini_list:
+        ocsini_obj = ocp.OCP(
+            resource_name="ocsinit",
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            kind="OCSInitialization",
+        )
+        ocsini_obj.patch(params=param, format_type="merge")
+
         # Add tolerations to the configmap rook-ceph-operator-config
         configmap_obj = ocp.OCP(
             kind=constants.CONFIGMAP,
@@ -134,7 +148,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Excluding tool-box pod because of https://bugzilla.redhat.com/show_bug.cgi?id=2012084
         pod_list = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=["rook-ceph-tools"],
+            # selector=["rook-ceph-tools"],
             exclude_selector=True,
         )
         for pod in pod_list:

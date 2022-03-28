@@ -156,6 +156,11 @@ SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
 
+
+CLUSTER_SERVICE_VERSION = "csv"
+OCSINITIALIZATION = "OCSInitialization"
+
+
 # Other
 SECRET = "Secret"
 TEST = "test"
