@@ -155,7 +155,16 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
-    if not config.DEPLOYMENT["external_mode"]:
+    if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+            }
+        )
+    elif not config.DEPLOYMENT["external_mode"]:
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 3,
