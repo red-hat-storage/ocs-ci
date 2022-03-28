@@ -288,6 +288,7 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     original_osd_args = [",".join(arg.split()) for arg in original_osd_args]
     original_osd_args.remove("--foreground")
     original_osd_args = " ".join(original_osd_args)
+    logger.info(f"Original args for osd deployment: {original_osd_args}")
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
     ct_pod = pod.get_ceph_tools_pod()

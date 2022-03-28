@@ -856,7 +856,7 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     mgr_node = pod.get_pod_node(mgr_pod)
     test_nodes = [
         worker_node
-        for worker_node in get_nodes(node_type="worker")
+        for worker_node in get_nodes(node_type=constants.WORKER_MACHINE)
         if worker_node.name != mgr_node.name
     ]
 
