@@ -55,7 +55,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """
     api = pagerduty.PagerDutyAPI()
 
-    # get incidents from time when manager deployment was scaled down
+    # get incidents from time when osd deployment was scaled down
     incidents = measure_stop_ceph_osd.get("pagerduty_incidents")
 
     # check that incidents CephOSDDisdNotResponding and CephClusterWarningState
@@ -86,11 +86,10 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     """
     api = pagerduty.PagerDutyAPI()
 
-    # get incidents from time when manager deployment was scaled down
+    # get incidents from time when node is down
     incidents = measure_stop_worker_nodes.get("pagerduty_incidents")
 
-    # check that incidents  and CephClusterErrorState
-    # alert are correctly raised
+    # check that incident CephNodeDown is correctly raised
     for target_label in [
         constants.ALERT_NODEDOWN,
     ]:
@@ -102,3 +101,62 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
         api.check_incident_cleared(
             summary=target_label, measure_end_time=measure_stop_worker_nodes.get("stop")
         )
+
+
+@tier4
+@tier4c
+@managed_service_required
+@pytest.mark.polarion_id("OCS-3716")
+def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
+    """
+    Test that there are appropriate incidents in PagerDuty when ceph monitor
+    is unavailable and that these incidents are cleared when the monitor
+    is back online.
+    """
+    api = pagerduty.PagerDutyAPI()
+
+    # get incidents from time when monitor deployment was scaled down
+    incidents = measure_stop_ceph_mon.get("pagerduty_incidents")
+
+    # check that incidents CephMonQuorumAtRisk and CephClusterWarningState
+    # alert are correctly raised
+    for target_label in [
+        constants.ALERT_MONQUORUMATRISK,
+        constants.ALERT_CLUSTERWARNINGSTATE,
+    ]:
+        assert pagerduty.check_incident_list(
+            summary=target_label,
+            incidents=incidents,
+            urgency="high",
+        )
+        api.check_incident_cleared(
+            summary=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+        )
+
+
+@tier4
+@tier4c
+@managed_service_required
+@pytest.mark.polarion_id("OCS-3717")
+@pytest.mark.parametrize("create_mon_quorum_loss", [True])
+def test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
+    """
+    Test that there are appropriate incidents in PagerDuty when ceph monitors
+    except one are unavailable and that these incidents are cleared when the
+    monitor is back online.
+    """
+    api = pagerduty.PagerDutyAPI()
+
+    # get incidents from time when monitor deployments were scaled down
+    incidents = measure_stop_ceph_mon.get("pagerduty_incidents")
+
+    # check that incident CephMonQuorumLost is correctly raised
+    target_label = constants.ALERT_MONQUORUMLOST
+    assert pagerduty.check_incident_list(
+        summary=target_label,
+        incidents=incidents,
+        urgency="high",
+    )
+    api.check_incident_cleared(
+        summary=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+    )
