@@ -4720,3 +4720,39 @@ def patch_consumer_toolbox_with_secret():
 
     log.info("Switching back to the initial cluster context")
     config.switch_ctx(restore_ctx_index)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def switch_to_provider_for_test(request):
+    """
+    Switch to provider cluster as required by the test. Applicable for Managed Services only if
+    the marker 'runs_on_provider' is added in the test.
+
+    """
+    switched_to_provider = False
+    current_cluster = config.cluster_ctx
+    if (
+        request.node.get_closest_marker("runs_on_provider")
+        and config.multicluster
+        and current_cluster.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+    ):
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "provider":
+                provider_cluster = cluster
+                log.debug("Switching to the provider cluster context")
+                config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+                switched_to_provider = True
+                break
+
+    def finalizer():
+        """
+        Switch context to the initial cluster
+
+        """
+        if switched_to_provider:
+            log.debug("Switching back to the previous cluster context")
+            config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+
+    request.addfinalizer(finalizer)
+>>>>>>> 8c7a19dd (Run tests on provider)
