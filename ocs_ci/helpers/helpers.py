@@ -1854,7 +1854,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         ]
         cmd = (
             f"ceph fs subvolume getpath {get_cephfs_name()}"
-            f" csi-vol-{image_uuid} csi"
+            f" csi-vol-{image_uuid} {get_cephfs_subvolumegroup()}"
         )
 
     try:
@@ -3861,3 +3861,19 @@ def create_reclaim_space_job(
         job_data["spec"]["retryDeadlineSeconds"] = retry_deadline_seconds
     ocs_obj = create_resource(**job_data)
     return ocs_obj
+
+
+def get_cephfs_subvolumegroup():
+    """
+    Get the name of cephfilesystemsubvolumegroup
+
+    Returns:
+        str: The name of cephfilesystemsubvolumegroup
+
+    """
+    subvolume_group = ocp.OCP(
+        kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    subvolume_group_obj = subvolume_group.get().get("items")[0]
+    return subvolume_group_obj.get("metadata").get("name")

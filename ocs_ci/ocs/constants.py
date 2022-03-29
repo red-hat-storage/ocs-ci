@@ -141,6 +141,7 @@ BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
+CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
