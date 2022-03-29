@@ -112,7 +112,7 @@ def test_workload_with_checksum_verify(
     if capacity.endswith("Gi"):
         pvc_size = int(capacity[0:-2])
     elif capacity.endswith("Ti"):
-        pvc_size = int(capacity[0:-2]) * 2 ** 10
+        pvc_size = int(capacity[0:-2]) * 2**10
 
     # And we need to drop claimRef, so that the PV will become available again
     if "claimRef" in pv_dict["spec"]:

@@ -244,8 +244,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
-GB = 1024 ** 3
-GB2KB = 1024 ** 2
+GB = 1024**3
+GB2KB = 1024**2
 GB2MB = 1024
 
 # Reclaim Policy
@@ -803,7 +803,7 @@ WORKER_IGN = "worker.ign"
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
 # Minimum storage needed for vSphere Datastore in bytes
-MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -1350,7 +1350,7 @@ MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
-MIN_NODE_MEMORY = 64 * 10 ** 9
+MIN_NODE_MEMORY = 64 * 10**9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
