@@ -48,6 +48,7 @@ class OCP(object):
         resource_name="",
         selector=None,
         field_selector=None,
+        threading_lock=None,
     ):
         """
         Initializer function
@@ -61,6 +62,8 @@ class OCP(object):
                 priority than resource_name and is used instead of the name.
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            threading_lock (threading.Lock): threading.Lock object that is used
+                for handling concurrent oc commands
         """
         self._api_version = api_version
         self._kind = kind
@@ -69,6 +72,7 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
+        self.threading_lock = threading_lock
 
     @property
     def api_version(self):
@@ -146,6 +150,7 @@ class OCP(object):
             secrets=secrets,
             timeout=timeout,
             ignore_error=ignore_error,
+            threading_lock=self.threading_lock,
             **kwargs,
         )
 
@@ -411,7 +416,9 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
+        if f'Now using project "{project_name}"' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         return False
 
@@ -432,7 +439,9 @@ class OCP(object):
 
         """
         command = f"oc delete project {project_name}"
-        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+        if f' "{project_name}" deleted' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         raise CommandFailed(f"{project_name} was not deleted")
 
@@ -449,7 +458,9 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
-        status = exec_cmd(command, secrets=[password])
+        status = exec_cmd(
+            command, secrets=[password], threading_lock=self.threading_lock
+        )
         # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
@@ -476,7 +487,7 @@ class OCP(object):
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
-        status = run_cmd(command)
+        status = run_cmd(command, threading_lock=self.threading_lock)
         return status
 
     def get_user_token(self):
@@ -1103,7 +1114,7 @@ def switch_to_project(project_name):
         f'Now using project "{project_name}"',
         f'Already on project "{project_name}"',
     ]
-    ret = run_cmd(cmd)
+    ret = run_cmd(cmd, threading_lock=self.threading_lock)
     if any(msg in ret for msg in success_msgs):
         return True
     return False
