@@ -34,13 +34,12 @@ class OCPDeployWithACM(Deployment):
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.ui_driver = None
 
-    def do_deploy_ocp(self, log_cli_level='INFO'):
+    def do_deploy_ocp(self, log_cli_level="INFO"):
         """
         This function overrides the parent's function in order accomodate
         ACM based OCP cluster deployments
 
         """
-        logger.info("INSIDE CHILD")
         if self.multicluster_mode == constants.RDR_MODE:
             self.do_rdr_acm_ocp_deploy()
 
@@ -98,7 +97,7 @@ class OCPDeployWithACM(Deployment):
             logger.error(f"{[c.cluster_name for c in failed_list]}")
             raise ACMClusterDeployException("one or more Cluster Deployment failed ")
 
-    def deploy_cluster(self, log_cli_level='INFO'):
+    def deploy_cluster(self, log_cli_level="INFO"):
         """
         We deploy new OCP clusters using ACM
         Note: Importing cluster through ACM has been implemented as part

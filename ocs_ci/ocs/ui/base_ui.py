@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
 )
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -105,6 +106,10 @@ class BaseUI:
             self.take_screenshot()
             logger.error(e)
             raise TimeoutException
+
+    def do_click_and_send_keys(self, locator, text, timeout=30):
+        self.do_click(locator=locator, timeout=timeout)
+        self.do_send_keys(locator=locator, text=text, timeout=timeout)
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -322,21 +327,10 @@ class BaseUI:
             wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
             wait.until(ec.presence_of_element_located(locator))
             return True
-        except NoSuchElementException:
+        except (NoSuchElementException, TimeoutException):
             self.take_screenshot()
             logger.error("Expected element not found on UI")
             return False
-
-    def wait_for_visible_element(self, locator, timeout=20):
-        try:
-            ele = WebDriverWait(self.driver, timeout=timeout).until(ec.visibility_of_element_located(
-               locator))
-            logger.info("ELEMENT FOUND")
-            return True
-        except:
-            logger.warn("ELEMENT NOT FOUND")
-            return False
-            
 
 
 class PageNavigator(BaseUI):

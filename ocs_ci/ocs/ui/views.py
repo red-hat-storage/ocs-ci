@@ -455,8 +455,15 @@ acm_configuration = {
         By.XPATH,
     ),
     "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
-    "cc_create_cluster": ("createCluster", By.ID),
-    "cc_provider_vmware_vsphere": ("//*[@id='vmware-vsphere']", By.XPATH),
+    "cc_create_cluster": ("//button[@id='createCluster']", By.XPATH),
+    "cc_create_cluster_index_xpath": (
+        "(//button[normalize-space()='Create cluster'])[1]",
+        By.XPATH,
+    ),
+    "cc_provider_vmware_vsphere": (
+        "//div[contains(text(),'VMware vSphere')]",
+        By.XPATH,
+    ),
     "cc_cluster_name": ("//input[@id='eman']", By.XPATH),
     "cc_base_dns_domain": ("//input[@id='baseDomain']", By.XPATH),
     "cc_openshift_release_image": ("//input[@id='imageSet']", By.XPATH),
@@ -490,7 +497,7 @@ acm_configuration = {
     ),
     "cc_provider_creds_default_namespace": (
         "//button[normalize-space()='default']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
     "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
@@ -546,6 +553,11 @@ acm_configuration = {
     ),
     "cc_table_entry": ("//a[normalize-space()='{}']", By.XPATH),
     "cc_cluster_details_page": ("//div[text()='Details']", By.XPATH),
+    "cc_cluster_status_text": ("//span[text()='Status']", By.XPATH),
+    "cc_details_toggle_icon": (
+        "//span[@class='pf-c-card__header-toggle-icon']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
