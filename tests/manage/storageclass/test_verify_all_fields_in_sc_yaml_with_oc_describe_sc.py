@@ -5,7 +5,12 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    skipif_external_mode,
+    skipif_managed_service,
+)
 from tests.fixtures import (
     create_ceph_block_pool,
     create_rbd_secret,
@@ -18,6 +23,7 @@ SC_OBJ = None
 
 
 @skipif_external_mode
+@skipif_managed_service
 @tier1
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
