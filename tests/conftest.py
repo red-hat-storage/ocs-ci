@@ -279,6 +279,17 @@ def supported_configuration():
         pytest.xfail(err_msg)
 
 
+@pytest.fixture(scope="session")
+def threading_lock():
+    """
+    threading.Lock object that can be used in threads across multiple tests.
+
+    Returns:
+        threading.Lock: lock object
+    """
+    return threading.Lock()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def auto_load_auth_config():
     try:
@@ -3185,7 +3196,7 @@ def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
 
 
 @pytest.fixture(autouse=True)
-def log_alerts(request):
+def log_alerts(request, threading_lock):
     """
     Log alerts at the beginning and end of each test case. At the end of test
     case print a difference: what new alerts are in place after the test is
@@ -3204,7 +3215,7 @@ def log_alerts(request):
     prometheus = None
 
     try:
-        prometheus = PrometheusAPI()
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
     except Exception:
         log.exception("There was a problem with connecting to Prometheus")
 

@@ -48,8 +48,15 @@ class OCS(object):
         if "metadata" in self.data:
             self._namespace = self.data.get("metadata").get("namespace")
             self._name = self.data.get("metadata").get("name")
+        if "threading_lock" in self.data:
+            self.threading_lock = self.data.pop("threading_lock")
+        else:
+            self.threading_lock = None
         self.ocp = OCP(
-            api_version=self._api_version, kind=self.kind, namespace=self._namespace
+            api_version=self._api_version,
+            kind=self.kind,
+            namespace=self._namespace,
+            threading_lock=self.threading_lock,
         )
         with tempfile.NamedTemporaryFile(
             mode="w+", prefix=self._kind, delete=False

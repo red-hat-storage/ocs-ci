@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def measure_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir, threading_lock):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -37,7 +37,9 @@ def measure_stop_ceph_mgr(measurement_dir):
             Ceph Manager pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
     mgr = mgr_deployments[0]["metadata"]["name"]
@@ -94,7 +96,7 @@ def create_mon_quorum_loss(create_mon_quorum_loss=False):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
+def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_lock):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -104,7 +106,9 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
             Ceph Monitor pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
@@ -176,7 +180,7 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
 
 
 @pytest.fixture
-def measure_stop_ceph_osd(measurement_dir):
+def measure_stop_ceph_osd(measurement_dir, threading_lock):
     """
     Downscales Ceph osd deployment, measures the time when it was
     downscaled and alerts that were triggered during this event.
@@ -186,7 +190,9 @@ def measure_stop_ceph_osd(measurement_dir):
             Ceph osd pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get("cluster_namespace"),
+        threading_lock=threading_lock,
     )
     osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
     osds = [deployment.get("metadata").get("name") for deployment in osd_deployments]
@@ -736,7 +742,7 @@ def workload_idle(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_rgw(measurement_dir, request, rgw_deployments):
+def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
     """
     Downscales RGW deployments, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -747,7 +753,9 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
 
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
 
     def stop_rgw():

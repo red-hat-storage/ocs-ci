@@ -295,8 +295,9 @@ class PrometheusAPI(object):
     _password = None
     _endpoint = None
     _cacert = False
+    _threading_lock = None
 
-    def __init__(self, user=None, password=None):
+    def __init__(self, user=None, password=None, threading_lock=None):
         """
         Constructor for PrometheusAPI class.
 
@@ -315,6 +316,7 @@ class PrometheusAPI(object):
                 with open(filename) as f:
                     password = f.read().rstrip("\n")
             self._password = password
+        self._threading_lock = threading_lock
         self.refresh_connection()
         # TODO: generate certificate for IBM cloud platform
         if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
@@ -324,7 +326,11 @@ class PrometheusAPI(object):
         """
         Login into OCP, refresh endpoint and token.
         """
-        ocp = OCP(kind=constants.ROUTE, namespace=defaults.OCS_MONITORING_NAMESPACE)
+        ocp = OCP(
+            kind=constants.ROUTE,
+            namespace=defaults.OCS_MONITORING_NAMESPACE,
+            threading_lock=self.threading_lock,
+        )
         kubeconfig = os.getenv("KUBECONFIG")
         kube_data = ""
         with open(kubeconfig, "r") as kube_file:
