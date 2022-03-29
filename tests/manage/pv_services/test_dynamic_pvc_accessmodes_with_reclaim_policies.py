@@ -96,6 +96,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-533"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_managed_service,
                 ],
             ),
             pytest.param(
@@ -115,6 +116,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.bugzilla("1751866"),
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
+                    skipif_managed_service,
                 ],
             ),
         ],
@@ -226,7 +228,7 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=pytest.mark.polarion_id("OCS-529"),
+                marks=[pytest.mark.polarion_id("OCS-529"), skipif_managed_service],
             ),
         ],
     )

@@ -25,7 +25,8 @@ log = logging.getLogger(__name__)
     argnames=["reclaim_policy"],
     argvalues=[
         pytest.param(
-            constants.RECLAIM_POLICY_DELETE, marks=pytest.mark.polarion_id("OCS-751")
+            constants.RECLAIM_POLICY_DELETE,
+            marks=[pytest.mark.polarion_id("OCS-751"), skipif_managed_service],
         ),
         pytest.param(
             constants.RECLAIM_POLICY_RETAIN,

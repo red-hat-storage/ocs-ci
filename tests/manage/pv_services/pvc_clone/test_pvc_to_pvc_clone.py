@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_ocp_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @acceptance
+@skipif_managed_service
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @pytest.mark.parametrize(
