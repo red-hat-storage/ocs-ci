@@ -868,6 +868,10 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
+            if ocs_version >= version.VERSION_4_10:
+                cluster_data["spec"]["encryption"] = {
+                    "clusterWide": True,
+                }
             if config.DEPLOYMENT.get("kms_deployment"):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
