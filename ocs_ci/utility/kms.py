@@ -7,7 +7,6 @@ import logging
 import os
 
 import requests
-
 import json
 import shlex
 import tempfile
@@ -1272,7 +1271,7 @@ class HPCS(KMS):
 
         """
         # nothing to cleanup as of now
-        pass
+        logger.warning("Nothing to cleanup from HPCS")
 
     def post_deploy_verification(self):
         """
@@ -1287,11 +1286,8 @@ class HPCS(KMS):
         This function retrieves the access token in exchange of
         an IBM API key
 
-        Args:
-            api_key (string): IBM API key
-
         Return:
-            access token for authentication with IBM endpoints
+            (str): access token for authentication with IBM endpoints
         """
         # decode service api key
         api_key = base64.b64decode(self.ibm_kp_service_api_key).decode()
@@ -1312,11 +1308,8 @@ class HPCS(KMS):
         """
         This function lists the keys present in a HPCS instance
 
-        Args:
-            hpcs_instance_id (string): IBM HPCS instance ID
-
         Return:
-            list of keys in a HPCS instance
+            (list): list of keys in a HPCS instance
         """
         access_token = self.get_token_for_ibm_api_key()
         r = requests.get(
