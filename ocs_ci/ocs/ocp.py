@@ -1114,7 +1114,7 @@ def switch_to_project(project_name):
         f'Now using project "{project_name}"',
         f'Already on project "{project_name}"',
     ]
-    ret = run_cmd(cmd, threading_lock=self.threading_lock)
+    ret = run_cmd(cmd)
     if any(msg in ret for msg in success_msgs):
         return True
     return False
