@@ -1009,7 +1009,7 @@ class Vault(KMS):
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")
         cmd = (
-            fr"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
+            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
             f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
         token = base64.b64decode(run_cmd(cmd=cmd)).decode()
