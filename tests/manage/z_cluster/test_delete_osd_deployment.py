@@ -1,101 +1,68 @@
 import logging
 import pytest
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_osd_deployments
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-@tier2
+@tier4
 @pytest.mark.polarion_id("OCS-2481")
 @pytest.mark.bugzilla("1859033")
-class TestDeleteRookCephMonPod(ManageTest):
+class TestDeleteOSDDeployment(ManageTest):
     """
-    Tries to delete rook-ceph-operator pod.
-    This operation creates a new pod 'rook-ceph-detect-version'
-    Try to delete the 'rook-ceph-detect-version' pod while is created
-
-    Note, this test performs the operations 10 times to get better odds
-    since it's a race issue
+    This test case deletes the OSD deployment.
+    The expected result is that once the OSD deployment is deleted, a new OSD
+    deployment should be created in it's place.
     """
 
-    num_of_deletions = 0
-
-    def test_delete_rook_ceph_mon_pod(self):
-        for i in range(30):
-            self.rook_detect_pod_name = None
-            rook_operator_pod = pod.get_ocs_operator_pod(
-                ocs_label=constants.OPERATOR_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    def test_delete_rook_ceph_osd_deployment(self):
+        osd_deployments = get_osd_deployments()
+        deployment_obj = OCP(
+            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        pod_obj = OCP(
+            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        for osd_deployment in osd_deployments:
+            # Get rook-ceph-osd pod name associated with the deployment
+            old_osd_pod = get_pod_name_by_pattern(
+                pattern=osd_deployment, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )[0]
+            logger.info(f"Deleting OSD deployment: {osd_deployment}")
+            deployment_obj.delete(resource_name=osd_deployment)
+            deployment_obj.wait_for_resource(
+                condition="0/1", resource_name=osd_deployment, column="READY"
             )
-            assert rook_operator_pod, "No rook operator pod found"
-            log.info(f"Found rook-operator pod {rook_operator_pod.name}. Deleting it.")
+            deployment_obj.wait_for_resource(
+                condition="1/1", resource_name=osd_deployment, column="READY"
+            )
 
-            operator_deleted = rook_operator_pod.delete(wait=False)
-            assert operator_deleted, f"Failed to delete pod {rook_operator_pod.name}"
-            try:
-                for pod_list in TimeoutSampler(
-                    30,
-                    1,
-                    pod.get_pods_having_label,
-                    constants.ROOK_CEPH_DETECT_VERSION_LABEL,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                ):
-                    if len(pod_list) > 0:
-                        self.rook_detect_pod_name = (
-                            pod_list[0].get("metadata").get("name")
-                        )
-                        rook_detect_pod_list = pod.get_pod_objs(
-                            pod_names=[self.rook_detect_pod_name],
-                            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                        )
-                        if len(rook_detect_pod_list) > 0:
-                            log.info(
-                                f"Found rook-ceph-detect-version pod {self.rook_detect_pod_name}. Deleting it"
-                            )
-                            self.rook_detect_pod_obj = rook_detect_pod_list[0]
-                            rook_detect_deleted = False
-                            try:
-                                rook_detect_deleted = self.rook_detect_pod_obj.delete(
-                                    wait=True
-                                )
-                            except CommandFailed:
-                                log.warning(
-                                    f"{self.rook_detect_pod_name} pod not found"
-                                )
-                            else:
-                                log.info(f"Deletion status: {rook_detect_deleted}")
-                                assert (
-                                    rook_detect_deleted
-                                ), f"Failed to delete pod {self.rook_detect_pod_name}"
-                                self.rook_detect_pod_obj.ocp.wait_for_delete(
-                                    self.rook_detect_pod_name
-                                )
-                                self.num_of_deletions += 1
-            except TimeoutExpiredError:
-                log.warning("rook-ceph-detect-version pod not found")
+            # Check if a new OSD pod is created
+            new_osd_pod = get_pod_name_by_pattern(
+                pattern=osd_deployment, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )[0]
+            assert old_osd_pod != new_osd_pod, "New OSD pod not created"
 
-        # Make sure there's no detect-version pod leftover
-        try:
-            for pod_list in TimeoutSampler(
-                60,
-                1,
-                pod.get_pods_having_label,
-                constants.ROOK_CEPH_DETECT_VERSION_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            ):
-                if len(pod_list) == 0:
-                    break
-                else:
-                    log.info(
-                        f"Pod {pod_list[0].get('metadata').get('name')} found. waiting for it to be deleted"
-                    )
-        except TimeoutExpiredError:
-            assert True, "rook-ceph-detect-version pod still exists"
-        log.info(f"Num of deletions: {self.num_of_deletions}/30")
-        assert (
-            self.num_of_deletions > 0
-        ), "All (20) attempts to delete rook-ceph-detect-version pod failed."
+            # Check if new OSD pod is up and running
+            logger.info(
+                "Waiting for a new OSD pod to get created and reach Running state"
+            )
+            assert pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=new_osd_pod,
+                column="STATUS",
+            ), f"New OSD pod {new_osd_pod} is not in {constants.STATUS_RUNNING} state"
+
+            if config.ENV_DATA.get("encryption_at_rest"):
+                osd_encryption_verification()
+
+            assert ceph_health_check(
+                delay=120, tries=50
+            ), "New OSDs failed to reach running state"
