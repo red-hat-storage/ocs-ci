@@ -117,7 +117,6 @@ class LogReaderWriterParallel(object):
              number_of_fetches (int): Number of fetches. Default is 100
 
         """
-        number_of_fetches = 100
         is_local_data_ok = True
         local_dir = self.tmp_path / "logwriter"
         local_dir.mkdir()

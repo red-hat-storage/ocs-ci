@@ -1,5 +1,6 @@
 import logging
 import pytest
+import random
 
 from ocs_ci.framework.testlib import (
     tier4,
@@ -26,7 +27,6 @@ from ocs_ci.ocs.node import (
     get_node_osd_ids,
     wait_for_nodes_status,
     recover_node_to_ready_state,
-    label_nodes,
     get_ocs_nodes,
     get_osd_ids_per_node,
     get_node_rook_ceph_pod_names,
@@ -38,7 +38,7 @@ from ocs_ci.ocs.node import (
 log = logging.getLogger(__name__)
 
 
-def get_node_pod_names_expect_to_terminate(node_name):
+def get_node_pod_names_expected_to_terminate(node_name):
     """
     Get the node pod names expected to be in a Terminating state
 
@@ -57,7 +57,7 @@ def get_node_pod_names_expect_to_terminate(node_name):
     ]
 
 
-def get_all_pod_names_expect_to_terminate():
+def get_all_pod_names_expected_to_terminate():
     """
     Get the pod names of all the ocs nodes, that expected to be in a Terminating state
 
@@ -66,11 +66,13 @@ def get_all_pod_names_expect_to_terminate():
 
     """
     ocs_nodes = get_ocs_nodes()
-    pod_names_expect_to_terminate = []
+    pod_names_expected_to_terminate = []
     for n in ocs_nodes:
-        pod_names_expect_to_terminate.extend(get_node_pod_names_expect_to_terminate(n))
+        pod_names_expected_to_terminate.extend(
+            get_node_pod_names_expected_to_terminate(n)
+        )
 
-    return pod_names_expect_to_terminate
+    return pod_names_expected_to_terminate
 
 
 def check_automated_recovery_from_stopped_node(nodes):
@@ -81,13 +83,13 @@ def check_automated_recovery_from_stopped_node(nodes):
     4) The new osd pods with the same ids should start on the stopped node after it powered on.
 
     """
-    osd_node_name = get_osd_running_nodes()[0]
+    osd_node_name = random.choice(get_osd_running_nodes())
     osd_node = get_node_objs([osd_node_name])[0]
 
     old_osd_pod_ids = get_node_osd_ids(osd_node_name)
     log.info(f"osd pod ids: {old_osd_pod_ids}")
 
-    pod_names_expect_to_terminate = get_node_pod_names_expect_to_terminate(
+    pod_names_expected_to_terminate = get_node_pod_names_expected_to_terminate(
         osd_node_name
     )
 
@@ -96,10 +98,11 @@ def check_automated_recovery_from_stopped_node(nodes):
 
     log.info("Verify the node rook ceph pods go into a Terminating state")
     res = wait_for_pods_to_be_in_statuses(
-        [constants.STATUS_TERMINATING], pod_names_expect_to_terminate
+        [constants.STATUS_TERMINATING], pod_names_expected_to_terminate
     )
     assert res, "Not all the node rook ceph pods are in a Terminating state"
 
+    nodes.start_nodes([osd_node])  # Delete this line
     log.info(f"Wait for the node: {osd_node_name} to power on")
     wait_for_nodes_status([osd_node_name])
     log.info(f"Successfully powered on node {osd_node_name}")
@@ -110,7 +113,7 @@ def check_automated_recovery_from_stopped_node(nodes):
     )
 
 
-def check_automated_recovery_from_terminate_node(nodes):
+def check_automated_recovery_from_terminated_node(nodes):
     """
     1) Terminate node.
     2) The rook ceph pods associated with the node should change to a Terminating state.
@@ -121,7 +124,7 @@ def check_automated_recovery_from_terminate_node(nodes):
     old_wnodes = get_worker_nodes()
     log.info(f"start worker nodes: {old_wnodes}")
     old_osd_node_names = get_osd_running_nodes()
-    osd_node = get_node_objs(old_osd_node_names)[0]
+    osd_node = random.choice(get_node_objs(old_osd_node_names))
     log.info(f"osd node name: {osd_node.name}")
 
     machine_name = machine.get_machine_from_node_name(osd_node.name)
@@ -131,27 +134,26 @@ def check_automated_recovery_from_terminate_node(nodes):
     old_osd_pod_ids = get_node_osd_ids(osd_node.name)
     log.info(f"osd pod ids: {old_osd_pod_ids}")
 
-    pod_names_expect_to_terminate = get_node_pod_names_expect_to_terminate(
+    pod_names_expected_to_terminate = get_node_pod_names_expected_to_terminate(
         osd_node.name
     )
 
-    nodes.stop_nodes([osd_node], wait=True)
-    log.info(f"Successfully powered off node: {osd_node.name}")
+    nodes.terminate_nodes([osd_node], wait=True)
+    log.info(f"Successfully terminated the node: {osd_node.name}")
 
     log.info("Verify the node rook ceph pods go into a Terminating state")
     res = wait_for_pods_to_be_in_statuses(
-        [constants.STATUS_TERMINATING], pod_names_expect_to_terminate
+        [constants.STATUS_TERMINATING], pod_names_expected_to_terminate
     )
     assert res, "Not all the node rook ceph pods are in a Terminating state"
 
-    machine.wait_for_new_node_to_be_ready(machineset, timeout=360)
+    machine.wait_for_new_node_to_be_ready(machineset, timeout=900)
     new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
     new_wnode = get_node_objs(new_wnode_names)[0]
     log.info(f"Successfully created a new node {new_wnode.name}")
 
     wait_for_nodes_status([new_wnode.name])
     log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
-    label_nodes([new_wnode])
 
     wait_for_osd_ids_come_up_on_node(new_wnode.name, old_osd_pod_ids, timeout=300)
     log.info(
@@ -173,13 +175,13 @@ def check_automated_recovery_from_full_cluster_shutdown(nodes):
     wnode_names = get_worker_nodes()
     wnodes = get_node_objs(wnode_names)
 
-    pod_names_expect_to_terminate = get_all_pod_names_expect_to_terminate()
+    pod_names_expected_to_terminate = get_all_pod_names_expected_to_terminate()
 
     nodes.stop_nodes(wnodes)
     log.info(f"Successfully stopped the worker nodes: {wnode_names}")
 
     res = wait_for_pods_to_be_in_statuses(
-        [constants.STATUS_TERMINATING], pod_names_expect_to_terminate
+        [constants.STATUS_TERMINATING], pod_names_expected_to_terminate
     )
     assert res, "Not all the rook ceph pods are in a Terminating state"
 
@@ -192,7 +194,7 @@ def check_automated_recovery_from_full_cluster_shutdown(nodes):
 
 FAILURE_TYPE_FUNC_CALL_DICT = {
     "stopped_node": check_automated_recovery_from_stopped_node,
-    "terminate_node": check_automated_recovery_from_terminate_node,
+    "terminate_node": check_automated_recovery_from_terminated_node,
     "full_cluster_shutdown": check_automated_recovery_from_full_cluster_shutdown,
 }
 
@@ -270,7 +272,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
 
         config.switch_to_consumer()
         log.info("Fetch and validate data on consumer")
-        log_read_write.fetch_and_validate_data()
+        log_read_write.fetch_and_validate_data(number_of_fetches=30)
 
         # Creating Resources
         log.info("Creating Resources using sanity helpers")

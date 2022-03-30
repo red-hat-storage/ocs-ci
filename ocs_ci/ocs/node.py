@@ -2076,7 +2076,13 @@ def check_node_ip_equal_to_associated_pods_ips(node_obj):
             False, otherwise.
 
     """
-    rook_ceph_pods = pod.get_pod_objs(pod.get_rook_ceph_pod_names())
+    rook_ceph_pod_names = pod.get_rook_ceph_pod_names()
+    rook_ceph_pod_names = [
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-operator")
+    ]
+    rook_ceph_pods = pod.get_pod_objs(rook_ceph_pod_names)
     node_rook_ceph_pods = get_node_pods(node_obj.name, rook_ceph_pods)
     node_ip = get_node_internal_ip(node_obj)
     return all([pod.get_pod_ip(p) == node_ip for p in node_rook_ceph_pods])
@@ -2084,7 +2090,8 @@ def check_node_ip_equal_to_associated_pods_ips(node_obj):
 
 def verify_worker_nodes_security_groups():
     """
-    Check the worker nodes security groups set correctly
+    Check the worker nodes security groups set correctly.
+    The function checks that the pods ip are equal to their associated nodes.
 
     Returns:
         bool: True, if the worker nodes security groups set correctly. False otherwise
