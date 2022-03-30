@@ -1,9 +1,7 @@
 import base64
 import json
 import logging
-import requests
 import tempfile
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
