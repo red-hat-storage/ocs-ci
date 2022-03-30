@@ -686,7 +686,7 @@ def create_multiple_pvcs(
                 volume_mode=volume_mode,
             )
             for _ in range(number_of_pvc)
-        ]
+        ], None
 
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["namespace"] = namespace

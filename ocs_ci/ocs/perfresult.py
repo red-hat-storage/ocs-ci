@@ -123,7 +123,7 @@ class PerfResult:
                 )
                 return True
             except Exception as e:
-                if retry > 0:
+                if retry > 1:
                     log.warning("Failed to write data to ES, retrying in 3 sec...")
                     retry -= 1
                     time.sleep(3)
