@@ -7,7 +7,6 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.resources.catalog_source import disable_specific_source
 from ocs_ci.utility.utils import exec_cmd
 
 
@@ -46,18 +45,13 @@ def get_dms_secret_name():
     )
 
 
-def disable_odf_operator_and_update_pull_secret():
+def update_pull_secret():
     """
     For unreleased odf operator version -  Disable odf operator
-      1. Disable odf operator
-      2. Update pull secret
-      3. Create a catalogSource using the ocs-registry image
 
     Note: This is a hack done to allow odf to odf deployment before full addon is available.
     """
     oc = ocp.OCP(kind=constants.SECRET, namespace="openshift-config")
-    logger.info("Disable odf operator")
-    disable_specific_source("redhat-operators")
     logger.info("Update pull secret")
     pull_secret = oc.exec_oc_cmd("get -n openshift-config secret/pull-secret -o yaml")
     secret_data = pull_secret["data"][".dockerconfigjson"]
@@ -72,20 +66,3 @@ def disable_odf_operator_and_update_pull_secret():
         exec_cmd(
             f"oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson={secret_file.name}"
         )
-    logger.info("Create a catalogSource using the ocs-registry image")
-    olm_data = requests.get(
-        "http://perf1.perf.lab.eng.bos.redhat.com/shberry/odfodf/files/olm.yaml"
-    )
-    olm_data = list(yaml.safe_load_all(olm_data.text))
-    image = (
-        config.DEPLOYMENT.get("ocs_registry_image")
-        or config.DEPLOYMENT["default_ocs_registry_image"]
-    )
-    with tempfile.NamedTemporaryFile() as olm_file:
-        for olm_yaml in olm_data:
-            olm_file.write(str.encode("---\n"))
-            if olm_yaml.get("spec").get("image"):
-                olm_yaml["spec"]["image"] = image
-            olm_file.write(str.encode(yaml.dump(olm_yaml)))
-        olm_file.flush()
-        exec_cmd(f"oc create -f {olm_file.name}")
