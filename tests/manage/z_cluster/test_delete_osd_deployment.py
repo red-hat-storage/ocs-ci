@@ -1,25 +1,28 @@
 import logging
 import pytest
+from ocs_ci.framework.testlib import ManageTest, tier4, ignore_leftovers
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_osd_deployments
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.framework.testlib import ManageTest, tier4
-from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
 
 @tier4
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-2481")
-@pytest.mark.bugzilla("1859033")
+@pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
     """
     This test case deletes the OSD deployment.
     The expected result is that once the OSD deployment is deleted, a new OSD
     deployment should be created in it's place.
+
     """
 
     def test_delete_rook_ceph_osd_deployment(self):
@@ -32,21 +35,31 @@ class TestDeleteOSDDeployment(ManageTest):
         )
         for osd_deployment in osd_deployments:
             # Get rook-ceph-osd pod name associated with the deployment
+            osd_deployment_name = osd_deployment.name
             old_osd_pod = get_pod_name_by_pattern(
-                pattern=osd_deployment, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                pattern=osd_deployment_name,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )[0]
-            logger.info(f"Deleting OSD deployment: {osd_deployment}")
-            deployment_obj.delete(resource_name=osd_deployment)
+
+            logger.info(f"Deleting OSD deployment: {osd_deployment_name}")
+            try:
+                deployment_obj.delete(resource_name=osd_deployment_name)
+                deployment_obj.wait_for_resource(
+                    condition="0/1", resource_name=osd_deployment_name, column="READY"
+                )
+            except CommandFailed as err:
+                if "NotFound" not in str(err):
+                    raise
+
+            # Wait for new OSD deployment to be Ready
             deployment_obj.wait_for_resource(
-                condition="0/1", resource_name=osd_deployment, column="READY"
-            )
-            deployment_obj.wait_for_resource(
-                condition="1/1", resource_name=osd_deployment, column="READY"
+                condition="1/1", resource_name=osd_deployment_name, column="READY"
             )
 
             # Check if a new OSD pod is created
             new_osd_pod = get_pod_name_by_pattern(
-                pattern=osd_deployment, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                pattern=osd_deployment_name,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )[0]
             assert old_osd_pod != new_osd_pod, "New OSD pod not created"
 
@@ -60,9 +73,8 @@ class TestDeleteOSDDeployment(ManageTest):
                 column="STATUS",
             ), f"New OSD pod {new_osd_pod} is not in {constants.STATUS_RUNNING} state"
 
-            if config.ENV_DATA.get("encryption_at_rest"):
-                osd_encryption_verification()
+        # If clusterwide encryption is enabled, verify that the new OSDs are encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
 
-            assert ceph_health_check(
-                delay=120, tries=50
-            ), "New OSDs failed to reach running state"
+        assert ceph_health_check(delay=120, tries=50), "Ceph health check failed"
