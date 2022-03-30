@@ -110,6 +110,10 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
+        config.ENV_DATA[
+            "ocp_version_object"
+        ] = version.get_semantic_ocp_version_from_config()
+        config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
 
