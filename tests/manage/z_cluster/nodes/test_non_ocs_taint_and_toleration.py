@@ -118,7 +118,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
 
         ocsini_obj = ocp.OCP(
-            resource_name="constants.OCSINIT",
+            resource_name=constants.OCSINIT,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.OCSINITIALIZATION,
         )
