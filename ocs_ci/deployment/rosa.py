@@ -206,55 +206,40 @@ class ROSA(CloudDeploymentBase):
                     "FromPort": 6800,
                     "ToPort": 7300,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph OSDs",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
                     ],
                 },
                 {
                     "FromPort": 3300,
                     "ToPort": 3300,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph MONs rule1",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
                     ],
                 },
                 {
                     "FromPort": 6789,
                     "ToPort": 6789,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph MONs rule2",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
                     ],
                 },
                 {
                     "FromPort": 9283,
                     "ToPort": 9283,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph Manager",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
                     ],
                 },
                 {
                     "FromPort": 31659,
                     "ToPort": 31659,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "API Server",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
                     ],
                 },
             ],
