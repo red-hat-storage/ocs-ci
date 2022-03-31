@@ -613,11 +613,8 @@ class Cosbench(object):
             header = next(reader)
             if header is not None:
                 for row in reader:
-                    op_type = row[1]
-                    throughput = row[13]
-                    bandwidth = row[14]
-                    throughput_data[op_type] = throughput
-                    bandwidth_data[op_type] = bandwidth
+                    throughput_data[row[1]] = row[13]
+                    bandwidth_data[row[1]] = row[14]
             else:
                 raise UnexpectedBehaviour(
                     f"Workload csv is incorrect/malformed. Dumping csv {reader}"

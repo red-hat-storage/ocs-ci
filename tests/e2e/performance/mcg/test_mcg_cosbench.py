@@ -1,7 +1,8 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.framework.testlib import performance
+from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.cosbench import Cosbench
 
 log = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ def cosbench(request):
 
 @performance
 @pytest.mark.polarion_id("OCS-3694")
-class TestMCGCosbench(E2ETest):
+class TestMCGCosbench(PASTest):
     """
     Test cosbench workloads for MCG
     """
@@ -36,7 +37,7 @@ class TestMCGCosbench(E2ETest):
 
         bucket_prefix = "bucket-"
         buckets = 1
-        objects = 100
+        objects = 10000
         timeout = 3600
         run_samples = 3
 
