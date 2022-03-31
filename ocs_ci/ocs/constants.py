@@ -509,6 +509,10 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
 )
 
+BREW_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "brewImageContentSourcePolicy.yaml"
+)
+
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
 SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")

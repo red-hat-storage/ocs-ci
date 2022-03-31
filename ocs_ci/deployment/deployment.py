@@ -1285,6 +1285,15 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
         run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
+    if ( 'brew' in image or 'registry-proxy' in image ):
+        run_cmd(
+            "oc patch image.config.openshift.io/cluster --type merge -p '"
+            '{"spec": {"registrySources": {"insecureRegistries": '
+            '["brew.registry.redhat.io"]'
+            "}}}'"
+        )
+        run_cmd(f"oc apply -f {constants.BREW_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
+        wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
