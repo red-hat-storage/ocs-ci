@@ -1,6 +1,11 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import ManageTest, tier4, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier4,
+    ignore_leftovers,
+    skipif_ocs_version,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_osd_deployments
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -15,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @ignore_leftovers
-@pytest.mark.polarion_id("OCS-2481")
+@skipif_ocs_version("<4.10")
+@pytest.mark.polarion_id("OCS-3731")
 @pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
     """
