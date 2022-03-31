@@ -4659,8 +4659,6 @@ def patch_consumer_toolbox_with_secret():
 
         # Patch the rook-ceph-tools deployment of all consumer clusters
         for cluster in config.clusters:
-            from pdb import set_trace
-
             if cluster.ENV_DATA.get("cluster_type") == "consumer":
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 consumer_tools_deployment = OCP(
