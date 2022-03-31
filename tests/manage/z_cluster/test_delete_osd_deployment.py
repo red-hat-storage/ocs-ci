@@ -2,8 +2,7 @@ import logging
 import pytest
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier4,
-    ignore_leftovers,
+    tier4c,
     skipif_ocs_version,
 )
 from ocs_ci.framework import config
@@ -18,16 +17,15 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
-@tier4
-@ignore_leftovers
+@tier4c
 @skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-3731")
 @pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
     """
-    This test case deletes the OSD deployment.
+    This test case deletes all the OSD deployments one after the other.
     The expected result is that once the OSD deployment is deleted, a new OSD
-    deployment should be created in it's place.
+    deployment and pod should be created in its place.
 
     """
 
