@@ -2049,8 +2049,10 @@ def check_pods_after_node_replacement():
         logger.info(
             f"waiting another {timeout} seconds for all the pods to be running..."
         )
+
+        expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
         wait_for_pods_to_be_in_statuses(
-            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+            expected_statuses=expected_statuses,
             timeout=timeout,
             sleep=30,
         )

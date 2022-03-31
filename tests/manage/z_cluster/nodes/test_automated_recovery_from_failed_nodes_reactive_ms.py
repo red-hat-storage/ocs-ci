@@ -123,8 +123,10 @@ def check_automated_recovery_from_terminated_node(nodes):
     """
     old_wnodes = get_worker_nodes()
     log.info(f"start worker nodes: {old_wnodes}")
+
     old_osd_node_names = get_osd_running_nodes()
-    osd_node = random.choice(get_node_objs(old_osd_node_names))
+    old_osd_nodes = get_node_objs(old_osd_node_names)
+    osd_node = random.choice(old_osd_nodes)
     log.info(f"osd node name: {osd_node.name}")
 
     machine_name = machine.get_machine_from_node_name(osd_node.name)
