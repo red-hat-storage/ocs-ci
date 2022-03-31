@@ -673,23 +673,23 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             external_cluster.update_permission_caps(EXTERNAL_CLUSTER_USER)
             external_cluster.get_external_cluster_details()
 
-            # update the external cluster details in secrets
-            log.info("updating external cluster secret")
-            external_cluster_details = NamedTemporaryFile(
-                mode="w+",
-                prefix="external-cluster-details-",
-                delete=False,
+        # update the external cluster details in secrets
+        log.info("updating external cluster secret")
+        external_cluster_details = NamedTemporaryFile(
+            mode="w+",
+            prefix="external-cluster-details-",
+            delete=False,
+        )
+        with open(external_cluster_details.name, "w") as fd:
+            decoded_external_cluster_details = decode(
+                config.EXTERNAL_MODE["external_cluster_details"]
             )
-            with open(external_cluster_details.name, "w") as fd:
-                decoded_external_cluster_details = decode(
-                    config.EXTERNAL_MODE["external_cluster_details"]
-                )
-                fd.write(decoded_external_cluster_details)
-            cmd = (
-                f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
-                f"--from-file=external_cluster_details={external_cluster_details.name}"
-            )
-            exec_cmd(cmd)
+            fd.write(decoded_external_cluster_details)
+        cmd = (
+            f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"--from-file=external_cluster_details={external_cluster_details.name}"
+        )
+        exec_cmd(cmd)
 
     ocs_install_verification(
         timeout=600,
