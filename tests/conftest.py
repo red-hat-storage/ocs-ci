@@ -4711,10 +4711,11 @@ def patch_consumer_toolbox_with_secret():
             )
 
             # Wait for the new tools pod to reach Running state
-            new_tools_pod = get_pods_having_label(
+            new_tools_pod_info = get_pods_having_label(
                 label=constants.TOOL_APP_LABEL,
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             )[0]
+            new_tools_pod = Pod(**new_tools_pod_info)
             helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
 
     log.info("Switching back to the initial cluster context")
