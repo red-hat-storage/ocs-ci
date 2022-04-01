@@ -108,7 +108,7 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
     """
     config.switch_to_provider()
 
-    def _get_provider_endpoint:
+    def _get_provider_endpoint():
         oc = ocp.OCP(namespace="openshift-config")
         oc.exec_oc_cmd(
             "get storagecluster -n openshift-storage -o=jsonpath="

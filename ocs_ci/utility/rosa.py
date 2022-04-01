@@ -15,7 +15,6 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
 )
-from ocs_ci.ocs.managedservice import get_provider_endpoint
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
