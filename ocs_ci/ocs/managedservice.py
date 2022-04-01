@@ -89,3 +89,17 @@ def disable_odf_operator_and_update_pull_secret():
             olm_file.write(str.encode(yaml.dump(olm_yaml)))
         olm_file.flush()
         exec_cmd(f"oc create -f {olm_file.name}")
+
+
+def get_provider_endpoint():
+    """
+    Switch context to provider cluster, get storageProviderEndpoint and switch
+    context back.
+
+    Returns:
+        str or None: storageProviderEndpoint value
+    """
+    config.switch_to_provider()
+    oc = ocp.OCP(kind=constants.SECRET, namespace="openshift-config")
+    oc.exec_oc_cmd("get storagecluster -o yaml | grep -i storageProviderEndpoint")
+    config.reset_ctx()

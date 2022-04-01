@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
 )
+from ocs_ci.ocs.managedservice import get_provider_endpoint
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 from ocs_ci.utility.aws import AWS as AWSUtil
@@ -205,6 +206,10 @@ def install_odf_addon(cluster):
     addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     cluster_type = config.ENV_DATA.get("cluster_type", "")
+    if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
+        sampler = utils.TimeoutSampler(timeout=timeout, sleep=3, func=get_provider_endpoint)
+        sampler.wait_for_func_status(result=True)
+
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
