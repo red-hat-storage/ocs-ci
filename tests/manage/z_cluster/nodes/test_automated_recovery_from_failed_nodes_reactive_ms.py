@@ -102,7 +102,10 @@ def check_automated_recovery_from_stopped_node(nodes):
     )
     assert res, "Not all the node rook ceph pods are in a Terminating state"
 
-    nodes.start_nodes([osd_node])  # Delete this line
+    # This is a workaround until we find what should be the behavior
+    # when shutting down a worker node
+    nodes.start_nodes([osd_node])
+
     log.info(f"Wait for the node: {osd_node_name} to power on")
     wait_for_nodes_status([osd_node_name])
     log.info(f"Successfully powered on node {osd_node_name}")

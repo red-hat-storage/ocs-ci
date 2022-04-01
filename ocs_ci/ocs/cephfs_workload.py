@@ -14,7 +14,7 @@ from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import job
 from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import exec_cmd
 
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ class LogReaderWriterParallel(object):
                 local_dir,
             ]
             try:
-                run_cmd(cmd=oc_cmd, timeout=300)
+                exec_cmd(cmd=oc_cmd, timeout=300)
             except Exception as ex:
                 # in case this fails, we are going to fetch extra evidence, that
                 # said such failure is most likely related to OCP or infrastructure
@@ -165,7 +165,7 @@ class LogReaderWriterParallel(object):
                         ]
                     ),
                 ]
-                run_cmd(cmd=oc_rpm_debug, timeout=600)
+                exec_cmd(cmd=oc_rpm_debug, timeout=600)
                 raise exceptions.UnexpectedBehaviour(error_msg) from ex
             # look for null bytes in the just fetched local files in target dir,
             # and if these binary bytes are found, the test failed (the bug

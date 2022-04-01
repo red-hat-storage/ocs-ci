@@ -217,6 +217,9 @@ class MultiClusterConfig:
         Returns:
             int: the provider cluster index
 
+        Raises:
+            ClusterNotFoundException: In case it didn't find the provider cluster
+
         """
         for i, cluster in enumerate(self.clusters):
             if cluster.ENV_DATA["cluster_type"] == "provider":
@@ -231,6 +234,9 @@ class MultiClusterConfig:
         Returns:
             list: the consumer cluster indexes
 
+        Raises:
+            ClusterNotFoundException: In case it didn't find any consumer cluster
+
         """
         consumer_indexes_list = []
         for i, cluster in enumerate(self.clusters):
@@ -238,7 +244,7 @@ class MultiClusterConfig:
                 consumer_indexes_list.append(i)
 
         if not consumer_indexes_list:
-            raise ClusterNotFoundException("Didn't find the consumer cluster")
+            raise ClusterNotFoundException("Didn't find any consumer cluster")
 
         return consumer_indexes_list
 
@@ -248,6 +254,9 @@ class MultiClusterConfig:
 
         Returns:
             int: The cluster index by the cluster name
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
 
         """
         for i, cluster in enumerate(self.clusters):
@@ -260,6 +269,9 @@ class MultiClusterConfig:
         """
         Switch to the provider cluster
 
+        Raises:
+            ClusterNotFoundException: In case it didn't find the provider cluster
+
         """
         self.switch_ctx(self.get_provider_index())
 
@@ -271,6 +283,8 @@ class MultiClusterConfig:
              num_of_consumer (int): The cluster index to switch to. The default consumer number
                 is 0 - which means it will switch to the first consumer.
                 1 - is the second, 2 - is the third, and so on.
+        Raises:
+            ClusterNotFoundException: In case it didn't find the consumer cluster
 
         """
         self.switch_ctx(self.get_consumer_indexes_list()[num_of_consumer])
@@ -281,6 +295,9 @@ class MultiClusterConfig:
 
         Args:
             cluster_name (str): The cluster name to switch to
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
 
         """
         self.switch_ctx(self.get_cluster_index_by_name(cluster_name))
