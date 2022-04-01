@@ -17,8 +17,13 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.managedservice import remove_header_footer_from_key
+from ocs_ci.utility.managedservice import (
+    remove_header_footer_from_key,
+    generate_onboarding_token,
+    get_storage_provider_endpoint,
+)
 
 
 logger = logging.getLogger(name=__file__)
@@ -205,6 +210,7 @@ def install_odf_addon(cluster):
     addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     cluster_type = config.ENV_DATA.get("cluster_type", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
@@ -215,6 +221,7 @@ def install_odf_addon(cluster):
         cmd = cmd + f" --notification-email-1 {notification_email_1}"
     if notification_email_2:
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
+
     if cluster_type.lower() == "provider":
         public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
         if not public_key:
@@ -227,6 +234,16 @@ def install_odf_addon(cluster):
             )
         public_key_only = remove_header_footer_from_key(public_key)
         cmd += f' --onboarding-validation-key "{public_key_only}"'
+
+    if cluster_type.lower() == "consumer" and provider_name:
+        onboarding_ticket = generate_onboarding_token()
+        if onboarding_ticket:
+            cmd += f' --onboarding-ticket "{onboarding_ticket}"'
+        else:
+            raise ValueError(" Invalid onboarding ticket configuration")
+
+        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
+        cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
 
     utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
