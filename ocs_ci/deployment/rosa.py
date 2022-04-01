@@ -57,7 +57,7 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version)
+        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
