@@ -4755,4 +4755,3 @@ def switch_to_provider_for_test(request):
             config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
 
     request.addfinalizer(finalizer)
->>>>>>> 8c7a19dd (Run tests on provider)
