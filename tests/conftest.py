@@ -65,6 +65,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     get_deployments_having_label,
     Pod,
+    get_ceph_tools_pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -4618,3 +4619,70 @@ def vault_tenant_sa_setup_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_consumer_toolbox_with_secret():
+    """
+    Patch the rook-ceph-tools deployment with ceph.admin key. Applicable for MS platform only to enable rook-ceph-tools
+    to run ceph commands until we have the fix for rook-ceph-tools in consumer cluster
+
+    """
+    # Get the secret from provider if MS multicluster run
+    if not (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and not config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    restore_ctx_index = config.cur_index
+
+    # Get the admin key if available
+    ceph_admin_key = os.environ.get("CEPHADMINKEY") or config.AUTH.get(
+        "external", {}
+    ).get("ceph_admin_key")
+
+    if not ceph_admin_key:
+        provider_cluster = ""
+
+        # Identify the provider cluster
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "provider":
+                provider_cluster = cluster
+                break
+        assert provider_cluster, "Provider cluster not found"
+
+        # Switch context to provider cluster
+        log.info("Switching to the provider cluster context")
+        config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+
+        # Get the key from provider cluster tools pod
+        provider_tools_pod = get_ceph_tools_pod()
+        ceph_admin_key = (
+            provider_tools_pod.exec_cmd_on_pod("grep key /etc/ceph/keyring")
+            .strip()
+            .split()[-1]
+        )
+
+    # Patch the rook-ceph-tools deployment of all consumer clusters
+    for cluster in config.clusters:
+        if cluster.ENV_DATA.get("cluster_type") == "consumer":
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            consumer_tools_deployment = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name="rook-ceph-tools",
+            )
+            patch_value = (
+                f'[{{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
+                f'"value":[{{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}}, '
+                f'{{"name": "ROOK_CEPH_SECRET", "value": "{ceph_admin_key}"}}]}}]'
+            )
+            assert consumer_tools_deployment.patch(
+                params=patch_value, format_type="json"
+            ), "Failed to patch rook-ceph-tools deployment in consumer cluster"
+
+    log.info("Switching back to the initial cluster context")
+    config.switch_ctx(restore_ctx_index)
