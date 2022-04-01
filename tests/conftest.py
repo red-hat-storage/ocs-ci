@@ -4637,7 +4637,7 @@ def patch_consumer_toolbox_with_secret():
     ):
         return
 
-    current_cluster = config.cluster_ctx
+    restore_ctx_index = config.cur_index
 
     # Get the admin key if available
     ceph_admin_key = os.environ.get("CEPHADMINKEY") or config.AUTH.get(
@@ -4685,4 +4685,4 @@ def patch_consumer_toolbox_with_secret():
             ), "Failed to patch rook-ceph-tools deployment in consumer cluster"
 
     log.info("Switching back to the initial cluster context")
-    config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+    config.switch_ctx(restore_ctx_index)
