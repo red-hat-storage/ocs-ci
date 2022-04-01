@@ -29,6 +29,7 @@ class ROSAOCP(BaseOCPDeployment):
     def __init__(self):
         super(ROSAOCP, self).__init__()
         self.ocp_version = get_ocp_version()
+        self.region = config.ENV_DATA["region"]
 
     def deploy_prereq(self):
         """
