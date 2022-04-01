@@ -4636,26 +4636,32 @@ def patch_consumer_toolbox_with_secret():
         and config.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
     ):
-        provider_cluster = ""
+        # Get the admin key if available
+        ceph_admin_key = os.environ.get("CEPHADMINKEY") or config.AUTH.get(
+            "external", {}
+        ).get("ceph_admin_key")
 
-        # Identify the provider cluster
-        for cluster in config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
-                provider_cluster = cluster
-                break
-        assert provider_cluster, "Provider cluster not found"
+        if not ceph_admin_key:
+            provider_cluster = ""
 
-        # Switch context to provider cluster
-        log.info("Switching to the provider cluster context")
-        config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+            # Identify the provider cluster
+            for cluster in config.clusters:
+                if cluster.ENV_DATA.get("cluster_type") == "provider":
+                    provider_cluster = cluster
+                    break
+            assert provider_cluster, "Provider cluster not found"
 
-        # Get the key from provider cluster tools pod
-        provider_tools_pod = get_ceph_tools_pod()
-        key = (
-            provider_tools_pod.exec_cmd_on_pod("grep key /etc/ceph/keyring")
-            .strip()
-            .split()[-1]
-        )
+            # Switch context to provider cluster
+            log.info("Switching to the provider cluster context")
+            config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+
+            # Get the key from provider cluster tools pod
+            provider_tools_pod = get_ceph_tools_pod()
+            ceph_admin_key = (
+                provider_tools_pod.exec_cmd_on_pod("grep key /etc/ceph/keyring")
+                .strip()
+                .split()[-1]
+            )
 
         # Patch the rook-ceph-tools deployment of all consumer clusters
         for cluster in config.clusters:
@@ -4669,7 +4675,7 @@ def patch_consumer_toolbox_with_secret():
                 patch_value = (
                     f'[{{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
                     f'"value":[{{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}}, '
-                    f'{{"name": "ROOK_CEPH_SECRET", "value": "{key}"}}]}}]'
+                    f'{{"name": "ROOK_CEPH_SECRET", "value": "{ceph_admin_key}"}}]}}]'
                 )
                 assert consumer_tools_deployment.patch(
                     params=patch_value, format_type="json"
