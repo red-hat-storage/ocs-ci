@@ -2295,7 +2295,11 @@ def check_pods_in_statuses(
 
     """
     if pod_names:
-        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+        list_of_pods = get_pod_objs(
+            pod_names=pod_names,
+            raise_pod_not_found_error=raise_pod_not_found_error,
+            namespace=namespace,
+        )
     else:
         list_of_pods = get_all_pods(namespace)
 
