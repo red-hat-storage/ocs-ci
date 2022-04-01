@@ -5,9 +5,9 @@ import stat
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-from ocs_ci.utility.utils import download_file, exec_cmd
+from ocs_ci.utility.utils import download_file, exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -92,29 +92,36 @@ def remove_header_footer_from_key(key):
     return "".join(key_lines)
 
 
-def get_storage_provider_endpoint(cluster):
+def get_storage_provider_endpoint(wait=False, timeout=1080):
     """
-    Get get_storage_provider_endpoint
+    Get storage provider endpoint from storage cluster.
 
     Args:
-        cluster (str): cluster name
+        wait (bool): If true then wait for the value to be available for
+            number of seconds defined in timeout parameter. If false then
+            trye to return value only once.
+        timeout (int): Number of seconds to wait for the value
 
     Returns:
         str: value of storage provider endpoint
 
     """
+    config.switch_to_provider()
 
-    # TODO: p2 task to implement below functionality
-    #  Use multicluster implementation to use
-    #  kubeconfig as per cluster name and
-    #  extract value of storage_provider_endpoint
-    #  handle invalid cluster name in implementation
-    #  validate Return String storage provider endpoint:
-    #     1. raise Error if storage_provider_endpoint is
-    #        not found in cluster yaml
-    #     2. warning if storage cluster is not ready
-    #     and storage_provider_endpoint is available in
-    #     storagecluster yaml .
-    #  For now use hardcoded value from config with key
-    #  storage_provider_endpoint:
-    return config.DEPLOYMENT.get("storage_provider_endpoint", "")
+    def _get_provider_endpoint:
+        oc = ocp.OCP(namespace="openshift-config")
+        oc.exec_oc_cmd(
+            "get storagecluster -n openshift-storage -o=jsonpath="
+            "'{.items[0].status.storageProviderEndpoint}'"
+        )
+
+    if wait:
+        for result in TimeoutSampler(timeout=timeout, sleep=5, func=_get_provider_endpoint):
+            if result:
+                provider_endpoint = result
+                break
+    else:
+        provider_endpoint = _get_provider_endpoint()
+
+    config.reset_ctx()
+    return provider_endpoint

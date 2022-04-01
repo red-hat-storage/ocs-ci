@@ -211,10 +211,7 @@ def install_odf_addon(cluster):
     addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     cluster_type = config.ENV_DATA.get("cluster_type", "")
-    if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
-        sampler = utils.TimeoutSampler(timeout=timeout, sleep=3, func=get_provider_endpoint)
-        sampler.wait_for_func_status(result=True)
-        provider_name = config.ENV_DATA.get("provider_name", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
@@ -246,7 +243,7 @@ def install_odf_addon(cluster):
         else:
             raise ValueError(" Invalid onboarding ticket configuration")
 
-        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
+        storage_provider_endpoint = get_storage_provider_endpoint(wait=True)
         cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
 
     utils.run_cmd(cmd, timeout=1200)
