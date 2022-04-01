@@ -4680,6 +4680,17 @@ def patch_consumer_toolbox_with_secret():
     for cluster in config.clusters:
         if cluster.ENV_DATA.get("cluster_type") == "consumer":
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            consumer_tools_pod = get_ceph_tools_pod()
+
+            # Check whether ceph command is working on tools pod.
+            # Patch is needed only if the error is "RADOS permission error"
+            try:
+                consumer_tools_pod.exec_ceph_cmd("ceph health")
+                continue
+            except Exception as exc:
+                if "RADOS permission error" not in str(exc):
+                    raise
+
             consumer_tools_deployment = OCP(
                 kind=constants.DEPLOYMENT,
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -4693,6 +4704,19 @@ def patch_consumer_toolbox_with_secret():
             assert consumer_tools_deployment.patch(
                 params=patch_value, format_type="json"
             ), "Failed to patch rook-ceph-tools deployment in consumer cluster"
+
+            # Wait for the existing tools pod to delete
+            consumer_tools_pod.ocp.wait_for_delete(
+                resource_name=consumer_tools_pod.name
+            )
+
+            # Wait for the new tools pod to reach Running state
+            new_tools_pod_info = get_pods_having_label(
+                label=constants.TOOL_APP_LABEL,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            )[0]
+            new_tools_pod = Pod(**new_tools_pod_info)
+            helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
 
     log.info("Switching back to the initial cluster context")
     config.switch_ctx(restore_ctx_index)
