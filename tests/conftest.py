@@ -397,6 +397,12 @@ def pagerduty_service(request):
             "is not used"
         )
         return None
+    if config.ENV_DATA.get("disable_pagerduty"):
+        log.info(
+            "PagerDuty service is not created because it was disabled "
+            "with configuration"
+        )
+        return None
 
     pagerduty_api = pagerduty.PagerDutyAPI()
     payload = pagerduty_api.get_service_dict()
@@ -428,8 +434,12 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
-        # this is used only for managed service platforms
+    if config.ENV_DATA[
+        "platform"
+    ].lower() not in constants.MANAGED_SERVICE_PLATFORMS or config.ENV_DATA.get(
+        "disable_pagerduty"
+    ):
+        # this is used only for managed service platforms with configured PagerDuty
         return
 
     service_id = pagerduty_service["id"]
