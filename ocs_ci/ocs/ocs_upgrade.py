@@ -671,7 +671,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             external_cluster.update_permission_caps()
         else:
             external_cluster.update_permission_caps(EXTERNAL_CLUSTER_USER)
-            external_cluster.get_external_cluster_details()
+        external_cluster.get_external_cluster_details()
 
         # update the external cluster details in secrets
         log.info("updating external cluster secret")
