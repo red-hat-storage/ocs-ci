@@ -137,7 +137,9 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
             ):
                 log.info(f"Encrypted device found in {pod_obj.name}")
             else:
-                log.error(f"Encrypted device not found in {pod_obj.name}")
+                raise ResourceNotFoundError(
+                    f"Encrypted device not found in {pod_obj.name}"
+                )
 
             pod_obj.run_io(
                 storage_type="block",
