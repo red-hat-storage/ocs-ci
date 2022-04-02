@@ -42,7 +42,6 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -225,7 +224,7 @@ class BaseUI:
             page_hash_new = get_page_hash()
             if retry_counter == retries:
                 raise PageNotLoaded(
-                    f"Current URL did not finish loading in {retries*sleep_time}"
+                    f"Current URL did not finish loading in {retries * sleep_time}"
                 )
         logger.info(f"page loaded: {self.driver.current_url}")
 
@@ -393,10 +392,16 @@ class PageNavigator(BaseUI):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_10:
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+            logger.info("Successfully navigated to Data foundation tab under Storage section")
+        else:
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+            logger.info("Successfully navigated to OpenShift Data foundation tab under Storage section")
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_10:
+            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
-        logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
         """
@@ -771,7 +776,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 

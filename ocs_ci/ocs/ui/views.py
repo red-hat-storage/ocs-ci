@@ -473,6 +473,7 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
+    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
     "drop_down_projects": (
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
@@ -847,10 +848,16 @@ validation_4_9 = {
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']", By.CSS_SELECTOR
+    ),
     "overview": (
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
+    "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
+    "1_storage_system_generic": ("a[href='/odf/system/ocs.openshift.io~v1~StorageCluster/ocs-storagecluster-storagesystem']", By.CSS_SELECTOR),
+    "1_storage_system_external": ("a[href='/odf/system/ocs.openshift.io~v1~StorageCluster/ocs-external-storagecluster-storagesystem']", By.CSS_SELECTOR),
     "blockandfile": (
         "a[data-test-id='horizontal-link-Block and File']",
         By.CSS_SELECTOR,

@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.views import locators, generic_locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,14 @@ class PvcUI(PageNavigator):
 
         logger.info("Select Storage Class")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
-        self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
+        if not config.DEPLOYMENT["external_mode"]:
+            self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
+        elif sc_name == "ocs-storagecluster-cephfs":
+            sc_name = "ocs-external-storagecluster-cephfs"
+            self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
+        else:
+            sc_name = "ocs-external-storagecluster-ceph-rbd"
+            self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
 
         logger.info("Select PVC name")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
