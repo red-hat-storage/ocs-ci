@@ -20,6 +20,10 @@ class TestPostInstallationState(ManageTest):
     """
     Post-installation tests for ROSA and OSD clusters
     """
+    
+    @managed_service_required
+    def test_post_installation(self):
+        storage_cluster.ocs_install_verification()
 
     @acceptance
     @managed_service_required
