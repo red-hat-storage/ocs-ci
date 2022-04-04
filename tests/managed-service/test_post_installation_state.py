@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.testlib import (
     managed_service_required,
     ManageTest,
@@ -17,6 +17,10 @@ class TestPostInstallationState(ManageTest):
     """
     Post-installation tests for ROSA and OSD clusters
     """
+    
+    @managed_service_required
+    def test_post_installation(self):
+        storage_cluster.ocs_install_verification()
 
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
