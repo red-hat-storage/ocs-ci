@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: logreader-cephfs
+  labels:
+    app: logreader-cephfs
+spec:
+  completions: 6
+  parallelism: 6
+  completionMode: Indexed
+  template:
+    metadata:
+      labels:
+        app: logreader-cephfs
+    spec:
+      restartPolicy: Never
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: logreader-cephfs
+          maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+        - labelSelector:
+             matchLabels:
+               app: logreader-cephfs
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      containers:
+      - name: logreader
+        image: quay.io/mbukatov/logwriter:ocs-ci
+        command:
+        - /bin/bash
+        - "-c"
+        - "/opt/logreader.py -r 1 *.log"
+        workingDir: /mnt/target
+        volumeMounts:
+        - mountPath: /mnt/target
+          name: logwriter-cephfs-volume
+      volumes:
+      - name: logwriter-cephfs-volume
+        persistentVolumeClaim:
+          claimName: logwriter-cephfs-many

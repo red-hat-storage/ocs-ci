@@ -5,68 +5,19 @@ import urllib.request
 import time
 import statistics
 import os
-from uuid import uuid4
 
 from ocs_ci.framework.testlib import performance
-from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.perfresult import PerfResult
+from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
 
-
-class ResultsAnalyse(PerfResult):
-    """
-    This class generates results for all tests as one unit
-    and saves them to an elastic search server on the cluster
-
-    """
-
-    def __init__(self, uuid, crd, full_log_path):
-        """
-        Initialize the object by reading some of the data from the CRD file and
-        by connecting to the ES server and read all results from it.
-
-        Args:
-            uuid (str): the unique uid of the test
-            crd (dict): dictionary with test parameters - the test yaml file
-                        that modify it in the test itself.
-            full_log_path (str): the path of the results files to be found
-
-        """
-        super(ResultsAnalyse, self).__init__(uuid, crd)
-        self.new_index = "pod_reattach_time_fullres"
-        self.full_log_path = full_log_path
-        # make sure we have connection to the elastic search server
-        self.es_connect()
+logger = logging.getLogger(__name__)
 
 
-@performance
-@pytest.mark.parametrize(
-    argnames=["interface", "copies", "timeout", "total_time_limit"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 3, 120, 70],
-            marks=pytest.mark.polarion_id("OCS-2043"),
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 13, 600, 420],
-            marks=pytest.mark.polarion_id("OCS-2673"),
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 3, 120, 70],
-            marks=pytest.mark.polarion_id("OCS-2044"),
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 13, 600, 420],
-            marks=pytest.mark.polarion_id("OCS-2674"),
-        ),
-    ],
-)
-@pytest.mark.polarion_id("OCS-2208")
 @performance
 class TestPodReattachTimePerformance(PASTest):
     """
@@ -78,28 +29,9 @@ class TestPodReattachTimePerformance(PASTest):
         """
         Setting up test parameters
         """
-        logging.info("Starting the test setup")
+        logger.info("Starting the test setup")
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
 
     def init_full_results(self, full_results):
         """
@@ -136,6 +68,27 @@ class TestPodReattachTimePerformance(PASTest):
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{self.sc}"
 
+    @pytest.mark.parametrize(
+        argnames=["interface", "copies", "timeout", "total_time_limit"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, 3, 120, 70],
+                marks=pytest.mark.polarion_id("OCS-2043"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, 13, 600, 420],
+                marks=pytest.mark.polarion_id("OCS-2673"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, 3, 120, 70],
+                marks=pytest.mark.polarion_id("OCS-2044"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, 13, 600, 420],
+                marks=pytest.mark.polarion_id("OCS-2674"),
+            ),
+        ],
+    )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
         self, pvc_factory, teardown_factory, copies, timeout, total_time_limit
@@ -150,6 +103,9 @@ class TestPodReattachTimePerformance(PASTest):
         download_path = "tmp"
 
         samples_num = 10
+        if self.dev_mode:
+            samples_num = 2
+
         test_start_time = PASTest.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
@@ -180,11 +136,11 @@ class TestPodReattachTimePerformance(PASTest):
                     size="100",
                 )
             except Exception as e:
-                logging.error(f"The PVC sample was not created, exception {str(e)}")
+                logger.error(f"The PVC sample was not created, exception {str(e)}")
                 raise PVCNotCreated("PVC did not reach BOUND state.")
 
             # Create a pod on one node
-            logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
+            logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
             try:
                 pod_obj1 = helpers.create_pod(
@@ -195,13 +151,13 @@ class TestPodReattachTimePerformance(PASTest):
                     pod_dict_path=constants.PERF_POD_YAML,
                 )
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
                 )
                 raise PodNotCreated("Pod on PVC was not created.")
 
             # Confirm that pod is running on the selected_nodes
-            logging.info("Checking whether pods are running on the selected nodes")
+            logger.info("Checking whether pods are running on the selected nodes")
             helpers.wait_for_resource_state(
                 resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=timeout
             )
@@ -229,25 +185,25 @@ class TestPodReattachTimePerformance(PASTest):
                 rsh_cmd = f"exec {pod_name} -- sync"
                 _ocp.exec_oc_cmd(rsh_cmd)
 
-            logging.info("Getting the amount of data written to the PVC")
+            logger.info("Getting the amount of data written to the PVC")
             rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
             data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            logging.info(f"The amount of written data is {data_written_str}")
+            logger.info(f"The amount of written data is {data_written_str}")
             data_written = float(data_written_str[:-1])
 
             rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
             files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
-            logging.info(
+            logger.info(
                 f"For {self.interface} - The number of files written to the pod is {files_written}"
             )
             files_written_list.append(files_written)
             data_written_list.append(data_written)
 
-            logging.info("Deleting the pod")
+            logger.info("Deleting the pod")
             rsh_cmd = f"delete pod {pod_name}"
             _ocp.exec_oc_cmd(rsh_cmd)
 
-            logging.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_two}")
+            logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_two}")
 
             try:
                 pod_obj2 = helpers.create_pod(
@@ -258,7 +214,7 @@ class TestPodReattachTimePerformance(PASTest):
                     pod_dict_path=constants.PERF_POD_YAML,
                 )
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
                 )
                 raise PodNotCreated("Pod on PVC was not created.")
@@ -272,13 +228,13 @@ class TestPodReattachTimePerformance(PASTest):
             end_time = time.time()
             total_time = end_time - start_time
             if total_time > total_time_limit:
-                logging.error(
+                logger.error(
                     f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
                 )
                 raise ex.PerformanceException(
                     f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
                 )
-            logging.info(
+            logger.info(
                 f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds"
             )
             time_measures.append(total_time)
@@ -286,12 +242,12 @@ class TestPodReattachTimePerformance(PASTest):
             teardown_factory(pod_obj2)
 
         average = statistics.mean(time_measures)
-        logging.info(
+        logger.info(
             f"The average time of {self.interface} pod creation on {samples_num} PVCs is {average} seconds"
         )
 
         st_deviation = statistics.stdev(time_measures)
-        logging.info(
+        logger.info(
             f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
         )
 
@@ -308,7 +264,12 @@ class TestPodReattachTimePerformance(PASTest):
 
         # Initialize the results doc file.
         full_results = self.init_full_results(
-            ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            ResultsAnalyse(
+                self.uuid,
+                self.crd_data,
+                self.full_log_path,
+                "pod_reattach_time_fullres",
+            )
         )
 
         full_results.add_key("storageclass", self.sc)
@@ -327,6 +288,29 @@ class TestPodReattachTimePerformance(PASTest):
         )
 
         # Write the test results into the ES server
-        full_results.es_write()
-        # write the ES link to the test results in the test log.
-        logging.info(f"The result can be found at : {full_results.results_link()}")
+        if full_results.es_write():
+            res_link = full_results.results_link()
+            logger.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.results_path = get_full_test_logs_path(
+                cname=self, fname="test_pod_reattach_time_performance"
+            )
+            self.write_result_to_file(res_link)
+
+    def test_pod_reattach_time_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        self.number_of_tests = 4
+        self.results_path = get_full_test_logs_path(
+            cname=self, fname="test_pod_reattach_time_performance"
+        )
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+        logger.info(f"Check results in {self.results_file}")
+
+        self.check_tests_results()
+
+        self.push_to_dashboard(test_name="POD Reattach")

@@ -40,7 +40,7 @@ def ui_deployment_conditions():
         logger.error(e)
         return False
 
-    if platform not in (
+    if platform.lower() not in (
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
@@ -53,17 +53,10 @@ def ui_deployment_conditions():
             f" is different from the OCP version [{ocp_version}]"
         )
         return False
-    elif (
-        is_external
-        or is_disconnected
-        or is_proxy
-        or is_kms
-        or is_arbiter
-        or is_infra_nodes
-    ):
+    elif is_external or is_disconnected or is_proxy or is_kms or is_arbiter:
         logger.info(
             "OCS deployment via UI is not supported on "
-            "external/disconnected/proxy/kms/arbiter/infra-nodes cluster"
+            "external/disconnected/proxy/kms/arbiter cluster"
         )
         return False
     elif platform == constants.AWS_PLATFORM and is_lso is True:
@@ -74,6 +67,9 @@ def ui_deployment_conditions():
         return False
     elif ocp_version == "4.6" and is_lso is True:
         logger.info("OCS deployment via UI is not supported on LSO-OCP4.6")
+        return False
+    elif is_infra_nodes and ocp_version != "4.10":
+        logger.info("Infra node checkbox exist only on OCP4.10")
         return False
     else:
         return True
@@ -125,7 +121,7 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
-    elif ocp_version not in ("4.7", "4.8", "4.9"):
+    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10"):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )
@@ -169,7 +165,7 @@ def ui_add_capacity(osd_size_capacity_requested):
     new_storage_devices_sets_count = int(
         device_sets_required + old_storage_devices_sets_count
     )
-    logging.info("Add capacity via UI")
+    logger.info("Add capacity via UI")
     setup_ui = login_ui()
     add_ui_obj = AddReplaceDeviceUI(setup_ui)
     add_ui_obj.add_capacity_ui()

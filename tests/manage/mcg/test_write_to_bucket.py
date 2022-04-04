@@ -21,7 +21,7 @@ from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod,
     craft_s3_command,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def pod_io(pods):
             p.submit(pod.run_io, "fs", "1G")
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 class TestBucketIO(MCGTest):
     """
     Test IO of a bucket

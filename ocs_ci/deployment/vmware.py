@@ -29,6 +29,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -49,6 +50,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
     wait_for_co,
+    get_infra_id,
     get_ocp_version,
     get_openshift_installer,
     get_terraform,
@@ -108,6 +110,10 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
+        config.ENV_DATA[
+            "ocp_version_object"
+        ] = version.get_semantic_ocp_version_from_config()
+        config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
 
@@ -304,7 +310,8 @@ class VSPHEREBASE(Deployment):
             )
 
         # destroy the folder in templates
-        self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+        template_folder = get_infra_id(self.cluster_path)
+        self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
 
         # remove .terraform directory ( this is only to reclaim space )
         terraform_plugins_dir = os.path.join(
@@ -723,6 +730,22 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{each_file}.json",
                     f"{each_file}.json.backup",
                 )
+
+        # change the keep_on_remove state to false
+        terraform_tfstate = os.path.join(terraform_data_dir, "terraform.tfstate")
+        str_to_modify = '"keep_on_remove": true,'
+        target_str = '"keep_on_remove": false,'
+        logger.debug(f"changing state from {str_to_modify} to {target_str}")
+        replace_content_in_file(terraform_tfstate, str_to_modify, target_str)
+
+        # remove csi users in case of external deployment
+        if config.DEPLOYMENT["external_mode"]:
+            logger.debug("deleting csi users")
+            toolbox = pod.get_ceph_tools_pod()
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))

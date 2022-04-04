@@ -5,7 +5,7 @@ import tempfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
@@ -21,18 +21,22 @@ def set_pagerduty_integration_secret(integration_key):
         integration_key (str): Integration key taken from PagerDuty Prometheus integration
 
     """
-    logger.info("Setting up PagerSuty integration")
+    logger.info("Setting up PagerDuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
     cmd = (
-        f"oc create secret generic {constants.MANAGED_PAGERDUTY_SECRET} "
+        f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
         f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
         f"--kubeconfig {kubeconfig} --dry-run -o yaml"
     )
     secret_data = exec_cmd(
-        cmd, secrets=[integration_key, constants.MANAGED_PAGERDUTY_SECRET]
+        cmd,
+        secrets=[
+            integration_key,
+            managedservice.get_pagerduty_secret_name(),
+        ],
     ).stdout
     with tempfile.NamedTemporaryFile(
-        prefix=f"{constants.MANAGED_PAGERDUTY_SECRET}_"
+        prefix=f"{managedservice.get_pagerduty_secret_name()}_"
     ) as secret_file:
         secret_file.write(secret_data)
         secret_file.flush()
@@ -240,11 +244,13 @@ class PagerDutyAPI(object):
 
         """
         cluster_name = config.ENV_DATA["cluster_name"]
+        # timestamp is added to service name to ensure unique name of service
+        timestamp = time.time()
         default_policy = self.get_default_escalation_policy_id()
         return {
             "service": {
                 "type": "service",
-                "name": cluster_name,
+                "name": f"{cluster_name}_{int(timestamp)}",
                 "description": f"Service for cluster {cluster_name}",
                 "status": "active",
                 "escalation_policy": {
@@ -311,7 +317,7 @@ class PagerDutyAPI(object):
             timeout -= sleep
         return incidents
 
-    def check_incident_cleared(self, summary, measure_end_time, time_min=120):
+    def check_incident_cleared(self, summary, measure_end_time, time_min=240):
         """
         Check that all incidents with provided summary are cleared.
 

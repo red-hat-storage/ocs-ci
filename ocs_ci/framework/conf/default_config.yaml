@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.9.0-0.nightly'
+  client_version: '4.10.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -42,18 +42,18 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.9.0-0.nightly"
+  installer_version: "4.10.0-0.nightly"
   force_download_installer: True
   force_download_client: True
   skip_download_client: False
-  default_latest_tag: 'latest-stable-4.9'
+  default_latest_tag: 'latest-stable-4.10'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.9"
+  ocs_csv_channel: "stable-4.10"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.9"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.10"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -100,6 +100,7 @@ DEPLOYMENT:
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -110,9 +111,11 @@ REPORTING:
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
-  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  overwrite_must_gather_image: true
   ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
-  default_ocs_must_gather_latest_tag: 'latest-4.9'
+  odf_live_must_gather_image: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
+  default_ocs_must_gather_latest_tag: 'latest-4.10'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
@@ -136,7 +139,7 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.9'
+  ocs_version: '4.10'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
@@ -186,14 +189,32 @@ ENV_DATA:
   enable_console_plugin: true
   # MCG only deployment
   mcg_only_deployment: false
+  # RHEL VERSIONS:
+  # Once we will change this version to something which will not be supported on different
+  # OCP version, we need to make sure to put rhel_version to the all ocp related version config files
+  rhel_version: "8.4"
+  # This RHEL version will be used for running ansible playbook for adding RHEL nodes
+  rhel_version_for_ansible: 7
+  rhel7.9_worker_ami: 'ami-058a93d58c5797698'
+  rhel8.4_worker_ami: 'ami-074bab065c112399f'
+  cluster_type: ""
+
+  # RHEL template which are used for vSphere platform
+  rhel7_template: 'rhel79_ocs4qe'
+  rhel8_template: 'rhel85_ocs4qe'
+  # ACM HUB deployment
+  deploy_acm_hub_cluster: false
+
+  #Managed service - Managed StorageCluster size in TiB
+  size: '4'
 
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.9"
+  ocp_channel: "stable-4.10"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.9"
+  upgrade_logging_channel: "4.10"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
@@ -236,7 +257,7 @@ PERF:
   # There is a Lab ES for development testing - combine with --dev-mode argument
   dev_lab_es: true
   # The Dev. Lab ES information:  IP / Port
-  dev_es_server: "10.0.144.152"
+  dev_es_server: "10.0.144.103"
   dev_es_port: 9200
   dashboard_cred: "data/perfdash"
 
@@ -247,3 +268,10 @@ COMPONENTS:
   disable_noobaa: False
   disable_cephfs: False
   disable_blockpools: False
+
+# All Multicluster stuff here
+MULTICLUSTER:
+  # Index of this cluster Config in a list of cluster Configs
+  multicluster_index: 0
+  acm_cluster: False
+  primary_cluster: False

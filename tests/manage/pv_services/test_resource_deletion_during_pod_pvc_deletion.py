@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4c, ignore_leftover_label
+from ocs_ci.framework.testlib import ManageTest, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -214,8 +214,10 @@ class DisruptionBase(ManageTest):
         log.info("Ceph cluster health is OK")
 
 
-@tier4
-@tier4c
+@pytest.mark.skip(
+    reason="This test is disabled because this scenario is covered in the "
+    "test test_resource_deletion_during_pvc_pod_deletion_and_io.py"
+)
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],

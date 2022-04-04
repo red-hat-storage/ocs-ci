@@ -1,19 +1,20 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import get_failure_domin
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import (
-    get_nodes_where_ocs_pods_running,
     get_node_rack_or_zone,
     get_node_rack_or_zone_dict,
     get_node_names,
-    get_crashcollector_nodes,
     get_node_objs,
+)
+from ocs_ci.helpers.helpers import (
+    verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running,
 )
 from ocs_ci.framework.testlib import (
     tier2,
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @bugzilla("1898808")
 @skipif_external_mode
-@skipif_openshift_dedicated
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
     """
@@ -91,7 +92,7 @@ class TestAddNodeCrashCollector(ManageTest):
             timeout=timeout,
             sleep=10,
             func=self.is_node_rack_or_zone_exist,
-            node_obj=new_node,
+            node_obj=get_node_objs([new_node_name])[0],
             failure_domain=failure_domain,
         )
         assert sample.wait_for_func_status(
@@ -113,7 +114,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         drain_nodes([drain_node])
 
-        logging.info("Wait for 3 mon pods to be on running state")
+        logger.info("Wait for 3 mon pods to be on running state")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         assert pod.wait_for_resource(
             condition="Running",
@@ -121,21 +122,11 @@ class TestAddNodeCrashCollector(ManageTest):
             resource_count=3,
             timeout=1400,
         )
-        logger.info(
-            "Verify rook-ceph-crashcollector pod running on worker node"
-            " where rook-ceph pods are running."
-        )
-        assert sorted(get_crashcollector_nodes()) == sorted(
-            get_nodes_where_ocs_pods_running()
-        ), (
-            f"The crashcollector pod exists on "
-            f"{get_crashcollector_nodes() - get_nodes_where_ocs_pods_running()} "
-            f"even though rook-ceph pods are not running on this node"
-        )
+        assert verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
 
         schedule_nodes([drain_node])
 
-        logging.info("Wait for 3 osd pods to be on running state")
+        logger.info("Wait for 3 osd pods to be on running state")
         assert pod.wait_for_resource(
             condition="Running",
             selector=constants.OSD_APP_LABEL,
@@ -143,13 +134,4 @@ class TestAddNodeCrashCollector(ManageTest):
             timeout=600,
         )
 
-        logger.info(
-            "Verify rook-ceph-crashcollector pod running on worker node where rook-ceph pods are running."
-        )
-        assert sorted(get_crashcollector_nodes()) == sorted(
-            get_nodes_where_ocs_pods_running()
-        ), (
-            f"The crashcollector pod exists on "
-            f"{get_crashcollector_nodes() - get_nodes_where_ocs_pods_running()} "
-            f"even though rook-ceph pods are not running on this node"
-        )
+        assert verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()

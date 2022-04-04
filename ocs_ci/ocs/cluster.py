@@ -61,8 +61,9 @@ class CephCluster(object):
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
+        if config.ENV_DATA["mcg_only_deployment"]:
+            return
         # cluster_name is name of cluster in rook of type CephCluster
-
         self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         self.CEPHCLUSTER = ocp.OCP(
             kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -70,6 +71,10 @@ class CephCluster(object):
         self.CEPHFS = ocp.OCP(
             kind="CephFilesystem", namespace=config.ENV_DATA["cluster_namespace"]
         )
+        self.RBD = ocp.OCP(
+            kind="CephBlockPool", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+
         self.DEP = ocp.OCP(
             kind="Deployment", namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -78,9 +83,16 @@ class CephCluster(object):
         try:
             self.cephfs_config = self.CEPHFS.get().get("items")[0]
         except IndexError as e:
-            logging.warning(e)
-            logging.warning("No CephFS found")
+            logger.warning(e)
+            logger.warning("No CephFS found")
             self.cephfs_config = None
+
+        try:
+            self.rbd_config = self.RBD.get().get("items")[0]
+        except IndexError as e:
+            logger.warning(e)
+            logger.warning("No RBD found")
+            self.rbd_config = None
 
         self._cluster_name = self.cluster_resource_config.get("metadata").get("name")
         self._namespace = self.cluster_resource_config.get("metadata").get("namespace")
@@ -93,6 +105,11 @@ class CephCluster(object):
             self.cephfs = ocs.OCS(**self.cephfs_config)
         else:
             self.cephfs = None
+
+        if self.rbd_config:
+            self.block = ocs.OCS(**self.rbd_config)
+        else:
+            self.block = None
 
         self.mon_selector = constant.MON_APP_LABEL
         self.mds_selector = constant.MDS_APP_LABEL
@@ -117,8 +134,8 @@ class CephCluster(object):
         self.rgw_count = 0
         self._mcg_obj = None
         self.scan_cluster()
-        logging.info(f"Number of mons = {self.mon_count}")
-        logging.info(f"Number of mds = {self.mds_count}")
+        logger.info(f"Number of mons = {self.mon_count}")
+        logger.info(f"Number of mds = {self.mds_count}")
 
         self.used_space = 0
 
@@ -170,8 +187,8 @@ class CephCluster(object):
                 self.cephfs = ocs.OCS(**self.cephfs_config)
                 self.cephfs.reload()
             except IndexError as e:
-                logging.warning(e)
-                logging.warning("No CephFS found")
+                logger.warning(e)
+                logger.warning("No CephFS found")
 
         self.mon_count = len(self.mons)
         self.mds_count = len(self.mdss)
@@ -197,7 +214,7 @@ class CephCluster(object):
         port = container[0]["ports"][0]["containerPort"]
         # Dynamically added attribute 'port'
         pod.port = port
-        logging.info(f"port={pod.port}")
+        logger.info(f"port={pod.port}")
         return pod
 
     def is_health_ok(self):
@@ -429,7 +446,7 @@ class CephCluster(object):
         # As of now ceph auth command gives output to stderr
         # To be handled
         out = self.toolbox.exec_cmd_on_pod(cmd)
-        logging.info(type(out))
+        logger.info(type(out))
         return self.get_user_key(username)
 
     def get_mons_from_cluster(self):
@@ -462,7 +479,7 @@ class CephCluster(object):
             resource_count=after_delete_mon_count,
             selector="app=rook-ceph-mon",
         )
-        logging.info(f"Removed the mon {random_mon} from the cluster")
+        logger.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
 
     @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
@@ -602,7 +619,7 @@ class CephCluster(object):
         iops_in_cluster = self.get_ceph_cluster_iops()
         osd_iops_limit = iops_per_osd * osd_count
         iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
-        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        logger.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
         return iops_percentage
 
     def get_cluster_throughput(self):
@@ -644,7 +661,7 @@ class CephCluster(object):
         throughput_percentage = (
             throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD
         ) * 100
-        logging.info(
+        logger.info(
             f"The throughput percentage of the cluster is {throughput_percentage}%"
         )
         return throughput_percentage
@@ -701,7 +718,7 @@ class CephCluster(object):
                 timeout=timeout, sleep=10, func=self.get_rebalance_status
             ):
                 if rebalance:
-                    logging.info("Re-balance is completed")
+                    logger.info("Re-balance is completed")
                     return True
         except exceptions.TimeoutExpiredError:
             logger.error(
@@ -729,6 +746,151 @@ class CephCluster(object):
         )
         time_taken = time.time() - start_time
         return time_taken / 60
+
+    def set_pgs(self, poolname, pgs):
+        """
+        Setting up the PG / PGP / PG_MIN number of a pool
+        if the pg_num_min is not setting to the pg_num number, the autoscale will
+        set automaticlly the pg_num to 32 (incase you try to set pg_num > 32)
+
+        Args:
+            poolname (str): the pool name that need to be modify
+            pgs (int): new number of PG's
+
+        """
+        for key in ["pg_num", "pgp_num", "pg_num_min"]:
+            cmd = f"ceph osd pool set {poolname} {key} {pgs}"
+            try:
+                logger.debug(f"Try to set {key} to {pgs}")
+                _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+            except Exception as ex:
+                logger.error(f"Failed to setup {key} : {ex}")
+
+    def set_target_ratio(self, poolname, ratio):
+        """
+        Setting the target_size_ratio of a ceph pool
+
+        Args:
+            poolname (str): the pool name
+            ratio (float): the new ratio to set
+
+        """
+        cmd = f"ceph osd pool set {poolname} target_size_ratio {ratio}"
+        try:
+            logger.debug(f"Try to set target_size_ratio on {poolname} to : {ratio}")
+            _ = self.toolbox.exec_ceph_cmd(ceph_cmd=cmd, format=None)
+        except Exception as ex:
+            logger.error(f"Failed to change the ratio : {ex}")
+
+    def get_cephfilesystem_status(self, fsname=None):
+        """
+        Getting the ceph filesystem status
+
+        Args:
+            fsname (str): The filesystem name
+
+        Returnes:
+            bool : true if the filesystem status is `Ready`, false otherwise
+        """
+        res = self.CEPHFS.get(resource_name=fsname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_filesystem(self, fs_name):
+        """
+        Creating new filesystem to use in the tests insted of the default one.
+        the new filesystem is identical (parameters wise) to the default filesystem
+
+        Args:
+            fs_name (str):  The name of the filesystem to create
+
+        """
+        # Creating the new filesystem using the default parameters
+        self.cephfs.data["metadata"]["name"] = fs_name
+        self.cephfs.apply(**self.cephfs.data)
+
+        # Verify that the filesystem was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_cephfilesystem_status, fsname=fs_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new filesystem"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
+    def delete_filesystem(self, fs_name):
+        """
+        Delete a ceph filesystem - not the default one - from the cluster
+
+        Args:
+            fs_name (str): the name of the filesystem to delete
+        """
+        # Make sure the the default filesystem is not deleted.
+        if fs_name == "ocs-storagecluster-cephfilesystem":
+            return
+
+        # Delete the filesystem
+        self.CEPHFS.delete(resource_name=fs_name)
+        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+
+    def get_blockpool_status(self, poolname=None):
+        """
+        Getting the RBD pool status
+
+        Args:
+            fsname (str): The RBD pool name
+
+        Returnes:
+            bool : true if the RBD pool status is `Ready`, false otherwise
+        """
+
+        res = self.RBD.get(resource_name=poolname)
+        return res.get("status").get("phase") == constants.STATUS_READY
+
+    def create_new_blockpool(self, pool_name):
+        """
+        Creating new RBD pool to use in the tests insted of the default one.
+        the new RBD pool is identical (parameters wise) to the default RBD pool
+
+        Args:
+            pool_name (str):  The name of the RBD pool to create
+
+        """
+        # Creating the new RBD pool using the default parameters
+        self.block.data["metadata"]["name"] = pool_name
+        self.block.apply(**self.block.data)
+
+        # Verify that the RBD pool was created and the cluster if healthy
+        sample = TimeoutSampler(
+            timeout=120, sleep=3, func=self.get_blockpool_status, poolname=pool_name
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_msg = "Can not create new Block Pool"
+            logger.error(err_msg)
+            raise exceptions.CephHealthException(err_msg)
+
+    def delete_blockpool(self, pool_name):
+        """
+        Delete a ceph RBD pool - not the default one - from the cluster
+
+        Args:
+            pool_name (str): the name of the RBD pool to delete
+        """
+        # Make sure the the default RBD pool is not deleted.
+        if pool_name == "ocs-storagecluster-cephblockpool":
+            return
+
+        # Delete the RBD pool
+        try:
+            self.RBD.delete(resource_name=pool_name)
+        except Exception:
+            logger.warning(f"BlockPoool {pool_name} couldnt delete")
+            logger.info("Try to force delete it")
+            patch = (
+                f"cephblockpool {pool_name} --type=merge -p "
+                '\'{"metadata":{"finalizers":null}}\''
+            )
+            self.RBD.exec_oc_cmd(f"patch {patch}")
+        self.RBD.wait_for_delete(resource_name=pool_name)
 
 
 class CephHealthMonitor(threading.Thread):
@@ -1254,10 +1416,10 @@ def get_pg_balancer_status():
     # Check 'mode' is 'upmap', based on suggestion from Ceph QE
     # TODO: Revisit this if mode needs change.
     if output["active"] and output["mode"] == "upmap":
-        logging.info("PG balancer is active and mode is upmap")
+        logger.info("PG balancer is active and mode is upmap")
         return True
     else:
-        logging.error("PG balancer is not active")
+        logger.error("PG balancer is not active")
         return False
 
 
@@ -1280,24 +1442,24 @@ def validate_pg_balancer():
         for key, value in osd_dict.items():
             diff = abs(value - osd_avg_pg_value)
             if diff <= 10:
-                logging.info(f"{key} PG difference {diff} is acceptable")
+                logger.info(f"{key} PG difference {diff} is acceptable")
             else:
-                logging.error(f"{key} PG difference {diff} is not acceptable")
+                logger.error(f"{key} PG difference {diff} is not acceptable")
                 osd_pg_value_flag = False
         if osd_pg_value_flag and eval <= 0.025:
-            logging.info(
+            logger.info(
                 f"Eval value is {eval} and pg distribution "
                 f"average difference is <=10 which is acceptable"
             )
             return True
         else:
-            logging.error(
+            logger.error(
                 f"Eval value is {eval} and pg distribution "
                 f"average difference is >=10 which is high and not acceptable"
             )
             return False
     else:
-        logging.info("pg_balancer is not active")
+        logger.info("pg_balancer is not active")
 
 
 def get_percent_used_capacity():
@@ -1427,7 +1589,7 @@ def check_osd_tree_1az_vmware(osd_tree, number_of_osds):
     for rack in racks:
         hosts = get_child_nodes_osd_tree(rack, osd_tree)
         if len(hosts) != number_of_hosts_expected:
-            logging.error(
+            logger.error(
                 f"Number of hosts under rack {rack} "
                 f"is not matching the expected ={number_of_hosts_expected} "
             )
@@ -1488,16 +1650,16 @@ def check_osd_tree_1az_cloud(osd_tree, number_of_osds):
     region = osd_tree["nodes"][0]["children"]
     zones = get_child_nodes_osd_tree(region[0], osd_tree)
     racks = get_child_nodes_osd_tree(zones[0], osd_tree)
-    logging.info(f"racks = {racks}")
+    logger.info(f"racks = {racks}")
     if len(racks) != 3:
-        logging.error(f"Expected 3 racks but got {len(racks)}")
+        logger.error(f"Expected 3 racks but got {len(racks)}")
     for each_rack in racks:
         hosts_in_each_rack = get_child_nodes_osd_tree(each_rack, osd_tree)
         if len(hosts_in_each_rack) != number_of_osds / 3:  # 3 is replica_factor
-            logging.error("number of hosts in rack is incorrect")
+            logger.error("number of hosts in rack is incorrect")
             return False
         else:
-            logging.info(f"adding host...{hosts_in_each_rack}")
+            logger.info(f"adding host...{hosts_in_each_rack}")
             all_hosts.append(hosts_in_each_rack)
     all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
 

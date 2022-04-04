@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     skipif_bmpsi,
+    skipif_ui_not_support,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class TestAddCapacityUI(object):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         def finalizer():
-            logging.info("Perform Ceph health checks after 'add capacity'")
+            logger.info("Perform Ceph health checks after 'add capacity'")
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -40,6 +41,7 @@ class TestAddCapacityUI(object):
     @skipif_bmpsi
     @ignore_leftovers
     @skipif_external_mode
+    @skipif_ui_not_support("add_capacity")
     def test_add_capacity_internal(self, setup_ui):
         """
         Test Add Capacity on Internal cluster via UI
@@ -53,7 +55,7 @@ class TestAddCapacityUI(object):
         infra_ui_obj = AddReplaceDeviceUI(setup_ui)
         infra_ui_obj.add_capacity_ui()
 
-        logging.info("Wait for osd pods to be in Running state")
+        logger.info("Wait for osd pods to be in Running state")
         for osd_pods in TimeoutSampler(
             timeout=600,
             sleep=10,

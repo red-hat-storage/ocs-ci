@@ -55,7 +55,14 @@ class BackingStore:
         self.vol_num = vol_num
         self.vol_size = vol_size
 
-    def delete(self):
+    def delete(self, retry=True):
+        """
+        Deletes the current backingstore by using OC/CLI commands
+
+        Args:
+            retry (bool): Whether to retry the deletion if it fails
+
+        """
         log.info(f"Cleaning up backingstore {self.name}")
         # If the backingstore utilizes a PV, save its PV name for deletion verification
         if self.type == "pv":
@@ -74,32 +81,60 @@ class BackingStore:
                 raise e
             pv_name = backingstore_pvc["spec"]["volumeName"]
 
-        if self.method == "oc":
-            OCP(
-                kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
-            ).delete(resource_name=self.name)
-        elif self.method == "cli":
-
-            def _cli_deletion_flow():
-                try:
-                    self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+        def _oc_deletion_flow():
+            try:
+                OCP(
+                    kind=constants.BACKINGSTORE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).delete(resource_name=self.name)
+                return True
+            except CommandFailed as e:
+                if "not found" in e.args[0].lower():
+                    log.warning(f"Backingstore {self.name} was already deleted.")
                     return True
-                except CommandFailed as e:
-                    if "being used by one or more buckets" in str(e).lower():
+                elif all(
+                    err in e.args[0]
+                    for err in ["cannot complete because pool", "in", "state"]
+                ):
+                    if retry:
                         log.warning(
-                            f"Deletion of {self.name} failed because it's being used by a bucket. "
-                            "Retrying..."
+                            f"Deletion of {self.name} failed due to its state; Retrying"
                         )
                         return False
+                    else:
+                        raise
+                else:
+                    raise
 
+        def _cli_deletion_flow():
+            try:
+                self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
+                return True
+            except CommandFailed as e:
+                if "being used by one or more buckets" in str(e).lower():
+                    log.warning(
+                        f"Deletion of {self.name} failed because it's being used by a bucket. "
+                        "Retrying..."
+                    )
+                    return False
+
+        cmdMap = {
+            "oc": _oc_deletion_flow,
+            "cli": _cli_deletion_flow,
+        }
+
+        if retry:
             sample = TimeoutSampler(
                 timeout=120,
                 sleep=20,
-                func=_cli_deletion_flow,
+                func=cmdMap[self.method],
             )
             if not sample.wait_for_func_status(result=True):
-                log.error(f"Failed to {self.name}")
-                raise TimeoutExpiredError
+                err_msg = f"Failed to delete {self.name}"
+                log.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
+        else:
+            cmdMap[self.method]()
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
@@ -142,8 +177,9 @@ class BackingStore:
                 namespace=namespace,
             )
             if not sample.wait_for_func_status(result=True):
-                log.error(f"{self.name} was not deleted properly, leftovers were found")
-                raise TimeoutExpiredError
+                err_msg = f"{self.name} was not deleted properly, leftovers were found"
+                log.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
 
         def _check_resources_deleted(namespace=None):
             """

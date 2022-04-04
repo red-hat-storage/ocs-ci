@@ -151,9 +151,10 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             f"The following nodes haven't reached status {status}: "
             f"{nodes_not_in_state}"
         )
-        raise exceptions.ResourceWrongStatusException(
-            node_names, [n.describe() for n in get_node_objs(node_names)]
+        error_message = (
+            f"{node_names}, {[n.describe() for n in get_node_objs(node_names)]}"
         )
+        raise exceptions.ResourceWrongStatusException(error_message)
 
 
 def unschedule_nodes(node_names):
@@ -356,16 +357,14 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
             if is_node_labeled(new_spun_node):
-                logging.info(
+                log.info(
                     f"node {new_spun_node} is already labeled with the OCS storage label"
                 )
             else:
                 node_obj.add_label(
                     resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
                 )
-                logging.info(
-                    f"Successfully labeled {new_spun_node} with OCS storage label"
-                )
+                log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
 
     return new_spun_nodes
 
@@ -416,7 +415,7 @@ def add_new_node_and_label_upi(
             node_obj.add_label(
                 resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
             )
-            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+            log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
 
 
@@ -627,7 +626,7 @@ def get_osd_running_nodes():
         list: OSD node names
 
     """
-    return [pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()]
+    return list({pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()})
 
 
 def get_osds_per_node():
@@ -1076,7 +1075,7 @@ def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
     node_obj = ocp.OCP(kind="node")
     for new_node_to_label in nodes:
         node_obj.add_label(resource_name=new_node_to_label.name, label=label)
-        logging.info(
+        log.info(
             f"Successfully labeled {new_node_to_label.name} " f"with OCS storage label"
         )
 
@@ -1108,7 +1107,7 @@ def get_worker_nodes():
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
     # Eliminate infra nodes from worker nodes in case of openshift dedicated
-    if config.ENV_DATA["platform"].lower() == "openshiftdedicated":
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         infra_nodes = ocp_node_obj.get(selector=constants.INFRA_NODE_LABEL).get("items")
         infra_node_ids = [
             infra_node.get("metadata").get("name") for infra_node in infra_nodes
@@ -1305,9 +1304,9 @@ def taint_nodes(nodes, taint_label=None):
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
-            logging.info(f"Successfully tainted {node} with taint {taint_label}")
+            log.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
-            logging.info(f"{node} was not tainted - {e}")
+            log.info(f"{node} was not tainted - {e}")
 
 
 def check_taint_on_nodes(taint=None):
@@ -1334,13 +1333,13 @@ def check_taint_on_nodes(taint=None):
         return bool(flag)
 
 
-def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None):
+def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
     Function to remove taints from nodes
 
     Args:
-        taint (str): taint to use
-        nodes_to_taint (list): list of nodes to untaint
+        taint_label (str): taint to use
+        nodes_to_untaint (list): list of node objs to untaint
 
     Return:
         bool: True if untainted, false otherwise
@@ -1349,8 +1348,9 @@ def untaint_ocs_nodes(taint=constants.OPERATOR_NODE_TAINT, nodes_to_untaint=None
     if check_taint_on_nodes():
         ocp = OCP()
         ocs_nodes = get_ocs_nodes()
-        nodes_to_taint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        for node in nodes_to_taint:
+        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+        for node in nodes_to_untaint:
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
             log.info(f"Untainted {node.name}")
@@ -1881,3 +1881,136 @@ def add_new_disk_for_vsphere(sc_name):
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
     add_disk_to_node(node_with_min_pvs)
+
+
+def get_odf_zone_count():
+    """
+    Get the number of Availability zones used by ODF cluster
+
+    Returns:
+         int : the number of availability zones
+    """
+    node_obj = OCP(kind="node")
+    az_count = node_obj.get(selector=constants.ZONE_LABEL)
+    az = set()
+    for node in az_count.get("items"):
+        node_lables = node.get("metadata")["labels"]
+        if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
+            az.add(node.get("metadata")["labels"][constants.ZONE_LABEL])
+    return len(az)
+
+
+def get_node_status(node_obj):
+    """
+    Get the node status.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Return:
+        str: The node status. If the command failed, it returns None.
+
+    """
+    return node_obj.ocp.get_resource_status(node_obj.name)
+
+
+def recover_node_to_ready_state(node_obj):
+    """
+    Recover the node to be in Ready state.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Return:
+        bool: True if the node recovered to Ready state. False otherwise
+
+    """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    node_status = get_node_status(node_obj)
+    node_name = node_obj.name
+    log.info(f"The status of the node {node_name} is {node_status} ")
+
+    if node_status == constants.NODE_READY:
+        log.info(
+            f"The node {node_name} is already in the expected status {constants.NODE_READY}"
+        )
+        return True
+
+    try:
+        if node_status == constants.NODE_NOT_READY:
+            log.info(f"Starting the node {node_name}...")
+            node_util.start_nodes(nodes=[node_obj], wait=True)
+            log.info(f"Successfully started the node {node_name}")
+        elif node_status == constants.NODE_READY_SCHEDULING_DISABLED:
+            log.info(f"Schedule the node {node_name}...")
+            schedule_nodes(node_names=[node_name])
+            log.info(f"Successfully schedule the node {node_name}")
+        elif node_status == constants.NODE_NOT_READY_SCHEDULING_DISABLED:
+            log.info(f"Schedule and start the node {node_name}...")
+            schedule_nodes(node_names=[node_name])
+            node_util.start_nodes(nodes=[node_obj], wait=True)
+            log.info(f"Successfully schedule and started the node {node_name}")
+        else:
+            log.warning(
+                f"The node {node_name} is not in the expected statuses. "
+                f"Trying to force stop and start the node..."
+            )
+            node_util.restart_nodes_by_stop_and_start(nodes=[node_obj], force=True)
+    except Exception as e:
+        log.warning(f"Operation failed due to exception: {str(e)}")
+
+    try:
+        wait_for_nodes_status(node_names=[node_name], timeout=60)
+        log.info(f"The node {node_name} reached status {constants.NODE_READY}")
+        res = True
+    except exceptions.ResourceWrongStatusException:
+        log.warning(
+            f"The node {node_name} failed to reach status {constants.NODE_READY}"
+        )
+        res = False
+
+    return res
+
+
+def add_new_nodes_and_label_after_node_failure_ipi(
+    machineset_name, num_nodes=1, mark_for_ocs_label=True
+):
+    """
+    Add new nodes for ipi and label them after node failure
+
+    Args:
+        machineset_name (str): Name of the machine set
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+
+    Returns:
+        list: new spun node names
+
+    """
+    machine.change_current_replica_count_to_ready_replica_count(machineset_name)
+    return add_new_node_and_label_it(machineset_name, num_nodes, mark_for_ocs_label)
+
+
+def get_encrypted_osd_devices(node_obj, node):
+    """
+    Get osd encrypted device names of a node
+
+    Args:
+        node_obj: OCP object of kind node
+        node: node name
+
+    Returns:
+        List of encrypted osd device names
+    """
+    luks_devices_out = node_obj.exec_oc_debug_cmd(
+        node=node,
+        cmd_list=[
+            "lsblk -o NAME,TYPE,FSTYPE | grep -E 'disk.*crypto_LUKS' | awk '{print $1}'"
+        ],
+    ).split("\n")
+    luks_devices = [device for device in luks_devices_out if device != ""]
+    return luks_devices

@@ -143,28 +143,41 @@ class Disruptions:
         log.info(f"Killed ceph-{self.resource} daemon on node {node_name}")
 
         if check_new_pid:
-            awk_print = "'{print $1}'"
-            pid_cmd = (
-                f"oc debug node/{node_name} -- chroot /host ps ax | grep"
-                f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
-            )
-            try:
-                for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
-                    ret, pid, err = pid_proc.async_communicate()
+            self.check_new_pid(node_name=node_name)
 
-                    # Consider scenario where more than one self.resource pod
-                    # is running on one node. eg:More than one osd on same node
-                    pids = pid.strip().split()
-                    pids = [pid.strip() for pid in pids]
-                    if len(pids) != len(self.pids):
-                        continue
-                    new_pid = [pid for pid in pids if pid not in self.pids]
-                    assert len(new_pid) == 1, "Found more than one new pid."
-                    new_pid = new_pid[0]
-                    if new_pid.isdigit() and (new_pid != self.daemon_pid):
-                        log.info(f"New pid of ceph-{self.resource} is {new_pid}")
-                        break
-            except TimeoutExpiredError:
-                raise TimeoutExpiredError(
-                    f"Waiting for pid of ceph-{self.resource} in {node_name}"
-                )
+    def check_new_pid(self, node_name=None):
+        """
+        Check if the pid of the daemon has changed from the initially selected pid(daemon_pid attribute)
+
+        Args:
+            node_name (str): Name of node in which the resource daemon is running
+
+        """
+        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
+            "nodeName"
+        )
+        awk_print = "'{print $1}'"
+        pid_cmd = (
+            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
+        )
+        try:
+            for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
+                ret, pid, err = pid_proc.async_communicate()
+
+                # Consider scenario where more than one self.resource pod
+                # is running on one node. eg:More than one osd on same node
+                pids = pid.strip().split()
+                pids = [pid.strip() for pid in pids]
+                if len(pids) != len(self.pids):
+                    continue
+                new_pid = [pid for pid in pids if pid not in self.pids]
+                assert len(new_pid) == 1, "Found more than one new pid."
+                new_pid = new_pid[0]
+                if new_pid.isdigit() and (new_pid != self.daemon_pid):
+                    log.info(f"New pid of ceph-{self.resource} is {new_pid}")
+                    break
+        except TimeoutExpiredError:
+            raise TimeoutExpiredError(
+                f"Waiting for pid of ceph-{self.resource} in {node_name}"
+            )

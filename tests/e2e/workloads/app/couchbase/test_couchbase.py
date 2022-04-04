@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.ocs.couchbase_new import CouchBase
+from ocs_ci.ocs.couchbase import CouchBase
 
 log = logging.getLogger(__name__)
 

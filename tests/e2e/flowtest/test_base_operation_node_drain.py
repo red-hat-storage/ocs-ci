@@ -65,7 +65,7 @@ class TestBaseOperationNodeDrain(E2ETest):
             timeout=100,
             iterations=1,
         )
-        logging.info("Started pgsql workload in background")
+        logger.info("Started pgsql workload in background")
 
         flow_ops = flowtest.FlowOperations()
 
@@ -76,7 +76,7 @@ class TestBaseOperationNodeDrain(E2ETest):
             bucket_factory,
             iterations=30,
         )
-        logging.info("Started object IOs in background")
+        logger.info("Started object IOs in background")
 
         pvc_create_delete = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
@@ -85,7 +85,7 @@ class TestBaseOperationNodeDrain(E2ETest):
             project,
             iterations=70,
         )
-        logging.info("Started pvc create and delete in background")
+        logger.info("Started pvc create and delete in background")
 
         logger.info("Starting operation 1: Node Drain")
         node_name = flow_ops.node_operations_entry_criteria(

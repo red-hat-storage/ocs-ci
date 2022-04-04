@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     bugzilla,
+    skipif_ocs_version,
+    ui,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -43,8 +45,10 @@ class TestCapacityBreakdownUI(ManageTest):
             ),
         ],
     )
+    @ui
     @tier2
     @bugzilla("1832297")
+    @skipif_ocs_version("!=4.8")
     @skipif_ui_not_support("validation")
     def test_capacity_breakdown_ui(
         self, setup_ui, project_name, pod_name, sc_type, teardown_project_factory
@@ -90,11 +94,11 @@ class TestCapacityBreakdownUI(ManageTest):
             size="4GB",
         )
         fio_result = pod_obj.get_fio_results()
-        logging.info("IOPs after FIO:")
+        logger.info("IOPs after FIO:")
         reads = fio_result.get("jobs")[0].get("read").get("iops")
         writes = fio_result.get("jobs")[0].get("write").get("iops")
-        logging.info(f"Read: {reads}")
-        logging.info(f"Write: {writes}")
+        logger.info(f"Read: {reads}")
+        logger.info(f"Write: {writes}")
 
         validation_ui_obj = ValidationUI(setup_ui)
         assert validation_ui_obj.check_capacity_breakdown(

@@ -1,6 +1,8 @@
 """
 Module to perform FIO benchmark
 """
+import os
+
 import logging
 import pytest
 import time
@@ -20,8 +22,6 @@ from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs import benchmark_operator
 
 log = logging.getLogger(__name__)
-
-SKIP_REASON = "Skipping FIO compressed test until github issue 5099 is addressed"
 
 
 class FIOResultsAnalyse(PerfResult):
@@ -142,27 +142,8 @@ class TestFIOBenchmark(PASTest):
         log.info("Starting the test setup")
         self.benchmark_name = "FIO"
         self.client_pod_name = "fio-client"
-        if config.PERF.get("deploy_internal_es"):
-            self.es = ElasticSearch()
-        else:
-            if config.PERF.get("internal_es_server") == "":
-                self.es = None
-                return
-            else:
-                self.es = {
-                    "server": config.PERF.get("internal_es_server"),
-                    "port": config.PERF.get("internal_es_port"),
-                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
-                    "parallel": True,
-                }
-                # verify that the connection to the elasticsearch server is OK
-                if not super(TestFIOBenchmark, self).es_connect():
-                    self.es = None
-                    return
 
         super(TestFIOBenchmark, self).setup()
-        # deploy the benchmark-operator
-        self.deploy_benchmark_operator()
 
     def setting_storage_usage(self):
         """
@@ -195,7 +176,7 @@ class TestFIOBenchmark(PASTest):
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 500:
-            self.filesize = int(ceph_capacity * 0.008)
+            self.filesize = int(ceph_capacity * 0.0415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
@@ -218,7 +199,6 @@ class TestFIOBenchmark(PASTest):
         """
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-            self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
         if io_pattern == "random":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = [
                 "randwrite",
@@ -281,7 +261,6 @@ class TestFIOBenchmark(PASTest):
         """
         Do cleanup in the benchmark-operator namespace.
         delete the benchmark, an make sure no PVC's an no PV's are left.
-
         """
         log.info("Deleting FIO benchmark")
         self.benchmark_obj.delete()
@@ -339,7 +318,7 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime)
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=36000)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
@@ -353,15 +332,40 @@ class TestFIOBenchmark(PASTest):
 
         """
         log.info("cleanup the environment")
-        self.operator.cleanup()
         if isinstance(self.es, ElasticSearch):
             self.es.cleanup()
+        try:
+            self.operator.cleanup()
+        except Exception:
+            # nothig to do, the benchmark-operator did not deployed. this is for
+            # the results collecting and pushing results into the dashboard
+            pass
 
         sleep_time = 5
         log.info(
             f"Going to sleep for {sleep_time} Minute, for background cleanup to complete"
         )
         time.sleep(sleep_time * 60)
+
+    def setup_internal_es(self):
+        """
+        Setting up the internal ElasticSearch server to used by the benchmark
+
+        """
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not self.es_connect():
+                    self.es = None
 
     @pytest.mark.parametrize(
         argnames=["interface", "io_pattern"],
@@ -393,16 +397,22 @@ class TestFIOBenchmark(PASTest):
             io_pattern (str): the I/O pattern to do - random / sequential
 
         """
+        # Getting the full path for the test logs
+        self.full_log_path = get_full_test_logs_path(cname=self)
+        self.results_path = get_full_test_logs_path(cname=self)
+        self.full_log_path += f"-{interface}-{io_pattern}"
+        log.info(f"Logs file path name is : {self.full_log_path}")
+        log.info(f"reslut path is : {self.results_path}")
+
+        self.setup_internal_es()
 
         # verify that there is an elasticsearch server for the benchmark
         if not self.es:
             log.error("This test must have an Elasticsearch server")
             return False
 
-        # Getting the full path for the test logs
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{interface}-{io_pattern}"
-        log.info(f"Logs file path name is : {self.full_log_path}")
+        # deploy the benchmark-operator
+        self.deploy_benchmark_operator()
 
         log.info("Create resource file for fio workload")
         self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
@@ -452,10 +462,13 @@ class TestFIOBenchmark(PASTest):
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():
-            log.info(f"The Result can be found at : {full_results.results_link()}")
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (4 - according to the parameters)
+            self.write_result_to_file(res_link)
 
     @skipif_ocs_version("<4.6")
-    @pytest.mark.skip(SKIP_REASON)
     @pytest.mark.parametrize(
         argnames=["io_pattern", "bs", "cmp_ratio"],
         argvalues=[
@@ -484,13 +497,24 @@ class TestFIOBenchmark(PASTest):
         # Getting the full path for the test logs
         self.full_log_path = get_full_test_logs_path(cname=self)
         self.full_log_path += f"-{io_pattern}-{bs}-{cmp_ratio}"
+        self.results_path = get_full_test_logs_path(cname=self)
         log.info(f"Logs file path name is : {self.full_log_path}")
+        log.info(f"reslut path is : {self.results_path}")
 
         log.info("Create resource file for fio workload")
         self.crd_data = templating.load_yaml(
             "ocs_ci/templates/workloads/fio/benchmark_fio_cmp.yaml"
         )
 
+        self.setup_internal_es()
+
+        # verify that there is an elasticsearch server for the benchmark
+        if not self.es:
+            log.error("This test must have an Elasticsearch server")
+            return False
+
+        # deploy the benchmark-operator
+        self.deploy_benchmark_operator()
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         self.es_info_backup(self.es)
 
@@ -559,9 +583,35 @@ class TestFIOBenchmark(PASTest):
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():
-            log.info(f"The Result can be found at : {full_results.results_link()}")
+            res_link = full_results.results_link()
+            log.info(f"The Result can be found at : {res_link}")
+
+            # Create text file with results of all subtest (6 - according to the parameters)
+            self.write_result_to_file(res_link)
 
         # Clean up fio benchmark
         self.cleanup()
         sc_obj.delete()
         sc_obj.ocp.wait_for_delete(resource_name=sc, timeout=300, sleep=5)
+
+    def test_fio_results(self):
+        """
+        This is not a test - it is only check that previous test ran and finish as expected
+        and reporting the full results (links in the ES) of previous tests (4)
+        """
+
+        workloads = [
+            {"name": "test_fio_workload_simple", "tests": 4, "test_name": "FIO"},
+            {
+                "name": "test_fio_compressed_workload",
+                "tests": 6,
+                "test_name": "FIO-Compress",
+            },
+        ]
+        for wl in workloads:
+            self.number_of_tests = wl["tests"]
+            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
+            self.results_file = os.path.join(self.results_path, "all_results.txt")
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])

@@ -14,7 +14,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
@@ -24,6 +24,7 @@ from ocs_ci.utility.aws import (
     terminate_rhel_workers,
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo,
@@ -31,6 +32,7 @@ from ocs_ci.utility.utils import (
     delete_file,
     get_cluster_name,
     get_infra_id,
+    get_ocp_repo,
     run_cmd,
     TimeoutSampler,
     get_ocp_version,
@@ -60,6 +62,17 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        super(AWSBase, self).deploy_ocp(log_cli_level)
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
+        if ocs_version >= version.VERSION_4_10 and ocp_version >= version.VERSION_4_9:
+            # If we don't customize the storage class, we will use the default one
+            self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
+                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
+            )
 
     def host_network_update(self):
         """
@@ -358,6 +371,7 @@ class AWSUPI(AWSBase):
             # Change dir back to ocs-ci dir
             os.chdir(cidir)
 
+            logger.info(stdout)
             if proc.returncode:
                 logger.error(stderr)
                 if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
@@ -366,7 +380,6 @@ class AWSUPI(AWSBase):
                     except Exception as ex:
                         logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
-            logger.info(stdout)
 
             self.test_cluster()
 
@@ -461,10 +474,12 @@ class AWSUPI(AWSBase):
         """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get("num_workers", 3))
-        logging.info(f"Creating {num_workers} RHEL workers")
+        logger.info(f"Creating {num_workers} RHEL workers")
+        rhel_version = config.ENV_DATA["rhel_version"]
+        rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         for i in range(num_workers):
             self.gather_worker_data(f"no{i}")
-            logging.info(f"Creating {i + 1}/{num_workers} worker")
+            logger.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
@@ -476,7 +491,7 @@ class AWSUPI(AWSBase):
                         },
                     },
                 ],
-                ImageId=config.ENV_DATA["rhel_worker_ami"],
+                ImageId=rhel_worker_ami,
                 SubnetId=self.worker_subnet,
                 InstanceType=config.ENV_DATA["rhel_worker_instance_type"],
                 MaxCount=1,
@@ -500,7 +515,7 @@ class AWSUPI(AWSBase):
                     {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
                 ],
             )
-            logging.info(self.worker_iam_role)
+            logger.info(self.worker_iam_role)
             self.client.associate_iam_instance_profile(
                 IamInstanceProfile=self.worker_iam_role,
                 InstanceId=inst_id,
@@ -519,6 +534,9 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
+        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
+        # different version of RHEL for running openshift ansible playbook, we need
+        # to update this method!
         rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name)
         timeout = 4000  # For ansible-playbook
 
@@ -526,19 +544,30 @@ class AWSUPI(AWSBase):
         pem_src_path = "~/.ssh/openshift-dev.pem"
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
-        repo_dst_path = "/etc/yum.repos.d/"
-        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
-        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
-        repo_file = os.path.basename(repo)
-        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
-        # copy the .pem file for our internal repo on all nodes
-        # including ansible pod
-        # get it from URL
-        mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
+        repo_dst_path = constants.YUM_REPOS_PATH
+        # Ansible playbook and dependency is described in the documentation to run
+        # on RHEL7 node
+        # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
+        repo_rhel_ansible = get_ocp_repo(
+            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
         )
-        dst = "/etc/pki/ca-trust/source/anchors/"
-        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        repo = get_ocp_repo()
+        diff_rhel = repo != repo_rhel_ansible
+        pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
+        if diff_rhel:
+            repo_dst_path = constants.POD_UPLOADPATH
+            pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+            repo_file = os.path.basename(repo)
+        else:
+            repo_file = os.path.basename(repo_rhel_ansible)
+        # prepare credential files for mirror.openshift.com
+        with prepare_mirror_openshift_credential_files() as (
+            mirror_user_file,
+            mirror_password_file,
+        ):
+            pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+            pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
+
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -562,24 +591,28 @@ class AWSUPI(AWSBase):
             rhel_pod_obj.exec_cmd_on_node(
                 host,
                 pem_dst_path,
-                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
+                f"sudo mv {os.path.join(constants.RHEL_TMP_PATH, repo_file)} {constants.YUM_REPOS_PATH}",
                 user=self.rhel_worker_user,
             )
-            rhel_pod_obj.copy_to_server(
-                host,
-                pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
-                user=self.rhel_worker_user,
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host,
-                pem_dst_path,
-                f"sudo mv "
-                f'{os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f"{dst}",
-                user=self.rhel_worker_user,
-            )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=self.rhel_worker_user,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=self.rhel_worker_user,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
@@ -665,7 +698,7 @@ class AWSUPI(AWSBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -713,12 +746,12 @@ class AWSUPI(AWSBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)

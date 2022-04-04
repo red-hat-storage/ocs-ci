@@ -24,6 +24,7 @@ from ocs_ci.ocs.constants import (
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
     MANAGED_SERVICE_PLATFORMS,
+    HPCS_KMS_PROVIDER,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -61,6 +62,7 @@ csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
+system_test = pytest.mark.system_test
 performance = pytest.mark.performance
 performance_extended = pytest.mark.performance_extended
 scale = pytest.mark.scale
@@ -69,6 +71,7 @@ scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+acm_import = pytest.mark.acm_import
 
 tier_marks = [
     tier1,
@@ -205,6 +208,37 @@ managed_service_required = pytest.mark.skipif(
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
+ms_provider_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "provider"
+    ),
+    reason="Test runs ONLY on managed service provider cluster",
+)
+
+ms_consumer_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    ),
+    reason="Test runs ONLY on managed service consumer cluster",
+)
+
+kms_config_required = pytest.mark.skipif(
+    (
+        config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
+        and load_auth_config().get("vault", {}).get("VAULT_ADDR") is None
+    )
+    or (
+        not (
+            config.ENV_DATA["KMS_PROVIDER"].lower() == HPCS_KMS_PROVIDER
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_10
+            and load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID")
+            is not None,
+        )
+    ),
+    reason="KMS config not found in auth.yaml",
+)
 
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
@@ -224,9 +258,26 @@ skipif_bmpsi = pytest.mark.skipif(
     reason="Test will not run on Baremetal PSI",
 )
 
+skipif_managed_service = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
+    reason="Test will not run on Managed service cluster",
+)
+
 skipif_openshift_dedicated = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == OPENSHIFT_DEDICATED_PLATFORM,
     reason="Test will not run on Openshift dedicated cluster",
+)
+
+skipif_ms_provider = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.ENV_DATA["cluster_type"].lower() == "provider",
+    reason="Test will not run on Managed service provider cluster",
+)
+
+skipif_ms_consumer = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.ENV_DATA["cluster_type"].lower() == "consumer",
+    reason="Test will not run on Managed service consumer cluster",
 )
 
 skipif_rosa = pytest.mark.skipif(

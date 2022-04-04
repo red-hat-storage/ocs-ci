@@ -1,19 +1,19 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier4a, E2ETest
+from ocs_ci.framework.testlib import tier4c, E2ETest
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.node import taint_nodes, untaint_ocs_nodes, get_ocs_nodes
+from ocs_ci.ocs.node import taint_nodes, untaint_nodes, get_ocs_nodes
 
 
 logger = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4c
 @pytest.mark.polarion_id("OCS-2450")
 class TestTaintAndTolerations(E2ETest):
     """
@@ -28,7 +28,7 @@ class TestTaintAndTolerations(E2ETest):
         """
 
         def finalizer():
-            assert untaint_ocs_nodes(), "Failed to untaint"
+            assert untaint_nodes(), "Failed to untaint"
 
         request.addfinalizer(finalizer)
 

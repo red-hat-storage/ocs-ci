@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier2,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-2595")
+@skipif_managed_service
 class TestVerifyRbdTrashPurge(ManageTest):
     """
     Verify RBD trash purge command when the RBD image have snapshots

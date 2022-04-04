@@ -4,12 +4,11 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    tier4,
     tier4a,
     bugzilla,
     skipif_ocs_version,
     skipif_aws_creds_are_missing,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -23,7 +22,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_aws_creds_are_missing
 class TestMultiRegion(MCGTest):
     """
@@ -74,7 +73,6 @@ class TestMultiRegion(MCGTest):
             len(mirror_attached_pools) == 2
         ), "Multiregion bucket did not have two backingstores attached"
 
-    @tier4
     @tier4a
     @bugzilla("1827317")
     @skipif_ocs_version("==4.4")

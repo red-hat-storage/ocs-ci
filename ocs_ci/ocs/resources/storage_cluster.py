@@ -8,7 +8,7 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
@@ -30,7 +30,12 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
+from ocs_ci.ocs.node import (
+    get_osds_per_node,
+    add_new_disk_for_vsphere,
+    get_osd_running_nodes,
+    get_encrypted_osd_devices,
+)
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
     localstorage,
@@ -613,15 +618,43 @@ def osd_encryption_verification():
         osd_number_per_node = len(osd_node_names[worker_node]) - 1
         lsblk_output = osd_node_names[worker_node][-1]
         lsblk_output_split = lsblk_output.split()
-        logging.info(f"lsblk split:{lsblk_output_split}")
-        logging.info(f"osd_node_names dictionary: {osd_node_names}")
-        logging.info(f"count crypt {lsblk_output_split.count('crypt')}")
-        logging.info(f"osd_number_per_node = {osd_number_per_node}")
+        log.info(f"lsblk split:{lsblk_output_split}")
+        log.info(f"osd_node_names dictionary: {osd_node_names}")
+        log.info(f"count crypt {lsblk_output_split.count('crypt')}")
+        log.info(f"osd_number_per_node = {osd_number_per_node}")
         if lsblk_output_split.count("crypt") != osd_number_per_node:
-            logging.error(
+            log.error(
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
+
+    # skip OCS 4.8 as the fix for luks header info is still not available on it
+    if ocs_version > version.VERSION_4_6 and ocs_version != version.VERSION_4_8:
+        log.info("Verify luks header label for encrypted devices")
+        worker_nodes = get_osd_running_nodes()
+        failures = 0
+        failure_message = ""
+        node_obj = OCP(kind="node")
+        for node in worker_nodes:
+            luks_devices = get_encrypted_osd_devices(node_obj, node)
+            for luks_device_name in luks_devices:
+                luks_device_name = luks_device_name.strip()
+                log.info(
+                    f"Checking luks header label on Luks device {luks_device_name} for node {node}"
+                )
+                cmd = "cryptsetup luksDump /dev/" + str(luks_device_name)
+                cmd_out = node_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+
+                if "(no label)" in str(cmd_out) or "(no subsystem)" in str(cmd_out):
+                    failures += 1
+                    failure_message += (
+                        f"\nNo label found on Luks header information for node {node}\n"
+                    )
+
+        if failures != 0:
+            log.error(failure_message)
+            raise ValueError("Luks header label is not found")
+        log.info("Luks header info found for all the encrypted osds")
 
 
 def verify_kms_ca_only():
@@ -630,7 +663,7 @@ def verify_kms_ca_only():
     without Client Certificate and without Client Private Key
 
     """
-    logging.info("Verify KMS deployment with only CA Certificate")
+    log.info("Verify KMS deployment with only CA Certificate")
     secret_names = get_secret_names()
     if (
         "ocs-kms-client-cert" in secret_names
@@ -1010,9 +1043,9 @@ def verify_managed_service_resources():
     # Verify alerting secrets creation
     secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for secret_name in {
-        constants.MANAGED_SMTP_SECRET,
-        constants.MANAGED_PAGERDUTY_SECRET,
-        constants.MANAGED_DEADMANSSNITCH_SECRET,
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name

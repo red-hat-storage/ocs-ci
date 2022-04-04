@@ -239,7 +239,7 @@ class ClusterLoad:
                 # In other cases, when the first latency sample value is greater than 3 ms,
                 # the multiplication factor we check according to, is lower, in order to
                 # determine the cluster load faster.
-                if latency > latency_vals[0] * 2 ** 7 or (
+                if latency > latency_vals[0] * 2**7 or (
                     3 < latency_vals[0] < 50 and len(latency_vals) > 5
                 ):
                     logger.info(
@@ -352,7 +352,7 @@ class ClusterLoad:
         timestamp = datetime.timestamp
         return float(
             self.prometheus_api.query(
-                query, str(timestamp(now())), mute_logs=mute_logs
+                query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
             )[0]["value"][1]
         )
 
@@ -416,7 +416,7 @@ class ClusterLoad:
             f"IOPS: {metrics.get('iops'):.2f}{limit_msg} || "
             f"Used Space: {metrics.get('used_space'):.2f} GB{pods_msg}"
         )
-        logger.info(f"Cluster utilization:{wrap_msg(msg)}")
+        logger.debug(f"Cluster utilization:{wrap_msg(msg)}")
         if metrics.get("latency") > high_latency:
             logger.warning(f"Cluster latency is higher than {high_latency} ms!")
 

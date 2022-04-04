@@ -9,10 +9,9 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
-    tier4,
-    tier4a,
+    tier4c,
     tier3,
-    skipif_openshift_dedicated,
+    skipif_managed_service,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -20,6 +19,7 @@ from ocs_ci.ocs import cluster, constants, defaults, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +29,6 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
-@tier4
-@tier4a
 @ignore_leftovers()
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
@@ -41,7 +39,7 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if float(config.ENV_DATA["ocs_version"]) < 4.7
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7
         else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
     labels_map = {
@@ -51,6 +49,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
+    @tier4c
     @pytest.mark.parametrize(
         argnames=["resource_to_delete"],
         argvalues=[
@@ -75,10 +74,12 @@ class TestMCGResourcesDisruptions(MCGTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[resource_to_delete],
             resource_count=1,
-            timeout=90,
+            timeout=800 if config.DEPLOYMENT.get("external_mode") else 90,
+            sleep=60,
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
     @pytest.mark.parametrize(
@@ -114,6 +115,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
+    @tier3
     @pytest.mark.parametrize(
         argnames=["pod_to_drain"],
         argvalues=[
@@ -167,8 +169,11 @@ class TestMCGResourcesDisruptions(MCGTest):
         Make sure noobaa db pod is running and scc is reverted back to noobaa.
 
         """
+
         # Teardown function to revert back the scc changes made
         def finalizer():
+            scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
+            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
@@ -180,25 +185,25 @@ class TestMCGResourcesDisruptions(MCGTest):
                 kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE
             )
             if helpers.validate_scc_policy(
-                sa_name=constants.NOOBAA_RESOURCE_NAME,
+                sa_name=scc_name,
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 scc_name=constants.ANYUID,
             ):
                 ocp_scc.patch(
                     resource_name=constants.ANYUID,
                     params='[{"op": "remove", "path": "/users/0", '
-                    '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+                    f'"value":{service_account}}}]',
                     format_type="json",
                 )
             if not helpers.validate_scc_policy(
-                sa_name=constants.NOOBAA_RESOURCE_NAME,
+                sa_name=scc_name,
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                scc_name=constants.NOOBAA_RESOURCE_NAME,
+                scc_name=scc_name,
             ):
                 ocp_scc.patch(
-                    resource_name=constants.NOOBAA_RESOURCE_NAME,
+                    resource_name=scc_name,
                     params='[{"op": "add", "path": "/users/0", '
-                    '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+                    f'"value":{service_account}}}]',
                     format_type="json",
                 )
             if (
@@ -217,7 +222,7 @@ class TestMCGResourcesDisruptions(MCGTest):
                     pod_data_list.get("metadata")
                     .get("annotations")
                     .get("openshift.io/scc")
-                    == constants.NOOBAA_RESOURCE_NAME
+                    == scc_name
                 ), "Invalid scc"
 
         request.addfinalizer(finalizer)
@@ -225,13 +230,15 @@ class TestMCGResourcesDisruptions(MCGTest):
     @tier3
     @pytest.mark.polarion_id("OCS-2513")
     @marks.bugzilla("1903573")
-    @skipif_openshift_dedicated
+    @skipif_managed_service
     @skipif_ocs_version("<4.7")
     def test_db_scc(self, teardown):
         """
         Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
 
         """
+        scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
+        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],
@@ -241,33 +248,33 @@ class TestMCGResourcesDisruptions(MCGTest):
         ocp_scc = ocp.OCP(kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         pod_data = pod_obj.get()
 
-        log.info("Verifying current SCC is noobaa in db pod")
+        log.info(f"Verifying current SCC is {scc_name} in db pod")
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
-            == constants.NOOBAA_RESOURCE_NAME
+            == scc_name
         ), "Invalid default scc"
 
         log.info("Deleting the user array from the Noobaa scc")
         ocp_scc.patch(
-            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            resource_name=scc_name,
             params='[{"op": "remove", "path": "/users/0", '
-            '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+            f'"value":{service_account}}}]',
             format_type="json",
         )
         assert not helpers.validate_scc_policy(
-            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            scc_name=constants.NOOBAA_RESOURCE_NAME,
+            scc_name=scc_name,
         ), "SA name is  present in noobaa scc"
         log.info("Adding the noobaa system sa user to anyuid scc")
         ocp_scc.patch(
             resource_name=constants.ANYUID,
             params='[{"op": "add", "path": "/users/0", '
-            '"value":"system:serviceaccount:openshift-storage:noobaa"}]',
+            f'"value":{service_account}}}]',
             format_type="json",
         )
         assert helpers.validate_scc_policy(
-            sa_name=constants.NOOBAA_RESOURCE_NAME,
+            sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             scc_name=constants.ANYUID,
         ), "SA name is not present in anyuid scc"

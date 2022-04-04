@@ -20,6 +20,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
+from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions, cluster
 from ocs_ci.ocs.node import (
@@ -36,6 +37,7 @@ from ocs_ci.utility.csr import (
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
+    get_ocp_repo,
     create_rhelpod,
     replace_content_in_file,
     get_ocp_version,
@@ -76,12 +78,17 @@ class PlatformNodesFactory:
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
+            "vsphere_ipi": VMWareIPINodes,
+            "rosa": AWSNodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
-        if cluster.is_lso_cluster() and platform == constants.VSPHERE_PLATFORM:
-            platform += "_lso"
+        if platform == constants.VSPHERE_PLATFORM:
+            if cluster.is_lso_cluster():
+                platform += "_lso"
+            elif config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
         return self.cls_map[platform]()
 
 
@@ -179,6 +186,9 @@ class NodesBase(object):
 
         return default_config_dict
 
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
 
 class VMWareNodes(NodesBase):
     """
@@ -242,18 +252,19 @@ class VMWareNodes(NodesBase):
             "get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes, force=True):
+    def stop_nodes(self, nodes, force=True, wait=True):
         """
         Stop vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for force VM stop, False otherwise
+            wait (bool): Wait for the VMs to stop
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.stop_vms(vms, force=force)
+        self.vsphere.stop_vms(vms, force=force, wait=wait)
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -261,11 +272,12 @@ class VMWareNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for the VMs to start
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.start_vms(vms)
+        self.vsphere.start_vms(vms, wait=wait)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """
@@ -870,6 +882,9 @@ class AWSNodes(NodesBase):
 
         """
         rhel_pod_name = "rhel-ansible"
+        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
+        # different version of RHEL for running openshift ansible playbook, we need
+        # to update this method!
         rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name, 600)
         timeout = 4000  # For ansible-playbook
 
@@ -878,18 +893,28 @@ class AWSNodes(NodesBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = constants.YUM_REPOS_PATH
-        repo = os.path.join(constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo")
-        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
-        repo_file = os.path.basename(repo)
-        pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
-        # copy the .pem file for our internal repo on all nodes
-        # including ansible pod
-        # get it from URL
-        mirror_pem_file_path = os.path.join(
-            constants.DATA_DIR, constants.INTERNAL_MIRROR_PEM_FILE
+        # Ansible playbook and dependency is described in the documentation to run
+        # on RHEL7 node
+        # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
+        repo_rhel_ansible = get_ocp_repo(
+            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
         )
-        dst = constants.PEM_PATH
-        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
+        repo = get_ocp_repo()
+        diff_rhel = repo != repo_rhel_ansible
+        pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
+        if diff_rhel:
+            repo_dst_path = constants.POD_UPLOADPATH
+            pod.upload(rhel_pod_obj.name, repo, repo_dst_path)
+            repo_file = os.path.basename(repo)
+        else:
+            repo_file = os.path.basename(repo_rhel_ansible)
+        # prepare credential files for mirror.openshift.com
+        with prepare_mirror_openshift_credential_files() as (
+            mirror_user_file,
+            mirror_password_file,
+        ):
+            pod.upload(rhel_pod_obj.name, mirror_user_file, constants.YUM_VARS_PATH)
+            pod.upload(rhel_pod_obj.name, mirror_password_file, constants.YUM_VARS_PATH)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -913,24 +938,28 @@ class AWSNodes(NodesBase):
             rhel_pod_obj.exec_cmd_on_node(
                 host,
                 pem_dst_path,
-                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
+                f"sudo mv {os.path.join(constants.RHEL_TMP_PATH, repo_file)} {constants.YUM_REPOS_PATH}",
                 user=constants.EC2_USER,
             )
-            rhel_pod_obj.copy_to_server(
-                host,
-                pem_dst_path,
-                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
-                os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE),
-                user=constants.EC2_USER,
-            )
-            cmd = (
-                f"sudo mv "
-                f'{os.path.join("/tmp/", constants.INTERNAL_MIRROR_PEM_FILE)} '
-                f"{dst}"
-            )
-            rhel_pod_obj.exec_cmd_on_node(
-                host, pem_dst_path, cmd, user=constants.EC2_USER
-            )
+            for file_name in (
+                constants.MIRROR_OPENSHIFT_USER_FILE,
+                constants.MIRROR_OPENSHIFT_PASSWORD_FILE,
+            ):
+                rhel_pod_obj.copy_to_server(
+                    host,
+                    pem_dst_path,
+                    os.path.join(constants.YUM_VARS_PATH, file_name),
+                    os.path.join(constants.RHEL_TMP_PATH, file_name),
+                    user=constants.EC2_USER,
+                )
+                rhel_pod_obj.exec_cmd_on_node(
+                    host,
+                    pem_dst_path,
+                    f"sudo mv "
+                    f"{os.path.join(constants.RHEL_TMP_PATH, file_name)} "
+                    f"{constants.YUM_VARS_PATH}",
+                    user=constants.EC2_USER,
+                )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
             self.cluster_path, config.RUN.get("kubeconfig_location")
@@ -973,7 +1002,7 @@ class AWSNodes(NodesBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -1021,12 +1050,12 @@ class AWSNodes(NodesBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)
@@ -1287,7 +1316,11 @@ class AWSUPINode(AWSNodes):
         config
 
         """
-        conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
+        # Expand RHEL Version in the file name below!
+        rhel_version = Version.coerce(config.ENV_DATA["rhel_version"])
+        conf = self.read_default_config(
+            constants.RHEL_WORKERS_CONF.format(version=rhel_version.major)
+        )
         default_conf = conf.get("ENV_DATA")
         merge_dict(default_conf, self.node_conf)
         logger.info(f"Merged dict is {default_conf}")
@@ -1306,6 +1339,8 @@ class AWSUPINode(AWSNodes):
         zone = node_conf.get("zone")
         logger.info("Creating RHEL worker node")
         self.gather_worker_data(f"no{zone}")
+        rhel_version = config.ENV_DATA["rhel_version"]
+        rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         response = self.client.run_instances(
             BlockDeviceMappings=[
                 {
@@ -1317,7 +1352,7 @@ class AWSUPINode(AWSNodes):
                     },
                 },
             ],
-            ImageId=node_conf["rhel_worker_ami"],
+            ImageId=rhel_worker_ami,
             SubnetId=self.worker_subnet,
             InstanceType=node_conf["rhel_worker_instance_type"],
             MaxCount=1,
@@ -1340,7 +1375,7 @@ class AWSUPINode(AWSNodes):
                 {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
             ],
         )
-        logging.info(self.worker_iam_role)
+        logger.info(self.worker_iam_role)
         self.client.associate_iam_instance_profile(
             IamInstanceProfile=self.worker_iam_role,
             InstanceId=inst_id,
@@ -1474,12 +1509,12 @@ class VSPHEREUPINode(VMWareNodes):
         logger.debug("Updating terraform variables")
         compute_str = "compute_count ="
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
         # backup the terraform variable file
         original_file = f"{self.terraform_var}_{int(time.time())}"
         shutil.copyfile(self.terraform_var, original_file)
-        logging.info(f"original terraform file: {original_file}")
+        logger.info(f"original terraform file: {original_file}")
 
         replace_content_in_file(
             self.terraform_var,
@@ -1499,7 +1534,7 @@ class VSPHEREUPINode(VMWareNodes):
             if self.folder_structure
             else constants.INSTALLER_MACHINE_CONF
         )
-        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        logger.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
         replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations
@@ -2553,3 +2588,58 @@ class IBMCloud(NodesBase):
 
         """
         self.create_nodes(node_conf, node_type, num_nodes)
+
+
+class VMWareIPINodes(VMWareNodes):
+    """
+    VMWare IPI nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_vms(self, nodes):
+        """
+        Get vSphere vm objects list in the Datacenter(and not just in the cluster scope).
+        Note: If one of the nodes failed with an exception, it will not return his
+        corresponding VM object.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: vSphere vm objects list in the Datacenter
+
+        """
+        vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
+        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        vms = []
+        for vm in vms_in_dc:
+            try:
+                vm_name = vm.name
+                if vm_name in node_names:
+                    vms.append(vm)
+            except Exception as e:
+                logger.info(f"Failed to get the vm name due to exception: {e}")
+
+        if len(vms) < len(nodes):
+            logger.warning("Didn't find all the VM objects for all the nodes")
+
+        return vms
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        self.vsphere.remove_vms_from_inventory(vms)
+        if wait:
+            for vm in vms:
+                self.vsphere.wait_for_vm_delete(vm)

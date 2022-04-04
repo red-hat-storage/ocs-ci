@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4a, ignore_leftover_label
+from ocs_ci.framework.testlib import ManageTest, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -17,8 +17,10 @@ logger = logging.getLogger(__name__)
 DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
-@tier4
-@tier4a
+@pytest.mark.skip(
+    reason="This test is disabled because this scenario is covered in the test "
+    "test_resource_deletion_during_pvc_pod_creation_and_io.py"
+)
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],
@@ -376,7 +378,7 @@ class TestPVCDisruption(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
-        logging.info("Verified: All new pods are Running.")
+        logger.info("Verified: All new pods are Running.")
 
         # Run IO on each of the new pods
         for pod_obj in pod_objs:

@@ -24,6 +24,7 @@ KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+RBD_NAME = "rbd"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
@@ -38,6 +39,7 @@ OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
+ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
@@ -61,7 +63,7 @@ BG_LOAD_NAMESPACE = "bg-fio-load"
 MAX_BYTES_IN_POOL_AFTER_DATA_DELETE = 250000
 
 # Elastic search parameters
-ELASTICSEARCH_DEV_IP = "10.0.144.152"
+ELASTICSEARCH_DEV_IP = "10.0.144.103"
 ELASTICSEARCE_PORT = 9200
 
 # Local storage namespace
@@ -83,10 +85,42 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT": "ocs-kms-ca-secret",
         "VAULT_TLS_SERVER_NAME": "",
         "VAULT_NAMESPACE": "",
-        "VAULT_TOKEN_NAME": "ocs-kms-token",
+        "VAULT_TOKEN_NAME": "ceph-csi-kms-token",
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
         "VAULT_BACKEND": "kv-v2",
+    }
+}
+VAULT_TENANT_SA_CONNECTION_CONF = {
+    "1-vault": {
+        "encryptionKMSType": "vaulttenantsa",
+        "vaultAddress": "https://vault.qe.rh-ocs.com:8200",
+        "vaultAuthPath": "",
+        "vaultAuthNamespace": "",
+        "vaultNamespace": "",
+        "vaultBackendPath": "kv-v2",
+        "vaultCAFromSecret": "ocs-kms-ca-secret",
+        "vaultClientCertFromSecret": "ocs-kms-client-cert",
+        "vaultClientCertKeyFromSecret": "ocs-kms-client-key",
+        "vaultBackend": "kv-v2",
+    }
+}
+
+# External cluster username
+EXTERNAL_CLUSTER_USER = "client.healthchecker"
+EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
+# Hpcs related defaults
+#
+# To be used for adding additional hpcs connections
+# to csi-kms-connection-details resource
+HPCS_CSI_CONNECTION_CONF = {
+    "1-hpcs": {
+        "KMS_PROVIDER": "ibmkeyprotect",
+        "KMS_SERVICE_NAME": "1-hpcs",
+        "IBM_KP_SERVICE_INSTANCE_ID": "",
+        "IBM_KP_SECRET_NAME": "ibm-kp-kms-test-secret",
+        "IBM_KP_BASE_URL": "",
+        "IBM_KP_TOKEN_URL": "https://iam.cloud.ibm.com/oidc/token",
     }
 }

@@ -1,6 +1,7 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
+import time
 import logging
 import tempfile
 import re
@@ -74,7 +75,7 @@ class PillowFight(object):
         self.replicas = replicas
         for i in range(self.replicas):
             # for basic-fillowfight.yaml
-            pfight = templating.load_yaml(constants.COUCHBASE_NEW_PILLOWFIGHT)
+            pfight = templating.load_yaml(constants.COUCHBASE_PILLOWFIGHT)
             pfight["metadata"]["name"] = "pillowfight-rbd-simple" + f"{i}"
             # change the name
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][2] = (
@@ -91,6 +92,7 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
+            time.sleep(15)
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
@@ -117,7 +119,7 @@ class PillowFight(object):
             except IndexError:
                 log.info("Pillowfight not yet completed")
 
-        logging.info(self.pods_info)
+        log.info(self.pods_info)
         for pod, pf_completion_info in self.pods_info.items():
             if pf_completion_info == "Completed":
                 pf_endlog = f"{pod}.log"
@@ -139,7 +141,7 @@ class PillowFight(object):
         """
         for path in listdir(self.logs):
             full_path = join(self.logs, path)
-            logging.info(f"Analyzing {full_path}")
+            log.info(f"Analyzing {full_path}")
             with open(full_path, "r") as fdesc:
                 data_from_log = fdesc.read()
             log_data = self.parse_pillowfight_log(data_from_log)
@@ -223,7 +225,7 @@ class PillowFight(object):
         """
         # Collect data and export to Google doc spreadsheet
         g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
-        logging.info("Exporting pf data to google spreadsheet")
+        log.info("Exporting pf data to google spreadsheet")
         for path in listdir(self.logs):
             full_path = join(self.logs, path)
             with open(full_path, "r") as fdesc:

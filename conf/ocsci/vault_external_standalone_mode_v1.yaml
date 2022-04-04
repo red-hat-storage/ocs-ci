@@ -12,3 +12,4 @@ ENV_DATA:
   VAULT_CLIENT_KEY: "ocs-kms-client-key"
   VAULT_SKIP_VERIFY: false
   VAULT_BACKEND: "v1"
+  VAULT_AUTH_METHOD: token

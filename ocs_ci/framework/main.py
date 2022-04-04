@@ -73,24 +73,16 @@ def init_ocsci_conf(arguments=None):
         )
         args, _ = parser.parse_known_args(arguments)
         init_multicluster_ocsci_conf(arguments, args.nclusters)
-        arguments.remove("multicluster")
-        for i in range(args.nclusters):
-            arguments.remove(f"--cluster{i+1}")
-        arguments.remove(str(args.nclusters))
+        # After processing the args we will remove everything from list
+        # and add args according to the need in the below block
+        arguments.clear()
 
-        # Remove original args and replace them with args with suffix
-        # i.e --cluster-name will be translated to --cluster-name1 etc and --cluster-name along with
-        # values will be removed from the list to make parse happy
-        for each in framework.config.multicluster_args:
-            for arg in each:
-                if arg.startswith("--"):
-                    match = re.search(r"\d+$", arg)
-                    if match:
-                        arguments.remove(re.sub(r"\d+$", "", arg))
-                else:
-                    arguments.remove(arg)
-        # Add only suffixed(cluster number) cluster args in the args list
+        # Preserve only common args and suffixed(cluster number) cluster args in the args list
         # i.e only --cluster-name1, --cluster-path1, --ocsci-conf1 etc
+        # common args first
+        for each in framework.config.multicluster_common_args:
+            arguments.extend(each)
+        # Remaining arguments
         for each in framework.config.multicluster_args:
             arguments.extend(each)
     else:
@@ -105,7 +97,21 @@ def process_ocsci_conf(arguments):
     parser.add_argument(
         "--ocs-version",
         action="store",
-        choices=["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "4.10"],
+        choices=[
+            "4.2",
+            "4.3",
+            "4.4",
+            "4.5",
+            "4.6",
+            "4.6-eus",
+            "4.7",
+            "4.7-eus",
+            "4.8",
+            "4.8-eus",
+            "4.9",
+            "4.10",
+            "4.11",
+        ],
     )
     parser.add_argument("--ocs-registry-image")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
@@ -115,10 +121,15 @@ def process_ocsci_conf(arguments):
         choices=["rgw", "cephfs", "noobaa", "blockpools"],
         help=("disable deployment of ocs components:rgw, cephfs, noobaa, blockpools."),
     )
+    parser.add_argument(
+        "--default-cluster-context-index",
+        action="store",
+        default=0,
+    )
 
     args, unknown = parser.parse_known_args(args=arguments)
-    ocs_version = args.ocs_version
     load_config(args.ocsci_conf)
+    ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
@@ -126,8 +137,7 @@ def process_ocsci_conf(arguments):
         ocs_version_from_image = utils.get_ocs_version_from_image(ocs_registry_image)
         if ocs_version and ocs_version != ocs_version_from_image:
             framework.config.DEPLOYMENT["ignore_csv_mismatch"] = True
-        if not ocs_version:
-            ocs_version = ocs_version_from_image
+        ocs_version = ocs_version_from_image
     if ocs_version:
         version_config_file = os.path.join(
             OCS_VERSION_CONF_DIR, f"ocs-{ocs_version}.yaml"
@@ -141,6 +151,9 @@ def process_ocsci_conf(arguments):
             OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
         )
         load_config([ocp_version_config])
+        # As we may have overridden values specified in the original config,
+        # reload it to get them back
+        load_config(args.ocsci_conf)
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
 
@@ -153,6 +166,11 @@ def process_ocsci_conf(arguments):
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
     if args.disable_components:
         framework.config.ENV_DATA["disable_components"] = args.disable_components
+    framework.config.ENV_DATA["default_cluster_context_index"] = (
+        int(args.default_cluster_context_index)
+        if args.default_cluster_context_index
+        else 0
+    )
 
 
 def init_multicluster_ocsci_conf(args, nclusters):
@@ -201,6 +219,9 @@ def init_multicluster_ocsci_conf(args, nclusters):
                 ] = f"{multicluster_conf[index][arg+1]}{index + 1}"
         framework.config.multicluster_args.append(multicluster_conf[index][1:])
         check_config_requirements()
+    framework.config.multicluster_common_args.append(common_argv)
+    # Set context to default_cluster_context_index
+    framework.config.switch_default_cluster_ctx()
 
 
 def tokenize_per_cluster_args(args, nclusters):

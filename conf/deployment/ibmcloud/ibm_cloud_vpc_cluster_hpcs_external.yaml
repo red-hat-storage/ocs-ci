@@ -1,0 +1,40 @@
+
+# This is the basic config for IBM cloud usage with HPCS.
+DEPLOYMENT:
+  kms_deployment: true
+---
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'managed'
+  region: 'eu-de'
+  zone: 'eu-de-3'
+  provider: "vpc-gen2"
+  worker_instance_type: "mx2.16x128"
+  master_replicas: 0
+  worker_replicas: 3
+  rhel_workers: true
+  encryption_at_rest: true
+  hpcs_deploy_mode: external
+  KMS_PROVIDER: hpcs
+  KMS_SERVICE_NAME: hpcs
+  # Following values needs to be set in separate config and passed to ocs-ci in
+  # order to deploy OCP/OCS cluster on IBM Cloud
+  # vpc_id: VPC ID PLACEHOLDER
+  # subnet_id: SUBNET ID PLACEHOLDER
+  # cos_instance: COS INSTANCE PLACEHOLDER
+#AUTH:
+#  ibmcloud:
+#    api_key: IBM CLOUD API KEY PLACEHOLDER
+#    account_id: ACCOUNT ID PLACEHOLDER
+#    ibm_cos_access_key_id: KEY PLACEHOLDER
+#    ibm_cos_secret_access_key: SECRET PLACEHOLDER
+#DEPLOYMENT:
+#  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
+REPORTING:
+  # We cannot use internal image for must gather cause of secret issue.
+  # To allow us testing NON GA version we have to use upstream image. For GAed
+  # version of OCS, we need to pass extra config file:
+  # conf/ocsci/live-must-gather.yaml
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'
+  overwrite_must_gather_image: false

@@ -10,9 +10,21 @@ import os
 import re
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ManagedServiceAddonDeploymentError
+from ocs_ci.ocs.exceptions import (
+    ManagedServiceAddonDeploymentError,
+    UnsupportedPlatformVersionError,
+    ConfigurationError,
+)
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+
+from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.managedservice import (
+    remove_header_footer_from_key,
+    generate_onboarding_token,
+    get_storage_provider_endpoint,
+)
+
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -29,31 +41,37 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
-def create_cluster(cluster_name, version):
+def create_cluster(cluster_name, version, region):
     """
     Create OCP cluster.
 
     Args:
         cluster_name (str): Cluster name
         version (str): cluster version
+        region (str): Cluster region
 
     """
     rosa_ocp_version = get_latest_rosa_version(version)
     create_account_roles(version)
-    region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
+    multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} --sts --yes"
+        f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
+        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
+    if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
+        aws = AWSUtil()
+        subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
+        cmd = f"{cmd} --subnet-ids {subnet_id}"
+
     utils.run_cmd(cmd)
-    create_operator_roles(cluster_name)
-    create_oidc_provider(cluster_name)
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        4000, 30, ocm.get_cluster_details, cluster_name
+        4500, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
@@ -83,11 +101,20 @@ def get_latest_rosa_version(version):
     """
     cmd = "rosa list versions"
     output = utils.run_cmd(cmd)
+    logger.info(f"Looking for z-stream version of {version}")
+    rosa_version = None
     for line in output.splitlines():
-        match = re.search(f"^{version}\\.(\\d) ", line)
+        match = re.search(f"^{version}\\.(\\d+) ", line)
         if match:
             rosa_version = match.group(0).rstrip()
             break
+    if rosa_version is None:
+        logger.error(f"Could not find any version of {version} available for ROSA")
+        logger.info("Try providing an older version of OCP with --ocp-version")
+        logger.info("Latest OCP versions available for ROSA are:")
+        for i in range(3):
+            logger.info(f"{output.splitlines()[i + 1]}")
+        raise UnsupportedPlatformVersionError
     return rosa_version
 
 
@@ -101,10 +128,10 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
 
     """
     cmd = (
-        f"rosa create account-roles --version {version} --mode auto"
+        f"rosa create account-roles --mode auto"
         f' --permissions-boundary "" --prefix {prefix}  --yes'
     )
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def create_operator_roles(cluster, prefix='""'):
@@ -121,7 +148,7 @@ def create_operator_roles(cluster, prefix='""'):
         f"rosa create operator-roles --cluster {cluster} --prefix {prefix}"
         f' --mode auto --permissions-boundary "" --yes'
     )
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def create_oidc_provider(cluster):
@@ -134,7 +161,7 @@ def create_oidc_provider(cluster):
 
     """
     cmd = f"rosa create oidc-provider --cluster {cluster} --mode auto --yes"
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def download_rosa_cli():
@@ -180,8 +207,10 @@ def install_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
@@ -193,7 +222,30 @@ def install_odf_addon(cluster):
     if notification_email_2:
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
 
-    utils.run_cmd(cmd)
+    if cluster_type.lower() == "provider":
+        public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+        if not public_key:
+            raise ConfigurationError(
+                "Public key for Managed Service not defined.\n"
+                "Expected following configuration in auth.yaml file:\n"
+                "managed_service:\n"
+                '  private_key: "..."\n'
+                '  public_key: "..."'
+            )
+        public_key_only = remove_header_footer_from_key(public_key)
+        cmd += f' --onboarding-validation-key "{public_key_only}"'
+
+    if cluster_type.lower() == "consumer" and provider_name:
+        onboarding_ticket = generate_onboarding_token()
+        if onboarding_ticket:
+            cmd += f' --onboarding-ticket "{onboarding_ticket}"'
+        else:
+            raise ValueError(" Invalid onboarding ticket configuration")
+
+        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
+        cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
+
+    utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
         4000, 30, get_addon_info, cluster, addon_name
     ):
@@ -215,7 +267,7 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
-    addon_name = config.DEPLOYMENT["addon_name"]
+    addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
@@ -229,3 +281,25 @@ def delete_odf_addon(cluster):
             raise ManagedServiceAddonDeploymentError(
                 f"Addon {addon_name} failed to be uninstalled"
             )
+
+
+def delete_operator_roles(cluster_id):
+    """
+    Delete operator roles of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete operator-roles -c {cluster_id}"
+    utils.run_cmd(cmd)
+
+
+def delete_oidc_provider(cluster_id):
+    """
+    Delete oidc provider of the given cluster
+
+    Args:
+        cluster_id (str): the id of the cluster
+    """
+    cmd = f"rosa delete oidc-provider -c {cluster_id}"
+    utils.run_cmd(cmd)

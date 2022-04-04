@@ -457,6 +457,23 @@ class AWS(object):
             "Delete response for volume: %s is: %s", volume.volume_id, delete_response
         )
 
+    def get_cluster_subnet_ids(self, cluster_name):
+        """
+        Get the cluster's subnet ids of existing cluster
+
+        Args:
+            cluster_name (str): Cluster name
+
+        Returns:
+            string of space separated subnet ids
+
+        """
+        subnets = self.ec2_client.describe_subnets(
+            Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
+        )
+        subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+        return subnet_ids
+
     def detach_and_delete_volume(self, volume, timeout=120):
         """
         Detach volume if attached and then delete it from AWS
@@ -1700,24 +1717,24 @@ def terminate_rhel_workers(worker_list):
         logger.info("No workers in list, skipping termination of RHEL workers")
         return
 
-    logging.info(f"Terminating RHEL workers {worker_list}")
+    logger.info(f"Terminating RHEL workers {worker_list}")
     # Do a dry run of instance termination
     try:
         aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=True)
     except aws.ec2_client.exceptions.ClientError as err:
         if "DryRunOperation" in str(err):
-            logging.info("Instances can be deleted")
+            logger.info("Instances can be deleted")
         else:
-            logging.error("Some of the Instances can't be deleted")
+            logger.error("Some of the Instances can't be deleted")
             raise exceptions.FailedToDeleteInstance()
     # Actual termination call here
     aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=False)
     try:
         waiter = aws.ec2_client.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=worker_list)
-        logging.info("Instances are terminated")
+        logger.info("Instances are terminated")
     except aws.ec2_client.exceptions.WaiterError as ex:
-        logging.error(f"Failed to terminate instances {ex}")
+        logger.error(f"Failed to terminate instances {ex}")
         raise exceptions.FailedToDeleteInstance()
 
 

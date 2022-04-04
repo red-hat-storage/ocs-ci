@@ -168,7 +168,7 @@ def test_get_storageutilization_size_empty100percent(ceph_df_json_output_cluster
         # necessary to utilize all storage space on the cluster should match
         # the value of MAX AVAIL
         pool_stats = ceph_df_json_output_clusterempty["pools"][2]["stats"]
-        expected_pvc_size = int(pool_stats["max_avail"] / 2 ** 30)  # GiB
+        expected_pvc_size = int(pool_stats["max_avail"] / 2**30)  # GiB
         assert pvc_size == expected_pvc_size
 
 
@@ -176,6 +176,6 @@ def test_get_timeout_basic():
     """
     Writing on 1 GiB volume with 1 GiB/s should give us 1s timeout
     """
-    fio_min_mbps = 2 ** 10  # MiB/s
+    fio_min_mbps = 2**10  # MiB/s
     pvc_size = 1  # GiB
     assert fiojob.get_timeout(fio_min_mbps, pvc_size) == 1

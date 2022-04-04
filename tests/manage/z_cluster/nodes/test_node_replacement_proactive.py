@@ -6,9 +6,7 @@ import random
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
-    tier4b,
     ManageTest,
     ignore_leftovers,
     ipi_deployment_required,
@@ -17,10 +15,11 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_openshift_dedicated,
+    skipif_managed_service,
     skipif_bmpsi,
     bugzilla,
     skipif_external_mode,
+    skipif_ms_consumer,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -121,7 +120,7 @@ def delete_and_create_osd_node(osd_node_name):
         f"results of this test run are all invalid."
     )
 
-    if config.ENV_DATA["deployment_type"] == "ipi":
+    if config.ENV_DATA["deployment_type"] in ["ipi", "managed"]:
         if is_lso_cluster():
             # TODO: Implement functionality for Internal-Attached devices mode
             # once ocs-ci issue #4545 is resolved
@@ -152,11 +151,10 @@ def delete_and_create_osd_node(osd_node_name):
     )
 
 
-@tier4
 @tier4a
 @ignore_leftovers
 @ipi_deployment_required
-@skipif_openshift_dedicated
+@skipif_managed_service
 @skipif_bmpsi
 @skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
@@ -227,12 +225,11 @@ class TestNodeReplacementWithIO(ManageTest):
             osd_encryption_verification()
 
 
-@tier4
 @tier4a
 @ignore_leftovers
-@skipif_openshift_dedicated
 @skipif_bmpsi
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -269,11 +266,12 @@ class TestNodeReplacement(ManageTest):
         ), "Data re-balance failed to complete"
 
 
-@tier4b
+@tier4a
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
+@skipif_ms_consumer
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:

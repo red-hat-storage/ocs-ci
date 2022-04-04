@@ -248,6 +248,18 @@ class ExternalClusterRGWAdminOpsUserException(Exception):
     pass
 
 
+class ExternalClusterExporterRunFailed(Exception):
+    pass
+
+
+class ExternalClusterObjectStoreUserCreationFailed(Exception):
+    pass
+
+
+class ExternalClusterRGWEndPointMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -352,6 +364,10 @@ class VaultOperationError(Exception):
     pass
 
 
+class HPCSDeploymentError(Exception):
+    pass
+
+
 class KMSNotSupported(Exception):
     pass
 
@@ -428,6 +444,10 @@ class PodNotCreated(Exception):
     pass
 
 
+class RBDSideCarContainerException(Exception):
+    pass
+
+
 class ElasticSearchNotDeployed(Exception):
     pass
 
@@ -440,5 +460,17 @@ class ConfigurationError(Exception):
     pass
 
 
+class DRPrimaryNotFoundException(Exception):
+    pass
+
+
+class InteractivePromptException(Exception):
+    pass
+
+
 class BenchmarkTestFailed(Exception):
+    pass
+
+
+class WrongVersionExpression(ValueError):
     pass

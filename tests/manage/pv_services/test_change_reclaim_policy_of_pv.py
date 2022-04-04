@@ -3,12 +3,14 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, skipif_managed_service
+from ocs_ci.ocs.constants import RECLAIM_POLICY_DELETE, RECLAIM_POLICY_RETAIN
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     verify_volume_deleted_in_backend,
     default_ceph_block_pool,
+    default_storage_class,
 )
 
 log = logging.getLogger(__name__)
@@ -19,20 +21,20 @@ log = logging.getLogger(__name__)
     argnames=["interface", "reclaim_policy"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "Delete"],
+            *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_DELETE],
             marks=pytest.mark.polarion_id("OCS-939"),
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "Retain"],
-            marks=pytest.mark.polarion_id("OCS-962"),
+            *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_RETAIN],
+            marks=[pytest.mark.polarion_id("OCS-962"), skipif_managed_service],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "Delete"],
+            *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_DELETE],
             marks=pytest.mark.polarion_id("OCS-963"),
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "Retain"],
-            marks=pytest.mark.polarion_id("OCS-964"),
+            *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_RETAIN],
+            marks=[pytest.mark.polarion_id("OCS-964"), skipif_managed_service],
         ),
     ],
 )
@@ -59,9 +61,13 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         """
         Create pvc and pod
         """
-        # Create storage class
-        self.sc_obj = storageclass_factory(
-            interface=interface, reclaim_policy=reclaim_policy
+        # Create storage class if reclaim policy is not "Delete"
+        self.sc_obj = (
+            default_storage_class(interface)
+            if reclaim_policy == RECLAIM_POLICY_DELETE
+            else storageclass_factory(
+                interface=interface, reclaim_policy=reclaim_policy
+            )
         )
 
         # Create PVCs

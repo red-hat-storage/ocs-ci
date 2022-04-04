@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
-    tier4a,
+    tier4b,
     on_prem_platform_required,
     skipif_external_mode,
     skipif_vsphere_ipi,
@@ -31,7 +31,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
 @pytest.mark.bugzilla("1852983")
@@ -56,7 +56,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     def create_obc_creation(self, bucket_factory, mcg_obj, key):
 
         # Create a bucket then read & write
-        bucket_name = bucket_factory(amount=1, interface="OC")[0].name
+        bucket_name = bucket_factory(amount=1, interface="OC", timeout=120)[0].name
         obj_data = "A random string data"
         assert s3_put_object(
             mcg_obj, bucket_name, key, obj_data
