@@ -38,11 +38,9 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_JENKINS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "jenkins")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
-TEMPLATE_COUCHBASE_NEW_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase_new")
-TEMPLATE_COUCHBASE_NEW_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_NEW_DIR, "server")
-TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_DIR, "pillowfight"
-)
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_COUCHBASE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
@@ -90,7 +88,6 @@ STATUS_BOUND = "Bound"
 STATUS_RELEASED = "Released"
 STATUS_COMPLETED = "Completed"
 STATUS_ERROR = "Error"
-STATUS_CLBO = "CrashLoopBackOff"
 STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
@@ -114,7 +111,6 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
-JOB = "Job"
 STORAGECLASS = "StorageClass"
 STORAGESYSTEM = "StorageSystem"
 PV = "PersistentVolume"
@@ -158,7 +154,6 @@ SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
-CLUSTER_SERVICE_VERSION = "csv"
 
 # Other
 SECRET = "Secret"
@@ -249,8 +244,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
-GB = 1024 ** 3
-GB2KB = 1024 ** 2
+GB = 1024**3
+GB2KB = 1024**2
 GB2MB = 1024
 
 # Reclaim Policy
@@ -413,28 +408,28 @@ OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
 )
 
-COUCHBASE_NEW_OPERATOR_GROUP_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-operatorgroup.yaml"
+COUCHBASE_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "cb-operatorgroup.yaml"
 )
 
-COUCHBASE_NEW_OPERATOR_SUBSCRIPTION_YAML = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "cb-subscription.yaml"
+COUCHBASE_OPERATOR_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "cb-subscription.yaml"
 )
 
-COUCHBASE_NEW_WORKER_SECRET = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker-secret.yaml"
+COUCHBASE_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
 )
 
-COUCHBASE_NEW_WORKER_EXAMPLE = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-worker.yaml"
+COUCHBASE_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker.yaml"
 )
 
-COUCHBASE_NEW_DATA_BUCKET = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_SERVER_DIR, "couchbase-data-bucket.yaml"
+COUCHBASE_DATA_BUCKET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-data-bucket.yaml"
 )
 
-COUCHBASE_NEW_PILLOWFIGHT = os.path.join(
-    TEMPLATE_COUCHBASE_NEW_PILLOWFIGHT_DIR, "basic-pillowfight.yaml"
+COUCHBASE_PILLOWFIGHT = os.path.join(
+    TEMPLATE_COUCHBASE_PILLOWFIGHT_DIR, "basic-pillowfight.yaml"
 )
 
 COUCHBASE_OPERATOR = "couchbase-operator-namespace"
@@ -613,6 +608,17 @@ RBD_CSI_VAULT_TENANT_CONFIGMAP = os.path.join(
 CEPH_CONFIG_DEBUG_LOG_LEVEL_CONFIGMAP = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "ceph-debug-log-level-configmap.yaml"
 )
+# External hpcs kms yamls
+EXTERNAL_HPCS_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "hpcs")
+EXTERNAL_HPCS_KMS_CONNECTION_DETAILS = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details-hpcs.yaml"
+)
+EXTERNAL_IBM_KP_KMS_SECRET = os.path.join(
+    EXTERNAL_HPCS_TEMPLATES, "ibm-kp-kms-secret.yaml"
+)
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
@@ -720,6 +726,7 @@ ALERT_BUCKETERRORSTATE = "NooBaaBucketErrorState"
 ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
 ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
 ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
+ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
@@ -796,7 +803,7 @@ WORKER_IGN = "worker.ign"
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
 # Minimum storage needed for vSphere Datastore in bytes
-MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -928,6 +935,9 @@ VM_RHEL_USER = "test"
 
 # playbooks
 SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
+
+# annotations
+REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
@@ -1340,7 +1350,7 @@ MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
-MIN_NODE_MEMORY = 64 * 10 ** 9
+MIN_NODE_MEMORY = 64 * 10**9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
@@ -1461,10 +1471,14 @@ VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
 VAULT_KMS_PROVIDER = "vault"
+HPCS_KMS_PROVIDER = "hpcs"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
-
+VAULT_CWD_KMS_SA_NAME = "odf-vault-auth"
+VAULT_TOKEN_AUTH = "token"
+VAULT_KUBERNETES_AUTH = "kubernetes"
+VAULT_KUBERNETES_AUTH_ROLE = "odf-rook-ceph-op"
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
@@ -1644,7 +1658,7 @@ ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
 
-# Vault encryption KMS types
+# Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
 VAULT_TENANT_SA = "vaulttenantsa"
 RBD_CSI_VAULT_TOKEN_REVIEWER_NAME = "rbd-csi-vault-token-review"

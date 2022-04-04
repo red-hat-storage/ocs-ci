@@ -12,6 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
+from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -28,6 +29,7 @@ class ROSAOCP(BaseOCPDeployment):
     def __init__(self):
         super(ROSAOCP, self).__init__()
         self.ocp_version = get_ocp_version()
+        self.region = config.ENV_DATA["region"]
 
     def deploy_prereq(self):
         """
@@ -56,7 +58,7 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version)
+        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -96,6 +98,7 @@ class ROSA(CloudDeploymentBase):
         super(ROSA, self).__init__()
         ocm.download_ocm_cli()
         rosa.download_rosa_cli()
+        self.aws = AWSUtil(self.region)
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -108,6 +111,8 @@ class ROSA(CloudDeploymentBase):
         """
         ocm.login()
         super(ROSA, self).deploy_ocp(log_cli_level)
+        if config.DEPLOYMENT.get("host_network"):
+            self.host_network_update()
 
     def check_cluster_existence(self, cluster_name_prefix):
         """
@@ -180,3 +185,63 @@ class ROSA(CloudDeploymentBase):
         cephfs_pvcs = pvc.get_all_pvcs_in_storageclass(constants.CEPHFILESYSTEM_SC)
         pvc.delete_pvcs(cephfs_pvcs)
         rosa.delete_odf_addon(self.cluster_name)
+
+    def host_network_update(self):
+        """
+        Update security group rules for HostNetwork
+        """
+        infrastructure_id = ocp.OCP().exec_oc_cmd(
+            "get -o jsonpath='{.status.infrastructureName}{\"\\n\"}' infrastructure cluster"
+        )
+        worker_pattern = f"{infrastructure_id}-worker*"
+        worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
+        security_groups = worker_instances[0]["security_groups"]
+        sg_id = security_groups[0]["GroupId"]
+        security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
+        # The ports are not 100 % clear yet. Taken from doc:
+        # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#
+        security_group.authorize_ingress(
+            DryRun=False,
+            IpPermissions=[
+                {
+                    "FromPort": 6800,
+                    "ToPort": 7300,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
+                    ],
+                },
+                {
+                    "FromPort": 3300,
+                    "ToPort": 3300,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
+                    ],
+                },
+                {
+                    "FromPort": 6789,
+                    "ToPort": 6789,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
+                    ],
+                },
+                {
+                    "FromPort": 9283,
+                    "ToPort": 9283,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
+                    ],
+                },
+                {
+                    "FromPort": 31659,
+                    "ToPort": 31659,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
+                    ],
+                },
+            ],
+        )

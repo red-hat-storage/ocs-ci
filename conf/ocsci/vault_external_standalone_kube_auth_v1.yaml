@@ -1,0 +1,15 @@
+DEPLOYMENT:
+  kms_deployment: true
+
+ENV_DATA:
+  encryption_at_rest: true
+  vault_deploy_mode: external
+  use_vault_namespace: false
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  VAULT_CACERT: "ocs-kms-ca-secret"
+  VAULT_CLIENT_CERT: "ocs-kms-client-cert"
+  VAULT_CLIENT_KEY: "ocs-kms-client-key"
+  VAULT_SKIP_VERIFY: false
+  VAULT_AUTH_METHOD: kubernetes
+  VAULT_BACKEND: v1

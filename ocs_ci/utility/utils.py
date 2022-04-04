@@ -934,8 +934,13 @@ def get_vault_cli(bind_dir=None, force_download=False):
     zip_file = f"vault_{version}_{system}_amd64.zip"
     vault_cli_filename = "vault"
     vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
-    if os.path.isfile(vault_binary_path) and force_download:
-        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        vault_ver = re.search(
+            r"Vault\sv*([\d.]+)", run_cmd(f"{vault_binary_path} version")
+        ).group(1)
+        if (Version.coerce(version) > Version.coerce(vault_ver)) or force_download:
+            delete_file(vault_binary_path)
+
     if os.path.isfile(vault_binary_path):
         log.debug(
             f"Vault CLI binary already exists {vault_binary_path}, skipping download."

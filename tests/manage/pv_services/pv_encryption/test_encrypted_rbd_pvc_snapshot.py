@@ -22,16 +22,33 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
+from semantic_version import Version
 
 log = logging.getLogger(__name__)
 
+# Set the arg values based on KMS provider.
+if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    kmsprovider = constants.HPCS_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider"]
+    argvalues = [
+        pytest.param("v1", kmsprovider),
+    ]
+else:
+    kmsprovider = constants.VAULT_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
+    argvalues = [
+        pytest.param(
+            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2612")
+        ),
+        pytest.param(
+            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2613")
+        ),
+    ]
+
 
 @pytest.mark.parametrize(
-    argnames=["kv_version"],
-    argvalues=[
-        pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2612")),
-        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2613")),
-    ],
+    argnames=argnames,
+    argvalues=argvalues,
 )
 @tier1
 @skipif_ocs_version("<4.8")
@@ -48,6 +65,8 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
     def setup(
         self,
         kv_version,
+        kms_provider,
+        use_vault_namespace,
         pv_encryption_kms_setup_factory,
         project_factory,
         pod_factory,
@@ -60,7 +79,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.vault = pv_encryption_kms_setup_factory(kv_version)
+        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
@@ -70,12 +89,13 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryption_kms_id=self.vault.kmsid,
+            encryption_kms_id=self.kms.kmsid,
         )
 
-        # Create ceph-csi-kms-token in the tenant namespace
-        self.vault.vault_path_token = self.vault.generate_vault_token()
-        self.vault.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
+        if kms_provider == constants.VAULT_KMS_PROVIDER:
+            # Create ceph-csi-kms-token in the tenant namespace
+            self.kms.vault_path_token = self.kms.generate_vault_token()
+            self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
         # Create PVC and Pods
         self.pvc_size = 5
@@ -107,15 +127,19 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
+            if kms_provider == constants.VAULT_KMS_PROVIDER:
+                if kms.is_key_present_in_path(
+                    key=vol_handle, path=self.kms.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for {pvc_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for {pvc_obj.name}"
+                    )
 
     def test_encrypted_rbd_block_pvc_snapshot(
         self,
+        kms_provider,
         snapshot_factory,
         snapshot_restore_factory,
         pod_factory,
@@ -190,14 +214,15 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             )
             snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
             snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
-            if kms.is_key_present_in_path(
-                key=snap_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for snapshot {snap_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Vault: Key not found for snapshot {snap_obj.name}"
-                )
+            if kms_provider == constants.VAULT_KMS_PROVIDER:
+                if kms.is_key_present_in_path(
+                    key=snap_handle, path=self.kms.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for snapshot {snap_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for snapshot {snap_obj.name}"
+                    )
             snap_handles.append(snap_handle)
 
         # Delete pods
@@ -276,14 +301,15 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             restore_vol_handles.append(vol_handle)
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.vault.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Vault: Key not found for restored PVC {pvc_obj.name}"
-                )
+            if kms_provider == constants.VAULT_KMS_PROVIDER:
+                if kms.is_key_present_in_path(
+                    key=vol_handle, path=self.kms.vault_backend_path
+                ):
+                    log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
+                else:
+                    raise ResourceNotFoundError(
+                        f"Vault: Key not found for restored PVC {pvc_obj.name}"
+                    )
 
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(restore_vol_handles, restore_pod_objs):
@@ -334,18 +360,21 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             snap_obj.delete()
             snapcontent_obj.ocp.wait_for_delete(resource_name=snapcontent_obj.name)
 
-        # Verify if keys for PVCs and snapshots are deleted from  Vault
-        if kv_version == "v1":
-            log.info(
-                "Verify whether the keys for PVCs and snapshots are deleted in vault"
-            )
-            for key in self.vol_handles + snap_handles + restore_vol_handles:
-                if not kms.is_key_present_in_path(
-                    key=key, path=self.vault.vault_backend_path
-                ):
-                    log.info(f"Vault: Key deleted for {key}")
-                else:
-                    raise KMSResourceCleaneupError(
-                        f"Vault: Key deletion failed for {key}"
-                    )
-            log.info("All keys from vault were deleted")
+        if kms_provider == constants.VAULT_KMS_PROVIDER:
+            # Verify if keys for PVCs and snapshots are deleted from  Vault
+            if kv_version == "v1" or Version.coerce(
+                config.ENV_DATA["ocs_version"]
+            ) >= Version.coerce("4.9"):
+                log.info(
+                    "Verify whether the keys for PVCs and snapshots are deleted in vault"
+                )
+                for key in self.vol_handles + snap_handles + restore_vol_handles:
+                    if not kms.is_key_present_in_path(
+                        key=key, path=self.kms.vault_backend_path
+                    ):
+                        log.info(f"Vault: Key deleted for {key}")
+                    else:
+                        raise KMSResourceCleaneupError(
+                            f"Vault: Key deletion failed for {key}"
+                        )
+                log.info("All keys from vault were deleted")

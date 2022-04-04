@@ -85,7 +85,7 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT": "ocs-kms-ca-secret",
         "VAULT_TLS_SERVER_NAME": "",
         "VAULT_NAMESPACE": "",
-        "VAULT_TOKEN_NAME": "ocs-kms-token",
+        "VAULT_TOKEN_NAME": "ceph-csi-kms-token",
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
@@ -110,3 +110,17 @@ VAULT_TENANT_SA_CONNECTION_CONF = {
 # External cluster username
 EXTERNAL_CLUSTER_USER = "client.healthchecker"
 EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
+# Hpcs related defaults
+#
+# To be used for adding additional hpcs connections
+# to csi-kms-connection-details resource
+HPCS_CSI_CONNECTION_CONF = {
+    "1-hpcs": {
+        "KMS_PROVIDER": "ibmkeyprotect",
+        "KMS_SERVICE_NAME": "1-hpcs",
+        "IBM_KP_SERVICE_INSTANCE_ID": "",
+        "IBM_KP_SECRET_NAME": "ibm-kp-kms-test-secret",
+        "IBM_KP_BASE_URL": "",
+        "IBM_KP_TOKEN_URL": "https://iam.cloud.ibm.com/oidc/token",
+    }
+}

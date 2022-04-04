@@ -79,6 +79,7 @@ class PlatformNodesFactory:
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
+            "rosa": AWSNodes,
         }
 
     def get_nodes_platform(self):

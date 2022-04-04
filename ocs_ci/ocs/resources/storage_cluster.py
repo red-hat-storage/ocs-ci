@@ -30,7 +30,12 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-from ocs_ci.ocs.node import get_osds_per_node, add_new_disk_for_vsphere
+from ocs_ci.ocs.node import (
+    get_osds_per_node,
+    add_new_disk_for_vsphere,
+    get_osd_running_nodes,
+    get_encrypted_osd_devices,
+)
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
     localstorage,
@@ -622,6 +627,34 @@ def osd_encryption_verification():
                 f"The output of lsblk command on node {worker_node} is not as expected:\n{lsblk_output}"
             )
             raise ValueError("OSD is not encrypted")
+
+    # skip OCS 4.8 as the fix for luks header info is still not available on it
+    if ocs_version > version.VERSION_4_6 and ocs_version != version.VERSION_4_8:
+        log.info("Verify luks header label for encrypted devices")
+        worker_nodes = get_osd_running_nodes()
+        failures = 0
+        failure_message = ""
+        node_obj = OCP(kind="node")
+        for node in worker_nodes:
+            luks_devices = get_encrypted_osd_devices(node_obj, node)
+            for luks_device_name in luks_devices:
+                luks_device_name = luks_device_name.strip()
+                log.info(
+                    f"Checking luks header label on Luks device {luks_device_name} for node {node}"
+                )
+                cmd = "cryptsetup luksDump /dev/" + str(luks_device_name)
+                cmd_out = node_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+
+                if "(no label)" in str(cmd_out) or "(no subsystem)" in str(cmd_out):
+                    failures += 1
+                    failure_message += (
+                        f"\nNo label found on Luks header information for node {node}\n"
+                    )
+
+        if failures != 0:
+            log.error(failure_message)
+            raise ValueError("Luks header label is not found")
+        log.info("Luks header info found for all the encrypted osds")
 
 
 def verify_kms_ca_only():

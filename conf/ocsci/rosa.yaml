@@ -9,6 +9,7 @@ ENV_DATA:
   master_replicas: 3
   # size of storage cluster, default is 1 TiB
   size: '1'
+  region: "us-east-2"
 
 # AUTH:
 #  openshiftdedicated:
@@ -19,7 +20,6 @@ DEPLOYMENT:
   ocm_cli_version: '0.1.60'
   force_download_rosa_cli: True
   rosa_cli_version: '1.1.7'
-  region: "us-east-2"
   addon_name: "ocs-converged"
   force_download_installer: True
   force_download_client: True
