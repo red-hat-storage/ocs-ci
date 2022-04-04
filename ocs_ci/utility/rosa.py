@@ -41,18 +41,18 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
-def create_cluster(cluster_name, version):
+def create_cluster(cluster_name, version, region):
     """
     Create OCP cluster.
 
     Args:
         cluster_name (str): Cluster name
         version (str): cluster version
+        region (str): Cluster region
 
     """
     rosa_ocp_version = get_latest_rosa_version(version)
     create_account_roles(version)
-    region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""

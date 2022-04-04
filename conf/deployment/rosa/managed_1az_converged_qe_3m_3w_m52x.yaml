@@ -8,9 +8,9 @@ ENV_DATA:
   worker_instance_type: 'm5.2xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-converged-qe"
+  region: 'us-east-2'
 DEPLOYMENT:
   force_download_ocm_cli: True
-  region: 'us-east-2'
   ocm_cli_version: '0.1.60'
   force_download_rosa_cli: True
   rosa_cli_version: '1.1.7'
