@@ -275,7 +275,7 @@ class TestAdmissionWebhooks(MCGTest):
                         "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 },
-                marks=[tier3, polarion_id("OCS-2795")],
+                marks=[tier3, polarion_id("OCS-2796")],
             ),
         ],
         ids=["AWS Backingstore", "AWS Namespacestore"],
