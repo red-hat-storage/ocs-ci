@@ -3,21 +3,19 @@ import pytest
 import random
 
 from ocs_ci.framework.testlib import (
-    tier4,
-    tier4a,
+    tier4b,
     ManageTest,
     managed_service_required,
+    skipif_ms_consumer,
     ignore_leftovers,
 )
 
-from ocs_ci.framework import config
-from ocs_ci.ocs import machine, constants, cephfs_workload
+from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     check_pods_after_node_replacement,
 )
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.helpers.sanity_helpers import Sanity
 
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -190,6 +188,10 @@ def check_automated_recovery_from_full_cluster_shutdown(nodes):
     )
     assert res, "Not all the rook ceph pods are in a Terminating state"
 
+    # This is a workaround until we find what should be the behavior
+    # when shutting down a worker node
+    nodes.start_nodes(wnodes)
+
     wait_for_nodes_status(wnode_names, timeout=360)
     log.info("All the worker nodes are in a Ready state!")
 
@@ -205,23 +207,13 @@ FAILURE_TYPE_FUNC_CALL_DICT = {
 
 
 @ignore_leftovers
-@tier4
-@tier4a
+@tier4b
 @managed_service_required
+@skipif_ms_consumer
 class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
-    @pytest.fixture(autouse=True)
-    def init_sanity(self):
-        """
-        Initialize Sanity instance
-
-        """
-        config.switch_to_consumer()
-        self.sanity_helpers = Sanity()
-
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         def finalizer():
-            config.switch_to_provider()
             log.info("Verify that all the worker nodes are in a Ready state")
             wnodes = get_nodes(node_type=constants.WORKER_MACHINE)
             for wnode in wnodes:
@@ -245,12 +237,6 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
     def test_automated_recovery_from_failed_nodes_reactive_ms(
         self,
         nodes,
-        project,
-        tmp_path,
-        pvc_factory,
-        pod_factory,
-        bucket_factory,
-        rgw_bucket_factory,
         failure,
     ):
         """
@@ -259,13 +245,6 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             B) Automated recovery from termination of a worker node
             C) Automated recovery from full cluster shutdown
         """
-
-        log_read_write = cephfs_workload.LogReaderWriterParallel(project, tmp_path)
-        log.info("Start read and write to cephfs on consumer")
-        log_read_write.log_reader_writer_parallel()
-
-        config.switch_to_provider()
-
         log.info("Start executing the node test function on the provider...")
         FAILURE_TYPE_FUNC_CALL_DICT[failure](nodes)
 
@@ -275,18 +254,5 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             verify_worker_nodes_security_groups()
         ), "Not all the worker nodes security groups set correctly"
 
-        config.switch_to_consumer()
-        log.info("Fetch and validate data on consumer")
-        log_read_write.fetch_and_validate_data(number_of_fetches=30)
-
-        # Creating Resources
-        log.info("Creating Resources using sanity helpers")
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
-        # Deleting Resources
-        self.sanity_helpers.delete_resources()
-
-        # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check()
+        log.info("Checking that the ceph health is ok")
+        ceph_health_check()
