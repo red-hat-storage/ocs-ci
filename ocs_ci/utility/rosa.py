@@ -236,14 +236,14 @@ def install_odf_addon(cluster):
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
     if cluster_type.lower() == "consumer" and provider_name:
+        unit = config.ENV_DATA.get("unit", "Ti")
+        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
+        cmd += f' --unit "{unit}" --storage-provider-endpoint "{storage_provider_endpoint}"'
         onboarding_ticket = generate_onboarding_token()
         if onboarding_ticket:
             cmd += f' --onboarding-ticket "{onboarding_ticket}"'
         else:
             raise ValueError(" Invalid onboarding ticket configuration")
-
-        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
-        cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
 
     utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
