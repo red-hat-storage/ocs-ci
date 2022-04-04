@@ -868,6 +868,10 @@ class Deployment(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
+            if ocs_version >= version.VERSION_4_10:
+                cluster_data["spec"]["encryption"] = {
+                    "clusterWide": True,
+                }
             if config.DEPLOYMENT.get("kms_deployment"):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
@@ -1134,7 +1138,7 @@ class Deployment(object):
             try:
                 uninstall_ocs()
                 # TODO - add ocs uninstall validation function call
-                logger.info("OCS uninstalled succesfully")
+                logger.info("OCS uninstalled successfully")
             except Exception as ex:
                 logger.error(f"Failed to uninstall OCS. Exception is: {ex}")
                 logger.info("resuming teardown")

@@ -6,6 +6,7 @@ currently supported KMSs: Vault and HPCS
 import logging
 import os
 
+import requests
 import json
 import shlex
 import tempfile
@@ -91,7 +92,7 @@ class Vault(KMS):
         self.cluster_id = None
         # Name of kubernetes resources
         # for ca_cert, client_cert, client_key
-        self.kms_auth_type = constants.VAULT_TOKEN
+        self.vault_auth_method = constants.VAULT_TOKEN_AUTH
         self.ca_cert_name = None
         self.client_cert_name = None
         self.client_key_name = None
@@ -107,7 +108,9 @@ class Vault(KMS):
         self.vault_path_token = None
         self.vault_policy_name = None
         self.vault_kube_auth_path = "kubernetes"
+        self.vault_kube_auth_role = constants.VAULT_KUBERNETES_AUTH_ROLE
         self.vault_kube_auth_namespace = None
+        self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
 
     def deploy(self):
         """
@@ -315,6 +318,30 @@ class Vault(KMS):
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
 
+    def create_ocs_kube_auth_resources(self, sa_name=constants.VAULT_CWD_KMS_SA_NAME):
+        """
+        This function will create the serviceaccount and clusterrolebindings
+        required for kubernetes auth
+
+        Args:
+            sa_name (str): Name of the service account in ODF
+
+        """
+        ocp_obj = ocp.OCP()
+        cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
+        ocp_obj.exec_oc_cmd(command=cmd)
+        self.vault_cwd_kms_sa_name = sa_name
+        logger.info(f"Created serviceaccount {sa_name}")
+
+        cmd = (
+            f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            "clusterrolebinding vault-tokenreview-binding "
+            "--clusterrole=system:auth-delegator "
+            f"--serviceaccount={constants.OPENSHIFT_STORAGE_NAMESPACE}:{sa_name}"
+        )
+        ocp_obj.exec_oc_cmd(command=cmd)
+        logger.info("Created the clusterrolebinding vault-tokenreview-binding")
+
     def create_ocs_vault_resources(self):
         """
         This function takes care of creating ocp resources for
@@ -326,20 +353,37 @@ class Vault(KMS):
         if not config.ENV_DATA.get("VAULT_SKIP_VERIFY"):
             self.create_ocs_vault_cert_resources()
 
-        # create oc resource secret for token
-        token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
-        # token has to base64 encoded (with padding)
-        token_data["data"]["token"] = base64.b64encode(
-            # encode() because b64encode expects a byte type
-            self.vault_path_token.encode()
-        ).decode()  # decode() because b64encode returns a byte type
-        self.create_resource(token_data, prefix="token")
+        # Create resource and configure kubernetes auth method
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
+            self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
+            self.create_ocs_kube_auth_resources()
+            self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+            self.create_vault_kube_auth_role(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                role_name=self.vault_kube_auth_role,
+                sa_name="rook-ceph-system,rook-ceph-osd,noobaa",
+            )
+            self.create_vault_kube_auth_role(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                role_name="odf-rook-ceph-osd",
+                sa_name="rook-ceph-osd",
+            )
+        else:
+            # create oc resource secret for token
+            token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
+            # token has to base64 encoded (with padding)
+            token_data["data"]["token"] = base64.b64encode(
+                # encode() because b64encode expects a byte type
+                self.vault_path_token.encode()
+            ).decode()  # decode() because b64encode returns a byte type
+            self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
         connection_data = templating.load_yaml(
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
+        connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
@@ -348,9 +392,15 @@ class Vault(KMS):
         else:
             connection_data["data"].pop("VAULT_CLIENT_CERT")
             connection_data["data"].pop("VAULT_CLIENT_KEY")
-        connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
+        if config.ENV_DATA.get("use_vault_namespace"):
+            connection_data["data"]["VAULT_NAMESPACE"] = self.vault_namespace
         connection_data["data"]["VAULT_TLS_SERVER_NAME"] = self.vault_tls_server
-        connection_data["data"]["VAULT_BACKEND"] = self.vault_backend_version
+        if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
+            connection_data["data"][
+                "VAULT_AUTH_KUBERNETES_ROLE"
+            ] = constants.VAULT_KUBERNETES_AUTH_ROLE
+        else:
+            connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def vault_unseal(self):
@@ -575,6 +625,22 @@ class Vault(KMS):
             self.vault_path_token = base64.b64decode(token).decode()
             logger.info(f"Setting vault_path_token = {self.vault_path_token}")
 
+    def get_vault_kube_auth_role(self):
+        """
+        Fetch the role name from ocs-kms-connection-details configmap
+
+        """
+        if not self.vault_kube_auth_role:
+            ocs_kms_configmap = ocp.OCP(
+                kind="ConfigMap",
+                resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            self.vault_kube_auth_role = ocs_kms_configmap.get().get("data")[
+                "VAULT_AUTH_KUBERNETES_ROLE"
+            ]
+            logger.info(f"Setting vault_kube_auth_role = {self.vault_kube_auth_role}")
+
     def get_vault_policy(self):
         """
         Get the policy name based on token from vault
@@ -582,7 +648,10 @@ class Vault(KMS):
         """
         self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
-            cmd = f"vault token lookup {self.vault_path_token}"
+            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
+                cmd = f"vault token lookup {self.vault_path_token}"
+            else:
+                cmd = f"vault read auth/{self.vault_kube_auth_path}/role/{self.vault_kube_auth_role}"
             out = subprocess.check_output(shlex.split(cmd))
             json_out = json.loads(out)
             logger.info(json_out)
@@ -674,7 +743,10 @@ class Vault(KMS):
             # get vault path
             self.get_vault_backend_path()
             # from token secret get token
-            self.get_vault_path_token()
+            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
+                self.get_vault_path_token()
+            else:
+                self.get_vault_kube_auth_role()
             # from token get policy
             if not self.cluster_id:
                 self.cluster_id = get_running_cluster_id()
@@ -768,7 +840,7 @@ class Vault(KMS):
     def create_vault_csi_kms_connection_details(
         self,
         kv_version,
-        kms_auth_type=constants.VAULT_TOKEN,
+        vault_auth_method=constants.VAULT_TOKEN,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     ):
         """
@@ -780,7 +852,7 @@ class Vault(KMS):
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
         )
-        if kms_auth_type == constants.VAULT_TOKEN:
+        if vault_auth_method == constants.VAULT_TOKEN:
             conn_str = csi_kms_conn_details["data"]["1-vault"]
             buf = json.loads(conn_str)
             buf["VAULT_ADDR"] = f"https://{self.vault_server}:{self.port}"
@@ -930,7 +1002,7 @@ class Vault(KMS):
         )
         secrets = run_cmd(cmd=cmd).split()
         for secret in secrets:
-            if "rbd-csi-vault-token-review-token" in secret:
+            if "-token-" in secret:
                 secret_name = secret
         if not secret_name:
             raise NotFoundError("Secret name not found")
@@ -938,7 +1010,7 @@ class Vault(KMS):
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")
         cmd = (
-            fr"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
+            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
             f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
         token = base64.b64decode(run_cmd(cmd=cmd)).decode()
@@ -1017,7 +1089,7 @@ class Vault(KMS):
 
     def create_vault_kube_auth_role(
         self,
-        tenant_namespace,
+        namespace,
         role_name="csi-kubernetes",
         sa_name="ceph-csi-vault-sa",
     ):
@@ -1025,7 +1097,7 @@ class Vault(KMS):
         Create a role for tenant authentication in Vault
 
         Args:
-           tenant_namespace (str): Tenant namespace where encrypted PVCs will be created
+           namespace (str): namespace in ODF cluster
            role_name (str): Name of the role in Vault
            sa_name (str): Service account in the tenant namespace to be used for authentication
 
@@ -1034,7 +1106,7 @@ class Vault(KMS):
         cmd = (
             f"vault write auth/{self.vault_kube_auth_path}/role/{role_name} "
             f"bound_service_account_names={sa_name} policies={self.vault_policy_name} "
-            f"bound_service_account_namespaces={tenant_namespace}"
+            f"bound_service_account_namespaces={namespace} ttl=1440h"
         )
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
@@ -1192,6 +1264,101 @@ class HPCS(KMS):
         csi_kms_conn_details["data"]["1-hpcs"] = json.dumps(buf)
         csi_kms_conn_details["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
+    def cleanup(self):
+        """
+        Cleanup the backend resources in case of external
+
+        """
+        # nothing to cleanup as of now
+        logger.warning("Nothing to cleanup from HPCS")
+
+    def post_deploy_verification(self):
+        """
+        Validating the OCS deployment from hpcs perspective
+
+        """
+        if config.ENV_DATA.get("hpcs_deploy_mode") == "external":
+            self.validate_external_hpcs()
+
+    def get_token_for_ibm_api_key(self):
+        """
+        This function retrieves the access token in exchange of
+        an IBM API key
+
+        Return:
+            (str): access token for authentication with IBM endpoints
+        """
+        # decode service api key
+        api_key = base64.b64decode(self.ibm_kp_service_api_key).decode()
+        payload = {
+            "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+            "apikey": api_key,
+        }
+        r = requests.post(
+            self.ibm_kp_token_url,
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            data=payload,
+            verify=True,
+        )
+        assert r.ok, f"Couldn't get access token! StatusCode: {r.status_code}."
+        return "Bearer " + r.json()["access_token"]
+
+    def list_hpcs_keys(self):
+        """
+        This function lists the keys present in a HPCS instance
+
+        Return:
+            (list): list of keys in a HPCS instance
+        """
+        access_token = self.get_token_for_ibm_api_key()
+        r = requests.get(
+            f"{self.ibm_kp_base_url}" + "/api/v2/keys",
+            headers={
+                "accept": "application/vnd.ibm.kms.key+json",
+                "bluemix-instance": self.ibm_kp_service_instance_id,
+                "authorization": access_token,
+            },
+            verify=True,
+        )
+        assert r.ok, f"Couldn't list HPCS keys! StatusCode: {r.status_code}."
+        return r.json()["resources"]
+
+    def validate_external_hpcs(self):
+        """
+        This function is for post OCS deployment HPCS
+        verification
+
+        Following checks will be done
+        1. check osd encryption keys in the HPCS path
+        2. check noobaa keys in the HPCS path
+        3. check storagecluster CR for 'kms' enabled
+
+        Raises:
+            NotFoundError : if key not found in HPCS OR in the resource CR
+
+        """
+        self.gather_init_hpcs_conf()
+        kvlist = self.list_hpcs_keys()
+        # Check osd keys are present
+        osds = pod.get_osd_pods()
+        for osd in osds:
+            pvc = (
+                osd.get()
+                .get("metadata")
+                .get("labels")
+                .get(constants.CEPH_ROOK_IO_PVC_LABEL)
+            )
+            if any(pvc in k["name"] for k in kvlist):
+                logger.info(f"HPCS: Found key for {pvc}")
+            else:
+                logger.error(f"HPCS: Key not found for {pvc}")
+                raise NotFoundError("HPCS key not found")
+
+        # Check kms enabled
+        if not is_kms_enabled():
+            logger.error("KMS not enabled on storage cluster")
+            raise NotFoundError("KMS flag not found")
 
 
 kms_map = {"vault": Vault, "hpcs": HPCS}

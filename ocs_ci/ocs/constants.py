@@ -244,8 +244,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
-GB = 1024 ** 3
-GB2KB = 1024 ** 2
+GB = 1024**3
+GB2KB = 1024**2
 GB2MB = 1024
 
 # Reclaim Policy
@@ -803,7 +803,7 @@ WORKER_IGN = "worker.ign"
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
 # Minimum storage needed for vSphere Datastore in bytes
-MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -1350,7 +1350,7 @@ MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
-MIN_NODE_MEMORY = 64 * 10 ** 9
+MIN_NODE_MEMORY = 64 * 10**9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
@@ -1475,7 +1475,10 @@ HPCS_KMS_PROVIDER = "hpcs"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
-
+VAULT_CWD_KMS_SA_NAME = "odf-vault-auth"
+VAULT_TOKEN_AUTH = "token"
+VAULT_KUBERNETES_AUTH = "kubernetes"
+VAULT_KUBERNETES_AUTH_ROLE = "odf-rook-ceph-op"
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
@@ -1655,7 +1658,7 @@ ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
 
-# Vault encryption KMS types
+# Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
 VAULT_TENANT_SA = "vaulttenantsa"
 RBD_CSI_VAULT_TOKEN_REVIEWER_NAME = "rbd-csi-vault-token-review"
