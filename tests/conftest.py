@@ -4907,7 +4907,7 @@ def nsfs_bucket_factory_fixture(
             # A hardcoded sleep is necessary since the bucket is not immediately available
             # for usage, despite it reporting a healthy status.
             # Instantly using the bucket results in a NoSuchKey error.
-            time.sleep(5)
+            time.sleep(15)
             if nsfs_obj.verify_health:
                 assert (
                     "optimal" in rpc_bucket_creation_response.text.lower()
