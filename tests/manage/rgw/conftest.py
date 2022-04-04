@@ -1,6 +1,7 @@
 import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import ON_PREM_PLATFORMS
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def pytest_collection_modifyitems(items):
     """
     if (
         config.ENV_DATA["platform"].lower() not in ON_PREM_PLATFORMS
-        or float(config.ENV_DATA["ocs_version"]) < 4.5
+        or version.get_semantic_ocs_version_from_config() < version.VERSION_4_5
     ):
         for item in items.copy():
             if "manage/rgw" in str(item.fspath):
