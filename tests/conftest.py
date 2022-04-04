@@ -68,6 +68,7 @@ from ocs_ci.ocs.resources.pod import (
     get_deployments_having_label,
     Pod,
     wait_for_pods_to_be_running,
+    get_ceph_tools_pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -90,6 +91,7 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -123,7 +125,7 @@ from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
-from ocs_ci.ocs.couchbase_new import CouchBase
+from ocs_ci.ocs.couchbase import CouchBase
 
 
 log = logging.getLogger(__name__)
@@ -267,6 +269,9 @@ def supported_configuration():
         64 GB memory
     Last documentation check: 2020-02-21
     """
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        log.info("Check for supported configuration is not applied on Managed Service")
+        return
     min_cpu = constants.MIN_NODE_CPU
     min_memory = constants.MIN_NODE_MEMORY
 
@@ -368,8 +373,8 @@ def log_ocs_version(cluster):
     elif skip_ocs_deployment:
         log.info("Skipping version reporting since OCS deployment is skipped.")
         return
-    cluster_version = get_ocp_version_dict()
-    image_dict = get_ocs_version()
+    cluster_version = retry(CommandFailed, tries=3, delay=15)(get_ocp_version_dict)()
+    image_dict = retry(CommandFailed, tries=3, delay=15)(get_ocs_version)()
     file_name = os.path.join(
         config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
     )
@@ -393,6 +398,12 @@ def pagerduty_service(request):
             "PagerDuty service is not created because "
             f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
             "is not used"
+        )
+        return None
+    if config.ENV_DATA.get("disable_pagerduty"):
+        log.info(
+            "PagerDuty service is not created because it was disabled "
+            "with configuration"
         )
         return None
 
@@ -426,8 +437,12 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
-        # this is used only for managed service platforms
+    if config.ENV_DATA[
+        "platform"
+    ].lower() not in constants.MANAGED_SERVICE_PLATFORMS or config.ENV_DATA.get(
+        "disable_pagerduty"
+    ):
+        # this is used only for managed service platforms with configured PagerDuty
         return
 
     service_id = pagerduty_service["id"]
@@ -1303,6 +1318,9 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     launch_url = config.REPORTING.get("rp_launch_url")
     if launch_url:
         record_testsuite_property("rp_launch_url", launch_url)
+    # add markers as separated property
+    markers = config.RUN["cli_params"].get("-m", "").replace(" ", "-")
+    record_testsuite_property("rp_markers", markers)
 
 
 @pytest.fixture(scope="session")
@@ -2890,7 +2908,7 @@ def jenkins_factory_fixture(request):
 
 
 @pytest.fixture(scope="function")
-def couchbase_new_factory_fixture(request):
+def couchbase_factory_fixture(request):
     """
     Couchbase factory fixture using Couchbase operator
     """
@@ -4156,12 +4174,26 @@ def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
     """
+
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
+
+
+def pv_encryption_vault_setup_factory(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap
+
+    """
     vault = KMS.Vault()
 
-    def factory(kv_version):
+    def factory(kv_version, use_vault_namespace=False):
         """
         Args:
             kv_version(str): KV version to be used, either v1 or v2
+            use_vault_namespace (bool): True, to use vault namespace
         Returns:
             object: Vault(KMS) object
         """
@@ -4180,7 +4212,8 @@ def pv_encryption_kms_setup_factory(request):
 
         # Create vault namespace, backend path and policy in vault
         vault_resource_name = create_unique_resource_name("test", "vault")
-        vault.vault_create_namespace(namespace=vault_resource_name)
+        if use_vault_namespace:
+            vault.vault_create_namespace(namespace=vault_resource_name)
         vault.vault_create_backend_path(
             backend_path=vault_resource_name, kv_version=kv_version
         )
@@ -4199,7 +4232,8 @@ def pv_encryption_kms_setup_factory(request):
                 old_key = key
             vdict[new_kmsid] = vdict.pop(old_key)
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
-            vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+            if use_vault_namespace:
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
             vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
@@ -4225,7 +4259,79 @@ def pv_encryption_kms_setup_factory(request):
             KMS.remove_kmsid(vault.kmsid)
         vault.remove_vault_backend_path()
         vault.remove_vault_policy()
-        vault.remove_vault_namespace()
+        if vault.vault_namespace:
+            vault.remove_vault_namespace()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+def pv_encryption_hpcs_setup_factory(request):
+    """
+    Create hpcs resources and setup csi-kms-connection-details configMap
+
+    """
+    hpcs = KMS.HPCS()
+
+    def factory(kv_version):
+        """
+        Args:
+            kv_version(str): KV version to be used
+        Returns:
+            object: HPCS(KMS) object
+        Raises:
+            CommandFailed: if fails to get csi-kms-connection-details configmap
+        """
+        hpcs.gather_init_hpcs_conf()
+
+        # Create hpcs secret with a unique name otherwise raise error if it already exists.
+        hpcs.ibm_kp_secret_name = hpcs.create_ibm_kp_kms_secret()
+
+        # Create or update hpcs related confimap.
+        hpcs_resource_name = create_unique_resource_name("test", "hpcs")
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            new_kmsid = hpcs_resource_name
+            hdict = defaults.HPCS_CSI_CONNECTION_CONF
+            for key in hdict.keys():
+                old_key = key
+            hdict[new_kmsid] = hdict.pop(old_key)
+            hdict[new_kmsid][
+                "IBM_KP_SERVICE_INSTANCE_ID"
+            ] = hpcs.ibm_kp_service_instance_id
+            hdict[new_kmsid]["IBM_KP_SECRET_NAME"] = hpcs.ibm_kp_secret_name
+            hdict[new_kmsid]["IBM_KP_BASE_URL"] = hpcs.ibm_kp_base_url
+            hdict[new_kmsid]["IBM_KP_TOKEN_URL"] = hpcs.ibm_kp_token_url
+            hdict[new_kmsid]["KMS_SERVICE_NAME"] = new_kmsid
+            hpcs.kmsid = hpcs_resource_name
+            KMS.update_csi_kms_vault_connection_details(hdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                hpcs.kmsid = "1-hpcs"
+                hpcs.create_hpcs_csi_kms_connection_details()
+
+        return hpcs
+
+    def finalizer():
+        """
+        Remove the hpcs config from csi-kms-connection-details configMap
+
+        """
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(hpcs.kmsid)
+        # remove the kms secret created to store hpcs creds
+        hpcs.delete_resource(
+            hpcs.ibm_kp_secret_name,
+            "secret",
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
     request.addfinalizer(finalizer)
     return factory
@@ -4511,7 +4617,7 @@ def vault_tenant_sa_setup_factory(request):
             else:
                 vault.kmsid = "vault-tenant-sa"
                 vault.create_vault_csi_kms_connection_details(
-                    kv_version=kv_version, kms_auth_type=constants.VAULT_TENANT_SA
+                    kv_version=kv_version, vault_auth_method=constants.VAULT_TENANT_SA
                 )
         return vault
 
@@ -4822,3 +4928,94 @@ def nsfs_bucket_factory_fixture(
 
     request.addfinalizer(nsfs_bucket_factory_cleanup)
     return nsfs_bucket_factory_implementation
+
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_consumer_toolbox_with_secret():
+    """
+    Patch the rook-ceph-tools deployment with ceph.admin key. Applicable for MS platform only to enable rook-ceph-tools
+    to run ceph commands until we have the fix for rook-ceph-tools in consumer cluster
+
+    """
+    # Get the secret from provider if MS multicluster run
+    if not (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and not config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    restore_ctx_index = config.cur_index
+
+    # Get the admin key if available
+    ceph_admin_key = os.environ.get("CEPHADMINKEY") or config.AUTH.get(
+        "external", {}
+    ).get("ceph_admin_key")
+
+    if not ceph_admin_key:
+        provider_cluster = ""
+
+        # Identify the provider cluster
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "provider":
+                provider_cluster = cluster
+                break
+        assert provider_cluster, "Provider cluster not found"
+
+        # Switch context to provider cluster
+        log.info("Switching to the provider cluster context")
+        config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+
+        # Get the key from provider cluster tools pod
+        provider_tools_pod = get_ceph_tools_pod()
+        ceph_admin_key = (
+            provider_tools_pod.exec_cmd_on_pod("grep key /etc/ceph/keyring")
+            .strip()
+            .split()[-1]
+        )
+
+    # Patch the rook-ceph-tools deployment of all consumer clusters
+    for cluster in config.clusters:
+        if cluster.ENV_DATA.get("cluster_type") == "consumer":
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            consumer_tools_pod = get_ceph_tools_pod()
+
+            # Check whether ceph command is working on tools pod.
+            # Patch is needed only if the error is "RADOS permission error"
+            try:
+                consumer_tools_pod.exec_ceph_cmd("ceph health")
+                continue
+            except Exception as exc:
+                if "RADOS permission error" not in str(exc):
+                    raise
+
+            consumer_tools_deployment = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name="rook-ceph-tools",
+            )
+            patch_value = (
+                f'[{{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
+                f'"value":[{{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}}, '
+                f'{{"name": "ROOK_CEPH_SECRET", "value": "{ceph_admin_key}"}}]}}]'
+            )
+            assert consumer_tools_deployment.patch(
+                params=patch_value, format_type="json"
+            ), "Failed to patch rook-ceph-tools deployment in consumer cluster"
+
+            # Wait for the existing tools pod to delete
+            consumer_tools_pod.ocp.wait_for_delete(
+                resource_name=consumer_tools_pod.name
+            )
+
+            # Wait for the new tools pod to reach Running state
+            new_tools_pod_info = get_pods_having_label(
+                label=constants.TOOL_APP_LABEL,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            )[0]
+            new_tools_pod = Pod(**new_tools_pod_info)
+            helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
+
+    log.info("Switching back to the initial cluster context")
+    config.switch_ctx(restore_ctx_index)

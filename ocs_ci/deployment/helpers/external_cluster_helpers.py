@@ -128,8 +128,10 @@ class ExternalCluster(object):
         """
         Update permission caps on the external RHCS cluster
         """
-        user = user if user else defaults.EXTERNAL_CLUSTER_USER
-        params = f"--upgrade --run-as-user={user}"
+        if user:
+            params = f"--upgrade --run-as-user={user}"
+        else:
+            params = "--upgrade"
         out = self.run_exporter_script(params=params)
         logger.info(f"updated permissions for the user are set as {out}")
 

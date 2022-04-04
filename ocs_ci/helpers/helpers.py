@@ -16,10 +16,8 @@ import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
-from subprocess import PIPE, TimeoutExpired, run
+from subprocess import PIPE, run
 from uuid import uuid4
-
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
@@ -688,7 +686,7 @@ def create_multiple_pvcs(
                 volume_mode=volume_mode,
             )
             for _ in range(number_of_pvc)
-        ]
+        ], None
 
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["namespace"] = namespace
@@ -1390,7 +1388,7 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid
             ):
                 # The creation time log is in nanosecond, so, it need to convert to seconds.
                 results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
-                    10 ** -9
+                    10**-9
                 )
                 return float(f"{results:.3f}")
 
@@ -2431,13 +2429,13 @@ def memory_leak_analysis(median_dict):
         logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
-            start_value = float(1024 ** 2 * float(start_value[:-1]))
+            start_value = float(1024**2 * float(start_value[:-1]))
         elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
         if end_value.__contains__("g"):
-            end_value = float(1024 ** 2 * float(end_value[:-1]))
+            end_value = float(1024**2 * float(end_value[:-1]))
         elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
@@ -2530,67 +2528,6 @@ def rsync_kubeconf_to_node(node):
         node=master_list[0], cmd_list=[f"ls {node_path}auth"]
     ):
         ocp.rsync(src=file_path, dst=f"{node_path}", node=node, dst_node=True)
-
-
-def create_dummy_osd(deployment):
-    """
-    Replace one of OSD pods with pod that contains all data from original
-    OSD but doesn't run osd daemon. This can be used e.g. for direct acccess
-    to Ceph Placement Groups.
-
-    Args:
-        deployment (str): Name of deployment to use
-
-    Returns:
-        list: first item is dummy deployment object, second item is dummy pod
-            object
-    """
-    oc = OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
-    )
-    osd_data = oc.get(deployment)
-    dummy_deployment = create_unique_resource_name("dummy", "osd")
-    osd_data["metadata"]["name"] = dummy_deployment
-
-    osd_containers = osd_data.get("spec").get("template").get("spec").get("containers")
-    # get osd container spec
-    original_osd_args = osd_containers[0].get("args")
-    osd_data["spec"]["template"]["spec"]["containers"][0]["args"] = []
-    osd_data["spec"]["template"]["spec"]["containers"][0]["command"] = [
-        "/bin/bash",
-        "-c",
-        "sleep infinity",
-    ]
-    osd_file = tempfile.NamedTemporaryFile(
-        mode="w+", prefix=dummy_deployment, delete=False
-    )
-    with open(osd_file.name, "w") as temp:
-        yaml.dump(osd_data, temp)
-    oc.create(osd_file.name)
-
-    # downscale the original deployment and start dummy deployment instead
-    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{deployment}")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
-
-    osd_list = pod.get_osd_pods()
-    dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
-    wait_for_resource_state(
-        resource=dummy_pod, state=constants.STATUS_RUNNING, timeout=60
-    )
-    ceph_init_cmd = "/rook/tini" + " " + " ".join(original_osd_args)
-    try:
-        logger.info("Following command should expire after 7 seconds")
-        dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
-    except TimeoutExpired:
-        logger.info("Killing /rook/tini process")
-        try:
-            dummy_pod.exec_sh_cmd_on_pod(
-                "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
-            )
-        except CommandFailed:
-            pass
-
-    return dummy_deployment, dummy_pod
 
 
 def get_failure_domin():
