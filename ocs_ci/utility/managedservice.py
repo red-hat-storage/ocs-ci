@@ -106,7 +106,14 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
         str: value of storage provider endpoint
 
     """
-    config.switch_to_provider()
+    # TODO(fbalak): use following command when https://github.com/red-hat-storage/ocs-ci/pull/5541
+    # is merged:
+    # config.switch_to_provider()
+    for i, cluster in enumerate(config.clusters):
+        if cluster.ENV_DATA["cluster_type"] == "provider":
+            provider_id = i
+            break
+    config.switch_ctx(provider_id)
 
     def _get_provider_endpoint():
         oc = ocp.OCP(namespace="openshift-config")
