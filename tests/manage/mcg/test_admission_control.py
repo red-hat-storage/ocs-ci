@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ignore_leftovers,
     tier3,
+    polarion_id,
 )
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -37,7 +38,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "please provide secret name",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2780")],
             ),
             pytest.param(
                 *[
@@ -50,7 +51,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "please provide a valid Backingstore type",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2781")],
             ),
             pytest.param(
                 *[
@@ -65,7 +66,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "Invalid S3 compatible Backingstore signature version",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2782")],
             ),
             pytest.param(
                 *[
@@ -78,7 +79,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "minimum volume size is 16Gi",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2777")],
             ),
             pytest.param(
                 *[
@@ -91,7 +92,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "Unsupported volume count",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2778")],
             ),
             pytest.param(
                 *[
@@ -104,7 +105,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "Unsupported BackingStore name length",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2779")],
             ),
         ],
         ids=[
@@ -156,7 +157,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "please provide secret name",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2786")],
             ),
             pytest.param(
                 *[
@@ -169,7 +170,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "please provide a valid Namespacestore type",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2787")],
             ),
             pytest.param(
                 *[
@@ -182,7 +183,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "PvcName must not be empty",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2788")],
             ),
             pytest.param(
                 *[
@@ -195,7 +196,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "must be a relative path",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2783")],
             ),
             pytest.param(
                 *[
@@ -208,7 +209,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "must not contain '..'",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2784")],
             ),
             pytest.param(
                 *[
@@ -221,7 +222,7 @@ class TestAdmissionWebhooks(MCGTest):
                     },
                     "must be no more than 63 characters",
                 ],
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2785")],
             ),
         ],
         ids=[
@@ -264,7 +265,7 @@ class TestAdmissionWebhooks(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2795")],
             ),
             pytest.param(
                 {
@@ -274,7 +275,7 @@ class TestAdmissionWebhooks(MCGTest):
                         "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 },
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2795")],
             ),
         ],
         ids=["AWS Backingstore", "AWS Namespacestore"],
@@ -312,7 +313,7 @@ class TestAdmissionWebhooks(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2797")],
             ),
             pytest.param(
                 {
@@ -322,7 +323,7 @@ class TestAdmissionWebhooks(MCGTest):
                         "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 },
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2791")],
             ),
         ],
         ids=["AWS Backingstore", "AWS Namespacestore"],
@@ -363,6 +364,7 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             assert False, "Store patch succeeded unexpectedly"
 
+    @polarion_id("OCS-2792")
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """
         Verify that PVPool downscaling is blocked
@@ -395,17 +397,17 @@ class TestAdmissionWebhooks(MCGTest):
             pytest.param(
                 {"quota": {"maxObjects": "-1"}},
                 "invalid maxObjects value",
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2793")],
             ),
             pytest.param(
                 {"quota": {"maxSize": "900M"}},
                 "invalid obcMaxSizeValue value",
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2794")],
             ),
             pytest.param(
                 {"quota": {"maxSize": "1024Pi"}},
                 "invalid obcMaxSizeValue value",
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2789")],
             ),
             pytest.param(
                 {
@@ -418,7 +420,7 @@ class TestAdmissionWebhooks(MCGTest):
                     }
                 },
                 "unsupported number of tiers",
-                marks=[tier3],
+                marks=[tier3, polarion_id("OCS-2790")],
             ),
         ],
         ids=[
