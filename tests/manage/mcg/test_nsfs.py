@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 class TestNSFSObjectIntegrity(MCGTest):
     """
     Test the integrity of IO operations on NSFS buckets
+
     """
 
-    # TODO: Limit the test to run only when CephFS is available
-    @pytest.mark.polarion_id("")  # TODO
+    @pytest.mark.polarion_id("OCS-3735")
     @pytest.mark.parametrize(
         argnames="nsfs_obj",
         argvalues=[
@@ -65,8 +65,7 @@ class TestNSFSObjectIntegrity(MCGTest):
             result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
         )
 
-    # TODO: Limit the test to run only when CephFS is available
-    @pytest.mark.polarion_id("")  # TODO
+    @pytest.mark.polarion_id("OCS-3737")
     @pytest.mark.parametrize(
         argnames="nsfs_obj",
         argvalues=[
