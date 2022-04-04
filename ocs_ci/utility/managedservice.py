@@ -116,7 +116,9 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
         )
 
     if wait:
-        for result in TimeoutSampler(timeout=timeout, sleep=5, func=_get_provider_endpoint):
+        for result in TimeoutSampler(
+            timeout=timeout, sleep=5, func=_get_provider_endpoint
+        ):
             if result:
                 provider_endpoint = result
                 break
