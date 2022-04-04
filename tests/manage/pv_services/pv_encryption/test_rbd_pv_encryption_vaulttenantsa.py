@@ -31,8 +31,6 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param("v1", True, False, marks=pytest.mark.polarion_id("OCS-2799")),
         pytest.param("v2", True, False, marks=pytest.mark.polarion_id("OCS-2800")),
-        pytest.param("v1", False, False, marks=pytest.mark.polarion_id("OCS-2802")),
-        pytest.param("v2", False, False, marks=pytest.mark.polarion_id("OCS-2801")),
     ],
 )
 class TestRbdPvEncryptionVaultTenantSA(ManageTest):
@@ -90,7 +88,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
         self.kms.create_tenant_sa(namespace=proj_obj.namespace)
 
         # Create role in Vault
-        self.kms.create_vault_kube_auth_role(tenant_namespace=proj_obj.namespace)
+        self.kms.create_vault_kube_auth_role(namespace=proj_obj.namespace)
 
         # Create RBD PVCs with volume mode Block
         pvc_size = 5

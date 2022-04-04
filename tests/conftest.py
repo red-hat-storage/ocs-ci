@@ -4575,7 +4575,6 @@ def vault_tenant_sa_setup_factory(request):
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
         ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-
         try:
             ocp_obj.get_resource(
                 resource_name="csi-kms-connection-details", column="NAME"
