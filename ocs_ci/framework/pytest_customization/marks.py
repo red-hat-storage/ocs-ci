@@ -139,6 +139,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
     ),
 )
 
+skipif_mcg_only = pytest.mark.skipif(
+    config.ENV_DATA["mcg_only_deployment"],
+    reason="This test cannot run on MCG-Only deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
