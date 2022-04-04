@@ -73,3 +73,82 @@ def relocate(preferred_cluster, drpc_name, namespace):
     drpc_obj.wait_for_phase(constants.STATUS_RELOCATED)
 
     config.switch_ctx(prev_index)
+
+
+def check_mirroring_status(replaying_num=None):
+    """
+    Check mirroring status have expected values
+
+    Args:
+        replaying_num (int): Expected number of images in replaying state
+
+    Returns:
+        bool: True if status contains expected values, False otherwise
+
+    """
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+    keys_to_check = ["health", "daemon_health", "image_health", "states"]
+    for key in keys_to_check:
+        value = mirroring_status.get(key)
+        if key == "states":
+            if replaying_num:
+                value = value.get("replaying")
+                expected_value = replaying_num
+            else:
+                continue
+        else:
+            expected_value = "OK"
+
+        if value != expected_value:
+            logger.error(
+                f"Unexpected {key} status. Current status is {value} but expected {expected_value}"
+            )
+            return False
+
+    return True
+
+
+def check_vr_status(state, namespace):
+    """
+    Check if all VR in the given namespace are in expected state
+
+    Args:
+        state (str): The VR state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the VR resources
+
+    Returns:
+        bool: True if all VR are in expected state, False otherwise
+
+    """
+    vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
+    vr_items = vr_obj.get().get("items")
+    vr_list = [vr.get("metadata").get("name") for vr in vr_items]
+
+    vr_state_mismatch = []
+    for vr in vr_list:
+        desired_state = vr_obj.get(vr).get("spec").get("replicationState")
+        current_state = vr_obj.get(vr).get("status").get("state")
+        logger.info(
+            f"VR: {vr} desired state is {desired_state}, current state is {current_state}"
+        )
+
+        if not (
+            state.lower() == desired_state.lower()
+            and state.lower() == current_state.lower()
+        ):
+            vr_state_mismatch.append(vr)
+
+    if len(vr_state_mismatch) == 0:
+        logger.info(f"All VR reached desired state {desired_state}")
+        return True
+    else:
+        logger.warning(
+            f"Following VR haven't reached desired state: {vr_state_mismatch}"
+        )
+        return False
