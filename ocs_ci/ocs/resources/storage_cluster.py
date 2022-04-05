@@ -628,7 +628,8 @@ def osd_encryption_verification():
             )
             raise ValueError("OSD is not encrypted")
 
-    if ocs_version > version.VERSION_4_6:
+    # skip OCS 4.8 as the fix for luks header info is still not available on it
+    if ocs_version > version.VERSION_4_6 and ocs_version != version.VERSION_4_8:
         log.info("Verify luks header label for encrypted devices")
         worker_nodes = get_osd_running_nodes()
         failures = 0

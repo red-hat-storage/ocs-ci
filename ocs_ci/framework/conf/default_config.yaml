@@ -206,7 +206,7 @@ ENV_DATA:
   deploy_acm_hub_cluster: false
 
   #Managed service - Managed StorageCluster size in TiB
-  size: '1'
+  size: '4'
 
 # This section is related to upgrade
 UPGRADE:

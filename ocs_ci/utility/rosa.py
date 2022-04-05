@@ -41,18 +41,18 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
-def create_cluster(cluster_name, version):
+def create_cluster(cluster_name, version, region):
     """
     Create OCP cluster.
 
     Args:
         cluster_name (str): Cluster name
         version (str): cluster version
+        region (str): Cluster region
 
     """
     rosa_ocp_version = get_latest_rosa_version(version)
     create_account_roles(version)
-    region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -236,14 +236,14 @@ def install_odf_addon(cluster):
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
     if cluster_type.lower() == "consumer" and provider_name:
+        unit = config.ENV_DATA.get("unit", "Ti")
+        storage_provider_endpoint = get_storage_provider_endpoint(wait=True)
+        cmd += f' --unit "{unit}" --storage-provider-endpoint "{storage_provider_endpoint}"'
         onboarding_ticket = generate_onboarding_token()
         if onboarding_ticket:
             cmd += f' --onboarding-ticket "{onboarding_ticket}"'
         else:
             raise ValueError(" Invalid onboarding ticket configuration")
-
-        storage_provider_endpoint = get_storage_provider_endpoint(wait=True)
-        cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
 
     utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
