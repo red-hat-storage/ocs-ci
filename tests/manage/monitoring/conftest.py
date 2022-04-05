@@ -11,7 +11,12 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes, unschedule_nodes, schedule_nodes
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_nodes,
+    unschedule_nodes,
+    schedule_nodes,
+)
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
@@ -157,7 +162,9 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 6 extra minutes so that alert is actually triggered and
         # unscheduling worker nodes so that monitor is not replaced
-        worker_node_names = [node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)]
+        worker_node_names = [
+            node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)
+        ]
         unschedule_nodes(worker_node_names)
         measured_op = measure_operation(stop_mon, test_file, minimal_time=60 * 20)
         schedule_nodes(worker_node_names)
@@ -178,7 +185,11 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
-        if not split_index == 1:
+        if (
+            not split_index == 1
+            or config.ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             msg = f"Downscaled monitors {mons_to_stop} were not replaced"
             assert check_old_mons_deleted, msg
 
