@@ -1388,7 +1388,7 @@ def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid
             ):
                 # The creation time log is in nanosecond, so, it need to convert to seconds.
                 results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
-                    10**-9
+                    10 ** -9
                 )
                 return float(f"{results:.3f}")
 
@@ -2429,13 +2429,13 @@ def memory_leak_analysis(median_dict):
         logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
-            start_value = float(1024**2 * float(start_value[:-1]))
+            start_value = float(1024 ** 2 * float(start_value[:-1]))
         elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
         if end_value.__contains__("g"):
-            end_value = float(1024**2 * float(end_value[:-1]))
+            end_value = float(1024 ** 2 * float(end_value[:-1]))
         elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
@@ -3865,15 +3865,24 @@ def create_reclaim_space_job(
 
 def get_cephfs_subvolumegroup():
     """
-    Get the name of cephfilesystemsubvolumegroup
+    Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
 
     Returns:
         str: The name of cephfilesystemsubvolumegroup
 
     """
-    subvolume_group = ocp.OCP(
-        kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-    subvolume_group_obj = subvolume_group.get().get("items")[0]
-    return subvolume_group_obj.get("metadata").get("name")
+    if (
+        config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+    ):
+        subvolume_group = ocp.OCP(
+            kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        subvolume_group_obj = subvolume_group.get().get("items")[0]
+        subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
+    else:
+        subvolume_group_name = "csi"
+
+    return subvolume_group_name
