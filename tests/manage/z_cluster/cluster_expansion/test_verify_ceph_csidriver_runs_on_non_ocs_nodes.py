@@ -2,7 +2,10 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import skipif_flexy_deployment
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_flexy_deployment,
+    skipif_managed_service,
+)
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.node import get_worker_nodes_not_in_ocs
 from ocs_ci.ocs.resources.pod import get_pod_node, get_plugin_pods
@@ -12,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # https://github.com/red-hat-storage/ocs-ci/issues/4802
 @skipif_flexy_deployment
+@skipif_managed_service
 @tier1
 @pytest.mark.polarion_id("OCS-2490")
 @pytest.mark.bugzilla("1794389")
