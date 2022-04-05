@@ -11,7 +11,6 @@ and with consideration of the entire project.
 
 import os
 
-from selenium.webdriver.common.keys import Keys
 
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
@@ -1679,7 +1678,7 @@ PLATFORM_XPATH_MAP = {
 ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
 # example release image url : quay.io/openshift-release-dev/ocp-release:4.9.23-x86_64
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "registry.ci.openshift.org/ocp/release"
-ACM_VSPHERE_NETWORK = "".join(["VM", Keys.SPACE, "Network"])
+ACM_VSPHERE_NETWORK = "VM Network"
 ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"

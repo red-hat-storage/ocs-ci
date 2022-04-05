@@ -106,10 +106,6 @@ class BaseUI:
             logger.error(e)
             raise TimeoutException
 
-    def do_click_and_send_keys(self, locator, text, timeout=30):
-        self.do_click(locator=locator, timeout=timeout)
-        self.do_send_keys(locator=locator, text=text, timeout=timeout)
-
     def is_expanded(self, locator, timeout=30):
         """
         Check whether an element is in an expanded or collapsed state
@@ -322,14 +318,21 @@ class BaseUI:
             bool: True if the element is found, returns False otherwise and raises NoSuchElementException
 
         """
+        ret = None
         try:
             wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
             wait.until(ec.presence_of_element_located(locator))
-            return True
-        except (NoSuchElementException, TimeoutException):
-            self.take_screenshot()
+            ret = True
+        except NoSuchElementException:
             logger.error("Expected element not found on UI")
-            return False
+            ret = False
+        except TimeoutException:
+            logger.error("Timedout while waiting for element")
+            ret = False
+        finally:
+            if not ret:
+                self.take_screenshot()
+            return ret
 
 
 class PageNavigator(BaseUI):
