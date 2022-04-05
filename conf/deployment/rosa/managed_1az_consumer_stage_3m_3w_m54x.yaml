@@ -21,6 +21,7 @@ DEPLOYMENT:
   rosa_cli_version: '1.1.7'
   force_download_installer: True
   force_download_client: True
+  pullsecret_workaround: True
 REPORTING:
   # This is useful as a W/A for Openshift Dedicated, as there is an issue
   # to use internal image for must gather
