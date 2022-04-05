@@ -1005,6 +1005,7 @@ class Vault(KMS):
             f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
         secrets = run_cmd(cmd=cmd).split()
+        secret_name = ""
         for secret in secrets:
             if "-token-" in secret and "docker" not in secret:
                 secret_name = secret
