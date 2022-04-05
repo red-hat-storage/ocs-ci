@@ -10,6 +10,10 @@ ENV_DATA:
   configs: 'aws,stage'
   addon_name: "ocs-consumer-qe"
   region: 'us-east-2'
+  #The requested capacity of the storage cluster to be deployed.
+  size : '1'
+  #Selected storage unit for the requested capacity in Ti or Gi
+  unit : 'Ti'
 DEPLOYMENT:
   force_download_ocm_cli: True
   ocm_cli_version: '0.1.60'
