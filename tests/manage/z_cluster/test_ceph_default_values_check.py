@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_external_mode,
     post_ocs_upgrade,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
@@ -149,6 +150,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @bugzilla("2012930")
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
+    @skipif_managed_service
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
