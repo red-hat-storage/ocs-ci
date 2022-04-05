@@ -45,7 +45,7 @@ def get_dms_secret_name():
 
 def update_pull_secret():
     """
-    For unreleased odf operator version -  Disable odf operator
+    Update pull secret with extra quay.io/rhceph-dev credentials.
 
     Note: This is a hack done to allow odf to odf deployment before full addon is available.
     """
