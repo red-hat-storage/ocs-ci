@@ -207,31 +207,6 @@ def copy_random_individual_objects(
         logger.info(f"Copied {src_obj}")
 
 
-def list_obc_objects(podobj, target, s3_obj=None, signed_request_creds=None):
-    """
-    Lists objects in a bucket using S3 ls command
-    """
-    logger.info(f"List objects in {target}")
-    retrieve_cmd = f"ls {target}"
-    if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
-    elif signed_request_creds:
-        secrets = [
-            signed_request_creds.get("access_key_id"),
-            signed_request_creds.get("access_key"),
-            signed_request_creds.get("endpoint"),
-        ]
-    else:
-        secrets = None
-    return podobj.exec_cmd_on_pod(
-        command=craft_s3_command(
-            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
-        ),
-        out_yaml_format=False,
-        secrets=secrets,
-    )
-
-
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
     """
     Syncs objects between a target and source directories

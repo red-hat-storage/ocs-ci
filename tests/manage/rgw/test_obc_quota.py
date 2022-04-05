@@ -5,7 +5,6 @@ import pytest
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.bucket_utils import (
-    list_obc_objects,
     copy_random_individual_objects,
 )
 
@@ -58,8 +57,8 @@ class TestOBCQuota:
                 s3_obj=obc_obj,
                 ignore_error=False,
             )
-        except Exception as err:
-            if err_msg in err.args[0]:
+        except Exception as e:
+            if err_msg in e.args[0]:
                 logger.info(f"Quota {quota} worked as expected!!")
             else:
                 logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
@@ -88,13 +87,10 @@ class TestOBCQuota:
                 s3_obj=obc_obj,
                 ignore_error=False,
             )
-        except Exception as err:
-            if err_msg in err.args[0]:
+        except Exception as e:
+            if err_msg in e.args[0]:
                 assert False, f"New quota {new_quota_str} didn't get applied!!"
             else:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
-
-        list_objs = list_obc_objects(awscli_pod_session, full_bucket_path, obc_obj)
-        logger.info(f"List objects:\n {list_objs}")
