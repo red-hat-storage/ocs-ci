@@ -259,6 +259,22 @@ class PVC(OCS):
         reclaim_space_job = helpers.create_reclaim_space_job(self.name)
         return reclaim_space_job
 
+    def create_reclaim_space_cronjob(self, schedule=None):
+        """
+        Create ReclaimSpaceCronJob to invoke reclaim space operation on RBD volume
+
+        Returns:
+            ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceCronJob
+
+        """
+        assert (
+            self.provisioner == constants.RBD_PROVISIONER
+        ), "Only RBD PVC is supported"
+        reclaim_space_job = helpers.create_reclaim_space_cronjob(
+            self.name, schedule=schedule
+        )
+        return reclaim_space_job
+
 
 def delete_pvcs(pvc_objs, concurrent=False):
     """

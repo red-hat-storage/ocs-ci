@@ -1,0 +1,31 @@
+##########################################################################################################################
+# ReclaimSpaceCronJob is a namespaced custom resource designed to invoke scheduled reclaim space operation on target volume
+###########################################################################################################################
+
+apiVersion: csiaddons.openshift.io/v1alpha1
+kind: ReclaimSpaceCronJob
+metadata:
+  name: reclaimspacecronjob-sample
+spec:
+  # describes what happens when a new ReclaimSpaceJob is scheduled by the ReclaimSpaceCronJob,
+  # while a previous ReclaimSpaceJob is still running. The default 'Forbid' prevents starting new job,
+  # whereas 'Replace' can be used to delete the running job (potentially in a failure state) and create a new one.
+  concurrencyPolicy: Forbid
+  #keeps at most the number of failed ReclaimSpaceJobs around for troubleshooting
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      # backOfflimit specifies the number of retries before marking reclaim space operation as failed.
+      # If not specified, defaults to 6. Maximum allowed value is 60 and minimum allowed value is 0.
+      backOffLimit: 6
+      # retryDeadlineSeconds specifies the duration in seconds relative to the start time that the operation may be retried;
+      # value must be positive integer. If not specified, defaults to 600 seconds. Maximum allowed value is 1800.
+      retryDeadlineSeconds: 600
+      # target represents volume target on which the operation will be performed
+      target:
+        persistentVolumeClaim: data-pvc
+  # interval of the recurring operation of reclaim space job
+  # schedule could be weekly, hourly, daily(midnight).
+  # By default schedule is set to weekly
+  schedule: '@weekly'
+  successfulJobsHistoryLimit: 3
