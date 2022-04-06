@@ -64,10 +64,11 @@ def get_all_pod_names_expected_to_terminate():
 
     """
     ocs_nodes = get_ocs_nodes()
+    ocs_node_names = [n.name for n in ocs_nodes]
     pod_names_expected_to_terminate = []
-    for n in ocs_nodes:
+    for node_name in ocs_node_names:
         pod_names_expected_to_terminate.extend(
-            get_node_pod_names_expected_to_terminate(n)
+            get_node_pod_names_expected_to_terminate(node_name)
         )
 
     return pod_names_expected_to_terminate
