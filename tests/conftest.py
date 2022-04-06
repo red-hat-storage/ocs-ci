@@ -3441,6 +3441,8 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             a namespacestore
 
     """
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        return
     return namespacestore_factory_implementation(
         request, cld_mgr, mcg_obj, cloud_uls_factory
     )
