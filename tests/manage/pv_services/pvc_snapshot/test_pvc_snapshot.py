@@ -22,7 +22,12 @@ log = logging.getLogger(__name__)
 @acceptance
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@bugzilla("2069367", skip_when=(config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS))
+@bugzilla(
+    "2069367",
+    skip_when=(
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    ),
+)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
