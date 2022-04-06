@@ -12,6 +12,7 @@ import shlex
 import tempfile
 import subprocess
 from subprocess import CalledProcessError
+from semantic_version import Version
 import base64
 
 from ocs_ci.framework import config, merge_dict
@@ -383,7 +384,10 @@ class Vault(KMS):
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
-        connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.10"):
+            connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        else:
+            connection_data["data"].pop("VAULT_AUTH_METHOD")
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
