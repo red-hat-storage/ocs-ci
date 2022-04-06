@@ -349,11 +349,11 @@ class TestPVCClonePerformance(PASTest):
         argnames=["interface", "copies", "timeout"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 2, 600],
+                *[constants.CEPHBLOCKPOOL, 13, 1800],
                 marks=pytest.mark.polarion_id("OCS-2673"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 2, 600],
+                *[constants.CEPHFILESYSTEM, 13, 1800],
                 marks=pytest.mark.polarion_id("OCS-2674"),
             ),
         ],
@@ -362,7 +362,6 @@ class TestPVCClonePerformance(PASTest):
     def test_pvc_clone_performance_multiple_files(
         self,
         pvc_factory,
-        teardown_factory,
         interface,
         copies,
         timeout,
@@ -370,8 +369,9 @@ class TestPVCClonePerformance(PASTest):
         """
         Test assign nodeName to a pod using RWX pvc
         Each kernel (unzipped) is 892M and 61694 files
-        The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
-        and calculates average reattach time and standard deviation
+        The test creates a pvc and a pods, writes kernel files multiplied by number of copies
+        The test creates number of clones samples, calculates creation and deletion times for each one the clones
+        and calculates the average creation and average deletion times
         """
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
@@ -459,7 +459,18 @@ class TestPVCClonePerformance(PASTest):
         files_written_list.append(files_written)
         data_written_list.append(data_written)
 
-        num_of_clones = 2
+        # delete the pod
+        pod_obj.delete(wait=False)
+
+        logger.info("Wait for the pod to be deleted")
+        performance_lib.wait_for_resource_bulk_status(
+            "pod", 0, pvc_obj.namespace, constants.STATUS_COMPLETED, timeout, 5
+        )
+        logger.info("The pod was deleted")
+
+
+        num_of_clones = 11
+        #encreasing the timeout since clone creation time is longer than pod attach time
         timeout = 18000
 
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
@@ -483,7 +494,6 @@ class TestPVCClonePerformance(PASTest):
                 pvc_obj.namespace,
                 storage_size=pvc_size + "Gi",
             )
-            teardown_factory(cloned_pvc_obj)
             helpers.wait_for_resource_state(
                 cloned_pvc_obj, constants.STATUS_BOUND, timeout
             )
@@ -529,7 +539,7 @@ class TestPVCClonePerformance(PASTest):
 
         os.remove(file_path)
         os.rmdir(dir_path)
-        teardown_factory(pvc_obj)
+        pvc_obj.delete()
 
         average_creation_time = statistics.mean(clone_creation_measures)
         logger.info(f"Average creation time is  {average_creation_time} secs.")
@@ -597,7 +607,7 @@ class TestPVCClonePerformance(PASTest):
     def test_pvc_clone_performance_results(self):
         """
         This is not a test - it is only check that previous tests ran and finished as expected
-        and reporting the full results (links in the ES) of previous tests (6 + 2)
+        and reporting the full results (links in the ES) of previous tests (8 + 2)
         """
 
         workloads = [
