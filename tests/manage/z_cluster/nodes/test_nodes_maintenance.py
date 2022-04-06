@@ -149,7 +149,6 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-
         self.sanity_helpers.delete_resources()
 
         # Mark the node back to schedulable
