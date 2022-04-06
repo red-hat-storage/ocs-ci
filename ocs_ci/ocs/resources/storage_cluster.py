@@ -155,6 +155,7 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+
     if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
         resources_dict.update(
             {
@@ -162,6 +163,15 @@ def ocs_install_verification(
                 constants.OSD_APP_LABEL: osd_count,
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
+            }
+        )
+    if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+        resources_dict.update(
+            {
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
             }
         )
     elif not config.DEPLOYMENT["external_mode"]:
@@ -263,7 +273,8 @@ def ocs_install_verification(
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
-    assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+    if not managed_service or config.ENV_DATA["cluster_type"].lower() != "provider":
+        assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -1028,7 +1039,7 @@ def verify_managed_service_resources():
     exist in openshift-storage namespace
     3. 1 prometheus pod and 3 alertmanager pods are in Running state
     4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
-    5. Networkpolicy and EgressNetworkpolicy resources are present
+    5. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1085,7 +1096,12 @@ def verify_managed_service_resources():
             managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
         ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
 
-    # Verify Networkpolicy and EgressNetworkpolicy creation
+
+def verify_managed_service_networkpolicy():
+    """
+    Verify Networkpolicy and EgressNetworkpolicy creation
+    Temporarily left out for V2 offering
+    """
     for policy in {
         ("Networkpolicy", "ceph-ingress-rule"),
         ("EgressNetworkpolicy", "egress-rule"),
