@@ -2023,7 +2023,8 @@ class CephClusterExternal(CephCluster):
         # https://github.com/red-hat-storage/ocs-ci/issues/5186
         logger.info("Sleep for 60 seconds before verifying MCG")
         time.sleep(60)
-        self.wait_for_nooba_cr()
+        if config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS:
+            self.wait_for_nooba_cr()
 
     @property
     def cluster_name(self):

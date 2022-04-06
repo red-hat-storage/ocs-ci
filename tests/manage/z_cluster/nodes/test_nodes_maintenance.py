@@ -41,6 +41,7 @@ from ocs_ci.helpers.helpers import (
     verify_pdb_mon,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -146,9 +147,15 @@ class TestNodesMaintenance(ManageTest):
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
+        if config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS:
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory=None, rgw_bucket_factory=None
+            )
+        else:
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
+
         self.sanity_helpers.delete_resources()
 
         # Mark the node back to schedulable
