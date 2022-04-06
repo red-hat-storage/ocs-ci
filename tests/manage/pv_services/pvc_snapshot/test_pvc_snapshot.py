@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -9,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_ocp_version,
+    bugzilla,
 )
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.helpers import helpers
@@ -20,6 +22,7 @@ log = logging.getLogger(__name__)
 @acceptance
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@bugzilla("2069367", skip_when=(config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS))
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
