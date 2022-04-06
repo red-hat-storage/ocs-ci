@@ -41,7 +41,6 @@ from ocs_ci.helpers.helpers import (
     verify_pdb_mon,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
