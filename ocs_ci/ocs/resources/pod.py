@@ -2051,12 +2051,11 @@ def check_pods_after_node_replacement():
         )
 
         expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
-        wait_for_pods_to_be_in_statuses(
+        are_pods_running = wait_for_pods_to_be_in_statuses(
             expected_statuses=expected_statuses,
             timeout=timeout,
             sleep=30,
         )
-        are_pods_running = wait_for_pods_to_be_running(timeout=timeout, sleep=30)
         if are_pods_running:
             logger.info("All the pods are running")
             return True
