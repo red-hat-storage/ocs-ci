@@ -2,7 +2,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    skipif_external_mode,
+    skipif_managed_service,
+)
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 
@@ -35,7 +40,10 @@ class TestMustGather(ManageTest):
                 *["JSON"],
                 marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode]
             ),
-            pytest.param(*["OTHERS"], marks=pytest.mark.polarion_id("OCS-1583")),
+            pytest.param(
+                *["OTHERS"],
+                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_managed_service]
+            ),
         ],
     )
     @pytest.mark.skipif(
