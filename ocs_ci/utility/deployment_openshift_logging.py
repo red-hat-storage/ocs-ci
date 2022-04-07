@@ -10,10 +10,12 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.node import get_all_nodes
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers import helpers
+from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -313,11 +315,6 @@ def create_instance():
     logger.info(f"The installed CSV is {get_csv}")
 
 
-from ocs_ci.utility import version
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.ocs.ocp import OCP
-
-
 def install_logging():
 
     csv = ocp.OCP(
@@ -372,5 +369,5 @@ def install_logging():
     cluster_logging_operator = OCP(
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    logging.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+    logger.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
     ocp_logging_obj.create_instance()
