@@ -329,7 +329,7 @@ class PrometheusAPI(object):
         ocp = OCP(
             kind=constants.ROUTE,
             namespace=defaults.OCS_MONITORING_NAMESPACE,
-            threading_lock=self.threading_lock,
+            threading_lock=self._threading_lock,
         )
         kubeconfig = os.getenv("KUBECONFIG")
         kube_data = ""
