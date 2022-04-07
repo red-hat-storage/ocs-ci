@@ -114,6 +114,9 @@ def ocs_install_verification(
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
+    external = config.DEPLOYMENT["external_mode"] or (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
 
     # Basic Verification for cluster
     basic_verification(ocs_registry_image)
@@ -126,7 +129,7 @@ def ocs_install_verification(
         namespace=namespace,
     )
     pod = OCP(kind=constants.POD, namespace=namespace)
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         osd_count = int(
             storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
         ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
@@ -257,7 +260,7 @@ def ocs_install_verification(
     assert list(missing_scs) == []
 
     # Verify OSDs are distributed
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         if not skip_osd_distribution_check:
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
@@ -293,23 +296,43 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools:
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.RBD_NODE_SECRET
-        )
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.RBD_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.RBD_NODE_SECRET
+            )
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.RBD_PROVISIONER_SECRET
+            )
     if not disable_cephfs:
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.CEPHFS_NODE_SECRET
-        )
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.CEPHFS_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.CEPHFS_NODE_SECRET
+            )
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.CEPHFS_PROVISIONER_SECRET
+            )
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
