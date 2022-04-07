@@ -9,7 +9,7 @@ import urllib.request
 import os
 import statistics
 
-from ocs_ci.ocs import constants, node
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
@@ -386,7 +386,6 @@ class TestPVCClonePerformance(PASTest):
             os.makedirs(dir_path)
         urllib.request.urlretrieve(kernel_url, file_path)
 
-        time_measures, files_written_list, data_written_list = ([], [], [])
         # Create a PVC
         accessmode = constants.ACCESS_MODE_RWX
         if interface == constants.CEPHBLOCKPOOL:
@@ -447,17 +446,14 @@ class TestPVCClonePerformance(PASTest):
 
         logger.info("Getting the amount of data written to the PVC")
         rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
-        data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-        logger.info(f"The amount of written data is {data_written_str}")
-        data_written = float(data_written_str[:-1])
+        data_written = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
+        logger.info(f"The amount of written data is {data_written}")
 
         rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
         files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
         logger.info(
             f"For {interface} - The number of files written to the pod is {files_written}"
         )
-        files_written_list.append(files_written)
-        data_written_list.append(data_written)
 
         # delete the pod
         pod_obj.delete(wait=False)
@@ -468,9 +464,8 @@ class TestPVCClonePerformance(PASTest):
         )
         logger.info("The pod was deleted")
 
-
         num_of_clones = 11
-        #encreasing the timeout since clone creation time is longer than pod attach time
+        # increasing the timeout since clone creation time is longer than pod attach time
         timeout = 18000
 
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
