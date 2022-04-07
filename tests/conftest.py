@@ -4741,6 +4741,7 @@ def switch_to_provider_for_test(request):
             if cluster.ENV_DATA.get("cluster_type") == "provider":
                 provider_cluster = cluster
                 log.debug("Switching to the provider cluster context")
+                # TODO: Use 'switch_to_provider' function introduced in PR 5541
                 config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
                 switched_to_provider = True
                 break
