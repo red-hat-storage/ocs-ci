@@ -837,7 +837,6 @@ def pvc_factory_fixture(request, project_factory):
         project=None,
         storageclass=None,
         size=None,
-        pvc_name=None,
         access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,

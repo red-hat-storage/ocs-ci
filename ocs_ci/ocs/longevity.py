@@ -244,7 +244,6 @@ class Longevity(object):
     def create_stagebuilder_all_pvc_types(
         self, num_of_pvc, namespace, pvc_size, kube_job_name="all_pvc_job_profile"
     ):
-
         """
         Create stagebuilder PVCs with all supported PVC types and access modes
 
@@ -316,7 +315,7 @@ class Longevity(object):
                     pod_dict["spec"]["containers"][0]["volumeDevices"] = temp_dict
             elif pvc_obj.backed_sc == constants.DEFAULT_STORAGECLASS_CEPHFS:
                 pod_dict = templating.load_yaml(constants.CSI_CEPHFS_POD_YAML)
-            pod_name = create_unique_resource_name(f"test", "pod")
+            pod_name = create_unique_resource_name("test", "pod")
             pod_dict["metadata"]["name"] = pod_name
             pod_dict["metadata"]["namespace"] = namespace
             pod_dict["spec"]["volumes"][0]["persistentVolumeClaim"][
@@ -639,7 +638,7 @@ def start_app_workload(
                 workload.cleanup()
             except CommandFailed as ef:
                 log.info("Workload already cleaned")
-                if f"does not exist on " not in str(ef):
+                if "does not exist on " not in str(ef):
                     raise ef
 
     request.addfinalizer(cleanup)
