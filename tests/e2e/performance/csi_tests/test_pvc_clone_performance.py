@@ -376,7 +376,7 @@ class TestPVCClonePerformance(PASTest):
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
 
-        test_start_time = PASTest.get_time()
+        test_start_time = self.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
 
@@ -563,7 +563,7 @@ class TestPVCClonePerformance(PASTest):
 
         full_results.add_key("files_number", files_written)
 
-        test_end_time = PASTest.get_time()
+        test_end_time = self.get_time()
 
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
