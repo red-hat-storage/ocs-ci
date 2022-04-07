@@ -103,7 +103,7 @@ def check_automated_recovery_from_stopped_node(nodes):
 
     # This is a workaround until we find what should be the behavior
     # when shutting down a worker node
-    nodes.start_nodes([osd_node])
+    nodes.start_nodes(nodes=[osd_node])
 
     log.info(f"Wait for the node: {osd_node_name} to power on")
     wait_for_nodes_status([osd_node_name])
@@ -191,7 +191,7 @@ def check_automated_recovery_from_full_cluster_shutdown(nodes):
 
     # This is a workaround until we find what should be the behavior
     # when shutting down a worker node
-    nodes.start_nodes(wnodes)
+    nodes.start_nodes(nodes=wnodes)
 
     wait_for_nodes_status(wnode_names, timeout=360)
     log.info("All the worker nodes are in a Ready state!")
