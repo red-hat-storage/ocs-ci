@@ -550,7 +550,7 @@ class Longevity(object):
 
 def start_app_workload(
     request,
-    workloads_list=["pgsql", "couchbase", "cosbench"],
+    workloads_list=None,
     run_time=10,
     run_in_bg=True,
 ):
