@@ -247,7 +247,7 @@ def install_odf_addon(cluster):
 
     utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
-        4000, 30, get_addon_info, cluster, addon_name
+        7200, 30, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "ready" in addon_info:
