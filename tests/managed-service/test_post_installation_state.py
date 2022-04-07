@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     runs_on_provider,
+    bugzilla,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -40,6 +41,7 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
+    @bugzilla("2073025")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     @managed_service_required
