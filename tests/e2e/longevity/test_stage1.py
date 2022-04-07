@@ -23,6 +23,7 @@ class TestLongevity(E2ETest):
         APP workloads
         1) Configure and run APP workloads (Pgsql, Couchbase, Cosbench, Jenkins, etc)
         2) Repeat Step-1 and run the workloads continuously for a specified period
+        of time
 
         """
         # Start stage-1
@@ -32,7 +33,7 @@ class TestLongevity(E2ETest):
         start_ocp_workload(
             workloads_list=["monitoring", "registry", "logging"], run_in_bg=True
         )
-        # Start application workloads and continuously for the specified period
+        # Start application workloads and continuously for the specified period of time
         log.info("Start running application workloads")
         start_apps_workload(
             workloads_list=["couchbase", "cosbench"], run_time=180, run_in_bg=True
