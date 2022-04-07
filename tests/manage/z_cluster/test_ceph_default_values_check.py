@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     post_ocs_upgrade,
     skipif_managed_service,
+    runs_on_provider,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
@@ -89,6 +90,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
     @tier1
+    @runs_on_provider
     @pytest.mark.skipif(
         config.DEPLOYMENT.get("ceph_debug"),
         reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
