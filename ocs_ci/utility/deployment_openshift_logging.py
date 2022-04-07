@@ -311,3 +311,66 @@ def create_instance():
     # Get the CSV installed
     get_csv = csv_obj.get(out_yaml_format=False)
     logger.info(f"The installed CSV is {get_csv}")
+
+
+from ocs_ci.utility import version
+from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.ocs.ocp import OCP
+
+
+def install_logging():
+
+    csv = ocp.OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+    )
+    logging_csv = csv.get().get("items")
+    if logging_csv:
+        logger.info("Logging is already configured, Skipping Installation")
+        return
+
+    logger.info("Configuring Openshift-logging")
+
+    # Gets OCP version to align logging version to OCP version
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
+
+    # Creates namespace openshift-operators-redhat
+    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+
+    # Creates an operator-group for elasticsearch
+    assert ocp_logging_obj.create_elasticsearch_operator_group(
+        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
+    )
+
+    # Set RBAC policy on the project
+    assert ocp_logging_obj.set_rbac(
+        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
+    )
+
+    # Creates subscription for elastic-search operator
+    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    subscription_yaml["spec"]["channel"] = logging_channel
+    helpers.create_resource(**subscription_yaml)
+    assert ocp_logging_obj.get_elasticsearch_subscription()
+
+    # Creates a namespace openshift-logging
+    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+
+    # Creates an operator-group for cluster-logging
+    assert ocp_logging_obj.create_clusterlogging_operator_group(
+        yaml_file=constants.CL_OG_YAML
+    )
+
+    # Creates subscription for cluster-logging
+    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
+    cl_subscription["spec"]["channel"] = logging_channel
+    helpers.create_resource(**cl_subscription)
+    assert ocp_logging_obj.get_clusterlogging_subscription()
+
+    # Creates instance in namespace openshift-logging
+    cluster_logging_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    logging.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+    ocp_logging_obj.create_instance()

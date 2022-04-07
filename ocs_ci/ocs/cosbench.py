@@ -616,7 +616,7 @@ class Cosbench(object):
         )
         return f"{self.cosbench_dir}/{archive_file}.csv"
 
-    def cosbench_teardown(self):
+    def cleanup(self):
         """
         Cosbench teardown
 
@@ -663,3 +663,36 @@ class Cosbench(object):
             f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
         )
         return throughput_data, bandwidth_data
+
+    def cosbench_full(self):
+        """
+        Run full Cosbench workload
+        """
+        bucket_prefix = "bucket-"
+        buckets = 10
+        objects = 50
+
+        # Operations to perform and its ratio(%)
+        operations = {"read": 50, "write": 50}
+
+        # Deployment of cosbench
+        self.setup_cosbench()
+
+        # Create initial containers and objects
+        self.run_init_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )
+
+        # Run main workload
+        self.run_main_workload(
+            operation_type=operations,
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+        )
+
+        # Dispose containers and objects
+        self.run_cleanup_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )

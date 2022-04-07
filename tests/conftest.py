@@ -126,6 +126,7 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.longevity import start_app_workload
 
 
 log = logging.getLogger(__name__)
@@ -836,6 +837,7 @@ def pvc_factory_fixture(request, project_factory):
         project=None,
         storageclass=None,
         size=None,
+        pvc_name=None,
         access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,
@@ -2795,6 +2797,20 @@ def fio_job_dict_session():
     Job template for fio workloads.
     """
     return fio_artefacts.get_job_dict()
+
+
+@pytest.fixture(scope="function")
+def start_apps_workload(request):
+    """
+    Application workload fixture which reads the list of app workloads to run and
+    starts running those iterating over the workloads in the list for a specified
+    duration
+
+    Usage:
+    start_app_workload(workloads_list=['pgsql', 'couchbase', 'cosbench'], run_time=60,
+    run_in_bg=True)
+    """
+    return start_app_workload(request)
 
 
 @pytest.fixture(scope="function")

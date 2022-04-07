@@ -34,7 +34,7 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
 )
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-
+from ocs_ci.ocs.ocp import switch_to_project
 
 log = logging.getLogger(__name__)
 
@@ -523,10 +523,14 @@ class Postgresql(BenchmarkOperator):
         Clean up
 
         """
+        switch_to_project(BMO_NAME)
         log.info("Deleting postgres pods and configuration")
         if self.pgsql_is_setup:
+            self.pgsql_sset._is_deleted = False
             self.pgsql_sset.delete()
+            self.pgsql_cmap._is_deleted = False
             self.pgsql_cmap.delete()
+            self.pgsql_service._is_deleted = False
             self.pgsql_service.delete()
         log.info("Deleting pgbench pods")
         pods_obj = self.get_pgbench_pods()
@@ -634,3 +638,17 @@ class Postgresql(BenchmarkOperator):
             filespace = filespace.split()[0]
             pod_obj.filespace = filespace
         return pod_obj_list
+
+    def pgsql_full(self):
+        """
+        Run full pgsql workload
+        """
+        self.setup_postgresql(replicas=1)
+        # Create pgbench benchmark
+        self.create_pgbench_benchmark(replicas=1)
+        # Wait for pg_bench pod to initialized and complete
+        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        # Get pgbench pods
+        pgbench_pods = self.get_pgbench_pods()
+        # Validate pgbench run and parse logs
+        self.validate_pgbench_run(pgbench_pods)

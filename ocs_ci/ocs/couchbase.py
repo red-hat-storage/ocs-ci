@@ -45,6 +45,7 @@ class CouchBase(PillowFight):
         self.cb_create_cb_secret = False
         self.cb_create_cb_cluster = False
         self.cb_create_bucket = False
+        self.cb_subscription = False
 
     def create_namespace(self, namespace):
         """
@@ -87,6 +88,7 @@ class CouchBase(PillowFight):
         )
         self.subscription_yaml = OCS(**subscription_yaml)
         self.subscription_yaml.create()
+        self.cb_subscription = False
 
         # Wait for the CSV to reach succeeded state
         cb_csv = self.get_couchbase_csv()
@@ -267,18 +269,24 @@ class CouchBase(PillowFight):
             nodes_set.add(pod.get().get("spec").get("nodeName"))
         return list(nodes_set)
 
-    def teardown(self):
+    def cleanup(self):
         """
         Cleaning up the resources created during Couchbase deployment
 
         """
+        switch_to_project(constants.COUCHBASE_OPERATOR)
         if self.cb_create_cb_secret:
+            self.cb_secrets._is_deleted = False
             self.cb_secrets.delete()
         if self.cb_create_cb_cluster:
+            self.cb_example._is_deleted = False
             self.cb_example.delete()
         if self.cb_create_bucket:
+            self.cb_bucket._is_deleted = False
             self.cb_bucket.delete()
-        self.subscription_yaml.delete()
+        if self.cb_subscription:
+            self.subscription_yaml._is_deleted = False
+            self.subscription_yaml.delete()
         switch_to_project("default")
         self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
         self.ns_obj.wait_for_delete(
@@ -286,3 +294,17 @@ class CouchBase(PillowFight):
         )
         PillowFight.cleanup(self)
         switch_to_default_rook_cluster_project()
+
+    def couchbase_full(self):
+        """
+        Run full CouchBase workload
+        """
+        # Create Couchbase subscription
+        self.couchbase_subscription()
+        # Create Couchbase worker secrets
+        self.create_cb_secrets()
+        # Create couchbase workers
+        self.create_cb_cluster(replicas=1)
+        self.create_data_buckets()
+        # Run couchbase workload
+        self.run_workload(replicas=1)

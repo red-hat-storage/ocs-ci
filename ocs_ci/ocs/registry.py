@@ -508,3 +508,19 @@ def modify_registry_pod_count(count):
                 f"Number of image registry pod doesn't match the count. Error: {ie}"
             )
             return False
+
+
+def check_if_registry_stack_exists():
+    """
+    Check if registry is configured on the cluster with ODF backed PVCs
+
+    Returns:
+        bool: True if registry is configured on the cluster, false otherwise
+
+    """
+    logger.info("Checking if registry stack exists on the cluster")
+    # Validate the pvc are mounted on pods
+    validate_pvc_mount_on_registry_pod()
+    logger.info("Registry stack already exists on the cluster")
+
+    return True
