@@ -63,7 +63,12 @@ class MustGather(object):
         ocs_version = float(
             f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         )
-        if self.type_log == "OTHERS" and storagecluster_independent_check():
+        if (
+            self.type_log == "OTHERS"
+            and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
+        ):
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_MANAGED_SERVICES"]
+        elif self.type_log == "OTHERS" and storagecluster_independent_check():
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
