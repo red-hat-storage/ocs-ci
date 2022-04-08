@@ -12,7 +12,7 @@ class TestLongevityStage2(E2ETest):
     """
 
     def test_longevity_stage2(
-       self, multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory
+        self, multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory
     ):
         """
         Tests Longevity Testing - Stage 2
