@@ -155,6 +155,8 @@ SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
+OCSINITIALIZATION = "OCSInitialization"
+OCSINIT = "ocsinit"
 
 # Other
 SECRET = "Secret"
