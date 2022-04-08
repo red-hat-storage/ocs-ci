@@ -168,7 +168,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    elif managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
