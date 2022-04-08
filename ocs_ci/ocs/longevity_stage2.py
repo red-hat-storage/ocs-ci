@@ -47,7 +47,7 @@ def write_empty_files_to_bucket(
     # Write all empty objects to the bucket
     sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
 
-    logger.info(f"Successfully created files.")
+    logger.info("Successfully created files.")
 
     obj_set = set(
         obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
@@ -290,6 +290,9 @@ def _multi_pvc_pod_lifecycle_factory(
                 # Measure PVC Creation Time
                 measure_pvc_creation_time(interface, pvc_size, pvc_objs_tmp, start_time)
 
+            else:
+                logger.info(f"Num of PVCs of interface - {interface} = {num_of_pvc}. So no PVCs created.")
+
         # PVC and PV Teardown
         pv_objs = list()
         for pvc_obj in pvc_objs:
@@ -510,7 +513,8 @@ def _multi_obc_lifecycle_factory(
 
 
 def stage2(
-    multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_pvcs=100, pvc_size=2, num_of_obcs=20, run_time=30
+    multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_pvcs=100, pvc_size=2, num_of_obcs=20,
+    run_time=30
 ):
     """
     Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and OBCs
