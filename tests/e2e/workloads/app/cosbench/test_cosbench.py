@@ -48,14 +48,29 @@ class TestCosbenchWorkload(E2ETest):
             prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
         )
 
-    def test_cosbench_workload_operations(self, cosbench):
+    @pytest.mark.parametrize(
+        argnames="objects, size, size_unit",
+        argvalues=[
+            pytest.param(
+                *[10000, 4, "KB"],
+            ),
+            pytest.param(
+                *[1000, 2, "MB"],
+            ),
+            pytest.param(
+                *[500, 8, "MB"],
+            ),
+        ],
+    )
+    def test_cosbench_workload_operations(self, cosbench, objects, size, size_unit):
         """
         Test to perform reads and writes on objects.
 
+        Write example:
+            total objects = buckets * objects
         """
         bucket_prefix = "bucket-"
         buckets = 10
-        objects = 50
 
         # Operations to perform and its ratio(%)
         operations = {"read": 50, "write": 50}
@@ -65,7 +80,12 @@ class TestCosbenchWorkload(E2ETest):
 
         # Create initial containers and objects
         cosbench.run_init_workload(
-            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+            size=size,
+            size_unit=size_unit,
         )
 
         # Run main workload
@@ -75,6 +95,8 @@ class TestCosbenchWorkload(E2ETest):
             containers=buckets,
             objects=objects,
             validate=True,
+            size=size,
+            size_unit=size_unit,
         )
 
         # Dispose containers and objects
