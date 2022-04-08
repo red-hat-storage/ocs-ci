@@ -58,17 +58,35 @@ def create_cluster(cluster_name, version, region):
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
     cluster_type = config.ENV_DATA.get("cluster_type", "")
     provider_name = config.ENV_DATA.get("provider_name", "")
+    rosa_mode = config.ENV_DATA.get("rosa_mode", "")
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
+        f"--compute-nodes {compute_nodes} --compute-machine-type "
         f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
+    if rosa_mode == "auto":
+        cmd += " --mode auto"
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
         aws = AWSUtil()
         subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
+    if rosa_mode != "auto":
+        logger.info(
+            "Waiting for ROSA cluster status changed to waiting or pending state"
+        )
+        for cluster_info in utils.TimeoutSampler(
+            4500, 30, ocm.get_cluster_details, cluster_name
+        ):
+            status = cluster_info["status"]["state"]
+            logger.info(f"Current installation status: {status}")
+            if status == "waiting" or status == "pending":
+                logger.info(f"Cluster is in {status} state")
+                break
+        create_operator_roles(cluster_name)
+        create_oidc_provider(cluster_name)
+
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
         4500, 30, ocm.get_cluster_details, cluster_name
@@ -127,27 +145,20 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    cmd = (
-        f"rosa create account-roles --mode auto"
-        f' --permissions-boundary "" --prefix {prefix}  --yes'
-    )
+    cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
     utils.run_cmd(cmd, timeout=1200)
 
 
-def create_operator_roles(cluster, prefix='""'):
+def create_operator_roles(cluster):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
 
     Args:
         cluster (str): cluster name or cluster id
-        prefix (str): role prefix
 
     """
-    cmd = (
-        f"rosa create operator-roles --cluster {cluster} --prefix {prefix}"
-        f' --mode auto --permissions-boundary "" --yes'
-    )
+    cmd = f"rosa create operator-roles --cluster {cluster}" f" --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
 
 
