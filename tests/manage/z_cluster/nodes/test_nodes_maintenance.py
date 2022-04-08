@@ -31,6 +31,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     skipif_bm,
     bugzilla,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -110,6 +111,7 @@ class TestNodesMaintenance(ManageTest):
             pytest.skip(str(e))
 
     @tier1
+    @skipif_managed_service
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[

@@ -5,14 +5,14 @@ from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_flexy_deployment,
     skipif_ibm_flash,
-    skipif_ms_consumer,
+    skipif_managed_service,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # https://github.com/red-hat-storage/ocs-ci/issues/4802
-@skipif_ms_consumer
+@skipif_managed_service
 @skipif_flexy_deployment
 @skipif_ibm_flash
 @ignore_leftovers

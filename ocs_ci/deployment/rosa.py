@@ -16,6 +16,7 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.managedservice import update_pull_secret
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -29,6 +30,7 @@ class ROSAOCP(BaseOCPDeployment):
     def __init__(self):
         super(ROSAOCP, self).__init__()
         self.ocp_version = get_ocp_version()
+        self.region = config.ENV_DATA["region"]
 
     def deploy_prereq(self):
         """
@@ -57,7 +59,7 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version)
+        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -161,6 +163,8 @@ class ROSA(CloudDeploymentBase):
             resource_count=3,
             timeout=600,
         )
+        if config.DEPLOYMENT.get("pullsecret_workaround"):
+            update_pull_secret()
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)

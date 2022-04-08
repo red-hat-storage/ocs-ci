@@ -758,6 +758,29 @@ GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE = [
     "ocs-storagecluster-rbdplugin-snapclass.yaml",
 ]
 
+GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE = [
+    "noobaa-db-pg-0-db.log",
+    "NooBaaList_crs.yaml",
+    "noobaa-core-0-core.log",
+    "NamespaceStoreList_crs.yaml",
+    "noobaa-db-pg-0-initialize-database.log",
+    "BackingStoreList_crs.yaml",
+    "ocs-storagecluster-cephfilesystem.yaml",
+    "ocs-storagecluster-cephblockpool.yaml",
+    "noobaa-db-pg-0-init.log",
+    "noobaa-endpoint-scc-describe.txt",
+    "noobaa-core-0-pod-describe.txt",
+    "noobaa-db-pg-0.log",
+    "obc_list",
+    "BucketClassList_crs.yaml",
+    "noobaa-db-pg-0-pod-describe.txt",
+    "odf-operator.yaml",
+    "noobaa-db-pg-0.yaml",
+    "db-noobaa-db-pg-0.yaml",
+    "noobaa-scc-describe.txt",
+    "db-noobaa-db-pg-0-pvc-describe.txt",
+]
+
 if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     GATHER_COMMANDS_OTHERS = list(
         set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
@@ -819,6 +842,14 @@ GATHER_COMMANDS_VERSION = {
         "OTHERS": GATHER_COMMANDS_OTHERS
         + GATHER_COMMANDS_OTHERS_4_7
         + GATHER_COMMANDS_OTHERS_4_10,
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
         "OTHERS_EXTERNAL": list(
             set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
