@@ -90,7 +90,7 @@ def measure_attach_time(
         else:
             time_measures.append(attach_time['web-server'])
     for index, start_time in enumerate(time_measures):
-        logging.info(
+        logger.info(
             f"{msg_prefix} pod number {index + 1} start time: {start_time} seconds"
         )
         if start_time > 30:
@@ -100,7 +100,7 @@ def measure_attach_time(
             )
     if time_measures:
         average = statistics.mean(time_measures)
-        logging.info(
+        logger.info(
             f"{msg_prefix} The average time for the sampled {len(time_measures)} pods is {average} seconds."
         )
 
@@ -176,7 +176,7 @@ def measure_pvc_creation_time(
             interface, pvc_obj.name, start_time
         )
 
-        logging.info(
+        logger.info(
             f"{msg_prefix} PVC number {pvc_no + 1} of interface {interface} was created in {creation_time} seconds."
         )
         if creation_time > accepted_creation_time:
@@ -222,7 +222,7 @@ def measure_pvc_deletion_time(
         deletion_time = helpers.measure_pvc_deletion_time(
             interface, pv
         )
-        logging.info(
+        logger.info(
             f"{msg_prefix} PVC number {pvc_no + 1} of interface {interface} was deleted in {deletion_time} seconds."
         )
         if deletion_time > accepted_deletion_time:
