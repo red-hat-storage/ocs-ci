@@ -318,21 +318,18 @@ class BaseUI:
             bool: True if the element is found, returns False otherwise and raises NoSuchElementException
 
         """
-        ret = None
         try:
             wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
             wait.until(ec.presence_of_element_located(locator))
-            ret = True
+            return True
         except NoSuchElementException:
             logger.error("Expected element not found on UI")
-            ret = False
+            self.take_screenshot()
+            return False
         except TimeoutException:
             logger.error("Timedout while waiting for element")
-            ret = False
-        finally:
-            if not ret:
-                self.take_screenshot()
-            return ret
+            self.take_screenshot()
+            return False
 
 
 class PageNavigator(BaseUI):

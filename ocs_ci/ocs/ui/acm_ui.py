@@ -259,7 +259,6 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
     def acm_bailout_if_failed(self):
         if self.acm_cluster_status_failed():
             raise ACMClusterDeployException("Deployment is in 'FAILED' state")
-        return
 
     def acm_cluster_status_failed(self, timeout=5):
         return self.check_element_presence(
