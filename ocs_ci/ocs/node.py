@@ -2014,3 +2014,170 @@ def get_encrypted_osd_devices(node_obj, node):
     ).split("\n")
     luks_devices = [device for device in luks_devices_out if device != ""]
     return luks_devices
+
+
+def get_osd_ids_per_node():
+    """
+    Get a dictionary of the osd ids per node
+
+    Returns:
+        dict: The dictionary of the osd ids per node
+
+    """
+    osd_node_names = get_osd_running_nodes()
+    return {node_name: get_node_osd_ids(node_name) for node_name in osd_node_names}
+
+
+def get_node_rook_ceph_pod_names(node_name):
+    """
+    Get the rook ceph pod names associated with the node
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: The rook ceph pod names associated with the node
+
+    """
+    rook_ceph_pods = pod.get_pod_objs(pod.get_rook_ceph_pod_names())
+    node_rook_ceph_pods = get_node_pods(node_name, rook_ceph_pods)
+    return [p.name for p in node_rook_ceph_pods]
+
+
+def get_node_internal_ip(node_obj):
+    """
+    Get the node internal ip
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The node internal ip or `None`
+
+    """
+    addresses = node_obj.get().get("status").get("addresses")
+    for address in addresses:
+        if address["type"] == "InternalIP":
+            return address["address"]
+
+    return None
+
+
+def check_node_ip_equal_to_associated_pods_ips(node_obj):
+    """
+    Check that the node ip is equal to the pods ips associated with the node.
+    This function is mainly for the managed service deployment.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        bool: True, if the node ip is equal to the pods ips associated with the node.
+            False, otherwise.
+
+    """
+    rook_ceph_pod_names = pod.get_rook_ceph_pod_names()
+    rook_ceph_pod_names = [
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-operator")
+    ]
+    rook_ceph_pods = pod.get_pod_objs(rook_ceph_pod_names)
+    node_rook_ceph_pods = get_node_pods(node_obj.name, rook_ceph_pods)
+    node_ip = get_node_internal_ip(node_obj)
+    return all([pod.get_pod_ip(p) == node_ip for p in node_rook_ceph_pods])
+
+
+def verify_worker_nodes_security_groups():
+    """
+    Check the worker nodes security groups set correctly.
+    The function checks that the pods ip are equal to their associated nodes.
+
+    Returns:
+        bool: True, if the worker nodes security groups set correctly. False otherwise
+
+    """
+    wnodes = get_nodes(constants.WORKER_MACHINE)
+    for wnode in wnodes:
+        if not check_node_ip_equal_to_associated_pods_ips(wnode):
+            log.warning(f"The node {wnode.name} security groups is not set correctly")
+            return False
+
+    log.info("All the worker nodes security groups are set correctly")
+    return True
+
+
+def wait_for_osd_ids_come_up_on_node(
+    node_name, expected_osd_ids, timeout=180, sleep=10
+):
+    """
+    Wait for the expected osd ids to come up on a node
+
+    Args:
+        node_name (str): The node name
+        expected_osd_ids (list): The list of the expected osd ids to come up on the node
+        timeout (int): Time to wait for the osd ids to come up on the node
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, the osd ids to come up on the node. False, otherwise
+
+    """
+    try:
+        for osd_ids in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_node_osd_ids,
+            node_name=node_name,
+        ):
+            log.info(f"the current node {node_name} osd ids are: {osd_ids}")
+            if osd_ids == expected_osd_ids:
+                log.info(
+                    f"The node {node_name} has the expected osd ids {expected_osd_ids}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The node {node_name} didn't have the expected osd ids {expected_osd_ids}"
+        )
+
+    return False
+
+
+def wait_for_all_osd_ids_come_up_on_nodes(
+    expected_osd_ids_per_node, timeout=360, sleep=20
+):
+    """
+    Wait for all the expected osd ids to come up on their associated nodes
+
+    Args:
+        expected_osd_ids_per_node (dict): The expected osd ids per node
+        timeout (int): Time to wait for all the expected osd ids to come up on
+            their associated nodes
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, if all the expected osd ids come up on their associated nodes.
+            False, otherwise
+
+    """
+    try:
+        for osd_ids_per_node in TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=get_osd_ids_per_node
+        ):
+            log.info(f"the current osd ids per node: {osd_ids_per_node}")
+            if osd_ids_per_node == expected_osd_ids_per_node:
+                log.info(
+                    f"The osd ids per node reached the expected values: "
+                    f"{expected_osd_ids_per_node}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The osd ids per node didn't reach the expected values: "
+            f"{expected_osd_ids_per_node}"
+        )
+
+    return False
