@@ -21,7 +21,7 @@ setup(
         "gevent==20.9.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
-        "paramiko==2.10.1",
+        "paramiko==2.11.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
@@ -80,6 +80,7 @@ setup(
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
         "protobuf==3.20.1",
+        "ping3>=4.0.3",
     ],
     entry_points={
         "console_scripts": [

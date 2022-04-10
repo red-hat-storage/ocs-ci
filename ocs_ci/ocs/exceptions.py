@@ -522,3 +522,7 @@ class UnsupportedWorkloadError(Exception):
 
 class RebootEventNotFoundException(Exception):
     pass
+
+
+class ConnectivityFail(Exception):
+    pass
