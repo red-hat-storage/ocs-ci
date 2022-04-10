@@ -2096,8 +2096,6 @@ def verify_worker_nodes_security_groups():
     Returns:
         bool: True, if the worker nodes security groups set correctly. False otherwise
 
-    TO DO: We may need to modify the steps, but for now this will suffice.
-
     """
     wnodes = get_nodes(constants.WORKER_MACHINE)
     for wnode in wnodes:
