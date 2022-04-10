@@ -2898,6 +2898,8 @@ def storagecluster_independent_check():
         .get()
         .get("items")[0]
     )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        return False
 
     return bool(
         storage_cluster.get("spec", {}).get("externalStorage", {}).get("enable", False)
