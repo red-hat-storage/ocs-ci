@@ -1134,6 +1134,22 @@ def verify_managed_service_resources():
     )[0]
     log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
     assert noobaa_deployment.replicas == 0
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        verify_provider_resources()
+
+
+def verify_provider_resources():
+    """
+    Verify resources specific to managed OCS provider:
+    1. Ocs-provider-server pod is Running
+    """
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    pod_obj.wait_for_resource(
+        condition="Running", selector="app=ocsProviderApiServer", resource_count=1
+    )
 
 
 def verify_managed_service_networkpolicy():
