@@ -4,7 +4,7 @@ RUN:
   client_version: '4.5.0-0.nightly'
 DEPLOYMENT:
   installer_version: "4.5.0-0.nightly"
-  terraform_version: "0.12.26"
+  terraform_version: "0.12.31"
   ignition_version: "2.2.0"
 ENV_DATA:
   vm_template: 'rhcos-45.82.202008010929-0-vmware.x86_64'

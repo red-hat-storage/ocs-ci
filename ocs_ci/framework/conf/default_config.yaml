@@ -74,7 +74,7 @@ DEPLOYMENT:
   live_deployment: False
   preserve_bootstrap_node: False
   # Terraform version
-  terraform_version: "0.12.26"
+  terraform_version: "0.12.31"
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
