@@ -49,9 +49,7 @@ def write_empty_files_to_bucket(
 
     logger.info("Successfully created files.")
 
-    obj_set = set(
-        obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
-    )
+    obj_set = set(obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name))
     test_set = set("test" + str(file_no + 1) for file_no in range(1000))
 
     if test_set != obj_set:
@@ -61,9 +59,7 @@ def write_empty_files_to_bucket(
     return obj_set
 
 
-def measure_attach_time(
-    pod_objs, pvc_size
-):
+def measure_attach_time(pod_objs, pvc_size):
     """
     Measures and Logs Attach Time of all PODs.
 
@@ -85,10 +81,10 @@ def measure_attach_time(
     logger.info(str(start_time_dict_list))
     time_measures = []
     for attach_time in start_time_dict_list:
-        if 'my-container' in attach_time:
-            time_measures.append(attach_time['my-container'])
+        if "my-container" in attach_time:
+            time_measures.append(attach_time["my-container"])
         else:
-            time_measures.append(attach_time['web-server'])
+            time_measures.append(attach_time["web-server"])
     for index, start_time in enumerate(time_measures):
         logger.info(
             f"{msg_prefix} pod number {index + 1} start time: {start_time} seconds"
@@ -105,9 +101,7 @@ def measure_attach_time(
         )
 
 
-def measure_pod_creation_time(
-    namespace, num_of_pods
-):
+def measure_pod_creation_time(namespace, num_of_pods):
     """
     Measures and Logs the POD Creation Time of all the PODs.
 
@@ -123,7 +117,7 @@ def measure_pod_creation_time(
 
     """
     logs = performance_lib.run_oc_command(
-        "get events --sort-by=\'{.lastTimestamp}\'",
+        "get events --sort-by='{.lastTimestamp}'",
         namespace,
     )
 
@@ -138,9 +132,7 @@ def measure_pod_creation_time(
         elif "Created" in line:
             created_time = int(line.split()[0][:-1])
             creation_time = scheduled_time - created_time
-            logger.info(
-                f"POD number {pod_no} was created in {creation_time} seconds."
-            )
+            logger.info(f"POD number {pod_no} was created in {creation_time} seconds.")
             if creation_time > accepted_creation_time:
                 raise ex.PerformanceException(
                     f"POD creation time is {creation_time} and is greater than "
@@ -149,9 +141,7 @@ def measure_pod_creation_time(
             pod_no -= 1
 
 
-def measure_pvc_creation_time(
-    interface, pvc_size, pvc_objs, start_time
-):
+def measure_pvc_creation_time(interface, pvc_size, pvc_objs, start_time):
     """
     Measures and Logs PVC Creation Time of all PVCs.
 
@@ -187,9 +177,7 @@ def measure_pvc_creation_time(
         pvc_no += 1
 
 
-def measure_pvc_deletion_time(
-    interface, num_of_pvcs, pvc_size, pvc_objs, pv_objs
-):
+def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_size, pvc_objs, pv_objs):
     """
     Measures and Logs PVC Deletion Time of all PVCs.
 
@@ -219,9 +207,7 @@ def measure_pvc_deletion_time(
         pv = pv_objs[pvc_no]
         pvc.ocp.wait_for_delete(resource_name=pvc.name)
         helpers.validate_pv_delete(pv)
-        deletion_time = helpers.measure_pvc_deletion_time(
-            interface, pv
-        )
+        deletion_time = helpers.measure_pvc_deletion_time(interface, pv)
         logger.info(
             f"{msg_prefix} PVC number {pvc_no + 1} of interface {interface} was deleted in {deletion_time} seconds."
         )
@@ -232,9 +218,7 @@ def measure_pvc_deletion_time(
             )
 
 
-def _multi_pvc_pod_lifecycle_factory(
-    multi_pvc_factory, pod_factory, teardown_factory
-):
+def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_factory):
     """
     Creates a factory that is used to:
     1. Create/Delete PVCs of type:
@@ -248,9 +232,7 @@ def _multi_pvc_pod_lifecycle_factory(
 
     """
 
-    def factory(
-        num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2"
-    ):
+    def factory(num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2"):
         """
         Args:
             num_of_pvcs (int) : Number of PVCs / PODs we want to create.
@@ -268,9 +250,11 @@ def _multi_pvc_pod_lifecycle_factory(
                 access_modes = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
                 num_of_pvc = num_of_pvcs // 2
             else:
-                access_modes = [constants.ACCESS_MODE_RWO,
-                                constants.ACCESS_MODE_RWO + '-' + constants.VOLUME_MODE_BLOCK,
-                                constants.ACCESS_MODE_RWX + '-' + constants.VOLUME_MODE_BLOCK]
+                access_modes = [
+                    constants.ACCESS_MODE_RWO,
+                    constants.ACCESS_MODE_RWO + "-" + constants.VOLUME_MODE_BLOCK,
+                    constants.ACCESS_MODE_RWX + "-" + constants.VOLUME_MODE_BLOCK,
+                ]
                 num_of_pvc = num_of_pvcs - num_of_pvcs // 2
 
             # Create PVCs
@@ -291,7 +275,9 @@ def _multi_pvc_pod_lifecycle_factory(
                 measure_pvc_creation_time(interface, pvc_size, pvc_objs_tmp, start_time)
 
             else:
-                logger.info(f"Num of PVCs of interface - {interface} = {num_of_pvc}. So no PVCs created.")
+                logger.info(
+                    f"Num of PVCs of interface - {interface} = {num_of_pvc}. So no PVCs created."
+                )
 
         # PVC and PV Teardown
         pv_objs = list()
@@ -305,35 +291,39 @@ def _multi_pvc_pod_lifecycle_factory(
         for pvc_obj in pvc_objs:
             if pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
                 if not bulk:
-                    pod_objs.append(pod_factory(
-                        pvc=pvc_obj,
-                        raw_block_pv=True,
-                        status=constants.STATUS_RUNNING,
-                        pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML
-                    ))
+                    pod_objs.append(
+                        pod_factory(
+                            pvc=pvc_obj,
+                            raw_block_pv=True,
+                            status=constants.STATUS_RUNNING,
+                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                        )
+                    )
                 else:
-                    pod_objs.append(pod_factory(
-                        pvc=pvc_obj,
-                        raw_block_pv=True,
-                        pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML
-                    ))
+                    pod_objs.append(
+                        pod_factory(
+                            pvc=pvc_obj,
+                            raw_block_pv=True,
+                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                        )
+                    )
             else:
                 if not bulk:
-                    pod_objs.append(pod_factory(
-                        pvc=pvc_obj,
-                        status=constants.STATUS_RUNNING
-                    ))
+                    pod_objs.append(
+                        pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
+                    )
                 else:
-                    pod_objs.append(pod_factory(
-                        pvc=pvc_obj
-                    ))
+                    pod_objs.append(pod_factory(pvc=pvc_obj))
 
         logger.info("POD creation was successful.")
 
         if bulk:
             for pod_obj in pod_objs:
                 executor.submit(
-                    helpers.wait_for_resource_state, pod_obj, constants.STATUS_RUNNING, timeout=300
+                    helpers.wait_for_resource_state,
+                    pod_obj,
+                    constants.STATUS_RUNNING,
+                    timeout=300,
                 )
 
             logger.info("All PODs reached Running State.")
@@ -368,20 +358,28 @@ def _multi_pvc_pod_lifecycle_factory(
         for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
             if interface == constants.CEPHFILESYSTEM:
                 num_of_pvc = num_of_pvcs // 2
-                measure_pvc_deletion_time(interface, num_of_pvc, pvc_size, pvc_objs[:num_of_pvc], pv_objs[:num_of_pvc])
+                measure_pvc_deletion_time(
+                    interface,
+                    num_of_pvc,
+                    pvc_size,
+                    pvc_objs[:num_of_pvc],
+                    pv_objs[:num_of_pvc],
+                )
             else:
                 num_of_pvc = num_of_pvcs - num_of_pvcs // 2
                 measure_pvc_deletion_time(
-                    interface, num_of_pvc, pvc_size, pvc_objs[num_of_pvcs // 2:], pv_objs[num_of_pvcs // 2:]
+                    interface,
+                    num_of_pvc,
+                    pvc_size,
+                    pvc_objs[num_of_pvcs // 2 :],
+                    pv_objs[num_of_pvcs // 2 :],
                 )
 
         logger.info(f"Successfully deleted {num_of_pvcs} PVCs")
 
         ocp_obj = ocp.OCP()
         ocp_obj.delete_project(namespace)
-        ocp_obj.wait_for_delete(
-            resource_name=namespace, timeout=90
-        )
+        ocp_obj.wait_for_delete(resource_name=namespace, timeout=90)
         switch_to_project(constants.DEFAULT_NAMESPACE)
 
     return factory
@@ -401,9 +399,7 @@ def _multi_obc_lifecycle_factory(
 
     """
 
-    def factory(
-        num_of_obcs=20, bulk=False
-    ):
+    def factory(num_of_obcs=20, bulk=False):
         """
         Args:
             num_of_obcs (int) : Number of OBCs we want to create of each type mentioned above.
@@ -416,27 +412,35 @@ def _multi_obc_lifecycle_factory(
         obc_objs = list()
         obc_names = list()
         obc_params = [
-            ("OC", {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Single",
-                    "namespacestore_dict": {"rgw": [(1, None)]},
+            (
+                "OC",
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
                 },
-            }, num_of_obcs),
+                num_of_obcs,
+            ),
             ("OC", None, num_of_obcs),
-            ("OC", {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Cache",
-                    "ttl": 3600,
-                    "namespacestore_dict": {"rgw": [(1, None)]},
+            (
+                "OC",
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 3600,
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                    "placement_policy": {
+                        "tiers": [
+                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                        ]
+                    },
                 },
-                "placement_policy": {
-                    "tiers": [
-                        {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
-                    ]
-                },
-            }, num_of_obcs)
+                num_of_obcs,
+            ),
         ]
         for _interface, _bucketclass, _num in obc_params:
             if _num > 0:
@@ -444,15 +448,19 @@ def _multi_obc_lifecycle_factory(
                     amount=_num,
                     interface=_interface,
                     bucketclass=_bucketclass,
-                    verify_health=not bulk
+                    verify_health=not bulk,
                 )
                 if bulk:
                     for bucket in buckets:
                         bucket.verify_health()
                 obc_objs.extend(buckets)
-                written_objs_names = write_empty_files_to_bucket(mcg_obj, awscli_pod_session, buckets[0].name,
-                                                                 test_directory_setup)
-                if _bucketclass and _bucketclass["namespace_policy_dict"]["type"] == "Cache":
+                written_objs_names = write_empty_files_to_bucket(
+                    mcg_obj, awscli_pod_session, buckets[0].name, test_directory_setup
+                )
+                if (
+                    _bucketclass
+                    and _bucketclass["namespace_policy_dict"]["type"] == "Cache"
+                ):
                     wait_for_cache(mcg_obj, buckets[0].name, list(written_objs_names))
 
         # Create OBCs - Replica Pair, create random files and verify replication
@@ -462,7 +470,7 @@ def _multi_obc_lifecycle_factory(
             "namespace_policy_dict": {
                 "type": "Single",
                 "namespacestore_dict": {"rgw": [(1, None)]},
-            }
+            },
         }
 
         source_bucketclass = {
@@ -470,7 +478,7 @@ def _multi_obc_lifecycle_factory(
             "namespace_policy_dict": {
                 "type": "Single",
                 "namespacestore_dict": {"rgw": [(1, None)]},
-            }
+            },
         }
 
         target_buckets = list()
@@ -481,10 +489,14 @@ def _multi_obc_lifecycle_factory(
             target_bucket_name = target_bucket.name
 
             replication_policy = ("basic-replication-rule", target_bucket_name, None)
-            source_bucket = bucket_factory(1, bucketclass=source_bucketclass, replication_policy=replication_policy)[0]
+            source_bucket = bucket_factory(
+                1, bucketclass=source_bucketclass, replication_policy=replication_policy
+            )[0]
             source_buckets.append(source_bucket)
 
-            write_empty_files_to_bucket(mcg_obj, awscli_pod_session, source_bucket.name, test_directory_setup)
+            write_empty_files_to_bucket(
+                mcg_obj, awscli_pod_session, source_bucket.name, test_directory_setup
+            )
             compare_bucket_object_list(
                 mcg_obj_session, source_bucket.name, target_bucket_name
             )
@@ -495,9 +507,7 @@ def _multi_obc_lifecycle_factory(
             obc_names.append(obc.name)
 
         # Measure OBC Creation Time
-        scale_noobaa_lib.measure_obc_creation_time(
-            obc_name_list=obc_names
-        )
+        scale_noobaa_lib.measure_obc_creation_time(obc_name_list=obc_names)
 
         # Delete OBCs
         for bucket in obc_objs:
@@ -505,16 +515,18 @@ def _multi_obc_lifecycle_factory(
             bucket.delete()
 
         # Measure OBC Deletion Time
-        scale_noobaa_lib.measure_obc_deletion_time(
-            obc_name_list=obc_names
-        )
+        scale_noobaa_lib.measure_obc_deletion_time(obc_name_list=obc_names)
 
     return factory
 
 
 def stage2(
-    multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_pvcs=100, pvc_size=2, num_of_obcs=20,
-    run_time=30
+    multi_pvc_pod_lifecycle_factory,
+    multi_obc_lifecycle_factory,
+    num_of_pvcs=100,
+    pvc_size=2,
+    num_of_obcs=20,
+    run_time=30,
 ):
     """
     Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and OBCs
@@ -541,7 +553,10 @@ def stage2(
         for bulk in (False, True):
             logger.info(f"-----BULK:{bulk}------")
             multi_pvc_pod_lifecycle_factory(
-                num_of_pvcs=num_of_pvcs, pvc_size=pvc_size, bulk=bulk, namespace="stage-2-cycle-" + str(cycle_no)
+                num_of_pvcs=num_of_pvcs,
+                pvc_size=pvc_size,
+                bulk=bulk,
+                namespace="stage-2-cycle-" + str(cycle_no),
             )
             multi_obc_lifecycle_factory(num_of_obcs=num_of_obcs, bulk=bulk)
 
