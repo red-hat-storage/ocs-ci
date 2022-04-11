@@ -14,5 +14,4 @@ def get_consumer_clusters():
     for index in range(config.nclusters):
         if config.clusters[index].ENV_DATA["cluster_type"] == "consumer":
             consumer_clusters.append(index)
-            config.consumer_test = list()
     config.index_consumer_clusters = consumer_clusters
