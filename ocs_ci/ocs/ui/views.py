@@ -455,8 +455,15 @@ acm_configuration = {
         By.XPATH,
     ),
     "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
-    "cc_create_cluster": ("createCluster", By.ID),
-    "cc_provider_vmware_vsphere": ("//*[@id='vmware-vsphere']", By.XPATH),
+    "cc_create_cluster": ("//button[@id='createCluster']", By.XPATH),
+    "cc_create_cluster_index_xpath": (
+        "(//button[normalize-space()='Create cluster'])[1]",
+        By.XPATH,
+    ),
+    "cc_provider_vmware_vsphere": (
+        "//div[contains(text(),'VMware vSphere')]",
+        By.XPATH,
+    ),
     "cc_cluster_name": ("//input[@id='eman']", By.XPATH),
     "cc_base_dns_domain": ("//input[@id='baseDomain']", By.XPATH),
     "cc_openshift_release_image": ("//input[@id='imageSet']", By.XPATH),
@@ -488,6 +495,10 @@ acm_configuration = {
         "//input[@id='namespaceName-input-toggle-select-typeahead']",
         By.XPATH,
     ),
+    "cc_provider_creds_default_namespace": (
+        "//button[normalize-space()='default']",
+        By.XPATH,
+    ),
     "cc_provider_creds_vsphere_base_dns": ("//input[@id='baseDomain']", By.XPATH),
     "cc_provider_creds_vsphere_vcenter_server": ("//input[@id='vCenter']", By.XPATH),
     "cc_provider_creds_vsphere_username": ("//input[@id='username']", By.XPATH),
@@ -512,7 +523,7 @@ acm_configuration = {
         "//button[normalize-space()='Add']",
         By.XPATH,
     ),
-    "cc_cluster_status_page_download_config": (
+    "cc_cluster_status_page_download_config_dropdown": (
         "//button[@id='download-configuration']",
         By.XPATH,
     ),
@@ -520,8 +531,31 @@ acm_configuration = {
         "//a[normalize-space()='install-config']",
         By.XPATH,
     ),
+    "cc_cluster_status_page_status": (
+        "//button[normalize-space()={}]",
+        By.XPATH,
+    ),
     "cc_cluster_status_page_status_failed": (
         "//button[normalize-space()='Failed']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status_creating": (
+        "//button[normalize-space()='Creating']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_status_ready": (
+        "//button[normalize-space()='Ready']",
+        By.XPATH,
+    ),
+    "cc_cluster_status_page_download_config_kubeconfig": (
+        "//a[normalize-space()='kubeconfig']",
+        By.XPATH,
+    ),
+    "cc_table_entry": ("//a[normalize-space()='{}']", By.XPATH),
+    "cc_cluster_details_page": ("//div[text()='Details']", By.XPATH),
+    "cc_cluster_status_text": ("//span[text()='Status']", By.XPATH),
+    "cc_details_toggle_icon": (
+        "//span[@class='pf-c-card__header-toggle-icon']",
         By.XPATH,
     ),
 }
@@ -753,6 +787,7 @@ locators = {
         "add_capacity": add_capacity,
         "validation": {**validation, **validation_4_8, **validation_4_9},
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "acm_page": {**acm_page_nav, **acm_configuration},
     },
     "4.9": {
         "login": login,

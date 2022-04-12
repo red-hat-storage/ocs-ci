@@ -472,6 +472,10 @@ class BenchmarkTestFailed(Exception):
     pass
 
 
+class ACMClusterDeployException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 

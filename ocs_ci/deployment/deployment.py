@@ -154,12 +154,12 @@ class Deployment(object):
 
         pass
 
-    def deploy_cluster(self, log_cli_level="DEBUG"):
+    def do_deploy_ocp(self, log_cli_level):
         """
-        We are handling both OCP and OCS deployment here based on flags
-
+        Deploy OCP
         Args:
-            log_cli_level (str): log level for installer (default: DEBUG)
+            log_cli_level (str): log level for the installer
+
         """
         if not config.ENV_DATA["skip_ocp_deployment"]:
             if is_cluster_running(self.cluster_path):
@@ -175,6 +175,76 @@ class Deployment(object):
                         collect_ocs_logs("deployment", ocs=False)
                     raise
 
+    def do_deploy_submariner(self):
+        """
+        Deploy Submariner operator
+
+        """
+        # Multicluster operations
+        if config.multicluster:
+            # Configure submariner only on non-ACM clusters
+            submariner = Submariner()
+            submariner.deploy()
+
+    def do_deploy_ocs(self):
+        """
+        Deploy OCS/ODF and run verification as well
+
+        """
+        if not config.ENV_DATA["skip_ocs_deployment"]:
+            for i in range(config.nclusters):
+                if config.multicluster and config.get_acm_index() == i:
+                    continue
+                config.switch_ctx(i)
+                try:
+                    self.deploy_ocs()
+
+                    if config.REPORTING["collect_logs_on_success_run"]:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                except Exception as e:
+                    logger.error(e)
+                    if config.REPORTING["gather_on_deploy_failure"]:
+                        # Let's do the collections separately to guard against one
+                        # of them failing
+                        collect_ocs_logs("deployment", ocs=False)
+                        collect_ocs_logs("deployment", ocp=False)
+                    raise
+            config.reset_ctx()
+            # Run ocs_install_verification here only in case of multicluster.
+            # For single cluster, test_deployment will take care.
+            if config.multicluster:
+                for i in range(config.multicluster):
+                    if config.get_acm_index() == i:
+                        continue
+                    else:
+                        config.switch_ctx(i)
+                        ocs_registry_image = config.DEPLOYMENT.get(
+                            "ocs_registry_image", None
+                        )
+                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
+                config.reset_ctx()
+        else:
+            logger.warning("OCS deployment will be skipped")
+
+    def do_deploy_rdr(self):
+        """
+        Call Regional DR deploy
+
+        """
+        # Multicluster: Handle all ODF multicluster DR ops
+        if config.multicluster:
+            dr_conf = self.get_rdr_conf()
+            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
+            deploy_dr.deploy()
+
+    def deploy_cluster(self, log_cli_level="DEBUG"):
+        """
+        We are handling both OCP and OCS deployment here based on flags
+
+        Args:
+            log_cli_level (str): log level for installer (default: DEBUG)
+        """
+        self.do_deploy_ocp(log_cli_level)
         # Deployment of network split scripts via machineconfig API happens
         # before OCS deployment.
         if config.DEPLOYMENT.get("network_split_setup"):
@@ -209,53 +279,9 @@ class Deployment(object):
             except Exception as e:
                 logger.error(e)
 
-        # Multicluster operations
-        if config.multicluster:
-            # Configure submariner only on non-ACM clusters
-            submariner = Submariner()
-            submariner.deploy()
-
-        if not config.ENV_DATA["skip_ocs_deployment"]:
-            for i in range(config.nclusters):
-                if config.multicluster and config.get_acm_index() == i:
-                    continue
-                config.switch_ctx(i)
-                try:
-                    self.deploy_ocs()
-
-                    if config.REPORTING["collect_logs_on_success_run"]:
-                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
-                except Exception as e:
-                    logger.error(e)
-                    if config.REPORTING["gather_on_deploy_failure"]:
-                        # Let's do the collections separately to guard against one
-                        # of them failing
-                        collect_ocs_logs("deployment", ocs=False)
-                        collect_ocs_logs("deployment", ocp=False)
-                    raise
-            config.reset_ctx()
-
-            # Run ocs_install_verification here only in case of multicluster.
-            # For single cluster, test_deployment will take care.
-            if config.multicluster:
-                for i in range(config.multicluster):
-                    if config.get_acm_index() == i:
-                        continue
-                    else:
-                        config.switch_ctx(i)
-                        ocs_registry_image = config.DEPLOYMENT.get(
-                            "ocs_registry_image", None
-                        )
-                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
-                config.reset_ctx()
-        else:
-            logger.warning("OCS deployment will be skipped")
-
-        # Multicluster: Handle all ODF multicluster DR ops
-        if config.multicluster:
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
-            deploy_dr.deploy()
+        self.do_deploy_submariner()
+        self.do_deploy_ocs()
+        self.do_deploy_rdr()
 
     def get_rdr_conf(self):
         """

@@ -323,8 +323,12 @@ class BaseUI:
             wait.until(ec.presence_of_element_located(locator))
             return True
         except NoSuchElementException:
-            self.take_screenshot()
             logger.error("Expected element not found on UI")
+            self.take_screenshot()
+            return False
+        except TimeoutException:
+            logger.error("Timedout while waiting for element")
+            self.take_screenshot()
             return False
 
 

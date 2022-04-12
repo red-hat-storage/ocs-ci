@@ -11,6 +11,7 @@ and with consideration of the entire project.
 
 import os
 
+
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -654,6 +655,7 @@ DR_AWS_S3_PROFILE_YAML = os.path.join(
 DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
+RDR_MODE = "regional-dr"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
@@ -772,6 +774,7 @@ IBM_PLATFORM = "ibm"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
+ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
     BAREMETAL_PLATFORM,
@@ -1665,3 +1668,22 @@ ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
 VAULT_TOKEN = "vaulttokens"
 VAULT_TENANT_SA = "vaulttenantsa"
 RBD_CSI_VAULT_TOKEN_REVIEWER_NAME = "rbd-csi-vault-token-review"
+# ACM UI related constants
+PLATFORM_XPATH_MAP = {
+    "vsphere": "cc_provider_vmware_vsphere",
+    "AWS": None,
+    "baremetal": None,
+    "azure": None,
+}
+ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
+# example release image url : quay.io/openshift-release-dev/ocp-release:4.9.23-x86_64
+ACM_OCP_RELEASE_IMG_URL_PREFIX = "registry.ci.openshift.org/ocp/release"
+ACM_VSPHERE_NETWORK = "VM Network"
+ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
+ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
+ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
+# Concatenated CA file for vcenter
+VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
+SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
+SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
+SPACE = " "
