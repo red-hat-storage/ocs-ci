@@ -376,6 +376,10 @@ page_nav = {
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
 }
 
+page_nav_4_10 = {
+    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
@@ -739,10 +743,18 @@ validation_4_9 = {
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
 }
 
+validation_4_10 = {
+    "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
+    "ocs-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
+        By.CSS_SELECTOR,
+    ),
+}
+
 locators = {
     "4.10": {
         "login": login,
-        "page": page_nav,
+        "page": {**page_nav, **page_nav_4_10},
         "generic": generic_locators,
         "deployment": {
             **deployment,
@@ -751,7 +763,12 @@ locators = {
             **deployment_4_10,
         },
         "add_capacity": add_capacity,
-        "validation": {**validation, **validation_4_8, **validation_4_9},
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+        },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.9": {

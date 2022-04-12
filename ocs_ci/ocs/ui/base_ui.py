@@ -381,7 +381,10 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        if self.ocs_version_semantic >= version.VERSION_4_10:
+            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        else:
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
