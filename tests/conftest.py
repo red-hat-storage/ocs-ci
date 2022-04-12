@@ -4662,7 +4662,12 @@ def patch_consumer_toolbox_with_secret():
             if cluster.ENV_DATA.get("cluster_type") == "provider":
                 provider_cluster = cluster
                 break
-        assert provider_cluster, "Provider cluster not found"
+        if not provider_cluster:
+            log.warning(
+                "Provider cluster not found to patch rook-ceph-tools deployment on consumers with ceph.admin key. "
+                "Assuming the toolbox on consumers are already fixed to run ceph commands."
+            )
+            return
 
         # Switch context to provider cluster
         log.info("Switching to the provider cluster context")
