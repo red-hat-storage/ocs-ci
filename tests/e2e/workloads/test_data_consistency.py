@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources import job
 from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,11 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # we need to mount the volume on every worker node, so RWX/cephfs
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
-    pvc_dict["spec"]["storageClassName"] = constants.CEPHFILESYSTEM_SC
+    if storagecluster_independent_check():
+        sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+    else:
+        sc_name = constants.CEPHFILESYSTEM_SC
+    pvc_dict["spec"]["storageClassName"] = sc_name
     # there is no need for lot of storage capacity for this test
     pvc_dict["spec"]["resources"]["requests"]["storage"] = "1Gi"
 
