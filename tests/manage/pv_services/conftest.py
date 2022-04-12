@@ -3,6 +3,8 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import bugzilla
 
 log = logging.getLogger(__name__)
 
@@ -169,3 +171,18 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         return pvcs, pods
 
     return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    Add markers in the collected items based on conditions
+
+    Args:
+        items: list of collected tests
+
+    """
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items:
+            if "tests/manage/pv_services/pvc_snapshot" in str(item.fspath):
+                # Add bugzilla marker to skip PVC snapshot tests based on the status of the bug 2069367
+                item.add_marker(bugzilla("2069367"))
