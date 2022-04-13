@@ -22,7 +22,7 @@
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments
 
-1. Install the `jq` and `awscli` system packages
+1. Install the `jq`, `yq` (v4.12.1+), and `awscli` system packages.
 
 ##### AWS UPI with RHEL workers
 Along with AWS UPI prerequisites we need following
