@@ -1134,6 +1134,9 @@ def verify_managed_service_resources():
     )[0]
     log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
     assert noobaa_deployment.replicas == 0
+
+    verify_managed_alerting_secrets()
+
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_resources()
 
