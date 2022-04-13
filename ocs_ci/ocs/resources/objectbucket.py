@@ -372,14 +372,19 @@ class MCGS3Bucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.mcg.s3_resource.create_bucket(Bucket=self.name)
+        if "s3resource" in kwargs:
+            self.s3resource = kwargs["s3resource"]
+        else:
+            self.s3resource = self.mcg.s3_resource
+
+        self.s3resource.create_bucket(Bucket=self.name)
 
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
         """
-        self.mcg.s3_resource.Bucket(self.name).object_versions.delete()
-        self.mcg.s3_resource.Bucket(self.name).delete()
+        self.s3resource.Bucket(self.name).object_versions.delete()
+        self.s3resource.Bucket(self.name).delete()
 
     @property
     def internal_status(self):

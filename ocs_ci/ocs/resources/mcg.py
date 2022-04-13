@@ -365,6 +365,7 @@ class MCG:
             The server's response
 
         """
+        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
         payload = {
             "api": api,
             "method": method,
@@ -588,66 +589,6 @@ class MCG:
             },
         )
         logger.info(f"result from RPC call: {result}")
-        return target_bucket_name
-
-    def create_namespace_store(
-        self, nss_name, region, cld_mgr, cloud_uls_factory, platform
-    ):
-        """
-        Creates a new namespace store
-
-        Args:
-            nss_name (str): The name to be given to the new namespace store
-            region (str): The region name to be used
-            cld_mgr: A cloud manager instance
-            cloud_uls_factory: The cloud uls factory
-            platform (str): The platform resource name
-
-        Returns:
-            str: The name of the created target_bucket_name (cloud uls)
-        """
-        # Create the actual target bucket on AWS
-        uls_dict = cloud_uls_factory({platform: [(1, region)]})
-        target_bucket_name = list(uls_dict[platform])[0]
-
-        nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
-        nss_data["metadata"]["name"] = nss_name
-        nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-
-        NSS_MAPPING = {
-            constants.AWS_PLATFORM: {
-                "type": "aws-s3",
-                "awsS3": {
-                    "targetBucket": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "aws_client.secret.name")
-                    },
-                },
-            },
-            constants.AZURE_PLATFORM: {
-                "type": "azure-blob",
-                "azureBlob": {
-                    "targetBlobContainer": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "azure_client.secret.name")
-                    },
-                },
-            },
-            constants.RGW_PLATFORM: {
-                "type": "s3-compatible",
-                "s3Compatible": {
-                    "targetBucket": target_bucket_name,
-                    "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
-                    "signatureVersion": "v2",
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "rgw_client.secret.name")
-                    },
-                },
-            },
-        }
-
-        nss_data["spec"] = NSS_MAPPING[platform]
-        create_resource(**nss_data)
         return target_bucket_name
 
     def check_ns_resource_validity(
