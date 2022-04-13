@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ui,
 )
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
@@ -50,6 +51,7 @@ class TestCapacityBreakdownUI(ManageTest):
     @bugzilla("1832297")
     @skipif_ocs_version("!=4.8")
     @skipif_ui_not_support("validation")
+    @green_squad
     def test_capacity_breakdown_ui(
         self, setup_ui, project_name, pod_name, sc_type, teardown_project_factory
     ):
