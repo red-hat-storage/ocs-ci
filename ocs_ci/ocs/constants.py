@@ -484,6 +484,8 @@ AWSCLI_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli.yaml")
 
 AWSCLI_MULTIARCH_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli_multiarch.yaml")
 
+NSFS_INTERFACE_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "ubi8.yaml")
+
 SERVICE_ACCOUNT_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "service_account.yaml")
 
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
@@ -770,6 +772,7 @@ IBM_POWER_PLATFORM = "powervs"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
+IBM_COS_PLATFORM = "ibmcos"
 IBM_PLATFORM = "ibm"
 OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
@@ -1382,6 +1385,7 @@ RHV_DISK_INTERFACE_VIRTIO_SCSI = "VIRTIO_SCSI"
 # MCG constants
 PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
+NAMESPACE_FILESYSTEM = "nsfs"
 
 # Cosbench constants
 COSBENCH = "cosbench"
