@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+import copy
 import logging
 import tempfile
 import yaml
@@ -344,6 +345,22 @@ def ocs_install_verification(
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
+
+    # verify caps for external cluster
+    log.info("Verify CSI users and caps for external cluster")
+    if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
+        ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+        ceph_auth_data = ct_pod.exec_cmd_on_pod("ceph auth ls -f json")
+        for each in ceph_auth_data["auth_dump"]:
+            if each["entity"] in defaults.ceph_csi_users:
+                assert (
+                    "osd blocklist" in each["caps"]["mon"]
+                ), f"osd blocklist caps are not present for user {each['entity']}"
+                ceph_csi_users.remove(each["entity"])
+        assert (
+            not ceph_csi_users
+        ), f"CSI users {ceph_csi_users} not created in external cluster"
+        log.debug("All CSI users exists and have expected caps")
 
     # Verify CSI snapshotter sidecar container is not present
     # if the OCS version is < 4.6
