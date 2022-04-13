@@ -303,6 +303,7 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         '[{"op": "remove", "path": "/spec/template/spec/containers/0/livenessProbe"}]',
         '[{"op": "replace", "path": "/spec/template/spec/containers/0/command", '
         '"value" : ["/bin/bash", "-c", "sleep infinity"]}]',
+        '[{"op": "remove", "path": "/spec/template/spec/containers/0/startupProbe"}]',
     ]
     for change in patch_changes:
         osd_deployment.ocp.patch(
