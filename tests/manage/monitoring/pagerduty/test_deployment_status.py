@@ -77,6 +77,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
 @tier4
 @tier4b
 @managed_service_required
+@bugzilla("2072612")
 @pytest.mark.polarion_id("OCS-2770")
 def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     """
