@@ -1,7 +1,11 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier2, managed_service_required
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    managed_service_required,
+    skipif_ms_provider,
+)
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -10,6 +14,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2718")
 @tier2
 @managed_service_required
+@skipif_ms_provider
 def test_capacity_workload_alerts(
     notification_emails_required, workload_storageutilization_95p_rbd
 ):
