@@ -11,7 +11,12 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_nodes,
+    unschedule_nodes,
+    schedule_nodes,
+)
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
@@ -65,7 +70,12 @@ def measure_stop_ceph_mgr(measurement_dir):
         return oc.get(mgr)
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_mgr.json")
-    measured_op = measure_operation(stop_mgr, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_mgr, test_file, minimal_time=60 * 9)
+    else:
+        measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
@@ -148,7 +158,18 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
     test_file = os.path.join(
         measurement_dir, f"measure_stop_ceph_mon_{split_index}.json"
     )
-    measured_op = measure_operation(stop_mon, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 6 extra minutes so that alert is actually triggered and
+        # unscheduling worker nodes so that monitor is not replaced
+        worker_node_names = [
+            node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)
+        ]
+        unschedule_nodes(worker_node_names)
+        measured_op = measure_operation(stop_mon, test_file, minimal_time=60 * 20)
+        schedule_nodes(worker_node_names)
+    else:
+        measured_op = measure_operation(stop_mon, test_file)
 
     # expected minimal downtime of a mon inflicted by this fixture
     measured_op["min_downtime"] = run_time - (60 * 2)
@@ -164,7 +185,11 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
-        if not split_index == 1:
+        if (
+            not split_index == 1
+            or config.ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             msg = f"Downscaled monitors {mons_to_stop} were not replaced"
             assert check_old_mons_deleted, msg
 
@@ -221,7 +246,12 @@ def measure_stop_ceph_osd(measurement_dir):
         return osd_to_stop
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_osd.json")
-    measured_op = measure_operation(stop_osd, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_osd, test_file, minimal_time=60 * 19)
+    else:
+        measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
@@ -315,7 +345,13 @@ def measure_corrupt_pg(request, measurement_dir):
         return osd_deployment.name
 
     test_file = os.path.join(measurement_dir, "measure_corrupt_pg.json")
-    measured_op = measure_operation(corrupt_pg, test_file)
+
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(corrupt_pg, test_file, minimal_time=60 * 17)
+    else:
+        measured_op = measure_operation(corrupt_pg, test_file)
 
     teardown()
 
@@ -771,7 +807,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
         return rgw_deployments
 
     test_file = os.path.join(measurement_dir, "measure_stop_rgw.json")
-    measured_op = measure_operation(stop_rgw, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_rgw, test_file, minimal_time=60 * 8)
+    else:
+        measured_op = measure_operation(stop_rgw, test_file)
 
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
@@ -888,7 +929,12 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     request.addfinalizer(finalizer)
 
     test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
-    measured_op = measure_operation(stop_nodes, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_nodes, test_file, minimal_time=60 * 8)
+    else:
+        measured_op = measure_operation(stop_nodes, test_file)
     logger.info("Turning on nodes")
     try:
         nodes.start_nodes(nodes=test_nodes)
