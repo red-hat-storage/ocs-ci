@@ -1078,7 +1078,9 @@ def verify_managed_service_resources():
     2. 1 prometheus pod and 3 alertmanager pods are in Running state
     3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
     4. Verify that noobaa-operator replicas is set to 0
-    5. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
+    5. Verify managed ocs secrets
+    6. If cluster is Provider, verify resources specific to provider clusters
+    7. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1145,6 +1147,7 @@ def verify_provider_resources():
     """
     Verify resources specific to managed OCS provider:
     1. Ocs-provider-server pod is Running
+    2. cephcluster is Ready and its hostNetworking is set to True
     """
     pod_obj = OCP(
         kind="pod",
@@ -1153,6 +1156,16 @@ def verify_provider_resources():
     pod_obj.wait_for_resource(
         condition="Running", selector="app=ocsProviderApiServer", resource_count=1
     )
+
+    cephcluster_cmd = "oc get cephcluster ocs-storagecluster-cephcluster -o yaml"
+    out = run_cmd(cephcluster_cmd)
+    cephcluster_yaml = yaml.safe_load(out)
+    assert (
+        cephcluster_yaml["status"]["phase"] == "Ready"
+    ), f"Status of cephcluster ocs-storagecluster-cephcluster is {cephcluster_yaml['status']['phase']}"
+    assert (
+        cephcluster_yaml["spec"]["network"]["hostNetwork"] == True
+    ), f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
 
 def verify_managed_service_networkpolicy():
