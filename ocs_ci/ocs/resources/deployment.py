@@ -52,7 +52,7 @@ class Deployment(OCS):
             int: Number of replicas
         """
         self.reload()
-        return self.data.get("status").get("replicas")
+        return self.data.get("spec").get("replicas")
 
     @property
     def available_replicas(self):

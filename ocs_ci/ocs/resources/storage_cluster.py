@@ -16,7 +16,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -1075,10 +1075,9 @@ def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
     1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
-    2. ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch secrets
-    exist in openshift-storage namespace
-    3. 1 prometheus pod and 3 alertmanager pods are in Running state
-    4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    2. 1 prometheus pod and 3 alertmanager pods are in Running state
+    3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    4. Verify that noobaa-operator replicas is set to 0
     5. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
@@ -1127,6 +1126,14 @@ def verify_managed_service_resources():
         assert (
             managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
         ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+
+    # Verify that noobaa-operator replicas is set to 0
+    noobaa_deployment = deployment.get_deployments_having_label(
+        "operators.coreos.com/mcg-operator.openshift-storage=",
+        constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )[0]
+    log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
+    assert noobaa_deployment.replicas == 0
 
 
 def verify_managed_service_networkpolicy():
