@@ -1101,15 +1101,7 @@ def verify_managed_service_resources():
         csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
 
     # Verify alerting secrets creation
-    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    for secret_name in {
-        managedservice.get_pagerduty_secret_name(),
-        managedservice.get_smtp_secret_name(),
-        managedservice.get_dms_secret_name(),
-    }:
-        assert secret_ocp_obj.is_exist(
-            resource_name=secret_name
-        ), f"{secret_name} does not exist in openshift-storage namespace"
+    verify_managed_alerting_secrets()
 
     # Verify alerting pods are Running
     pod_obj = OCP(
@@ -1153,3 +1145,33 @@ def verify_managed_service_networkpolicy():
         assert policy_obj.is_exist(
             resource_name=policy[1]
         ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+
+
+def verify_managed_alerting_secrets():
+    """
+    Verify that ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch,
+    addon-ocs-provider-qe-parameters, alertmanager-managed-ocs-alertmanager-generated secrets
+    exist in openshift-storage namespace.
+    For a provider cluster verify existence of onboarding-ticket-key, ocs-provider-server
+    and rook-ceph-mon secrets.
+    """
+    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for secret_name in {
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
+        managedservice.get_parameters_secret_name(),
+        constants.MANAGED_ALERTMANAGER_SECRET,
+    }:
+        assert secret_ocp_obj.is_exist(
+            resource_name=secret_name
+        ), f"{secret_name} does not exist in openshift-storage namespace"
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        for secret_name in {
+            constants.MANAGED_ONBOARDING_SECRET,
+            constants.MANAGED_PROVIDER_SERVER_SECRET,
+            constants.MANAGED_MON_SECRET,
+        }:
+            assert secret_ocp_obj.is_exist(
+                resource_name=secret_name
+            ), f"{secret_name} does not exist in openshift-storage namespace"
