@@ -499,13 +499,57 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
-        logger.info("Sleeping for 90 seconds after subscribing OCS")
-        time.sleep(90)
+        self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
             csv_name = package_manifest.get_current_csv(channel=custom_channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             csv.wait_for_phase("Installing", timeout=60)
+        self.wait_for_csv(ocs_operator_name)
+        logger.info("Sleeping for 30 seconds after CSV created")
+        time.sleep(30)
+
+    def wait_for_subscription(self, subscription_name):
+        """
+        Wait for the subscription to appear
+
+        Args:
+            subscription_name (str): Subscription name pattern
+
+        """
+        ocp.OCP(kind="subscription", namespace=self.namespace)
+        for sample in TimeoutSampler(
+            300, 10, ocp.OCP, kind="subscription", namespace=self.namespace
+        ):
+            subscriptions = sample.get().get("items", [])
+            for subscription in subscriptions:
+                found_subscription_name = subscription.get("metadata", {}).get(
+                    "name", ""
+                )
+                if subscription_name in found_subscription_name:
+                    logger.info(f"Subscription found: {found_subscription_name}")
+                    return
+                logger.debug(f"Still waiting for the subscription: {subscription_name}")
+
+    def wait_for_csv(self, csv_name):
+        """
+        Wait for the CSV to appear
+
+        Args:
+            csv_name (str): CSV name pattern
+
+        """
+        ocp.OCP(kind="subscription", namespace=self.namespace)
+        for sample in TimeoutSampler(
+            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
+        ):
+            csvs = sample.get().get("items", [])
+            for csv in csvs:
+                found_csv_name = csv.get("metadata", {}).get("name", "")
+                if csv_name in found_csv_name:
+                    logger.info(f"CSV found: {found_csv_name}")
+                    return
+                logger.debug(f"Still waiting for the CSV: {csv_name}")
 
     def get_arbiter_location(self):
         """
