@@ -1149,6 +1149,7 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     """
+    # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
         kind="pod",
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -1157,15 +1158,17 @@ def verify_provider_resources():
         condition="Running", selector="app=ocsProviderApiServer", resource_count=1
     )
 
+    # Verify that cephcluster is Ready and hostNetworking is True
     cephcluster_cmd = "oc get cephcluster ocs-storagecluster-cephcluster -o yaml"
     out = run_cmd(cephcluster_cmd)
     cephcluster_yaml = yaml.safe_load(out)
+    log.info("Verifying that cephcluster is Ready and hostNetworking is True")
     assert (
         cephcluster_yaml["status"]["phase"] == "Ready"
     ), f"Status of cephcluster ocs-storagecluster-cephcluster is {cephcluster_yaml['status']['phase']}"
-    assert (
-        cephcluster_yaml["spec"]["network"]["hostNetwork"] == True
-    ), f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
+    assert cephcluster_yaml["spec"]["network"][
+        "hostNetwork"
+    ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
 
 def verify_managed_service_networkpolicy():
