@@ -2,7 +2,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode, skipif_ms_consumer
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    skipif_external_mode,
+    skipif_ms_consumer,
+)
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 
@@ -29,11 +34,19 @@ class TestMustGather(ManageTest):
         argvalues=[
             pytest.param(
                 *["CEPH"],
-                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode, skipif_ms_consumer]
+                marks=[
+                    pytest.mark.polarion_id("OCS-1583"),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                ]
             ),
             pytest.param(
                 *["JSON"],
-                marks=[pytest.mark.polarion_id("OCS-1583"), skipif_external_mode, skipif_ms_consumer]
+                marks=[
+                    pytest.mark.polarion_id("OCS-1583"),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                ]
             ),
             pytest.param(*["OTHERS"], marks=pytest.mark.polarion_id("OCS-1583")),
         ],
