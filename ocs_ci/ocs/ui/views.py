@@ -709,7 +709,11 @@ validation_4_9 = {
         "//*[@data-test='OpenShift Data Foundation-health-item-icon']//*[@aria-labelledby='icon-title-403']",
         By.XPATH,
     ),
-    "odf-capacityCardLink": (".odf-capacityCardLink--ellipsis", By.CSS_SELECTOR),
+    "odf-capacityCardLink": ("//a[@class='odf-capacityCardLink--ellipsis']", By.XPATH),
+    "storagesystem-details-page": (
+        "//li[normalize-space()='StorageSystem details']",
+        By.XPATH,
+    ),
     "odf-performanceCardLink": (
         "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
@@ -748,6 +752,20 @@ validation_4_10 = {
     "ocs-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
         By.CSS_SELECTOR,
+    ),
+    "storagesystem-details": (
+        "//li[normalize-space()='StorageSystem details']",
+        By.XPATH,
+    ),
+    "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
+    "storagesystem-status-card": (
+        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
+    "storage-system-health-card-hyperlink": (
+        "//div[@class='odf-storageSystemPopup__item--margin']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        By.XPATH,
     ),
 }
 

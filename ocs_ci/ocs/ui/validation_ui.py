@@ -1,4 +1,5 @@
 import logging
+import warnings
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
@@ -249,10 +250,44 @@ class ValidationUI(PageNavigator):
 
         self.odf_console_plugin_check()
         self.navigate_odf_overview_page()
+        logger.info("Click on Storage System under Status card")
+        storage_system_presence = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-status-card"],
+            timeout=30,
+            expected_text="Storage System",
+        )
+        if storage_system_presence:
+            self.do_click(self.validation_loc["storagesystem-status-card"])
+            block_and_file_health_message_check = (
+                self.wait_until_expected_text_is_found(
+                    locator=self.validation_loc["block-and-file-health-message"],
+                    timeout=5,
+                    expected_text="Block and File service is unhealthy",
+                )
+            )
+            if block_and_file_health_message_check:
+                logger.critical("Block and File service is unhealthy")
+                warnings.warn("Block and File service is unhealthy")
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' from Storage System pop-up "
+                "under Status Card on Data Foundation Overview page"
+            )
+            self.do_click(
+                self.validation_loc["storage-system-health-card-hyperlink"],
+                enable_screenshot=True,
+            )
+            logger.info("Click on StorageSystems breadcrumb")
+            self.do_click((self.validation_loc["storagesystems"]))
+            logger.info("Navigate back to ODF Overview page")
+            self.do_click((self.validation_loc["overview"]))
+        else:
+            logger.critical(
+                "Storage system under Status card on Data Foundation Overview tab is missing"
+            )
+
         system_capacity_check = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["system-capacity"],
             expected_text="System Capacity",
-            timeout=5,
         )
         if system_capacity_check:
             logger.info(
@@ -266,8 +301,10 @@ class ValidationUI(PageNavigator):
             "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
         )
         self.do_click(self.validation_loc["odf-capacityCardLink"])
-        navigate_to_storagesystem_details_page = self.check_element_text(
-            "StorageSystem details"
+        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-details"],
+            timeout=15,
+            expected_text="StorageSystem details",
         )
         if navigate_to_storagesystem_details_page:
             logger.info(
@@ -282,11 +319,23 @@ class ValidationUI(PageNavigator):
         logger.info("Navigate back to ODF Overview page")
         self.do_click((self.validation_loc["overview"]))
         logger.info(
-            "Now navigate to Performance Card and Click on 'ocs-storagecluster-storagesystem'"
+            "Now search for 'Performance' Card on Data Foundation Overview page"
         )
-        self.do_click(self.validation_loc["odf-performanceCardLink"])
-        navigate_to_storagesystem_details_page = self.check_element_text(
-            "StorageSystem details"
+        performance_card = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["performance-card"],
+            expected_text="Performance",
+            timeout=15,
+        )
+        if performance_card:
+            self.do_click(self.validation_loc["odf-performanceCardLink"])
+        else:
+            logger.critical(
+                "Couldn't find 'Performance' card on Data Foundation Overview page"
+            )
+        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-details"],
+            timeout=15,
+            expected_text="StorageSystem details",
         )
         if navigate_to_storagesystem_details_page:
             logger.info(
