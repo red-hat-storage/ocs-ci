@@ -165,7 +165,6 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1293")),
         ],
     )
     def test_node_maintenance_restart_activate(
@@ -178,10 +177,10 @@ class TestNodesMaintenance(ManageTest):
         rgw_bucket_factory,
     ):
         """
-        OCS-1292/OCS-1293:
-        - Maintenance (mark as unscheduable and drain) 1 worker/master node
+        OCS-1292:
+        - Maintenance (mark as unscheduable and drain) 1 worker node
         - Restart the node
-        - Mark the node as scheduable
+        - Mark the node as schedulable
         - Check cluster and Ceph health
         - Check cluster functionality by creating and deleting resources
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
