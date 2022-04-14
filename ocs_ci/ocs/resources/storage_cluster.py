@@ -115,6 +115,9 @@ def ocs_install_verification(
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
+    external = config.DEPLOYMENT["external_mode"] or (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
 
     # Basic Verification for cluster
     basic_verification(ocs_registry_image)
@@ -127,7 +130,7 @@ def ocs_install_verification(
         namespace=namespace,
     )
     pod = OCP(kind=constants.POD, namespace=namespace)
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         osd_count = int(
             storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
         ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
@@ -156,7 +159,26 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
-    if not config.DEPLOYMENT["external_mode"]:
+
+    if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+            }
+        )
+    elif managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+        resources_dict.update(
+            {
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+            }
+        )
+    elif not config.DEPLOYMENT["external_mode"]:
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 3,
@@ -239,7 +261,7 @@ def ocs_install_verification(
     assert list(missing_scs) == []
 
     # Verify OSDs are distributed
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         if not skip_osd_distribution_check:
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
@@ -255,7 +277,8 @@ def ocs_install_verification(
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
-    assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+    if not managed_service or config.ENV_DATA["cluster_type"].lower() != "provider":
+        assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -274,23 +297,43 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools:
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.RBD_NODE_SECRET
-        )
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.RBD_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.RBD_NODE_SECRET
+            )
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.RBD_PROVISIONER_SECRET
+            )
     if not disable_cephfs:
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.CEPHFS_NODE_SECRET
-        )
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.CEPHFS_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.CEPHFS_NODE_SECRET
+            )
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.CEPHFS_PROVISIONER_SECRET
+            )
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
@@ -1036,7 +1079,7 @@ def verify_managed_service_resources():
     exist in openshift-storage namespace
     3. 1 prometheus pod and 3 alertmanager pods are in Running state
     4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
-    5. Networkpolicy and EgressNetworkpolicy resources are present
+    5. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1093,7 +1136,12 @@ def verify_managed_service_resources():
             managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
         ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
 
-    # Verify Networkpolicy and EgressNetworkpolicy creation
+
+def verify_managed_service_networkpolicy():
+    """
+    Verify Networkpolicy and EgressNetworkpolicy creation
+    Temporarily left out for V2 offering
+    """
     for policy in {
         ("Networkpolicy", "ceph-ingress-rule"),
         ("EgressNetworkpolicy", "egress-rule"),
