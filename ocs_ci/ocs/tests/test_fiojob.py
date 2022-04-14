@@ -8,6 +8,7 @@ import textwrap
 import pytest
 import yaml
 
+from ocs_ci.ocs import constants
 from ocs_ci.ocs import fiojob
 
 
@@ -179,3 +180,11 @@ def test_get_timeout_basic():
     fio_min_mbps = 2**10  # MiB/s
     pvc_size = 1  # GiB
     assert fiojob.get_timeout(fio_min_mbps, pvc_size) == 1
+
+
+def test_get_sc_name_default():
+    """
+    Checking that we get correct storage class by default.
+    """
+    assert fiojob.get_sc_name("foo_rbd") == constants.DEFAULT_STORAGECLASS_RBD
+    assert fiojob.get_sc_name("bar_cephfs") == constants.DEFAULT_STORAGECLASS_CEPHFS
