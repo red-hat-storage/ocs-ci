@@ -1,4 +1,5 @@
 import logging
+import os
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -22,9 +23,24 @@ class Disruptions:
     resource_count = 0
     selector = None
     daemon_pid = None
+    cluster_kubeconfig = ""
 
     def set_resource(self, resource, leader_type="provisioner"):
         self.resource = resource
+        if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
+            resource in ["mds", "mon", "mgr", "osd"]
+        ):
+            # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
+            # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
+            # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
+            provider_kubeconfig = os.path.join(
+                config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
+                config.clusters[config.get_provider_index()].RUN.get(
+                    "kubeconfig_location"
+                ),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig
+            POD.cluster_kubeconfig = provider_kubeconfig
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -67,6 +83,12 @@ class Disruptions:
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        if self.cluster_kubeconfig:
+            # Setting 'cluster_kubeconfig' attribute to use as the value of the
+            # parameter '--kubeconfig' in the 'oc' commands.
+            self.resource_obj[
+                resource_id
+            ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
             condition="Running",
@@ -84,12 +106,17 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon has
                 to be selected.
         """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
+        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -122,6 +149,11 @@ class Disruptions:
                 daemon. False to skip the check.
             kill_signal (str): kill signal type
         """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
+        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -130,7 +162,7 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc debug node/{node_name} -- chroot /host  "
+            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -153,12 +185,17 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon is running
 
         """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
+        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         try:
