@@ -1,5 +1,6 @@
 import logging
 import warnings
+import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
@@ -199,6 +200,7 @@ class ValidationUI(PageNavigator):
                 self.validation_loc["project-search-bar"], text="openshift-storage"
             )
             logger.info("Select 'openshift-storage' project")
+            time.sleep(2)
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
@@ -268,6 +270,8 @@ class ValidationUI(PageNavigator):
             if block_and_file_health_message_check:
                 logger.critical("Block and File service is unhealthy")
                 warnings.warn("Block and File service is unhealthy")
+            else:
+                pass
             logger.info(
                 "Click on 'ocs-storagecluster-storagesystem' from Storage System pop-up "
                 "under Status Card on Data Foundation Overview page"

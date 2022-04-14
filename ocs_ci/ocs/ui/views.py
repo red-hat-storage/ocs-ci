@@ -745,6 +745,20 @@ validation_4_9 = {
     "resources-tab": ("a[data-test-id='horizontal-link-Resources']", By.CSS_SELECTOR),
     "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
+    "storagesystem-status-card": (
+        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
+    "storage-system-health-card-hyperlink": (
+        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        By.XPATH,
+    ),
+    "storagesystem-details": (
+        "//li[normalize-space()='StorageSystem details']",
+        By.XPATH,
+    ),
+    "performance-card": ("//h2[normalize-space()='Performance']", By.XPATH),
 }
 
 validation_4_10 = {
@@ -753,16 +767,11 @@ validation_4_10 = {
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
         By.CSS_SELECTOR,
     ),
-    "storagesystem-details": (
-        "//li[normalize-space()='StorageSystem details']",
-        By.XPATH,
-    ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
     "storagesystem-status-card": (
         ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup",
         By.CSS_SELECTOR,
     ),
-    "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
     "storage-system-health-card-hyperlink": (
         "//div[@class='odf-storageSystemPopup__item--margin']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
         By.XPATH,
