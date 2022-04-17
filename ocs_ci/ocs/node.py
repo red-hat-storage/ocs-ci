@@ -760,19 +760,27 @@ def get_compute_node_names(no_replace=False):
         raise NotImplementedError
 
 
-def get_ocs_nodes(num_of_nodes=None):
+def get_ocs_nodes(num_of_nodes=None, worker_nodes_only=True):
     """
     Gets the ocs nodes
 
     Args:
         num_of_nodes (int): The number of ocs nodes to return. If not specified,
             it returns all the ocs nodes.
+        worker_nodes_only (bool): If True, it will get only the OCS worker nodes. Otherwise,
+            it will get all the OCS nodes. The default value is True.
 
     Returns:
-        list: List of ocs nodes
+        list: List of the ocs nodes
 
     """
     ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    if worker_nodes_only:
+        wnode_names = get_worker_nodes()
+        ocs_node_names = [
+            node_name for node_name in ocs_node_names if node_name in wnode_names
+        ]
+
     ocs_nodes = get_node_objs(ocs_node_names)
     num_of_nodes = num_of_nodes or len(ocs_nodes)
 
