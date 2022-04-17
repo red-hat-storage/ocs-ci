@@ -769,10 +769,14 @@ def get_ocs_nodes(num_of_nodes=None):
             it returns all the ocs nodes.
 
     Returns:
-        list: List of ocs nodes
+        list: List of ocs nodes. If not found, it returns None.
 
     """
     ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    if not ocs_node_names:
+        log.warning("Didn't find any OCS nodes")
+        return None
+
     ocs_nodes = get_node_objs(ocs_node_names)
     num_of_nodes = num_of_nodes or len(ocs_nodes)
 
