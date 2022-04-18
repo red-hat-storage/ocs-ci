@@ -55,13 +55,22 @@ class TestCosbenchWorkload(E2ETest):
 
         # Create initial containers and objects
         cosbench.run_init_workload(
-            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True, size=size,
-            size_unit=size_unit, timeout=1200
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+            size=size,
+            size_unit=size_unit,
+            timeout=1200,
         )
 
         # Dispose containers and objects
         cosbench.run_cleanup_workload(
-            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True, timeout=1200
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+            timeout=1200,
         )
 
     def test_cosbench_workload_operations(self, cosbench):
