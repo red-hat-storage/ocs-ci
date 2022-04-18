@@ -618,7 +618,7 @@ class Cosbench(object):
 
     def cleanup(self):
         """
-        Cosbench teardown
+        Cosbench cleanup
 
         """
         logger.info("Deleting Cosbench pod, configmap and namespace")

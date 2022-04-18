@@ -62,10 +62,10 @@ class Longevity(object):
         type and access mode.
 
         Eg: num_of_pvcs = 30
-        The function creates a total of 150 PVCs of below types and access modes
+        The function creates a total of 120 PVCs of below types and access modes
         RBD-Filesystemvolume  -> 30 RWO PVCs
         CEPHFS                -> 30 RWO PVCs, 30 RWX PVCs
-        RBD-Block             -> 30 RWO PVCs, 30 RWX PVCs
+        RBD-Block             -> 30 RWX PVCs
 
         Args:
             num_of_pvcs(int): Bulk PVC count
@@ -127,7 +127,8 @@ class Longevity(object):
         This function constructs kube object config file for the kube object
 
         Args:
-            obj_dict_list (list): List of dictionaries with kube objects
+            obj_dict_list (list): List of dictionaries with kube objects,
+            the return value of construct_stage_builder_bulk_pvc_creation_yaml()
             namespace (str): Namespace where the object has to be deployed
             name (str): Name of this object config file
 
@@ -172,6 +173,9 @@ class Longevity(object):
         Args:
             kube_job_obj (obj): Kube job object
             namespace (str): Namespace where the job is created
+
+        Returns:
+            res_yaml_dict (list): List of all resource yaml dicts
 
         """
         log.info(
@@ -255,7 +259,10 @@ class Longevity(object):
 
         Returns:
             pvc_bound_list (list): List of all PVCs in Bound state
-             pvc_job_file_list (list): List of all PVC.yaml dicts
+            pvc_job_file_list (list): List of all PVC.yaml dicts
+
+        Raises:
+        AssertionError: If not all PVCs reached Bound state
 
         """
         log.info("Creating stagebuilder pods with all pvc types and access modes")
@@ -378,10 +385,10 @@ class Longevity(object):
         pod.yamls for each of these PVCs using kube_job.
 
         Eg: num_of_pvc = 30
-        The function creates a total of 150 PVCs of below types and access modes
+        The function creates a total of 120 PVCs of below types and access modes
         RBD-Filesystemvolume  -> 30 RWO PVCs
         CEPHFS                -> 30 RWO PVCs, 30 RWX PVCs
-        RBD-Block             -> 30 RWO PVCs, 30 RWX PVCs
+        RBD-Block             -> 30 RWX PVCs
         and then creates pods for each of these PVCs. So, it will create 150 PODs
 
         Args:

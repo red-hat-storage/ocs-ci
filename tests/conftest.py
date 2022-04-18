@@ -2969,7 +2969,7 @@ def couchbase_factory_fixture(request):
         """
         Clean up
         """
-        couchbase.teardown()
+        couchbase.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
