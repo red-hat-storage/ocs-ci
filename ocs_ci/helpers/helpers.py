@@ -36,7 +36,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -572,6 +572,11 @@ def create_storage_class(
             sc_data["parameters"]["encryptionKMSID"] = (
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
+        ocs_version = version.get_ocs_version_from_csv()
+        if ocs_version >= version.get_semantic_version("4.11.0"):
+            sc_data["parameters"][
+                "imageFeatures"
+            ] = "layering,deep-flatten,exclusive-lock,object-map,fast-diff"
     elif interface_type == constants.CEPHFILESYSTEM:
         interface = constants.CEPHFS_INTERFACE
         sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
