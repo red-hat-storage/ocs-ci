@@ -2385,3 +2385,15 @@ def get_pod_ip(pod_obj):
 
     """
     return pod_obj.get().get("status").get("podIP")
+
+
+def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
+    for osd_pods in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_osd_pods_having_ids,
+        osd_ids=osd_ids,
+    ):
+        if len(osd_pods) == len(osd_ids):
+            logger.info(f"Found all the osd pods with the ids: {osd_ids}")
+            return osd_pods
