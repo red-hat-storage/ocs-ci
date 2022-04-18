@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_external_mode,
     skipif_ibm_cloud,
+    skipif_ms_consumer,
 )
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1895819")
 @skipif_ibm_cloud
 @skipif_external_mode
+@skipif_ms_consumer
 @ignore_leftovers
 class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
     """
