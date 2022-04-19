@@ -3,7 +3,6 @@ Test to verify performance of attaching number of pods as a bulk, each pod attac
 The test results will be uploaded to the ES server
 """
 import logging
-import os
 import pytest
 import pathlib
 import time
@@ -11,7 +10,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, polarion_id
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import defaults, constants, scale_lib
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.perftests import PASTest
@@ -209,16 +207,12 @@ class TestBulkPodAttachPerformance(PASTest):
         and reporting the full results (links in the ES) of previous tests (4)
         """
 
-        self.number_of_tests = 4
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_bulk_pod_attach_performance"
+        self.add_test_to_results_check(
+            test="test_bulk_pod_attach_performance",
+            test_count=4,
+            test_name="Bulk Pod Attach Time",
         )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="Bulk Pod Attach Time")
+        self.check_results_and_push_to_dashboard()
 
     def init_full_results(self, full_results):
         """
