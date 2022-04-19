@@ -35,7 +35,9 @@ class Disruptions:
                 Empty string if the the attribute 'cluster_kubeconfig' is empty.
         """
         kubeconfig_parameter = (
-            f"--kubeconfig {self.cluster_kubeconfig} " if self.cluster_kubeconfig else ""
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
         )
         return kubeconfig_parameter
 
