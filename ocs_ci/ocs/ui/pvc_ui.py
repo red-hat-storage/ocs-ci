@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.views import locators, generic_locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
+from selenium.common.exceptions import NoSuchElementException
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -117,6 +119,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -172,6 +175,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -221,6 +225,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -277,6 +282,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -329,6 +335,7 @@ class PvcUI(PageNavigator):
             )
         else:
             logger.error(f"Project {project_name} not found on UI")
+            raise NoSuchElementException
 
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
