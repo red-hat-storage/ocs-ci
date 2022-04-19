@@ -55,8 +55,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -118,8 +117,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -174,8 +172,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -224,8 +221,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -281,8 +277,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -334,8 +329,7 @@ class PvcUI(PageNavigator):
                 format_locator(self.pvc_loc["test-project-link"], project_name)
             )
         else:
-            logger.error(f"Project {project_name} not found on UI")
-            raise NoSuchElementException
+            raise NoSuchElementException(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
