@@ -11,6 +11,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 log = logging.getLogger(__name__)
 
 POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+CEPH_PODS = ["mds", "mon", "mgr", "osd"]
 
 
 class Disruptions:
@@ -25,10 +26,23 @@ class Disruptions:
     daemon_pid = None
     cluster_kubeconfig = ""
 
+    def kubeconfig_parameter(self):
+        """
+        Returns the '--kubeconfig <value>' parameter for the oc command
+
+        Returns:
+            str: The '--kubeconfig <value>' parameter for oc command if the attribute 'cluster_kubeconfig' is not empty.
+                Empty string if the the attribute 'cluster_kubeconfig' is empty.
+        """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} " if self.cluster_kubeconfig else ""
+        )
+        return kubeconfig_parameter
+
     def set_resource(self, resource, leader_type="provisioner"):
         self.resource = resource
         if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
-            resource in ["mds", "mon", "mgr", "osd"]
+            resource in CEPH_PODS
         ):
             # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
             # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
@@ -106,17 +120,12 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon has
                 to be selected.
         """
-        kubeconfig_parameter = (
-            f"--kubeconfig {self.cluster_kubeconfig} "
-            if self.cluster_kubeconfig
-            else ""
-        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -149,11 +158,6 @@ class Disruptions:
                 daemon. False to skip the check.
             kill_signal (str): kill signal type
         """
-        kubeconfig_parameter = (
-            f"--kubeconfig {self.cluster_kubeconfig} "
-            if self.cluster_kubeconfig
-            else ""
-        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
@@ -162,7 +166,7 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host  "
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
