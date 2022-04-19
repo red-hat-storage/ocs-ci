@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -7,6 +6,8 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.framework.pytest_customization.marks import tier2
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class TestOBCQuota:
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "50M"}],
+                marks=[tier2, pytest.mark.polarion_id("")],
             ),
         ],
     )
@@ -57,7 +59,7 @@ class TestOBCQuota:
                 s3_obj=obc_obj,
                 ignore_error=False,
             )
-        except Exception as e:
+        except CommandFailed as e:
             if err_msg in e.args[0]:
                 logger.info(f"Quota {quota} worked as expected!!")
             else:
@@ -87,7 +89,7 @@ class TestOBCQuota:
                 s3_obj=obc_obj,
                 ignore_error=False,
             )
-        except Exception as e:
+        except CommandFailed as e:
             if err_msg in e.args[0]:
                 assert False, f"New quota {new_quota_str} didn't get applied!!"
             else:

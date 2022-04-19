@@ -163,7 +163,17 @@ def copy_objects(
 ):
     """
     Copies a object onto a bucket using s3 cp command
+
+    Args:
+        podobj: Pod object that is used to perform copy operation
+        src_obj: full path to object
+        target: target bucket
+        s3_obj: obc/mcg object
+
+    Returns:
+        None
     """
+
     logger.info(f"Copying object {src_obj} to {target}")
     retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
@@ -176,7 +186,7 @@ def copy_objects(
         ]
     else:
         secrets = None
-    out = podobj.exec_cmd_on_pod(
+    podobj.exec_cmd_on_pod(
         command=craft_s3_command(
             retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
         ),
@@ -184,7 +194,6 @@ def copy_objects(
         secrets=secrets,
         **kwargs,
     )
-    return out
 
 
 def copy_random_individual_objects(
@@ -192,6 +201,16 @@ def copy_random_individual_objects(
 ):
     """
     Generates random objects and then copies them individually one after the other
+
+    podobj: Pod object used to perform the operation
+    file_dir: file directory name where the generated objects are placed
+    pattern: pattern to follow for objects naming
+    target: target bucket name
+    amount: number of objects to generate
+    s3_obj: MCG/OBC object
+
+    Returns:
+        None
     """
     logger.info(f"create objects in {file_dir}")
     podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
@@ -201,9 +220,7 @@ def copy_random_individual_objects(
     objects_to_upload = [obj for obj in object_files]
     for obj in objects_to_upload:
         src_obj = f"{file_dir}/{obj}"
-        out = copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
-        if "An error occurred (QuotaExceeded)" in out:
-            return out
+        copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
         logger.info(f"Copied {src_obj}")
 
 
