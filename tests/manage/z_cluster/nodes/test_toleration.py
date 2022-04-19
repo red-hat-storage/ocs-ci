@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier4c, E2ETest
+from ocs_ci.framework.testlib import tier4c, E2ETest, ignore_leftovers
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4c
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-2450")
 class TestTaintAndTolerations(E2ETest):
     """
