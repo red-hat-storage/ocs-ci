@@ -7,9 +7,9 @@ import pytest
 import pathlib
 import time
 
-from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, polarion_id
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import defaults, constants, scale_lib
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.perftests import PASTest
@@ -102,18 +102,17 @@ class TestBulkPodAttachPerformance(PASTest):
             number_of_pvc=bulk_size,
             size=self.pvc_size,
             burst=True,
+            do_reload=False,
         )
 
-        for pvc_obj in pvc_objs:
-            pvc_obj.reload()
-            teardown_factory(pvc_obj)
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
-                )
-
-                executor.submit(pvc_obj.reload)
+        log.info("Wait for all of the PVCs to be in Bound state")
+        timeout = bulk_size * 2
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", bulk_size, self.namespace, constants.STATUS_BOUND, timeout, 5
+        )
+        # incase of creation faliure, the wait_for_resource_bulk_status function
+        # will raise an exception. so in this point the creation succeed
+        log.info("All PVCs was created and in Bound state.")
 
         start_time = helpers.get_provision_time(
             self.interface, pvc_objs, status="start"
