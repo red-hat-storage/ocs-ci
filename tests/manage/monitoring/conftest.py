@@ -188,7 +188,7 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
         if (
             not split_index == 1
             or config.ENV_DATA["platform"].lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
+            not in constants.MANAGED_SERVICE_PLATFORMS
         ):
             msg = f"Downscaled monitors {mons_to_stop} were not replaced"
             assert check_old_mons_deleted, msg
