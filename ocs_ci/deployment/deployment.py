@@ -1331,12 +1331,13 @@ class Deployment(object):
         run_cmd(f"oc create -f {constants.ACM_HUB_DOWNSTREAM_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
-        # TODO: pull from config once this is set in OCP configs
-        tag_data = "2.4.3-DOWNSTREAM-2022-04-02-03-50-40"
+        image_tag = config.ENV_DATA.get(
+            "acm_downstream_image", config.ENV_DATA.get("default_acm_downstream_image")
+        )
         with open(
             os.path.join(acm_hub_downstream_deploy_dir, "snapshot.ver"), "w"
         ) as f:
-            f.write(tag_data)
+            f.write(image_tag)
 
         logger.info("Running open-cluster-management deploy")
         cmd = ["./start.sh", "--silent"]

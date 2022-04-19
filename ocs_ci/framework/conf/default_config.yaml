@@ -204,6 +204,7 @@ ENV_DATA:
   rhel8_template: 'rhel85_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
+  default_acm_downstream_image: "2.4.3-DOWNSTREAM-2022-04-13-07-05-00"
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
