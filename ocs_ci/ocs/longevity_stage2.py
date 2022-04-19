@@ -59,13 +59,12 @@ def write_empty_files_to_bucket(
     return obj_set
 
 
-def measure_attach_time(pod_objs, pvc_size):
+def measure_pod_to_pvc_attach_time(pod_objs):
     """
     Measures and Logs Attach Time of all PODs.
 
     Args:
         pod_objs (list) : List of POD objects for which we have to measure the time.
-        pvc_size (int) : Size of each PVC in GB.
 
     Raises:
         PerformanceException : Raises an exception if POD attach time is greater than the accepted time.
@@ -74,7 +73,6 @@ def measure_attach_time(pod_objs, pvc_size):
         Attach time of all PODs, as well as the average time.
 
     """
-    msg_prefix = f"PVC size: {pvc_size}."
     start_time_dict_list = []
     for pod in pod_objs:
         start_time_dict_list.append(helpers.pod_start_time(pod))
@@ -86,18 +84,16 @@ def measure_attach_time(pod_objs, pvc_size):
         else:
             time_measures.append(attach_time["web-server"])
     for index, start_time in enumerate(time_measures):
-        logger.info(
-            f"{msg_prefix} pod number {index + 1} start time: {start_time} seconds"
-        )
+        logger.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
         if start_time > 30:
             raise ex.PerformanceException(
-                f"{msg_prefix} Pod number {index} start time is {start_time},"
+                f"POD {pod_objs[index].name} attach time is {start_time},"
                 f"which is greater than 30 seconds"
             )
     if time_measures:
         average = statistics.mean(time_measures)
         logger.info(
-            f"{msg_prefix} The average time for the sampled {len(time_measures)} pods is {average} seconds."
+            f"The average attach time for the sampled {len(time_measures)} pods is {average} seconds."
         )
 
 
@@ -141,13 +137,12 @@ def measure_pod_creation_time(namespace, num_of_pods):
             pod_no -= 1
 
 
-def measure_pvc_creation_time(interface, pvc_size, pvc_objs, start_time):
+def measure_pvc_creation_time(interface, pvc_objs, start_time):
     """
     Measures and Logs PVC Creation Time of all PVCs.
 
     Args:
         interface (str) : an interface (RBD or CephFS) to run on.
-        pvc_size (int) : Size of each PVC in GB.
         pvc_objs (list) : List of PVC objects for which we have to measure the time.
         start_time (str) : Formatted time from which and on to search the relevant logs.
 
@@ -158,7 +153,6 @@ def measure_pvc_creation_time(interface, pvc_size, pvc_objs, start_time):
         PVC Creation Time of all the PVCs.
 
     """
-    msg_prefix = f"Interface: {interface}, PVC size: {pvc_size}."
     accepted_creation_time = 1
     pvc_no = 0
     for pvc_obj in pvc_objs:
@@ -166,25 +160,22 @@ def measure_pvc_creation_time(interface, pvc_size, pvc_objs, start_time):
             interface, pvc_obj.name, start_time
         )
 
-        logger.info(
-            f"{msg_prefix} PVC number {pvc_no + 1} of interface {interface} was created in {creation_time} seconds."
-        )
+        logger.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
         if creation_time > accepted_creation_time:
             raise ex.PerformanceException(
-                f"{msg_prefix} PVC creation time is {creation_time} and is greater than "
+                f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
                 f"{accepted_creation_time} seconds."
             )
         pvc_no += 1
 
 
-def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_size, pvc_objs, pv_objs):
+def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_objs, pv_objs):
     """
     Measures and Logs PVC Deletion Time of all PVCs.
 
     Args:
         interface (str) : an interface (RBD or CephFS) to run on.
         num_of_pvcs (int) : Number of PVCs we have created.
-        pvc_size (int) : Size of each PVC in GB.
         pvc_objs (list) : List of PVC objects for which we have to measure the time.
         pv_objs (list) : List of PV names created for the respective PVCs.
 
@@ -195,25 +186,19 @@ def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_size, pvc_objs, pv_obj
         PVC Creation Time of all the PVCs.
 
     """
-    msg_prefix = f"Interface: {interface}, PVC size: {pvc_size}."
-    accepted_deletion_time = 1
-    if interface == constants.CEPHFILESYSTEM:
-        accepted_deletion_time = 2
-    elif interface == constants.CEPHBLOCKPOOL:
-        accepted_deletion_time = 1
+    accepted_deletion_time = 2 if interface == constants.CEPHFILESYSTEM else 1
 
     for pvc_no in range(num_of_pvcs):
         pvc = pvc_objs[pvc_no]
         pv = pv_objs[pvc_no]
-        pvc.ocp.wait_for_delete(resource_name=pvc.name)
+        pvc_name = pvc.name
+        pvc.ocp.wait_for_delete(resource_name=pvc_name)
         helpers.validate_pv_delete(pv)
         deletion_time = helpers.measure_pvc_deletion_time(interface, pv)
-        logger.info(
-            f"{msg_prefix} PVC number {pvc_no + 1} of interface {interface} was deleted in {deletion_time} seconds."
-        )
+        logger.info(f"PVC {pvc_name} was deleted in {deletion_time} seconds.")
         if deletion_time > accepted_deletion_time:
             raise ex.PerformanceException(
-                f"{msg_prefix} PVC deletion time is {deletion_time} and is greater than "
+                f"PVC {pvc_name} deletion time is {deletion_time} and is greater than "
                 f"{accepted_deletion_time} seconds."
             )
 
@@ -228,17 +213,21 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
         d. CephBlockPool - RWO - Block
         e. CephBlockPool - RWX - Block
     2. Create/Delete PODs.
-    2. Measure the PVC creation/deletion time and POD attach time.
+    2. Measure the PVC creation/deletion time and POD to PVC attach time.
 
     """
 
-    def factory(num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2"):
+    def factory(
+        num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2", measure=False
+    ):
         """
         Args:
             num_of_pvcs (int) : Number of PVCs / PODs we want to create.
             pvc_size (int) : Size of each PVC in GB.
             bulk (bool) : True for bulk operations, False otherwise.
             namespace (str) : Name of the namespace inside which the PODs/PVCs are created.
+            measure (bool) : True if we want to measure the PVC creation/deletion time and POD to PVC attach time,
+                                False otherwise.
 
         """
         project = helpers.create_project(project_name=namespace)
@@ -271,8 +260,9 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                 logger.info("PVC creation was successful.")
                 pvc_objs.extend(pvc_objs_tmp)
 
-                # Measure PVC Creation Time
-                measure_pvc_creation_time(interface, pvc_size, pvc_objs_tmp, start_time)
+                if measure:
+                    # Measure PVC Creation Time
+                    measure_pvc_creation_time(interface, pvc_objs_tmp, start_time)
 
             else:
                 logger.info(
@@ -328,8 +318,9 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
 
             logger.info("All PODs reached Running State.")
 
-        # Measure PVC attach time
-        measure_attach_time(pod_objs, pvc_size)
+        if measure:
+            # Measure POD to PVC attach time
+            measure_pod_to_pvc_attach_time(pod_objs)
 
         # POD Teardown
         for pod in pod_objs:
@@ -354,26 +345,25 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
             raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
         logger.info("PVC deletion was successful.")
 
-        # Measure PVC Deletion Time
-        for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
-            if interface == constants.CEPHFILESYSTEM:
-                num_of_pvc = num_of_pvcs // 2
-                measure_pvc_deletion_time(
-                    interface,
-                    num_of_pvc,
-                    pvc_size,
-                    pvc_objs[:num_of_pvc],
-                    pv_objs[:num_of_pvc],
-                )
-            else:
-                num_of_pvc = num_of_pvcs - num_of_pvcs // 2
-                measure_pvc_deletion_time(
-                    interface,
-                    num_of_pvc,
-                    pvc_size,
-                    pvc_objs[num_of_pvcs // 2 :],
-                    pv_objs[num_of_pvcs // 2 :],
-                )
+        if measure:
+            # Measure PVC Deletion Time
+            for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
+                if interface == constants.CEPHFILESYSTEM:
+                    num_of_pvc = num_of_pvcs // 2
+                    measure_pvc_deletion_time(
+                        interface,
+                        num_of_pvc,
+                        pvc_objs[:num_of_pvc],
+                        pv_objs[:num_of_pvc],
+                    )
+                else:
+                    num_of_pvc = num_of_pvcs - num_of_pvcs // 2
+                    measure_pvc_deletion_time(
+                        interface,
+                        num_of_pvc,
+                        pvc_objs[num_of_pvcs // 2 :],
+                        pv_objs[num_of_pvcs // 2 :],
+                    )
 
         logger.info(f"Successfully deleted {num_of_pvcs} PVCs")
 
@@ -399,12 +389,13 @@ def _multi_obc_lifecycle_factory(
 
     """
 
-    def factory(num_of_obcs=20, bulk=False):
+    def factory(num_of_obcs=20, bulk=False, measure=False):
         """
         Args:
             num_of_obcs (int) : Number of OBCs we want to create of each type mentioned above.
                                 (Total OBCs = num_of_obcs * 5)
             bulk (bool) : True for bulk operations, False otherwise.
+            measure (bool) : True if we want to measure the OBC creation/deletion time, False otherwise.
 
         """
 
@@ -506,16 +497,18 @@ def _multi_obc_lifecycle_factory(
         for obc in obc_objs:
             obc_names.append(obc.name)
 
-        # Measure OBC Creation Time
-        scale_noobaa_lib.measure_obc_creation_time(obc_name_list=obc_names)
+        if measure:
+            # Measure OBC Creation Time
+            scale_noobaa_lib.measure_obc_creation_time(obc_name_list=obc_names)
 
         # Delete OBCs
         for bucket in obc_objs:
             logger.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
 
-        # Measure OBC Deletion Time
-        scale_noobaa_lib.measure_obc_deletion_time(obc_name_list=obc_names)
+        if measure:
+            # Measure OBC Deletion Time
+            scale_noobaa_lib.measure_obc_deletion_time(obc_name_list=obc_names)
 
     return factory
 
@@ -526,7 +519,8 @@ def stage2(
     num_of_pvcs=100,
     pvc_size=2,
     num_of_obcs=20,
-    run_time=30,
+    run_time=1440,
+    measure=False,
 ):
     """
     Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and OBCs
@@ -541,6 +535,7 @@ def stage2(
         pvc_size (int) : Size of each PVC in GB.
         num_of_obcs (int) : Number of OBCs we want to create of each type. (Total OBCs = num_of_obcs * 5)
         run_time (int) : Total Run Time in minutes.
+        measure (bool) : True if we want to measure the performance metrics, False otherwise.
 
     """
     end_time = datetime.now() + timedelta(minutes=run_time)
@@ -557,7 +552,10 @@ def stage2(
                 pvc_size=pvc_size,
                 bulk=bulk,
                 namespace="stage-2-cycle-" + str(cycle_no),
+                measure=measure,
             )
-            multi_obc_lifecycle_factory(num_of_obcs=num_of_obcs, bulk=bulk)
+            multi_obc_lifecycle_factory(
+                num_of_obcs=num_of_obcs, bulk=bulk, measure=measure
+            )
 
         logger.info(f"------------ENDING CYCLE:{cycle_no}------------")
