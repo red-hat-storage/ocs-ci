@@ -193,6 +193,7 @@ class TestBulkPodAttachPerformance(PASTest):
         )
 
         # Write the test results into the ES server
+        self.results_path = self.full_log_path
         if full_results.es_write():
             res_link = full_results.results_link()
             # write the ES link to the test results in the test log.
