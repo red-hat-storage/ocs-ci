@@ -1137,8 +1137,6 @@ def verify_managed_service_resources():
     log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
     assert noobaa_deployment.replicas == 0
 
-    verify_managed_alerting_secrets()
-
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_resources()
 
@@ -1159,9 +1157,8 @@ def verify_provider_resources():
     )
 
     # Verify that cephcluster is Ready and hostNetworking is True
-    cephcluster_cmd = "oc get cephcluster ocs-storagecluster-cephcluster -o yaml"
-    out = run_cmd(cephcluster_cmd)
-    cephcluster_yaml = yaml.safe_load(out)
+    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster_yaml = cephcluster.get().get("items")[0]
     log.info("Verifying that cephcluster is Ready and hostNetworking is True")
     assert (
         cephcluster_yaml["status"]["phase"] == "Ready"
@@ -1197,7 +1194,9 @@ def verify_managed_alerting_secrets():
     For a provider cluster verify existence of onboarding-ticket-key, ocs-provider-server
     and rook-ceph-mon secrets.
     """
-    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    secret_ocp_obj = OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
     for secret_name in {
         managedservice.get_pagerduty_secret_name(),
         managedservice.get_smtp_secret_name(),
@@ -1207,7 +1206,7 @@ def verify_managed_alerting_secrets():
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name
-        ), f"{secret_name} does not exist in openshift-storage namespace"
+        ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         for secret_name in {
             constants.MANAGED_ONBOARDING_SECRET,
@@ -1216,4 +1215,4 @@ def verify_managed_alerting_secrets():
         }:
             assert secret_ocp_obj.is_exist(
                 resource_name=secret_name
-            ), f"{secret_name} does not exist in openshift-storage namespace"
+            ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
