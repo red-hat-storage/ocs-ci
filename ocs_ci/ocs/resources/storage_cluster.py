@@ -36,6 +36,7 @@ from ocs_ci.ocs.node import (
     add_new_disk_for_vsphere,
     get_osd_running_nodes,
     get_encrypted_osd_devices,
+    verify_worker_nodes_security_groups,
 )
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
@@ -1146,6 +1147,7 @@ def verify_provider_resources():
     Verify resources specific to managed OCS provider:
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
+    3. Security groups are set up correctly
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1166,6 +1168,8 @@ def verify_provider_resources():
     assert cephcluster_yaml["spec"]["network"][
         "hostNetwork"
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
+
+    assert verify_worker_nodes_security_groups()
 
 
 def verify_managed_service_networkpolicy():
