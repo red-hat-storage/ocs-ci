@@ -92,7 +92,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         """
         # Getting the test start time
-        test_start_time = PASTest.get_time()
+        test_start_time = self.get_time()
 
         log.info(f"Start creating bulk of new {bulk_size} PVCs")
 
@@ -185,7 +185,7 @@ class TestBulkPodAttachPerformance(PASTest):
         full_results.add_key("bulk_size", bulk_size)
 
         # Getting the test end time
-        test_end_time = PASTest.get_time()
+        test_end_time = self.get_time()
 
         # Add the test time to the ES report
         full_results.add_key(
