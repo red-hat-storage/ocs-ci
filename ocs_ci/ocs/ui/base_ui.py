@@ -502,7 +502,7 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(
             locator=self.page_nav["persistentvolumeclaims_page"],
-            enable_screenshot=False,
+            enable_screenshot=True,
         )
 
     def navigate_storageclasses_page(self):

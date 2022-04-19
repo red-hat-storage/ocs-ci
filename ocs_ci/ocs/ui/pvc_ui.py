@@ -43,8 +43,18 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
 
-        logger.info(f"Select test project {project_name}")
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -95,13 +105,24 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(get_element_type(pvc_name))
+        self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
         logger.info("Checking status of Pvc")
         self.wait_until_expected_text_is_found(
@@ -139,7 +160,18 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -160,7 +192,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["resize-value"], text=new_size)
 
         logger.info("Click on Expand Button")
-        self.do_click(self.pvc_loc["expand-btn"])
+        self.do_click(self.pvc_loc["expand-btn"], enable_screenshot=True)
 
     def verify_pvc_resize_ui(self, project_name, pvc_name, expected_capacity):
         """
@@ -177,13 +209,24 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
-        self.do_click(get_element_type(pvc_name))
+        self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
         is_expected_capacity = self.wait_until_expected_text_is_found(
             format_locator(self.pvc_loc["expected-capacity"], expected_capacity),
@@ -222,7 +265,18 @@ class PvcUI(PageNavigator):
         logger.info(f"Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -237,7 +291,7 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["pvc_delete"])
 
         logger.info("Confirm PVC Deletion")
-        self.do_click(self.pvc_loc["confirm_pvc_deletion"])
+        self.do_click(self.pvc_loc["confirm_pvc_deletion"], enable_screenshot=True)
         time.sleep(1)
 
     def pvc_clone_ui(
@@ -263,7 +317,18 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and select the project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        self.do_click(format_locator(self.pvc_loc["test-project-link"], project_name))
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=5,
+        )
+        if wait_for_project:
+            logger.info(f"Select test project {project_name}")
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
+        else:
+            logger.error(f"Project {project_name} not found on UI")
 
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
