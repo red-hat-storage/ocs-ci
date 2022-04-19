@@ -175,12 +175,9 @@ class TestBulkPodAttachPerformance(PASTest):
         self.get_env_info()
 
         # Initialize the results doc file.
-        full_log_path = get_full_test_logs_path(cname=self)
-        self.results_path = get_full_test_logs_path(cname=self)
-        full_log_path += f"-{self.sc}"
         full_results = self.init_full_results(
             ResultsAnalyse(
-                self.uuid, self.crd_data, full_log_path, "pod_bulk_attachtime"
+                self.uuid, self.crd_data, self.full_log_path, "pod_bulk_attachtime"
             )
         )
 
