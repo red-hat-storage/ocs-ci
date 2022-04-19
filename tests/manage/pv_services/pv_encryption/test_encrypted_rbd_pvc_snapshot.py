@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     kms_config_required,
     skipif_managed_service,
 )
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -53,6 +54,7 @@ else:
 @tier1
 @skipif_ocs_version("<4.8")
 @skipif_ocp_version("<4.8")
+@green_squad
 @kms_config_required
 @skipif_managed_service
 class TestEncryptedRbdBlockPvcSnapshot(ManageTest):

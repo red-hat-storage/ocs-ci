@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     acceptance,
     skipif_ocp_version,
 )
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @acceptance
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@green_squad
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
@@ -55,7 +57,9 @@ class TestClone(ManageTest):
             interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-    def test_pvc_to_pvc_clone(self, interface_type, teardown_factory):
+    def test_pvc_to_pvc_clonetest_pvc_to_pvc_clone(
+        self, interface_type, teardown_factory
+    ):
         """
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
