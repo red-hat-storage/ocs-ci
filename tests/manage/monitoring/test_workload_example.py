@@ -11,6 +11,7 @@ import textwrap
 
 import pytest
 
+from ocs_ci.framework.testlib import skipif_managed_service
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -22,6 +23,7 @@ TEST_NS = "namespace-test-fio-continuous-workload"
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_start_fio_job(
     tmp_path,
     fio_pvc_dict,
@@ -83,6 +85,7 @@ def test_start_fio_job(
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_stop_fio_job():
     """
     Check that the job is still running.
