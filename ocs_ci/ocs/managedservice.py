@@ -43,6 +43,20 @@ def get_dms_secret_name():
     )
 
 
+def get_parameters_secret_name():
+    """
+    Get name of the addon parameters secret for currently used addon.
+
+    Returns:
+        string: name of the secret
+    """
+    return (
+        constants.MANAGED_PARAMETERS_SECRET_PREFIX
+        + config.ENV_DATA["addon_name"]
+        + constants.MANAGED_PARAMETERS_SECRET_SUFFIX
+    )
+
+
 def update_pull_secret():
     """
     Update pull secret with extra quay.io/rhceph-dev credentials.

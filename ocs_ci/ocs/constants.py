@@ -987,6 +987,12 @@ OCS_SECRET = "ocs-secret"
 MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
 MANAGED_PAGERDUTY_SECRET_SUFFIX = "-pagerduty"
 MANAGED_DEADMANSSNITCH_SECRET_SUFFIX = "-deadmanssnitch"
+MANAGED_PARAMETERS_SECRET_PREFIX = "addon-"
+MANAGED_PARAMETERS_SECRET_SUFFIX = "-parameters"
+MANAGED_ALERTMANAGER_SECRET = "alertmanager-managed-ocs-alertmanager-generated"
+MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
+MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
+MANAGED_MON_SECRET = "rook-ceph-mon"
 
 # JSON Schema
 OSD_TREE_ROOT = {
