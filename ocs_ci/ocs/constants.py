@@ -1554,6 +1554,8 @@ debug_paxos = 20
 debug_crush = 20
 """
 
+EXPECTED_MDS_VALUE = 4 * GB
+EXPECTED_MDS_VALUE_GB = int(EXPECTED_MDS_VALUE / GB)
 
 # Values from configmap noobaa-postgres-config
 NOOBAA_POSTGRES_TUNING_VALUES = """

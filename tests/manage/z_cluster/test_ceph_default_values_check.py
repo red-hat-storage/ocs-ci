@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
@@ -138,16 +139,22 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check mds cache memory limit post ocs upgrade
 
         """
-        mds_cache_memory_limit = get_mds_cache_memory_limit()
-        expected_mds_value = 4294967296
-        expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
-        assert mds_cache_memory_limit == expected_mds_value, (
-            f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
-            f"MDS cache memory limit is set : {mds_cache_memory_limit}B "
-        )
-        log.info(
-            f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
-        )
+        for sampler in TimeoutSampler(
+            timeout=900, sleep=60, func=get_mds_cache_memory_limit
+        ):
+            if sampler:
+                mds_cache_memory_limit = get_mds_cache_memory_limit()
+                expected_mds_value = constants.EXPECTED_MDS_VALUE
+                expected_mds_value_in_GB = constants.EXPECTED_MDS_VALUE_GB
+                assert mds_cache_memory_limit == expected_mds_value, (
+                    f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
+                    f"MDS cache memory limit is set : {mds_cache_memory_limit}B "
+                )
+                log.info(
+                    f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
+                )
+            else:
+                log.error("Failed to get mds_cache_memory_limit")
 
     @bugzilla("2012930")
     @post_ocs_upgrade
