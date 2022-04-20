@@ -7,11 +7,12 @@ from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
 
 logger = logging.getLogger(__name__)
 
 
+@bugzilla
 class TestOBCQuota:
     """
     Test OBC Quota feature
