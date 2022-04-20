@@ -191,17 +191,12 @@ class Disruptions:
             node_name (str): Name of node in which the resource daemon is running
 
         """
-        kubeconfig_parameter = (
-            f"--kubeconfig {self.cluster_kubeconfig} "
-            if self.cluster_kubeconfig
-            else ""
-        )
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc {kubeconfig_parameter}debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         try:
