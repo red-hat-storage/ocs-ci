@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.cosbench import Cosbench
 
@@ -27,6 +28,7 @@ class TestCosbenchWorkload(E2ETest):
 
     """
 
+    @bugzilla("2010453")
     @pytest.mark.parametrize(
         argnames="objects, size, size_unit",
         argvalues=[
@@ -62,6 +64,7 @@ class TestCosbenchWorkload(E2ETest):
             size=size,
             size_unit=size_unit,
             timeout=1200,
+            sleep=30,
         )
 
         # Dispose containers and objects
@@ -71,6 +74,7 @@ class TestCosbenchWorkload(E2ETest):
             objects=objects,
             validate=True,
             timeout=1200,
+            sleep=30,
         )
 
     def test_cosbench_workload_operations(self, cosbench):
