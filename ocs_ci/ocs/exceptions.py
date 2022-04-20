@@ -480,6 +480,10 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class RDRDeploymentException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 
