@@ -175,14 +175,17 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
 
 def pytest_collection_modifyitems(items):
     """
-    Add markers in the collected items based on conditions
+    Skip tests in a directory based on conditions
 
     Args:
         items: list of collected tests
 
     """
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        for item in items:
-            if "tests/manage/pv_services/pvc_snapshot" in str(item.fspath):
-                # Add bugzilla marker to skip PVC snapshot tests based on the status of the bug 2069367
-                item.add_marker(bugzilla("2069367"))
+        for item in items.copy():
+            if "manage/pv_services/pvc_snapshot" in str(item.fspath):
+                log.info(
+                    f"Test {item} is removed from the collected items. PVC snapshot is not supported on"
+                    f" {config.ENV_DATA['platform'].lower()} due to the bug 2069367"
+                )
+                items.remove(item)
