@@ -7,7 +7,7 @@ from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.pytest_customization.marks import tier2
+from ocs_ci.framework.pytest_customization.marks import tier1
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,8 @@ class TestOBCQuota:
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "50M"}],
                 marks=[
-                    tier2,
+                    tier1,
                     pytest.mark.polarion_id("OCS-3904"),
-                    pytest.mark.polarion_id("OCS-3905"),
                 ],
             ),
         ],
