@@ -899,7 +899,7 @@ class MCG:
         return result
 
     @retry(
-        (NoobaaCliChecksumFailedException, CommandFailed),
+        (NoobaaCliChecksumFailedException, CommandFailed, subprocess.TimeoutExpired),
         tries=5,
         delay=15,
         backoff=1,
