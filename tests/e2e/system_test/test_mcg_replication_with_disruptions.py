@@ -121,7 +121,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             resource_name=target_bucket_name,
         ).patch(params=json.dumps(bi_replication_policy_dict), format_type="merge")
         logger.info(
-            f"Patch run successfully! Changed the replication policy from uni to bi directional"
+            "Patch ran successfully! Changed the replication policy from uni to bi directional"
         )
 
         # write objects to the second bucket and see if it's replicated on the other
