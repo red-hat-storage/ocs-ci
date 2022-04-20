@@ -16,7 +16,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -36,6 +36,7 @@ from ocs_ci.ocs.node import (
     add_new_disk_for_vsphere,
     get_osd_running_nodes,
     get_encrypted_osd_devices,
+    verify_worker_nodes_security_groups,
 )
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
@@ -1075,11 +1076,12 @@ def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
     1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
-    2. ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch secrets
-    exist in openshift-storage namespace
-    3. 1 prometheus pod and 3 alertmanager pods are in Running state
-    4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
-    5. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
+    2. 1 prometheus pod and 3 alertmanager pods are in Running state
+    3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    4. Verify that noobaa-operator replicas is set to 0
+    5. Verify managed ocs secrets
+    6. If cluster is Provider, verify resources specific to provider clusters
+    7. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1101,15 +1103,7 @@ def verify_managed_service_resources():
         csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
 
     # Verify alerting secrets creation
-    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    for secret_name in {
-        managedservice.get_pagerduty_secret_name(),
-        managedservice.get_smtp_secret_name(),
-        managedservice.get_dms_secret_name(),
-    }:
-        assert secret_ocp_obj.is_exist(
-            resource_name=secret_name
-        ), f"{secret_name} does not exist in openshift-storage namespace"
+    verify_managed_alerting_secrets()
 
     # Verify alerting pods are Running
     pod_obj = OCP(
@@ -1136,6 +1130,47 @@ def verify_managed_service_resources():
             managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
         ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
 
+    # Verify that noobaa-operator replicas is set to 0
+    noobaa_deployment = deployment.get_deployments_having_label(
+        "operators.coreos.com/mcg-operator.openshift-storage=",
+        constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )[0]
+    log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
+    assert noobaa_deployment.replicas == 0
+
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        verify_provider_resources()
+
+
+def verify_provider_resources():
+    """
+    Verify resources specific to managed OCS provider:
+    1. Ocs-provider-server pod is Running
+    2. cephcluster is Ready and its hostNetworking is set to True
+    3. Security groups are set up correctly
+    """
+    # Verify ocs-provider-server pod is Running
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    pod_obj.wait_for_resource(
+        condition="Running", selector="app=ocsProviderApiServer", resource_count=1
+    )
+
+    # Verify that cephcluster is Ready and hostNetworking is True
+    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster_yaml = cephcluster.get().get("items")[0]
+    log.info("Verifying that cephcluster is Ready and hostNetworking is True")
+    assert (
+        cephcluster_yaml["status"]["phase"] == "Ready"
+    ), f"Status of cephcluster ocs-storagecluster-cephcluster is {cephcluster_yaml['status']['phase']}"
+    assert cephcluster_yaml["spec"]["network"][
+        "hostNetwork"
+    ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
+
+    assert verify_worker_nodes_security_groups()
+
 
 def verify_managed_service_networkpolicy():
     """
@@ -1153,3 +1188,35 @@ def verify_managed_service_networkpolicy():
         assert policy_obj.is_exist(
             resource_name=policy[1]
         ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+
+
+def verify_managed_alerting_secrets():
+    """
+    Verify that ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch,
+    addon-ocs-provider-qe-parameters, alertmanager-managed-ocs-alertmanager-generated secrets
+    exist in openshift-storage namespace.
+    For a provider cluster verify existence of onboarding-ticket-key, ocs-provider-server
+    and rook-ceph-mon secrets.
+    """
+    secret_ocp_obj = OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    for secret_name in {
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
+        managedservice.get_parameters_secret_name(),
+        constants.MANAGED_ALERTMANAGER_SECRET,
+    }:
+        assert secret_ocp_obj.is_exist(
+            resource_name=secret_name
+        ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        for secret_name in {
+            constants.MANAGED_ONBOARDING_SECRET,
+            constants.MANAGED_PROVIDER_SERVER_SECRET,
+            constants.MANAGED_MON_SECRET,
+        }:
+            assert secret_ocp_obj.is_exist(
+                resource_name=secret_name
+            ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
