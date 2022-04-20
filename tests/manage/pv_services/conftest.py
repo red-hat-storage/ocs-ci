@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import bugzilla
 
 log = logging.getLogger(__name__)
 
