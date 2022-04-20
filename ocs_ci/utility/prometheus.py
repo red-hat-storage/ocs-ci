@@ -290,7 +290,7 @@ def validate_status(content):
     """
     Validate content data from Prometheus. If this fails, Prometheus instance
     or a query is so broken that test can't be performed. We assume that
-    Prometheus reports "success" even for queryies which returns nothing.
+    Prometheus reports "success" even for queries which returns nothing.
 
     Args:
         content (dict): data from Prometheus
