@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
@@ -35,6 +36,7 @@ from ocs_ci.ocs.node import (
     unschedule_nodes,
     schedule_nodes,
 )
+from ocs_ci.ocs.cephfs_workload import LogReaderWriterParallel
 
 log = logging.getLogger(__name__)
 
@@ -265,4 +267,77 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         ), "Not all the worker nodes security groups set correctly"
 
         log.info("Checking that the ceph health is ok")
+        ceph_health_check()
+
+
+@ignore_leftovers
+@tier4b
+@managed_service_required
+class TestAutomatedRecoveryFromFailedNodeReactiveMSWithIO(ManageTest):
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        def finalizer():
+            config.switch_to_provider()
+            log.info(
+                "Verify that all the worker nodes are in a Ready state on the provider"
+            )
+            wnodes = get_nodes(node_type=constants.WORKER_MACHINE)
+            for wnode in wnodes:
+                is_recovered = recover_node_to_ready_state(wnode)
+                if not is_recovered:
+                    log.warning(f"The node {wnode.name} has failed to recover")
+
+            log.info("Verify again that the ceph health is OK")
+            ceph_health_check()
+
+            config.switch_to_consumer()
+            log.info("Verify that the ceph health is OK on consumer")
+            ceph_health_check()
+
+        request.addfinalizer(finalizer)
+
+    @pytest.mark.parametrize(
+        argnames=["failure"],
+        argvalues=[
+            pytest.param("stopped_node"),
+            pytest.param("terminate_node"),
+            pytest.param("drain_node"),
+        ],
+    )
+    def test_automated_recovery_from_failed_nodes_reactive_ms_with_io(
+        self,
+        nodes,
+        failure,
+        project,
+        tmp_path,
+    ):
+        """
+        We have 3 test cases to check when running IO in the background:
+            A) Automated recovery from stopped worker node
+            B) Automated recovery from termination of a worker node
+            C) Automated recovery from unschedule and reschedule a worker node.
+        """
+        config.switch_to_consumer()
+        ceph_health_check()
+        log_read_write = LogReaderWriterParallel(project, tmp_path)
+        log_read_write.log_reader_writer_parallel()
+
+        config.switch_to_provider()
+        log.info("Start executing the node test function on the provider...")
+        FAILURE_TYPE_FUNC_CALL_DICT[failure](nodes)
+
+        # Verification steps after the automated recovery.
+        assert check_pods_after_node_replacement(), "Not all the pods are running"
+        assert (
+            verify_worker_nodes_security_groups()
+        ), "Not all the worker nodes security groups set correctly"
+
+        log.info("Checking that the ceph health is ok on the provider")
+        ceph_health_check()
+
+        config.switch_to_consumer()
+        log.info("Validate the data on the consumer")
+        log_read_write.fetch_and_validate_data()
+
+        log.info("Checking that the ceph health is ok on the consumer")
         ceph_health_check()
