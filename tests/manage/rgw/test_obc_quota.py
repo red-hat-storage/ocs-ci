@@ -22,7 +22,11 @@ class TestOBCQuota:
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "50M"}],
-                marks=[tier2, pytest.mark.polarion_id("")],
+                marks=[
+                    tier2,
+                    pytest.mark.polarion_id("OCS-3904"),
+                    pytest.mark.polarion_id("OCS-3905"),
+                ],
             ),
         ],
     )
