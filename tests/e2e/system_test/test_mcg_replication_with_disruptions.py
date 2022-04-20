@@ -60,7 +60,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                marks=[tier2, pytest.mark.polarion_id("")],
+                marks=[tier2, pytest.mark.polarion_id("OCS-3906")],
             ),
         ],
         ids=[
@@ -214,7 +214,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         # restart RGW pods and then see if object sync still works
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
-            source_bucket_name,
+            target_bucket_name,
             test_directory_setup.origin_dir,
             mcg_obj=mcg_obj_session,
             amount=1,
