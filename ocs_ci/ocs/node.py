@@ -33,6 +33,7 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_size,
     get_node_pv_objs,
 )
+from ocs_ci.utility.version import get_semantic_version
 
 
 log = logging.getLogger(__name__)
@@ -206,7 +207,8 @@ def drain_nodes(node_names):
     try:
         drain_deletion_flag = (
             "--delete-emptydir-data"
-            if get_ocp_version() >= version.VERSION_4_7
+            if get_semantic_version(get_ocp_version(), only_major_minor=True)
+            >= version.VERSION_4_7
             else "--delete-local-data"
         )
         ocp.exec_oc_cmd(
