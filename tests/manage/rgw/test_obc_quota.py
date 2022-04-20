@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
 logger = logging.getLogger(__name__)
 
 
-@bugzilla
+@bugzilla("1940823")
 class TestOBCQuota:
     """
     Test OBC Quota feature
