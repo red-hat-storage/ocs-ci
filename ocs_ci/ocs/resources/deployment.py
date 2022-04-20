@@ -46,7 +46,7 @@ class Deployment(OCS):
     @property
     def replicas(self):
         """
-        Returns number of replicas for the deployment
+        Returns number of replicas for the deployment as defined in its spec
 
         Returns:
             int: Number of replicas
