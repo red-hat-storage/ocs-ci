@@ -195,7 +195,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         """
         # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
         # Consumer cluster will be the primary cluster. Switching to provider cluster is required to get ceph pods
-        switch_to_provier_needed = (
+        switch_to_provider_needed = (
             True
             if (
                 config.ENV_DATA["platform"].lower()
@@ -210,7 +210,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         proj_obj = pvc_objs[0].project
         storageclass = pvc_objs[0].storageclass
 
-        if switch_to_provier_needed:
+        if switch_to_provider_needed:
             # Switch to provider cluster context to get ceph pods
             config.switch_to_provider()
 
@@ -234,7 +234,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Get number of pods of type 'resource_to_delete'
         initial_pods_num = len(pod_functions[resource_to_delete]())
 
-        if switch_to_provier_needed:
+        if switch_to_provider_needed:
             # Switch back to consumer cluster context to access PVCs and pods
             config.switch_to_consumer(self.consumer_cluster_index)
 
@@ -358,7 +358,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         for pod_obj in all_pod_objs:
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
-        if switch_to_provier_needed:
+        if switch_to_provider_needed:
             # Switch to provider cluster context to get ceph pods
             config.switch_to_provider()
 
@@ -371,7 +371,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             f"{final_pods_num}"
         )
 
-        if switch_to_provier_needed:
+        if switch_to_provider_needed:
             # Switch back to consumer cluster context
             config.switch_to_consumer(self.consumer_cluster_index)
 
