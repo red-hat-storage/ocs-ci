@@ -482,3 +482,11 @@ class WrongVersionExpression(ValueError):
 
 class ClusterNotFoundException(Exception):
     pass
+
+
+class AlertingError(Exception):
+    pass
+
+
+class AuthError(Exception):
+    pass
