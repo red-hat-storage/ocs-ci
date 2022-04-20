@@ -10,7 +10,6 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
-POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 CEPH_PODS = ["mds", "mon", "mgr", "osd"]
 
 
@@ -25,6 +24,9 @@ class Disruptions:
     selector = None
     daemon_pid = None
     cluster_kubeconfig = ""
+    pod_ocp = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
 
     def kubeconfig_parameter(self):
         """
@@ -56,7 +58,7 @@ class Disruptions:
                 ),
             )
             self.cluster_kubeconfig = provider_kubeconfig
-            POD.cluster_kubeconfig = provider_kubeconfig
+            self.pod_ocp.cluster_kubeconfig = provider_kubeconfig
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -106,7 +108,7 @@ class Disruptions:
                 resource_id
             ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
-        assert POD.wait_for_resource(
+        assert self.pod_ocp.wait_for_resource(
             condition="Running",
             selector=self.selector,
             resource_count=self.resource_count,
