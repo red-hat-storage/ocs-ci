@@ -24,9 +24,6 @@ class Disruptions:
     selector = None
     daemon_pid = None
     cluster_kubeconfig = ""
-    pod_ocp = ocp.OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
 
     def kubeconfig_parameter(self):
         """
@@ -58,7 +55,6 @@ class Disruptions:
                 ),
             )
             self.cluster_kubeconfig = provider_kubeconfig
-            self.pod_ocp.cluster_kubeconfig = provider_kubeconfig
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -101,14 +97,18 @@ class Disruptions:
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        pod_ocp = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         if self.cluster_kubeconfig:
             # Setting 'cluster_kubeconfig' attribute to use as the value of the
             # parameter '--kubeconfig' in the 'oc' commands.
             self.resource_obj[
                 resource_id
             ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
+            pod_ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
-        assert self.pod_ocp.wait_for_resource(
+        assert pod_ocp.wait_for_resource(
             condition="Running",
             selector=self.selector,
             resource_count=self.resource_count,
