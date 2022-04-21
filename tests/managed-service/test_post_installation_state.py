@@ -33,7 +33,7 @@ class TestPostInstallationState(ManageTest):
         argnames=["resource"],
         argvalues=[
             pytest.param(
-                *["cephblockpool"],
+                *[constants.CEPHBLOCKPOOL.lower()],
                 marks=pytest.mark.polarion_id("OCS-3907"),
             ),
             pytest.param(
@@ -44,12 +44,14 @@ class TestPostInstallationState(ManageTest):
     )
     def test_consumers_connected(self, resource):
         """
-        Test that at least one consumer is connected to the provider cluster
+        Test run on provider cluster that at least one consumer is connected
         and a unique cephblockpool and subvolumegroup are successfully created
         on the provider cluster for each connected consumer.
         """
-        assert managedservice.get_consumer_names()
-        for consumer_name in managedservice.get_consumer_names():
+        consumer_names = managedservice.get_consumer_names()
+        log.info(f"Connected consumer names: {consumer_names}")
+        assert consumer_names, "No consumer clusters are connected"
+        for consumer_name in consumer_names:
             resource_name = resource + "-" + consumer_name
             resource_yaml = ocp.OCP(
                 kind=resource,
