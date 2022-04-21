@@ -4,7 +4,7 @@ import logging
 import tempfile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility.utils import exec_cmd
 
 
@@ -64,3 +64,17 @@ def update_pull_secret():
         exec_cmd(
             f"oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson={secret_file.name}"
         )
+
+
+def get_consumer_names():
+    """
+    Get the names of all consumers
+
+    Returns:
+        list: names of all connected consumers, empty list if there are none
+    """
+    consumer = ocp.OCP(
+        kind="StorageConsumer", namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    consumer_yamls = consumer.get().get("items")
+    return [consumer["metadata"]["name"] for consumer in consumer_yamls]
