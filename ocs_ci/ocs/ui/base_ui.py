@@ -343,6 +343,7 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.operator_name = (
@@ -616,6 +617,49 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to block pools page")
         self.navigate_to_ocs_operator_page()
         self.do_click(locator=self.page_nav["block_pool_link"])
+
+    def wait_for_namespace_selection(self, project_name):
+        """
+        If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
+        It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
+        namespace drop-down.
+        The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
+
+        Args:
+            project_name (str): Name of the project to be selected
+
+        Returns:
+            bool: True if the project is found, raises NoSuchElementException otherwise with a log message
+        """
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.10"):
+
+            default_projects_is_checked = self.driver.find_element_by_xpath(
+                "//*[@data-test='showSystemSwitch']"
+            )
+
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
+                logger.info("Show default projects")
+                self.do_click(self.validation_loc["show-default-projects"])
+
+        pvc_loc = locators[self.ocp_version]["pvc"]
+        logger.info(f"Wait and select namespace {project_name}")
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=10,
+        )
+        if wait_for_project:
+            logger.info(f"Namespace {project_name} selected")
+            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+        else:
+            raise NoSuchElementException(f"Namespace {project_name} not found on UI")
 
     def verify_current_page_resource_status(self, status_to_check, timeout=30):
         """

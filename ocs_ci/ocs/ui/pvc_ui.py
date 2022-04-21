@@ -7,7 +7,6 @@ from ocs_ci.ocs.ui.views import locators, generic_locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
-from selenium.common.exceptions import NoSuchElementException
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +43,7 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
 
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
@@ -106,18 +94,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -161,18 +139,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -210,18 +178,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -266,18 +224,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Select test project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -318,18 +266,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Search and select the project {project_name}")
         self.do_click(self.pvc_loc["pvc_project_selector"])
         self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-        wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
-            expected_text=f"{project_name}",
-            timeout=5,
-        )
-        if wait_for_project:
-            logger.info(f"Select test project {project_name}")
-            self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
-            )
-        else:
-            raise NoSuchElementException(f"Project {project_name} not found on UI")
+
+        self.wait_for_namespace_selection(project_name=project_name)
 
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
