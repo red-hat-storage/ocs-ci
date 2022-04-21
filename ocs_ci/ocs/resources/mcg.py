@@ -172,8 +172,12 @@ class MCG:
             config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
             or storagecluster_independent_check()
         ):
-            if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
-                version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
+            if (
+                not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
+                and not config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and (
+                    version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
+                )
             ):
                 logger.info("Checking whether RGW pod is not present")
                 pods = pod.get_pods_having_label(
