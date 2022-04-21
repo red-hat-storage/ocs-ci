@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     ignore_leftover_label,
-    skipif_ms_consumer,
+    skipif_ms_provider,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
-@skipif_ms_consumer
+@skipif_ms_provider
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
