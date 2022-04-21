@@ -1,4 +1,5 @@
 import logging
+import os
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -9,7 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
-POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+CEPH_PODS = ["mds", "mon", "mgr", "osd"]
 
 
 class Disruptions:
@@ -22,9 +23,38 @@ class Disruptions:
     resource_count = 0
     selector = None
     daemon_pid = None
+    cluster_kubeconfig = ""
+
+    def kubeconfig_parameter(self):
+        """
+        Returns the '--kubeconfig <value>' parameter for the oc command
+
+        Returns:
+            str: The '--kubeconfig <value>' parameter for oc command if the attribute 'cluster_kubeconfig' is not empty.
+                Empty string if the the attribute 'cluster_kubeconfig' is empty.
+        """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
+        )
+        return kubeconfig_parameter
 
     def set_resource(self, resource, leader_type="provisioner"):
         self.resource = resource
+        if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
+            resource in CEPH_PODS
+        ):
+            # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
+            # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
+            # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
+            provider_kubeconfig = os.path.join(
+                config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
+                config.clusters[config.get_provider_index()].RUN.get(
+                    "kubeconfig_location"
+                ),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -67,8 +97,18 @@ class Disruptions:
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        pod_ocp = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if self.cluster_kubeconfig:
+            # Setting 'cluster_kubeconfig' attribute to use as the value of the
+            # parameter '--kubeconfig' in the 'oc' commands.
+            self.resource_obj[
+                resource_id
+            ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
+            pod_ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
-        assert POD.wait_for_resource(
+        assert pod_ocp.wait_for_resource(
             condition="Running",
             selector=self.selector,
             resource_count=self.resource_count,
@@ -89,7 +129,7 @@ class Disruptions:
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -130,7 +170,7 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc debug node/{node_name} -- chroot /host  "
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -158,7 +198,7 @@ class Disruptions:
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         try:
