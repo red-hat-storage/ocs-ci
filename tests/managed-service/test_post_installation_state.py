@@ -1,12 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.testlib import (
     acceptance,
     managed_service_required,
     ManageTest,
+    ms_provider_required,
     tier1,
     runs_on_provider,
     bugzilla,
@@ -25,6 +26,39 @@ class TestPostInstallationState(ManageTest):
     @managed_service_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
+
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.parametrize(
+        argnames=["resource"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL.lower()],
+                marks=pytest.mark.polarion_id("OCS-3907"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEMSUBVOLUMEGROUP],
+                marks=pytest.mark.polarion_id("OCS-3908"),
+            ),
+        ],
+    )
+    def test_consumers_connected(self, resource):
+        """
+        Test run on provider cluster that at least one consumer is connected
+        and a unique cephblockpool and subvolumegroup are successfully created
+        on the provider cluster for each connected consumer.
+        """
+        consumer_names = managedservice.get_consumer_names()
+        log.info(f"Connected consumer names: {consumer_names}")
+        assert consumer_names, "No consumer clusters are connected"
+        for consumer_name in consumer_names:
+            resource_name = resource + "-" + consumer_name
+            resource_yaml = ocp.OCP(
+                kind=resource,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=resource_name,
+            )
+            assert resource_yaml.get()["status"]["phase"] == "Ready"
 
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
