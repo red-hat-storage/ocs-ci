@@ -648,7 +648,7 @@ class AWSUPI(AWSBase):
         for node in rhcos_workers:
             cordon = f"oc adm cordon {node}"
             run_cmd(cordon)
-            drain_nodes(node)
+            drain_nodes([node])
             delete = f"oc delete nodes {node}"
             run_cmd(delete)
         if len(self.get_rhcos_workers()):
