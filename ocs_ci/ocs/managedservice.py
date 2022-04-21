@@ -68,7 +68,8 @@ def update_pull_secret():
 
 def get_consumer_names():
     """
-    Get the names of all consumers
+    Get the names of all consumers connected to this provider cluster.
+    Runs on provider cluster
 
     Returns:
         list: names of all connected consumers, empty list if there are none
