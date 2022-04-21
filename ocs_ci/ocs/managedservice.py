@@ -151,7 +151,7 @@ def patch_consumer_toolbox(ceph_admin_key=None):
     except Exception as exe:
         logger.warning(
             "Failed to patch rook-ceph-tools deployment in consumer cluster. "
-            f"The can be done manually after deployment. Error {str(exe)}"
+            f"The patch can be applied manually after deployment. Error {str(exe)}"
         )
         return
 
