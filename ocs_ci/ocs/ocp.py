@@ -48,6 +48,7 @@ class OCP(object):
         resource_name="",
         selector=None,
         field_selector=None,
+        cluster_kubeconfig="",
     ):
         """
         Initializer function
@@ -61,6 +62,7 @@ class OCP(object):
                 priority than resource_name and is used instead of the name.
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
         """
         self._api_version = api_version
         self._kind = kind
@@ -69,6 +71,7 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
+        self.cluster_kubeconfig = cluster_kubeconfig
 
     @property
     def api_version(self):
@@ -130,8 +133,12 @@ class OCP(object):
         """
         oc_cmd = "oc "
         env_kubeconfig = os.getenv("KUBECONFIG")
-        if not env_kubeconfig or not os.path.exists(env_kubeconfig):
-            cluster_dir_kubeconfig = os.path.join(
+        kubeconfig_path = (
+            self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
+        )
+
+        if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
+            cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
                 config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
             )
             if os.path.exists(cluster_dir_kubeconfig):
