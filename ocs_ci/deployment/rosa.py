@@ -152,16 +152,16 @@ class ROSA(CloudDeploymentBase):
             # Check for Ceph pods
             assert pod.wait_for_resource(
                 condition="Running",
-                selector="app=rook-ceph-mon",
+                selector=constants.MON_APP_LABEL,
                 resource_count=3,
                 timeout=600,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
             )
             assert pod.wait_for_resource(
                 condition="Running",
-                selector="app=rook-ceph-osd",
+                selector=constants.OSD_APP_LABEL,
                 resource_count=3,
                 timeout=600,
             )
