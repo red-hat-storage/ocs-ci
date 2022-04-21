@@ -75,15 +75,15 @@ def relocate(preferred_cluster, drpc_name, namespace):
     config.switch_ctx(prev_index)
 
 
-def check_mirroring_status(replaying_num=None):
+def check_mirroring_status(replaying_images=None):
     """
-    Check mirroring status have expected values
+    Check if mirroring status have expected health and states values
 
     Args:
-        replaying_num (int): Expected number of images in replaying state
+        replaying_images (int): Expected number of images in replaying state
 
     Returns:
-        bool: True if status contains expected values, False otherwise
+        bool: True if status contains expected health and states values, False otherwise
 
     """
     cbp_obj = ocp.OCP(
@@ -97,9 +97,9 @@ def check_mirroring_status(replaying_num=None):
     for key in keys_to_check:
         value = mirroring_status.get(key)
         if key == "states":
-            if replaying_num:
+            if replaying_images:
                 value = value.get("replaying")
-                expected_value = replaying_num
+                expected_value = replaying_images
             else:
                 continue
         else:
@@ -144,11 +144,9 @@ def check_vr_status(state, namespace):
         ):
             vr_state_mismatch.append(vr)
 
-    if len(vr_state_mismatch) == 0:
+    if not vr_state_mismatch:
         logger.info(f"All VR reached desired state {desired_state}")
         return True
     else:
-        logger.warning(
-            f"Following VR haven't reached desired state: {vr_state_mismatch}"
-        )
+        logger.error(f"Following VR haven't reached desired state: {vr_state_mismatch}")
         return False
