@@ -234,10 +234,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         switch_to_provider_needed = (
             True
             if (
-                   config.ENV_DATA["platform"].lower()
-                   in constants.MANAGED_SERVICE_PLATFORMS
-               )
-               and (resource_to_delete in ["mds", "mon", "mgr", "osd"])
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            )
+            and (resource_to_delete in ["mds", "mon", "mgr", "osd"])
             else False
         )
 
