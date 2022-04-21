@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     ignore_leftover_label,
+    skipif_ms_consumer,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@skipif_ms_consumer
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
