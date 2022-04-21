@@ -147,22 +147,25 @@ class ROSA(CloudDeploymentBase):
             logger.info("Running OCS basic installation")
         rosa.install_odf_addon(self.cluster_name)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-mon",
-            resource_count=3,
-            timeout=600,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-osd",
-            resource_count=3,
-            timeout=600,
-        )
+
+        if config.ENV_DATA.get("cluster_type") != "consumer":
+            # Check for Ceph pods
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-mon",
+                resource_count=3,
+                timeout=600,
+            )
+            assert pod.wait_for_resource(
+                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-osd",
+                resource_count=3,
+                timeout=600,
+            )
+
         if config.DEPLOYMENT.get("pullsecret_workaround"):
             update_pull_secret()
         if config.ENV_DATA.get("cluster_type") == "consumer":
