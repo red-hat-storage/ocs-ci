@@ -286,6 +286,7 @@ class AWSUPI(AWSBase):
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
+                "INSTALLER_BIN": "openshift-install",
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
