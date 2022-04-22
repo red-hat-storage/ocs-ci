@@ -2825,6 +2825,7 @@ def pgsql_factory_fixture(request):
         threads=None,
         transactions=None,
         scaling_factor=None,
+        samples=None,
         timeout=None,
         sc_name=None,
     ):
@@ -2837,6 +2838,8 @@ def pgsql_factory_fixture(request):
             threads (int): Number of threads
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
+            samples (int): Number of samples to run
+
             timeout (int): Time in seconds to wait
 
         """
@@ -2850,6 +2853,7 @@ def pgsql_factory_fixture(request):
             threads=threads,
             transactions=transactions,
             scaling_factor=scaling_factor,
+            samples=samples,
             timeout=timeout,
         )
 

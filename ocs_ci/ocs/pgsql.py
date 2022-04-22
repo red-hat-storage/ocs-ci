@@ -109,6 +109,7 @@ class Postgresql(BenchmarkOperator):
         transactions=None,
         scaling_factor=None,
         timeout=None,
+        samples=None,
         wait=True,
     ):
         """
@@ -148,6 +149,8 @@ class Postgresql(BenchmarkOperator):
                 pg_data["spec"]["workload"]["args"]["transactions"] = transactions
             if scaling_factor is not None:
                 pg_data["spec"]["workload"]["args"]["scaling_factor"] = scaling_factor
+            if samples is not None:
+                pg_data["spec"]["workload"]["args"]["samples"] = samples
             pg_obj = OCS(**pg_data)
             pg_obj_list.append(pg_obj)
             pg_obj.create()
@@ -645,9 +648,11 @@ class Postgresql(BenchmarkOperator):
         """
         self.setup_postgresql(replicas=1)
         # Create pgbench benchmark
-        self.create_pgbench_benchmark(replicas=1)
+        self.create_pgbench_benchmark(
+            replicas=1, transactions=15000, scaling_factor=100, samples=10
+        )
         # Wait for pg_bench pod to initialized and complete
-        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=3000)
         # Get pgbench pods
         pgbench_pods = self.get_pgbench_pods()
         # Validate pgbench run and parse logs

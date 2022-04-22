@@ -186,7 +186,9 @@ class CouchBase(PillowFight):
         log.info("Successfully created data buckets")
         self.cb_create_bucket = True
 
-    def run_workload(self, replicas, num_items=None, num_threads=None, run_in_bg=False):
+    def run_workload(
+        self, replicas, num_items=None, num_threads=None, run_in_bg=False, timeout=1800
+    ):
         """
         Running workload with pillow fight operator
         Args:
@@ -206,6 +208,7 @@ class CouchBase(PillowFight):
                 replicas=replicas,
                 num_items=num_items,
                 num_threads=num_threads,
+                timeout=timeout,
             )
             return self.result
         PillowFight.run_pillowfights(
@@ -304,7 +307,7 @@ class CouchBase(PillowFight):
         # Create Couchbase worker secrets
         self.create_cb_secrets()
         # Create couchbase workers
-        self.create_cb_cluster(replicas=1)
+        self.create_cb_cluster(replicas=3)
         self.create_data_buckets()
         # Run couchbase workload
-        self.run_workload(replicas=1)
+        self.run_workload(replicas=3, num_items=50000, timeout=3600)

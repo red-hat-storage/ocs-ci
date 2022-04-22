@@ -581,11 +581,15 @@ def start_app_workload(
     """
     threads = []
     workloads = []
-    support_check = all(item in supported_app_workloads for item in workloads_list)
-    if not support_check:
-        raise UnsupportedWorkloadError("Found Unsupported app workloads list")
 
     def factory(workloads_list=workloads_list, run_time=run_time, run_in_bg=run_in_bg):
+
+        log.info(f"workloads_list: {workloads_list}")
+        log.info(f"supported app workloads list: {supported_app_workloads}")
+        support_check = all(item in supported_app_workloads for item in workloads_list)
+        if not support_check:
+            raise UnsupportedWorkloadError("Found Unsupported app workloads list")
+        log.info("APP Workloads support check is Successful")
         cycle_count = 1
         end_time = datetime.now() + timedelta(minutes=run_time)
         while datetime.now() < end_time:
@@ -669,9 +673,12 @@ def start_ocp_workload(workloads_list, run_in_bg=True):
 
     """
     threads = []
+    log.info(f"workloads_list: {workloads_list}")
+    log.info(f"supported ocp workloads list: {supported_ocp_workloads}")
     support_check = all(item in supported_ocp_workloads for item in workloads_list)
     if not support_check:
         raise UnsupportedWorkloadError("Found Unsupported ocp workloads list")
+    log.info("OCP Workloads support check is Successful")
 
     for workload in workloads_list:
         if workload == "monitoring":
