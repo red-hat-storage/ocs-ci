@@ -384,7 +384,9 @@ class VSPHEREUPI(VSPHEREBASE):
             # Download terraform ignition provider
             # ignition provider dependancy from OCP 4.6
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-                get_terraform_ignition_provider(self.terraform_data_dir)
+                get_terraform_ignition_provider(
+                    self.terraform_data_dir, version=get_ignition_provider_version()
+                )
 
             # Initialize Terraform
             self.terraform_work_dir = constants.VSPHERE_DIR
@@ -786,7 +788,9 @@ class VSPHEREUPI(VSPHEREBASE):
             if not (
                 os.path.exists(terraform_ignition_provider_path) or is_cluster_upgraded
             ):
-                get_terraform_ignition_provider(terraform_data_dir)
+                get_terraform_ignition_provider(
+                    terraform_data_dir, version=get_ignition_provider_version()
+                )
             terraform.initialize()
         else:
             terraform.initialize(upgrade=True)
@@ -1491,3 +1495,17 @@ def delete_dns_records():
     for record in record_sets:
         if record["Name"] in records_to_delete:
             aws.delete_record(record, hosted_zone_id)
+
+
+def get_ignition_provider_version():
+    """
+    Gets the ignition provider version based on OCP version
+
+    Returns:
+        str: ignition provider version
+
+    """
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+        return "v2.1.2"
+    else:
+        return "v2.1.0"

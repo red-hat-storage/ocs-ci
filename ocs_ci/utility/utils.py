@@ -3160,6 +3160,9 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
         f"terraform-provider-ignition_{version[1:]}_linux_amd64.zip"
     )
     terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+    terraform_ignition_provider = os.path.join(
+        terraform_plugins_path, "terraform-provider-ignition"
+    )
     log.info(f"Downloading terraform ignition provider version {version}")
     previous_dir = os.getcwd()
     os.chdir(terraform_dir)
@@ -3175,9 +3178,16 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)
+    if (
+        version_module.get_semantic_ocp_version_from_config()
+        >= version_module.VERSION_4_11
+    ):
+        target_terraform_ignition_provider = terraform_plugins_path
+    else:
+        target_terraform_ignition_provider = terraform_ignition_provider
     move(
         f"terraform-provider-ignition_{version}",
-        terraform_plugins_path,
+        target_terraform_ignition_provider,
     )
 
     # delete the downloaded files
