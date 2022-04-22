@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     ignore_leftover_label,
-    skipif_managed_service,
+    skipif_ms_provider,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
-@skipif_managed_service
+@skipif_ms_provider
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
@@ -111,10 +111,21 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
     pvc_size = 3
 
     @pytest.fixture()
-    def setup_base(self, interface, multi_pvc_factory, pod_factory):
+    def setup_base(self, request, interface, multi_pvc_factory, pod_factory):
         """
         Create PVCs and pods
         """
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            # Get the index of current consumer cluster
+            self.consumer_cluster_index = config.cur_index
+
+            def teardown():
+                # Switching to provider cluster context will be done during the test case.
+                # Switch back to consumer cluster context after the test case.
+                config.switch_to_consumer(self.consumer_cluster_index)
+
+            request.addfinalizer(teardown)
+
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
@@ -218,6 +229,18 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
         progressing
         """
+        # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
+        # Consumer cluster will be the primary cluster. Switching to provider cluster is required to get ceph pods
+        switch_to_provider_needed = (
+            True
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            )
+            and (resource_to_delete in ["mds", "mon", "mgr", "osd"])
+            else False
+        )
+
         pvc_objs, pod_objs, rwx_pod_objs = setup_base
         namespace = pvc_objs[0].project.namespace
 
@@ -282,6 +305,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             f"RWX PVCs: {no_of_rwx_pvcs_delete}"
         )
 
+        if switch_to_provider_needed:
+            # Switch to provider cluster context to get ceph pods
+            config.switch_to_provider()
+
         pod_functions = {
             "mds": partial(get_mds_pods),
             "mon": partial(get_mon_pods),
@@ -300,6 +327,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
+
+        if switch_to_provider_needed:
+            # Switch back to consumer cluster context to access PVCs and pods
+            config.switch_to_consumer(self.consumer_cluster_index)
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(get_all_pods(namespace=namespace))
@@ -487,6 +518,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
                 f"Volume associated with PVC {pvc_name} still exists " f"in backend"
             )
 
+        if switch_to_provider_needed:
+            # Switch to provider cluster context to get ceph pods
+            config.switch_to_provider()
+
         # Verify number of pods of type 'resource_to_delete'
         final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
         assert final_num_resource_to_delete == num_of_resource_to_delete, (
@@ -495,6 +530,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             f"{num_of_resource_to_delete}. Total number of pods present now: "
             f"{final_num_resource_to_delete}"
         )
+
+        if switch_to_provider_needed:
+            # Switch back to consumer cluster context
+            config.switch_to_consumer(self.consumer_cluster_index)
 
         # Check ceph status
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
