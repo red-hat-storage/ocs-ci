@@ -128,6 +128,7 @@ def patch_consumer_toolbox(ceph_admin_key=None):
     # Check whether ceph command is working on tools pod. Patch is needed only if the error is "RADOS permission error"
     try:
         consumer_tools_pod.exec_ceph_cmd("ceph health")
+        return
     except Exception as exc:
         if "RADOS permission error" not in str(exc):
             logger.warning(
