@@ -337,7 +337,8 @@ def install_logging():
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
+        yaml_file=constants.EO_OG_YAML,
+        resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
 
     # Set RBAC policy on the project

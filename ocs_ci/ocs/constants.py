@@ -1704,3 +1704,6 @@ VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
 SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
 SPACE = " "
+
+# Longevity constants
+STAGE_0_NAMESPACE = "ever-running-project"

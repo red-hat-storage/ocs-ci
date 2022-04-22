@@ -73,52 +73,52 @@ class Longevity(object):
             If None, random size pvc will be created
 
         Returns:
-             pvc_dict_list (list): List of all PVC.yaml dicts
+             all_pvc_dict_list (list): List of all PVC.yaml dicts
 
         """
-        pvc_dict_list = []
+        all_pvc_dict_list = []
         # Construct bulk pvc creation yaml for ceph-rbd with access mode RWO
         log.info(
             "Constructing bulk pvc creation yaml for ceph-rbd with access mode RWO"
         )
-        pvc_dict_list1 = construct_pvc_creation_yaml_bulk_for_kube_job(
+        ceph_rbd_rwo_dict_list = construct_pvc_creation_yaml_bulk_for_kube_job(
             no_of_pvc=num_of_pvcs,
             access_mode=constants.ACCESS_MODE_RWO,
             sc_name=constants.CEPHBLOCKPOOL_SC,
             pvc_size=pvc_size,
         )
-        pvc_dict_list.append(pvc_dict_list1)
+        all_pvc_dict_list.append(ceph_rbd_rwo_dict_list)
         # Construct bulk pvc creation yaml for ceph-rbd with access mode RWX
         log.info(
             "Constructing bulk pvc creation yaml for ceph-rbd with access mode RWX"
         )
-        pvc_dict_list2 = construct_pvc_creation_yaml_bulk_for_kube_job(
+        ceph_rbd_rwx_dict_list = construct_pvc_creation_yaml_bulk_for_kube_job(
             no_of_pvc=num_of_pvcs,
             access_mode=constants.ACCESS_MODE_RWX,
             sc_name=constants.CEPHBLOCKPOOL_SC,
             pvc_size=pvc_size,
         )
-        pvc_dict_list.append(pvc_dict_list2)
+        all_pvc_dict_list.append(ceph_rbd_rwx_dict_list)
         # Construct bulk pvc creation yaml for cephfs with access mode RWO
         log.info("Constructing bulk pvc creation yaml for cephfs with access mode RWO")
-        pvc_dict_list3 = construct_pvc_creation_yaml_bulk_for_kube_job(
+        cephfs_rwo_dict_list = construct_pvc_creation_yaml_bulk_for_kube_job(
             no_of_pvc=num_of_pvcs,
             access_mode=constants.ACCESS_MODE_RWO,
             sc_name=constants.CEPHFILESYSTEM_SC,
             pvc_size=pvc_size,
         )
-        pvc_dict_list.append(pvc_dict_list3)
+        all_pvc_dict_list.append(cephfs_rwo_dict_list)
         # Construct bulk pvc creation yaml for cephfs with access mode RWX
         log.info("Constructing bulk pvc creation yaml for cephfs with access mode RWX")
-        pvc_dict_list4 = construct_pvc_creation_yaml_bulk_for_kube_job(
+        cephfs_rwx_dict_list = construct_pvc_creation_yaml_bulk_for_kube_job(
             no_of_pvc=num_of_pvcs,
             access_mode=constants.ACCESS_MODE_RWX,
             sc_name=constants.CEPHFILESYSTEM_SC,
             pvc_size=pvc_size,
         )
-        pvc_dict_list.append(pvc_dict_list4)
+        all_pvc_dict_list.append(cephfs_rwx_dict_list)
 
-        return pvc_dict_list
+        return all_pvc_dict_list
 
     def construct_stage_builder_kube_job(
         self, obj_dict_list, namespace, kube_job_name="job_profile"
