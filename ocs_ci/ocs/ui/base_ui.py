@@ -385,27 +385,16 @@ class PageNavigator(BaseUI):
     def navigate_odf_overview_page(self):
         """
         Navigate to OpenShift Data Foundation Overview Page
-
         """
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_10:
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
-            logger.info(
-                "Successfully navigated to Data foundation tab under Storage section"
-            )
-        else:
-            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-            logger.info(
-                "Successfully navigated to OpenShift Data foundation tab under Storage section"
-            )
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_10:
-            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
+        logger.info("Successfully navigated to ODF tab under Storage section")
 
     def navigate_quickstarts_page(self):
         """

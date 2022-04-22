@@ -343,89 +343,12 @@ pvc_4_8 = {
         "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
         By.CSS_SELECTOR,
     ),
-    "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
-    "test-storage-class": (
-        "a[id='test-storage-class-link'] span[class='co-resource-item__resource-name']",
-        By.CSS_SELECTOR,
-    ),
-    "pvc_storage_class": ("//*[text()='{}']", By.XPATH),
-    "test-pvc-for-sc": ("a[title='test-pvc-for-sc']", By.CSS_SELECTOR),
-    "existing-kms-connection": ("(//input[@name='kms-selection'])[1]", By.XPATH),
-    "kms-dropdown": ("//button[@data-test='kms-dropdown-toggle']", By.XPATH),
 }
 
 pvc_4_9 = {
     "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-}
-
-storage_class = {
-    "create-sc": (
-        "#yaml-create",
-        By.CSS_SELECTOR,
-    ),
-    "sc-name": (
-        "#storage-class-name",
-        By.CSS_SELECTOR,
-    ),
-    "sc-description": ("#storage-class-description", By.CSS_SELECTOR),
-    "reclaim-policy": ("#storage-class-reclaim-policy", By.CSS_SELECTOR),
-    "reclaim-policy-delete": ("//button[@id='Delete-link']", By.XPATH),
-    "reclaim-policy-retain": ("#Retain-link", By.CSS_SELECTOR),
-    "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
-    "rbd-provisioner": (
-        "//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']",
-        By.XPATH,
-    ),
-    "cephfs-provisioner": (
-        "//a[normalize-space()='openshift-storage.cephfs.csi.ceph.com']",
-        By.XPATH,
-    ),
-    "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
-    "ceph-block-pool": ("//div[@class='pf-c-dropdown__menu-item-main']", By.XPATH),
-    "encryption": ("#storage-class-encryption", By.CSS_SELECTOR),
-    "connections-details": (
-        ".pf-c-button.pf-m-link[data-test='edit-kms-link']",
-        By.CSS_SELECTOR,
-    ),
-    "service-name": ("#kms-service-name", By.CSS_SELECTOR),
-    "kms-address": ("#kms-address", By.CSS_SELECTOR),
-    "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
-    "save-btn": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
-        By.CSS_SELECTOR,
-    ),
-    "advanced-settings": (
-        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
-        By.CSS_SELECTOR,
-    ),
-    "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
-    "tls-server-name": ("#kms-service-tls", By.CSS_SELECTOR),
-    "vault-enterprise-namespace": ("#kms-service-namespace", By.CSS_SELECTOR),
-    "browse-ca-certificate": ("(//input[@type='file'])[1]", By.XPATH),
-    "browse-client-certificate": ("(//input[@type='file'])[2]", By.XPATH),
-    "browse-client-private-key": ("(//input[@type='file'])[3]", By.XPATH),
-    "pvc-expansion-check": (
-        "input[class='create-storage-class-form__checkbox']",
-        By.CSS_SELECTOR,
-    ),
-    "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
-    "save-service-details": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
-        By.CSS_SELECTOR,
-    ),
-    "create": ("#save-changes", By.CSS_SELECTOR),
-    "sc-dropdown": ("button[data-test-id='dropdown-button']", By.CSS_SELECTOR),
-    "name-from-dropdown": ("//button[@id='NAME-link']", By.XPATH),
-    "sc-search": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
-    "select-sc": ("//a[normalize-space()='{}']", By.XPATH),
-    "sc-actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
-    "delete-storage-class": (
-        "button[data-test-action='Delete StorageClass']",
-        By.CSS_SELECTOR,
-    ),
-    "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
 }
 
 storage_class_4_9 = {
@@ -995,7 +918,7 @@ locators = {
         "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
-        "storage_class": {**storage_class, **storage_class_4_9},
+        "storage_class": {storage_class_4_9},
     },
     "4.8": {
         "login": login,
@@ -1008,7 +931,6 @@ locators = {
         "mcg_stores": mcg_stores,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8},
         "validation": {**validation, **validation_4_8},
-        "storage_class": storage_class,
         "add_capacity": add_capacity,
         "block_pool": block_pool,
         "storageclass": storageclass,
