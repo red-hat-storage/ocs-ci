@@ -2,6 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: pillowfight-rbd-simple
+  namespace: couchbase-operator-namespace
 spec:
   template:
     metadata:
