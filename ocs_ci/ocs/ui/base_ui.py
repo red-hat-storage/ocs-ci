@@ -392,10 +392,14 @@ class PageNavigator(BaseUI):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_10:
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
-            logger.info("Successfully navigated to Data foundation tab under Storage section")
+            logger.info(
+                "Successfully navigated to Data foundation tab under Storage section"
+            )
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
-            logger.info("Successfully navigated to OpenShift Data foundation tab under Storage section")
+            logger.info(
+                "Successfully navigated to OpenShift Data foundation tab under Storage section"
+            )
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_10:
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
@@ -666,6 +670,7 @@ class PageNavigator(BaseUI):
         )
         if wait_for_project:
             logger.info(f"Namespace {project_name} selected")
+            time.sleep(2)
             self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")
@@ -776,7 +781,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if not headless:
+        if headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 

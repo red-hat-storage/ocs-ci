@@ -252,13 +252,16 @@ class ValidationUI(PageNavigator):
 
         self.odf_console_plugin_check()
         self.navigate_odf_overview_page()
-        logger.info("Click on Storage System under Status card")
+        logger.info(
+            "Wait and check for Storage System under Status card on Overview page"
+        )
         storage_system_presence = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["storagesystem-status-card"],
             timeout=30,
             expected_text="Storage System",
         )
         if storage_system_presence:
+            logger.info("Click on Storage System under Status card on Overview page")
             self.do_click(self.validation_loc["storagesystem-status-card"])
             block_and_file_health_message_check = (
                 self.wait_until_expected_text_is_found(
@@ -273,13 +276,21 @@ class ValidationUI(PageNavigator):
             else:
                 pass
             logger.info(
-                "Click on 'ocs-storagecluster-storagesystem' from Storage System pop-up "
+                "Click on storage system hyperlink from Storage System pop-up "
                 "under Status Card on Data Foundation Overview page"
             )
-            self.do_click(
-                self.validation_loc["storage-system-health-card-hyperlink"],
-                enable_screenshot=True,
-            )
+            if config.DEPLOYMENT["external_mode"]:
+                self.do_click(
+                    self.validation_loc[
+                        "storage-system-external-status-card-hyperlink"
+                    ],
+                    enable_screenshot=True,
+                )
+            else:
+                self.do_click(
+                    self.validation_loc["storage-system-status-card-hyperlink"],
+                    enable_screenshot=True,
+                )
             logger.info("Click on StorageSystems breadcrumb")
             self.do_click((self.validation_loc["storagesystems"]))
             logger.info("Navigate back to ODF Overview page")
@@ -302,7 +313,7 @@ class ValidationUI(PageNavigator):
                 "System Capacity Card not found on OpenShift Data Foundation Overview page"
             )
         logger.info(
-            "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
+            "Navigate to System Capacity Card and Click on storage system hyperlink"
         )
         self.do_click(self.validation_loc["odf-capacityCardLink"])
         navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
@@ -353,10 +364,6 @@ class ValidationUI(PageNavigator):
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate again to ODF Overview page")
         self.do_click((self.validation_loc["overview"]), enable_screenshot=True)
-        logger.info("Click on Storage System under Status Card on Overview page")
-        self.do_click((self.validation_loc["1_storage_system_generic"]))
-        logger.info("Click on Storage System hyperlink from pop-up under Status Card on Overview page")
-        self.do_click((self.validation_loc["1_storage_system_external"]), enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=5)
         logger.info(
             "Successfully navigated back to ODF tab under Storage, test successful!"
@@ -383,7 +390,8 @@ class ValidationUI(PageNavigator):
             )
         else:
             logger.info(
-                "Click on 'ocs-external-storagecluster-storagesystem' link from Storage Systems page for External Mode Deployment"
+                "Click on 'ocs-external-storagecluster-storagesystem' link "
+                "from Storage Systems page for External Mode Deployment"
             )
             self.do_click(
                 self.validation_loc["ocs-external-storagecluster-storagesystem"],

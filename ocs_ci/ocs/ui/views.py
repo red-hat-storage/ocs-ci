@@ -849,15 +849,14 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "ocs-external-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']", By.CSS_SELECTOR
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster/overview']",
+        By.CSS_SELECTOR,
     ),
     "overview": (
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
     "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
-    "1_storage_system_generic": ("a[href='/odf/system/ocs.openshift.io~v1~StorageCluster/ocs-storagecluster-storagesystem']", By.CSS_SELECTOR),
-    "1_storage_system_external": ("a[href='/odf/system/ocs.openshift.io~v1~StorageCluster/ocs-external-storagecluster-storagesystem']", By.CSS_SELECTOR),
     "blockandfile": (
         "a[data-test-id='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
@@ -917,8 +916,13 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
-    "storage-system-health-card-hyperlink": (
+    "storage-system-status-card-hyperlink": (
         "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        By.XPATH,
+    ),
+    "storage-system-external-status-card-hyperlink": (
+        "//div[@class='odf-storageSystemPopup__item--margin']"
+        "//a[contains(text(),'ocs-external-storagecluster-storagesystem')]",
         By.XPATH,
     ),
     "storagesystem-details": (
@@ -932,6 +936,10 @@ validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
         By.CSS_SELECTOR,
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
