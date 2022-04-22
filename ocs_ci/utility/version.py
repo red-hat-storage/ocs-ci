@@ -43,6 +43,7 @@ VERSION_4_7 = get_semantic_version("4.7", True)
 VERSION_4_8 = get_semantic_version("4.8", True)
 VERSION_4_9 = get_semantic_version("4.9", True)
 VERSION_4_10 = get_semantic_version("4.10", True)
+VERSION_4_11 = get_semantic_version("4.11", True)
 
 
 def get_semantic_ocs_version_from_config():
