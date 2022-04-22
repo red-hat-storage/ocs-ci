@@ -60,6 +60,50 @@ class TestPostInstallationState(ManageTest):
             )
             assert resource_yaml.get()["status"]["phase"] == "Ready"
 
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.polarion_id("OCS-3909")
+    def test_consumers_ceph_resources(self):
+        """
+        Test that all CephResources of every storageconsumer are in Ready status
+        """
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer_name,
+            )
+            ceph_resources = consumer_yaml.get().get("status")["cephResources"]
+            for resource in ceph_resources:
+                log.info(
+                    f"Verifying Ready status of {resource['name']} resource of {consumer_name}"
+                )
+                assert (
+                    resource["status"] == "Ready"
+                ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
+
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.polarion_id("OCS-3910")
+    def test_consumers_capacity(self):
+        """
+        Test each storageconsumer's capacity and requested capacity.
+        Now only 1Ti value is possible. If more options get added, the test
+        will need to get the value from the consumer cluster's config file
+        """
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer_name,
+            ).get()
+            log.info(f"Verifying capacity of {consumer_name}")
+            assert consumer_yaml["spec"]["capacity"] == "1Ti"
+            log.info(f"Verifying granted capacity of {consumer_name}")
+            assert consumer_yaml["status"]["grantedCapacity"] == "1Ti"
+
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
