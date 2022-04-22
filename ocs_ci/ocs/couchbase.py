@@ -38,10 +38,10 @@ class CouchBase(PillowFight):
         """
         super().__init__(**kwargs)
         self.args = kwargs
-        self.create_namespace(namespace=constants.COUCHBASE_OPERATOR)
         self.pod_obj = OCP(kind="pod", namespace=constants.COUCHBASE_OPERATOR)
         self.ns_obj = OCP(kind="namespace")
         self.couchbase_pod = OCP(kind="pod")
+        self.create_namespace(namespace=constants.COUCHBASE_OPERATOR)
         self.cb_create_cb_secret = False
         self.cb_create_cb_cluster = False
         self.cb_create_bucket = False
