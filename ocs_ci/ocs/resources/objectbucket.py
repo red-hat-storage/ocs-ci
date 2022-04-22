@@ -136,6 +136,7 @@ class ObjectBucket(ABC):
         rgw=None,
         bucketclass=None,
         replication_policy=None,
+        quota=None,
         *args,
         **kwargs,
     ):
@@ -162,6 +163,7 @@ class ObjectBucket(ABC):
                 }
             ]
         )
+        self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -487,6 +489,7 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["additionalConfig"] = self.quota
         if storagecluster_independent_check():
             obc_data["spec"][
                 "storageClassName"
