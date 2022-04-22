@@ -11,9 +11,9 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftovers,
-    tier3,
     skipif_openshift_dedicated,
     skipif_external_mode,
+    system_test,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import E2ETest, config
@@ -36,7 +36,7 @@ from ocs_ci.utility.utils import exec_cmd
 logger = logging.getLogger(__name__)
 
 
-@tier3
+@system_test
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
@@ -168,7 +168,7 @@ class TestMonitorRecovery(E2ETest):
 
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
-        archive_and_mute_ceph_warn()
+        remove_ceph_warn()
 
         self.sanity_helpers.health_check(tries=10)
 
@@ -671,7 +671,7 @@ def corrupt_ceph_monitors():
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
 
-def archive_and_mute_ceph_warn():
+def remove_ceph_warn():
     """
     Archives all ceph crashes and mute warnings
 
