@@ -351,20 +351,6 @@ pvc_4_9 = {
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
 
-storage_class_4_9 = {
-    "volume_binding_mode": (
-        "#storage-class-volume-binding-mode",
-        By.CSS_SELECTOR,
-    ),
-    "wait_for_first_consumer": (
-        "#WaitForFirstConsumer-link",
-        By.CSS_SELECTOR,
-    ),
-    "immediate": ("#Immediate-link", By.CSS_SELECTOR),
-    "new_kms": ("#create-new-kms-connection", By.CSS_SELECTOR),
-    "toggle_switch": ("no-label-switch-on-on", By.ID),
-}
-
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
@@ -403,10 +389,6 @@ page_nav = {
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
-}
-
-page_nav_4_10 = {
-    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -918,7 +900,6 @@ locators = {
         "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
-        "storage_class": {storage_class_4_9},
     },
     "4.8": {
         "login": login,
