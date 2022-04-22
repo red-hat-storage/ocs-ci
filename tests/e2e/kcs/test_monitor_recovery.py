@@ -666,7 +666,7 @@ def corrupt_ceph_monitors():
                     f"Re-spinning monitor: {mon.name} since it did not reach CLBO state"
                 )
                 mon.delete()
-    logging.info("Validating all the monitors are in CLBO state")
+    logger.info("Validating all the monitors are in CLBO state")
     for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
