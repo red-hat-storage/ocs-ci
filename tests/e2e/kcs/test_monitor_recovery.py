@@ -3,6 +3,8 @@ import base64
 import time
 import os
 from os.path import join
+import tempfile
+import re
 
 import pytest
 
@@ -13,14 +15,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_openshift_dedicated,
     skipif_external_mode,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import E2ETest, config
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-import tempfile
-import re
-
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_osd_pods,
@@ -28,20 +28,17 @@ from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
 )
 from ocs_ci.ocs.resources import pod
-
-from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.ocs.ocp import OCP
-
+from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd, exec_cmd
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
 
 @tier3
 @ignore_leftovers
-@pytest.mark.polarion_id("")
+@pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
 @skipif_ocs_version("<4.9")
 @skipif_openshift_dedicated
@@ -53,146 +50,129 @@ class TestMonitorRecovery(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(
+    def mon_recovery_setup(
         self,
-        project_factory,
-        multi_pvc_factory,
         dc_pod_factory,
         mcg_obj,
         bucket_factory,
     ):
         """
-        Creates pvcs, pods and obcs
+        Creates project, pvcs, dc-pods and obcs
 
         """
         self.filename = "sample_file.txt"
-        self.sanity_helpers = Sanity()
-        project = project_factory()
-        rbd_pvcs = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            project=project,
-            size=1,
-            access_modes=[constants.ACCESS_MODE_RWO],
-            num_of_pvc=1,
-            wait_each=True,
-        )
+        self.object_key = "obj-key"
+        self.object_data = "Random string data"
+        self.dd_cmd = f"dd if=/dev/urandom of=/mnt/{self.filename} bs=4M count=3"
+        # self.sanity_helpers = Sanity()
 
-        cephfs_pvcs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            project=project,
-            size=1,
-            access_modes=[constants.ACCESS_MODE_RWX],
-            num_of_pvc=1,
-        )
-
-        # Create deployment-config based pods
+        # Create project, pvc, dc pods
         self.dc_pods = []
-        for rbd_pvc in rbd_pvcs:
-            self.dc_pods.append(
-                dc_pod_factory(
-                    interface=constants.CEPHBLOCKPOOL,
-                    pvc=rbd_pvc,
-                )
+        self.dc_pods.append(
+            dc_pod_factory(
+                interface=constants.CEPHBLOCKPOOL,
             )
-
-        for cephfs_pvc in cephfs_pvcs:
-            self.dc_pods.append(
-                dc_pod_factory(
-                    interface=constants.CEPHFILESYSTEM,
-                    pvc=cephfs_pvc,
-                )
+        )
+        self.dc_pods.append(
+            dc_pod_factory(
+                interface=constants.CEPHFILESYSTEM,
+                access_mode=constants.ACCESS_MODE_RWX,
             )
-        dd_cmd = f"dd if=/dev/urandom of=/tmp/{self.filename} bs=4M count=3"
-        run_cmd(cmd=dd_cmd)
+        )
         for pod_obj in self.dc_pods:
-            pod.upload(
-                pod_obj.name,
-                f"/tmp/{self.filename}",
-                "/mnt/",
-                namespace=project.namespace,
-            )
+            pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
             # Calculate md5sum
             md5sum = pod.cal_md5sum(pod_obj, self.filename)
             pod_obj.pvc.md5sum = md5sum
-        logger.info("IO completed on all pods")
 
-        logger.info("Running ios on OBCs")
-        self.sanity_helpers.obc_put_obj_create_delete(mcg_obj, bucket_factory)
+        logger.info("Putting object on an object bucket")
+        self.bucket_name = bucket_factory(interface="OC")[0].name
+        assert bucket_utils.s3_put_object(
+            s3_obj=mcg_obj,
+            bucketname=self.bucket_name,
+            object_key=self.object_key,
+            data=self.object_data,
+        ), "Failed: PutObject"
 
-    def test_monitor_recovery(self):
+    def test_monitor_recovery(
+        self,
+        dc_pod_factory,
+        mcg_obj,
+        bucket_factory,
+    ):
         """
         Verifies Monitor recovery procedure as per:
         https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.9/
         html-single/troubleshooting_openshift_container_storage/index
 
         """
-        # Initialize mon recovery class
-        mon_recovery = MonitorRecovery()
+        # # Initialize mon recovery class
+        # mon_recovery = MonitorRecovery()
+        #
+        # logger.info("Backing up all the deployments")
+        # mon_recovery.backup_deployments()
+        # mons_revert = mon_recovery.mon_deployments_to_revert()
+        # mds_revert = mon_recovery.mds_deployments_to_revert()
+        #
+        # logger.info("Corrupting ceph monitors by deleting store db")
+        # corrupt_ceph_monitors()
+        #
+        # logger.info("Starting the monitor recovery procedure")
+        # logger.info("Scaling down rook and ocs operators")
+        # mon_recovery.scale_rook_ocs_operators(replica=0)
+        #
+        # logger.info(
+        #     "Patching OSDs to remove LivenessProbe and setting sleep to infinity"
+        # )
+        # mon_recovery.patch_sleep_on_osds()
+        #
+        # logger.info("Getting mon-store from OSDs")
+        # mon_recovery.get_monstore_from_osds()
+        #
+        # logger.info("Patching MONs to sleep infinitely")
+        # mon_recovery.patch_sleep_on_mon()
+        #
+        # logger.info("Updating initial delay on all monitors")
+        # update_mon_initial_delay()
+        #
+        # logger.info("Generating monitor map command using the IPs")
+        # self.mon_map_cmd = generate_monmap_cmd()
+        #
+        # logger.info("Getting ceph keyring from ocs secrets")
+        # self.keyring_files = mon_recovery.get_ceph_keyrings()
+        #
+        # logger.info("Rebuilding Monitors to recover store db")
+        # mon_recovery.monitor_rebuild()
+        #
+        # logger.info("Reverting mon, osd and mgr deployments")
+        # mon_recovery.revert_patches(mons_revert)
+        #
+        # logger.info("Scaling back rook and ocs operators")
+        # mon_recovery.scale_rook_ocs_operators(replica=1)
+        #
+        # logger.info("Sleeping for 150 secs for cluster to stabilize")
+        # time.sleep(150)
+        # logger.info("Recovering CephFS")
+        # mon_recovery.scale_rook_ocs_operators(replica=0)
+        #
+        # logger.info(
+        #     "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
+        # )
+        # mon_recovery.patch_sleep_on_mds()
+        #
+        # logger.info("Resetting the fs")
+        # ceph_fs_recovery()
+        #
+        # logger.info("Reverting MDS deployments")
+        # mon_recovery.revert_patches(mds_revert)
+        #
+        # logger.info("Scaling back rook and ocs operators")
+        # mon_recovery.scale_rook_ocs_operators(replica=1)
+        # archive_and_mute_ceph_warn()
+        #
+        # self.sanity_helpers.health_check(tries=10)
 
-        logger.info("Backing up all the deployments")
-        mon_recovery.backup_deployments()
-        mons_revert = mon_recovery.mon_deployments_to_revert()
-        mds_revert = mon_recovery.mds_deployments_to_revert()
-
-        logger.info("Corrupting ceph monitors by deleting store db")
-        corrupt_ceph_monitors()
-
-        logger.info("Starting the monitor recovery procedure")
-        logger.info("Scaling down rook and ocs operators")
-        mon_recovery.scale_rook_ocs_operators(replica=0)
-
-        logger.info(
-            "Patching OSDs to remove LivenessProbe and setting sleep to infinity"
-        )
-        mon_recovery.patch_sleep_on_osds()
-
-        logger.info("Getting mon-store from OSDs")
-        mon_recovery.get_monstore_from_osds()
-
-        logger.info("Patching MONs to sleep infinitely")
-        mon_recovery.patch_sleep_on_mon()
-
-        logger.info("Updating initial delay on all monitors")
-        update_mon_initial_delay()
-
-        logger.info("Generating monitor map command using the IPs")
-        self.mon_map_cmd = generate_monmap_cmd()
-
-        logger.info("Getting ceph keyring from ocs secrets")
-        self.keyring_files = mon_recovery.get_ceph_keyrings()
-
-        logger.info("Rebuilding Monitors to recover store db")
-        mon_recovery.monitor_rebuild()
-
-        logger.info("Reverting mon, osd and mgr deployments")
-        mon_recovery.revert_patches(mons_revert)
-
-        logger.info("Scaling back rook and ocs operators")
-        mon_recovery.scale_rook_ocs_operators(replica=1)
-
-        logger.info("Sleeping for 150 secs for cluster to stabilize")
-        time.sleep(150)
-        logger.info("Recovering CephFS")
-        mon_recovery.scale_rook_ocs_operators(replica=0)
-
-        logger.info(
-            "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
-        )
-        mon_recovery.patch_sleep_on_mds()
-
-        logger.info("Resetting the fs")
-        ceph_fs_recovery()
-
-        logger.info("Reverting MDS deployments")
-        mon_recovery.revert_patches(mds_revert)
-
-        logger.info("Scaling back rook and ocs operators")
-        mon_recovery.scale_rook_ocs_operators(replica=1)
-        archive_and_mute_ceph_warn()
-
-        self.sanity_helpers.health_check(tries=10)
-
-        logger.info("Verifying md5sum of files")
+        logger.info("Verifying md5sum of files after recovery")
         for pod_obj in self.dc_pods:
             current_md5sum = pod.cal_md5sum(pod_obj, self.filename)
             assert current_md5sum == pod_obj.pvc.md5sum, "Data corruption found"
@@ -200,6 +180,33 @@ class TestMonitorRecovery(E2ETest):
                 f"Verified: md5sum of {self.filename} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
+        # Create new project, pvc, dc pods
+        new_dc_pods = [
+            dc_pod_factory(
+                interface=constants.CEPHBLOCKPOOL,
+            ),
+            dc_pod_factory(
+                interface=constants.CEPHFILESYSTEM,
+            ),
+        ]
+        for pod_obj in new_dc_pods:
+            pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
+
+        logger.info("Getting object after recovery")
+        assert bucket_utils.s3_get_object(
+            s3_obj=mcg_obj,
+            bucketname=self.bucket_name,
+            object_key=self.object_key,
+        ), "Failed: PutObject"
+
+        logger.info("Creating new bucket and write object")
+        new_bucket = bucket_factory(interface="OC")[0].name
+        assert bucket_utils.s3_put_object(
+            s3_obj=mcg_obj,
+            bucketname=new_bucket,
+            object_key=self.object_key,
+            data=self.object_data,
+        ), "Failed: PutObject"
 
 
 class MonitorRecovery(object):
@@ -234,9 +241,10 @@ class MonitorRecovery(object):
         self.dep_ocp.exec_oc_cmd(
             f"scale deployment {constants.ROOK_CEPH_OPERATOR} --replicas={replica}"
         )
-
-        logger.info(f"Scaling ocs operator to replica: {replica} ")
-        self.dep_ocp.exec_oc_cmd(f"scale deployment ocs-operator --replicas={replica}")
+        logger.info(f"Scaling ocs-operator to replica: {replica}")
+        self.dep_ocp.exec_oc_cmd(
+            f"scale deployment {defaults.OCS_OPERATOR_NAME} --replicas={replica}"
+        )
 
     def patch_sleep_on_osds(self):
         """
@@ -396,7 +404,7 @@ class MonitorRecovery(object):
             k_file = k_file.split("/")
             logger.info(f"Importing keyring {k_file[-1]}")
             _exec_cmd_on_pod(
-                cmd=f"ceph-authtool  /tmp/keyring  --import-keyring /tmp/{k_file[-1]}",
+                cmd=f"ceph-authtool /tmp/keyring --import-keyring /tmp/{k_file[-1]}",
                 pod_obj=mon_obj,
             )
 
@@ -702,6 +710,9 @@ def get_ceph_caps(secret_resource):
     Args:
         secret_resource (any): secret resource name
 
+    Returns:
+        str: Auth keyring
+
     """
     keyring = ""
 
@@ -729,7 +740,9 @@ def get_ceph_caps(secret_resource):
 
     for resource in secret_resource:
         resource_obj = ocp.OCP(
-            resource_name=resource, kind="Secret", namespace="openshift-storage"
+            resource_name=resource,
+            kind=constants.SECRET,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
         )
         if constants.CEPHFS_NODE_SECRET in resource:
             keyring = (
@@ -797,6 +810,9 @@ def get_ceph_caps(secret_resource):
 def generate_monmap_cmd():
     """
     Generates monmap-tool command used to rebuild monitors
+
+    Returns:
+        str: Monitor map command
 
     """
     mon_ips_dict = {}
