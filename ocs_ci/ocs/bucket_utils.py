@@ -158,6 +158,72 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
+def copy_objects(
+    podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
+):
+    """
+    Copies a object onto a bucket using s3 cp command
+
+    Args:
+        podobj: Pod object that is used to perform copy operation
+        src_obj: full path to object
+        target: target bucket
+        s3_obj: obc/mcg object
+
+    Returns:
+        None
+    """
+
+    logger.info(f"Copying object {src_obj} to {target}")
+    retrieve_cmd = f"cp {src_obj} {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    podobj.exec_cmd_on_pod(
+        command=craft_s3_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    )
+
+
+def copy_random_individual_objects(
+    podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
+):
+    """
+    Generates random objects and then copies them individually one after the other
+
+    podobj: Pod object used to perform the operation
+    file_dir: file directory name where the generated objects are placed
+    pattern: pattern to follow for objects naming
+    target: target bucket name
+    amount: number of objects to generate
+    s3_obj: MCG/OBC object
+
+    Returns:
+        None
+    """
+    logger.info(f"create objects in {file_dir}")
+    podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
+    object_files = write_random_objects_in_pod(
+        podobj, pattern=pattern, file_dir=file_dir, amount=amount
+    )
+    objects_to_upload = [obj for obj in object_files]
+    for obj in objects_to_upload:
+        src_obj = f"{file_dir}/{obj}"
+        copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
+        logger.info(f"Copied {src_obj}")
+
+
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
     """
     Syncs objects between a target and source directories
