@@ -64,8 +64,8 @@ class TestMonitorRecovery(E2ETest):
         self.object_key = "obj-key"
         self.object_data = "Random string data"
         self.dd_cmd = f"dd if=/dev/urandom of=/mnt/{self.filename} bs=4M count=3"
-        # self.sanity_helpers = Sanity()
 
+        self.sanity_helpers = Sanity()
         # Create project, pvc, dc pods
         self.dc_pods = []
         self.dc_pods.append(
@@ -106,71 +106,71 @@ class TestMonitorRecovery(E2ETest):
         html-single/troubleshooting_openshift_container_storage/index
 
         """
-        # # Initialize mon recovery class
-        # mon_recovery = MonitorRecovery()
-        #
-        # logger.info("Backing up all the deployments")
-        # mon_recovery.backup_deployments()
-        # mons_revert = mon_recovery.mon_deployments_to_revert()
-        # mds_revert = mon_recovery.mds_deployments_to_revert()
-        #
-        # logger.info("Corrupting ceph monitors by deleting store db")
-        # corrupt_ceph_monitors()
-        #
-        # logger.info("Starting the monitor recovery procedure")
-        # logger.info("Scaling down rook and ocs operators")
-        # mon_recovery.scale_rook_ocs_operators(replica=0)
-        #
-        # logger.info(
-        #     "Patching OSDs to remove LivenessProbe and setting sleep to infinity"
-        # )
-        # mon_recovery.patch_sleep_on_osds()
-        #
-        # logger.info("Getting mon-store from OSDs")
-        # mon_recovery.get_monstore_from_osds()
-        #
-        # logger.info("Patching MONs to sleep infinitely")
-        # mon_recovery.patch_sleep_on_mon()
-        #
-        # logger.info("Updating initial delay on all monitors")
-        # update_mon_initial_delay()
-        #
-        # logger.info("Generating monitor map command using the IPs")
-        # self.mon_map_cmd = generate_monmap_cmd()
-        #
-        # logger.info("Getting ceph keyring from ocs secrets")
-        # self.keyring_files = mon_recovery.get_ceph_keyrings()
-        #
-        # logger.info("Rebuilding Monitors to recover store db")
-        # mon_recovery.monitor_rebuild()
-        #
-        # logger.info("Reverting mon, osd and mgr deployments")
-        # mon_recovery.revert_patches(mons_revert)
-        #
-        # logger.info("Scaling back rook and ocs operators")
-        # mon_recovery.scale_rook_ocs_operators(replica=1)
-        #
-        # logger.info("Sleeping for 150 secs for cluster to stabilize")
-        # time.sleep(150)
-        # logger.info("Recovering CephFS")
-        # mon_recovery.scale_rook_ocs_operators(replica=0)
-        #
-        # logger.info(
-        #     "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
-        # )
-        # mon_recovery.patch_sleep_on_mds()
-        #
-        # logger.info("Resetting the fs")
-        # ceph_fs_recovery()
-        #
-        # logger.info("Reverting MDS deployments")
-        # mon_recovery.revert_patches(mds_revert)
-        #
-        # logger.info("Scaling back rook and ocs operators")
-        # mon_recovery.scale_rook_ocs_operators(replica=1)
-        # archive_and_mute_ceph_warn()
-        #
-        # self.sanity_helpers.health_check(tries=10)
+        # Initialize mon recovery class
+        mon_recovery = MonitorRecovery()
+
+        logger.info("Backing up all the deployments")
+        mon_recovery.backup_deployments()
+        mons_revert = mon_recovery.mon_deployments_to_revert()
+        mds_revert = mon_recovery.mds_deployments_to_revert()
+
+        logger.info("Corrupting ceph monitors by deleting store db")
+        corrupt_ceph_monitors()
+
+        logger.info("Starting the monitor recovery procedure")
+        logger.info("Scaling down rook and ocs operators")
+        mon_recovery.scale_rook_ocs_operators(replica=0)
+
+        logger.info(
+            "Patching OSDs to remove LivenessProbe and setting sleep to infinity"
+        )
+        mon_recovery.patch_sleep_on_osds()
+
+        logger.info("Getting mon-store from OSDs")
+        mon_recovery.get_monstore_from_osds()
+
+        logger.info("Patching MONs to sleep infinitely")
+        mon_recovery.patch_sleep_on_mon()
+
+        logger.info("Updating initial delay on all monitors")
+        update_mon_initial_delay()
+
+        logger.info("Generating monitor map command using the IPs")
+        self.mon_map_cmd = generate_monmap_cmd()
+
+        logger.info("Getting ceph keyring from ocs secrets")
+        self.keyring_files = mon_recovery.get_ceph_keyrings()
+
+        logger.info("Rebuilding Monitors to recover store db")
+        mon_recovery.monitor_rebuild()
+
+        logger.info("Reverting mon, osd and mgr deployments")
+        mon_recovery.revert_patches(mons_revert)
+
+        logger.info("Scaling back rook and ocs operators")
+        mon_recovery.scale_rook_ocs_operators(replica=1)
+
+        logger.info("Sleeping for 150 secs for cluster to stabilize")
+        time.sleep(150)
+        logger.info("Recovering CephFS")
+        mon_recovery.scale_rook_ocs_operators(replica=0)
+
+        logger.info(
+            "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
+        )
+        mon_recovery.patch_sleep_on_mds()
+
+        logger.info("Resetting the fs")
+        ceph_fs_recovery()
+
+        logger.info("Reverting MDS deployments")
+        mon_recovery.revert_patches(mds_revert)
+
+        logger.info("Scaling back rook and ocs operators")
+        mon_recovery.scale_rook_ocs_operators(replica=1)
+        archive_and_mute_ceph_warn()
+
+        self.sanity_helpers.health_check(tries=10)
 
         logger.info("Verifying md5sum of files after recovery")
         for pod_obj in self.dc_pods:
