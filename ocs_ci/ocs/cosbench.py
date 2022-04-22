@@ -141,7 +141,7 @@ class Cosbench(object):
               <work type="init" workers="1" config="" />
             </workstage>
             <workstage name="prepare-objects">
-              <work type="prepare" workers="4" config="" />
+              <work type="prepare" workers="16" config="" />
             </workstage>
           </workflow>
         </workload>
@@ -153,6 +153,11 @@ class Cosbench(object):
             start_container if start_container else self.init_container
         )
         self.init_object = start_object if start_object else self.init_object
+        init_container_config = self.generate_container_stage_config(
+            self.range_selector,
+            self.init_container,
+            containers,
+        )
         init_config = self.generate_stage_config(
             self.range_selector,
             self.init_container,
@@ -162,7 +167,7 @@ class Cosbench(object):
         )
         for stage in xml_root.iter("work"):
             if stage.get("type") == "init":
-                stage.set("config", f"cprefix={prefix};{init_config}")
+                stage.set("config", f"cprefix={prefix};{init_container_config}")
             elif stage.get("type") == "prepare":
                 stage.set(
                     "config",
@@ -410,6 +415,25 @@ class Cosbench(object):
             f"objects={selector}({str(start_objects)},{str(end_object)})"
         )
         return xml_config
+
+    @staticmethod
+    def generate_container_stage_config(selector, start_container, end_container):
+        """
+        Generates container config which creates buckets in bulk
+
+        Args:
+            selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
+            start_container (int): Start of containers
+            end_container (int): End of containers
+
+        Returns:
+            (str): Container and object configuration
+
+        """
+        container_config = (
+            f"containers={selector}({str(start_container)},{str(end_container)});"
+        )
+        return container_config
 
     def _create_tmp_xml(self, xml_tree, xml_file_prefix):
         """
