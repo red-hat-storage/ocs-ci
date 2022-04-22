@@ -60,6 +60,29 @@ class TestPostInstallationState(ManageTest):
             )
             assert resource_yaml.get()["status"]["phase"] == "Ready"
 
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.polarion_id("OCS-3909")
+    def test_consumers_ceph_resources(self):
+        """
+        Test that all CephResources of every storageconsumer are in Ready status
+        """
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer_name,
+            )
+            ceph_resources = consumer_yaml.get().get("status")["cephResources"]
+            for resource in ceph_resources:
+                log.info(
+                    f"Verifying Ready status of {resource['name']} resource of {consumer_name}"
+                )
+                assert (
+                    resource["status"] == "Ready"
+                ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
+
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
