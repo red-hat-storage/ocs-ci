@@ -3157,13 +3157,10 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     """
     version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
     terraform_ignition_provider_zip_file = (
-        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
-    )
-    terraform_ignition_provider_dir = (
-        f"terraform-provider-ignition-{version}-linux-amd64"
+        f"terraform-provider-ignition_{version[1:]}_linux_amd64.zip"
     )
     terraform_plugins_path = ".terraform/plugins/linux_amd64/"
-    log.info(f"Downloading terraform ignition proivider version {version}")
+    log.info(f"Downloading terraform ignition provider version {version}")
     previous_dir = os.getcwd()
     os.chdir(terraform_dir)
     url = (
@@ -3174,18 +3171,17 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # Download and untar
     download_file(url, terraform_ignition_provider_zip_file)
-    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+    run_cmd(f"unzip {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)
     move(
-        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
+        f"terraform-provider-ignition_{version}",
         terraform_plugins_path,
     )
 
     # delete the downloaded files
     delete_file(terraform_ignition_provider_zip_file)
-    delete_dir(terraform_ignition_provider_dir)
 
     # return to the previous working directory
     os.chdir(previous_dir)
