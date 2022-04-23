@@ -1,5 +1,6 @@
 import logging
 
+from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config

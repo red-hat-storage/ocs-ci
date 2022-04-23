@@ -343,6 +343,7 @@ pvc_4_8 = {
         "div[class ='col-xs-4 col-sm-2 col-md-2'] span",
         By.CSS_SELECTOR,
     ),
+    "search_pvc": ("input[placeholder='Search by name...']", By.CSS_SELECTOR),
 }
 
 pvc_4_9 = {
@@ -389,6 +390,10 @@ page_nav = {
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+}
+
+page_nav_4_10 = {
+    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
 }
 
 acm_page_nav = {
