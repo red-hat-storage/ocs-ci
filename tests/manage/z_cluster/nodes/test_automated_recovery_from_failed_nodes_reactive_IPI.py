@@ -17,7 +17,6 @@ from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
     wait_for_resource_state,
-    wait_for_rook_ceph_pod_status,
     get_failure_domain,
 )
 from ocs_ci.ocs.node import (
@@ -317,8 +316,8 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
-        assert wait_for_rook_ceph_pod_status(
-            temp_osd, constants.STATUS_TERMINATING, timeout
+        assert pod.wait_for_pods_to_be_in_statuses(
+            [constants.STATUS_TERMINATING], [temp_osd.name], timeout=timeout
         ), (
             f"The pod {osd_real_name} didn't reach the status {constants.STATUS_TERMINATING} "
             f"after {timeout} seconds"

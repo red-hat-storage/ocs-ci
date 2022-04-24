@@ -1938,11 +1938,12 @@ def recover_node_to_ready_state(node_obj):
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
 
-    if not node_obj:
-        log.warning("The node object is not exist")
+    try:
+        node_status = get_node_status(node_obj)
+    except Exception as e:
+        log.info(f"failed to get the node status due to the exception {str(e)}")
         return False
 
-    node_status = get_node_status(node_obj)
     node_name = node_obj.name
     log.info(f"The status of the node {node_name} is {node_status} ")
 
