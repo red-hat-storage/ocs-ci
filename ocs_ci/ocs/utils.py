@@ -930,7 +930,9 @@ def get_helper_pods_output():
     output_describe_mg_helper = ""
     helper_pods = get_pod_name_by_pattern(pattern="helper")
     for helper_pod in helper_pods:
-        helper_pod_obj = get_pod_obj(name=helper_pod, namespace=None)
+        helper_pod_obj = get_pod_obj(
+            name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
         output_describe_mg_helper += (
             f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
         )
