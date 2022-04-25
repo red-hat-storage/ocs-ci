@@ -3,6 +3,7 @@ StorageCluster related functionalities
 """
 import copy
 import logging
+import re
 import tempfile
 import yaml
 
@@ -1148,6 +1149,7 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     3. Security groups are set up correctly
+    4. Storagecluster has the correct properties
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1170,6 +1172,8 @@ def verify_provider_resources():
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
     assert verify_worker_nodes_security_groups()
+
+    verify_provider_storagecluster()
 
 
 def verify_managed_service_networkpolicy():
@@ -1220,3 +1224,43 @@ def verify_managed_alerting_secrets():
             assert secret_ocp_obj.is_exist(
                 resource_name=secret_name
             ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+
+
+def verify_provider_storagecluster():
+    """
+    Verify that storagecluster of the provider passes the following checks:
+    1. allowRemoteStorageConsumers: true
+    2. hostNetwork: true
+    3. matchExpressions:
+    key: node-role.kubernetes.io/worker
+    operator: Exists
+    key: node-role.kubernetes.io/infra
+    operator: DoesNotExist
+    4. storageProviderEndpoint: 10\.\d\.\d\.\d:31659
+    5. annotations:
+    uninstall.ocs.openshift.io/cleanup-policy: delete
+    uninstall.ocs.openshift.io/mode: graceful
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get()["items"][0]
+    log.info(
+        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+    )
+    assert sc_data["spec"]["allowRemoteStorageConsumers"] == True
+    log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
+    assert sc_data["spec"]["hostNetwork"] == True
+    expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]
+    for item in expressions:
+        log.info(f"Verifying {item}")
+        if item["key"] == "node-role.kubernetes.io/worker":
+            assert item["operator"] == "Exists"
+        else:
+            assert item["operator"] == "DoesNotExist"
+    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
+    )
+    annotations = sc_data["metadata"]["annotations"]
+    log.info(f"Annotations: {annotations}")
+    assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
+    assert annotations["uninstall.ocs.openshift.io/mode"] == "graceful"
