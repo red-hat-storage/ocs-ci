@@ -645,10 +645,7 @@ class Deployment(object):
         ):
             self.deploy_odf_addon()
             return
-        else:
-            logger.info("Creating namespace and operator group.")
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
-            self.subscribe_ocs()
+        self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         ocs_version = version.get_semantic_ocs_version_from_config()
