@@ -12,7 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
+from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pvc
@@ -78,8 +78,34 @@ class ROSAOCP(BaseOCPDeployment):
         cluster_details = ocm.get_cluster_details(self.cluster_name)
         cluster_id = cluster_details.get("id")
         ocm.destroy_cluster(self.cluster_name)
+        sample = TimeoutSampler(
+            timeout=1000,
+            sleep=3,
+            func=self.cluster_present(cluster_details.get("display_name")),
+        )
+        if not sample.wait_for_func_status(result=False):
+            raise CommandFailed("Cluster was not deleted")
         rosa.delete_operator_roles(cluster_id)
         rosa.delete_oidc_provider(cluster_id)
+
+    def cluster_present(self, cluster_name_prefix):
+        """
+        Check if the cluster is present in the cluster list, regardless of its
+        state.
+
+        Args:
+            cluster_name_prefix (str): name prefix which identifies a cluster
+
+        Returns:
+            bool: True if a cluster with the same name prefix exists,
+                False otherwise
+
+        """
+        cluster_list = ocm.list_cluster()
+        for cluster in cluster_list:
+            if cluster[0].startswith(cluster_name_prefix):
+                return True
+        return False
 
 
 class ROSA(CloudDeploymentBase):
@@ -109,7 +135,8 @@ class ROSA(CloudDeploymentBase):
 
     def check_cluster_existence(self, cluster_name_prefix):
         """
-        Check cluster existence based on a cluster name.
+        Check cluster existence based on a cluster name. Cluster in Uninstalling
+        phase is not considered to be existing
 
         Args:
             cluster_name_prefix (str): name prefix which identifies a cluster
