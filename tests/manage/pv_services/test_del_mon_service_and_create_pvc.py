@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftovers,
     bugzilla,
+    runs_on_provider,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -24,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +41,13 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     mon services manually
     """
 
+    consumer_cluster_index = None
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # Get the index of consumer cluster
+        consumer_cluster_index = config.get_consumer_indexes_list()[0]
+
     @bugzilla("1858195")
+    @runs_on_provider
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
         argnames=["interface"],
@@ -67,9 +75,16 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         9. Create PVC, should succeeded.
 
         """
+        if self.consumer_cluster_index is not None:
+            # Switch to consumer to create PVC, pod and start IO
+            config.switch_to_consumer(self.consumer_cluster_index)
 
         pod_obj = pod_factory(interface=interface)
         run_io_in_bg(pod_obj)
+
+        if self.consumer_cluster_index is not None:
+            # Switch to provider
+            config.switch_to_provider()
 
         # Get all mon services
         mon_svc = get_services_by_label(
@@ -233,10 +248,17 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         )
         log.info(f"All new mon endpoints are created {list_new_svc}")
 
+        if self.consumer_cluster_index is not None:
+            # Switch to consumer to create PVC, pod and run IO
+            config.switch_to_consumer(self.consumer_cluster_index)
+
         # Create PVC and pods
         log.info(f"Create {interface} PVC")
         pod_obj = pod_factory(interface=interface)
         pod_obj.run_io(storage_type="fs", size="500M")
+
+        if self.consumer_cluster_index is not None:
+            config.switch_to_provider()
 
     @pytest.fixture()
     def validate_all_mon_svc_are_up_at_teardown(self, request):
@@ -306,6 +328,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
     @bugzilla("1969733")
     @skipif_ocs_version("<4.7")
+    @runs_on_provider
     @pytest.mark.polarion_id("OCS-2611")
     def test_del_mon_svc(
         self, multi_pvc_factory, validate_all_mon_svc_are_up_at_teardown
@@ -393,5 +416,12 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         # Validate all storage pods are running
         wait_for_storage_pods()
 
+        if self.consumer_cluster_index is not None:
+            # Switch to consumer to create PVC
+            config.switch_to_consumer(self.consumer_cluster_index)
+
         # Create and delete resources
         self.sanity_helpers.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
+
+        if self.consumer_cluster_index is not None:
+            config.switch_to_provider()
