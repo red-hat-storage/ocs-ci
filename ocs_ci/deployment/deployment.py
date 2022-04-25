@@ -111,6 +111,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
+from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -631,11 +632,23 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
             run_cmd(f"oc create -f {multus_data_yaml.name}")
 
+        disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
+
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
-        self.subscribe_ocs()
+        if (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and live_deployment
+            and not disable_addon
+        ):
+            self.deploy_odf_addon()
+            return
+        else:
+            logger.info("Creating namespace and operator group.")
+            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         ocs_version = version.get_semantic_ocs_version_from_config()
@@ -971,6 +984,22 @@ class Deployment(object):
                 command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
+
+    def deploy_odf_addon(self):
+        """
+        This method deploy ODF addon.
+
+        """
+        logger.info("Deploying odf with ocs addon.")
+        clustername = config.ENV_DATA.get("cluster_name")
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        cmd = (
+            f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
+            f"{ocs_version}.0"
+        )
+        run_ibmcloud_cmd(cmd)
+        time.sleep(120)
+        logger.info("Ocs addon started enabling.")
 
     def deployment_with_ui(self):
         """
