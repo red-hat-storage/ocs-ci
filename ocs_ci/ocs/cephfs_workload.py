@@ -14,6 +14,7 @@ from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
 from ocs_ci.utility.utils import update_container_with_mirrored_image
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 
 
 logger = logging.getLogger(__name__)
@@ -24,12 +25,12 @@ class LogReaderWriterParallel(object):
     """
     This procedure in the test was originally created in the file
     'tests/e2e/workloads/test_data_consistency.py'. I just rearranged it in a class.
-    This is a temporary solution until the issue https://github.com/red-hat-storage/ocs-ci/issues/5724
-    will be completed.
-
     Write and read logfile stored on cephfs volume, from all worker nodes of a
     cluster via k8s Deployment, while fetching content of the stored data via
     oc rsync to check the data locally.
+
+    TO DO: Update the test after the issue https://github.com/red-hat-storage/ocs-ci/issues/5724
+    will be completed.
 
     """
 
@@ -55,7 +56,7 @@ class LogReaderWriterParallel(object):
         # we need to mount the volume on every worker node, so RWX/cephfs
         self.pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
         self.pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
-        if storagecluster_independent_check():
+        if storagecluster_independent_check() and not is_managed_service_cluster():
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
             sc_name = constants.CEPHFILESYSTEM_SC
@@ -138,7 +139,7 @@ class LogReaderWriterParallel(object):
     def fetch_and_validate_data(self):
         """
         while the workload is running, we will try to fetch and validate data
-        from the cephfs volume of the workload 'number_of_fetches' times.
+        from the cephfs volume of the workload.
 
         """
         # if no obvious problem was detected, run the logreader job to validate
