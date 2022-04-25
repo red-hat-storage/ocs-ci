@@ -629,7 +629,7 @@ def start_app_workload(
                     if run_in_bg:
                         log.info(f"Starting {workload} workload in background")
                         executor2 = ThreadPoolExecutor(max_workers=1)
-                        thread3 = executor2.submit(cos.cosbench_full())
+                        thread3 = executor2.submit(cos.cosbench_full)
                         threads.append(thread3)
                         continue
                     else:

@@ -7,7 +7,7 @@ from xml.etree import ElementTree
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -621,6 +621,7 @@ class Cosbench(object):
         Cosbench cleanup
 
         """
+        switch_to_project(constants.COSBENCH_PROJECT)
         logger.info("Deleting Cosbench pod, configmap and namespace")
         self.cosbench_pod.delete()
         self.cosbench_config.delete()
