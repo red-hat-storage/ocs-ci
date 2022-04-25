@@ -16,7 +16,7 @@ def test_ocs_monkey():
     ocs_monkety_dir = "/tmp/ocs-monkey"
     # ocs-monkey run time in seconds
     run_time = 3600
-    clone_repo(constants.OCS_MONKEY_REPOSITORY, ocs_monkety_dir)
+    clone_repo(constants.OCS_MONKEY_REPOSITORY, ocs_monkety_dir, clone_type="shallow")
     run_cmd(f"pip install -r {os.path.join(ocs_monkety_dir, 'requirements.txt')}")
     workload_run_cmd = f"python workload_runner.py -t {run_time}"
     chaos_runner_cmd = "python chaos_runner.py"

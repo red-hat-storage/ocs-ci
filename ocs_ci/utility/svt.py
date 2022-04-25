@@ -14,7 +14,7 @@ def svt_project_clone():
     """
     This function clones the SVT project.
     """
-    clone_repo("https://github.com/openshift/svt.git", "/tmp/svt")
+    clone_repo("https://github.com/openshift/svt.git", "/tmp/svt", clone_type="shallow")
 
 
 def svt_create_venv_setup():
