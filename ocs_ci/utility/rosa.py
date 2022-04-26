@@ -120,6 +120,115 @@ def create_cluster(cluster_name, version, region):
         json.dump(cluster_info, f)
 
 
+def appliance_mode_cluster(cluster_name, ocp_version, region):
+    """
+    Create appliance mode provider cluster
+
+    Args:
+        cluster_name (str): Cluster name
+        ocp_version (str): cluster version
+        region (str): Cluster region
+
+    """
+    addon_name = config.ENV_DATA.get("addon_name", "")
+    size = config.ENV_DATA["size"]
+    public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+    subnet_ids = config.ENV_DATA["subnet_ids"]
+    notification_email_0 = config.REPORTING.get("notification_email_0")
+    notification_email_1 = config.REPORTING.get("notification_email_1")
+    notification_email_2 = config.REPORTING.get("notification_email_2")
+    region = config.ENV_DATA.get("region", "")
+    if not public_key:
+        raise ConfigurationError(
+            "Public key for Managed Service not defined.\n"
+            "Expected following configuration in auth.yaml file:\n"
+            "managed_service:\n"
+            '  private_key: "..."\n'
+            '  public_key: "..."'
+        )
+    public_key_only = remove_header_footer_from_key(public_key)
+    cmd = (
+        f"rosa create service --type {addon_name} --name {cluster_name} "
+        f"--size {size} --onboarding-validation-key {public_key_only} "
+        f"--subnet-ids {subnet_ids}"
+    )
+    if notification_email_0:
+        cmd = cmd + f" --notification-email-0 {notification_email_0}"
+    if notification_email_1:
+        cmd = cmd + f" --notification-email-1 {notification_email_1}"
+    if notification_email_2:
+        cmd = cmd + f" --notification-email-2 {notification_email_2}"
+    if region:
+        cmd = cmd + f" --region {region}"
+
+    utils.run_cmd(cmd, timeout=1200)
+    logger.info("Waiting for ROSA cluster status changed to waiting or pending state")
+    for cluster_info in utils.TimeoutSampler(
+        4500, 30, ocm.get_cluster_details, cluster_name
+    ):
+        status = cluster_info["status"]["state"]
+        logger.info(f"Current installation status: {status}")
+        if status == "waiting" or status == "pending":
+            logger.info(f"Cluster is in {status} state")
+            break
+    create_operator_roles(cluster_name)
+    create_oidc_provider(cluster_name)
+
+    logger.info("Waiting for installation of ROSA cluster")
+    for cluster_info in utils.TimeoutSampler(
+        4500, 30, ocm.get_cluster_details, cluster_name
+    ):
+        status = cluster_info["status"]["state"]
+        logger.info(f"Current installation status: {status}")
+        if status == "ready":
+            logger.info("Cluster was installed")
+            break
+    if cluster_info["status"]["state"] == "ready":
+        for addon_info in utils.TimeoutSampler(
+            7200, 30, get_addon_info, cluster_name, addon_name
+        ):
+            logger.info(f"Current addon installation info: " f"{addon_info}")
+            if "ready" in addon_info:
+                logger.info(f"Addon {addon_name} was installed")
+                break
+            if "failed" in addon_info:
+                raise ManagedServiceAddonDeploymentError(
+                    f"Addon {addon_name} failed to be installed"
+                )
+        logger.info("Waiting for ROSA service ready status")
+    for service_status in utils.TimeoutSampler(
+        7200, 30, get_rosa_service_details, cluster_name
+    ):
+        if "ready" in service_status:
+            logger.info(f"service {cluster_name} is ready")
+            break
+        elif "failed" in service_status:
+            logger.info(f"service {cluster_name} is ready")
+            break
+        else:
+            logger.info(f"Current service creation status: {service_status}")
+
+
+def get_rosa_service_details(cluster):
+    """
+    Returns info about the rosa service cluster.
+
+    Args:
+        cluster (str): Cluster name.
+
+    """
+    cmd = "rosa list services"
+    # cmd = f"rosa list services -o json --region {region}"
+    services_details = utils.run_cmd(cmd, 1200)
+    # services_details = json.loads(out)
+    for service_info in services_details.splitlines():
+        if cluster in service_info:
+            return service_info
+    # Todo : update this function when -o json get supported in rosa services command
+    # TODO : need exception handling
+    return json.loads(service_info)
+
+
 def get_latest_rosa_version(version):
     """
     Returns latest available z-stream version available for ROSA.
