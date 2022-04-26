@@ -829,6 +829,7 @@ VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
+VERSIONS_TF_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "versions.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"

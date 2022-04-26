@@ -6,7 +6,7 @@ import glob
 import json
 import logging
 import os
-from shutil import rmtree
+from shutil import rmtree, copy2
 import time
 
 import tempfile
@@ -422,6 +422,10 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # git clone repo from openshift installer
             clone_openshift_installer()
+
+            # add provider version for terraform
+            # This is ONLY to support terraform version 0.12.31
+            copy2(constants.VERSIONS_TF_FILE, constants.VSPHERE_DIR)
 
             # generate terraform variable file
             generate_terraform_vars_and_update_machine_conf()
