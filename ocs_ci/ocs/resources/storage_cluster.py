@@ -1246,9 +1246,9 @@ def verify_provider_storagecluster():
     log.info(
         f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
     )
-    assert sc_data["spec"]["allowRemoteStorageConsumers"] == True
+    assert sc_data["spec"]["allowRemoteStorageConsumers"]
     log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
-    assert sc_data["spec"]["hostNetwork"] == True
+    assert sc_data["spec"]["hostNetwork"]
     expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]
     for item in expressions:
         log.info(f"Verifying {item}")
