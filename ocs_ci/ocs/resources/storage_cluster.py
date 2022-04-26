@@ -1236,7 +1236,7 @@ def verify_provider_storagecluster():
     operator: Exists
     key: node-role.kubernetes.io/infra
     operator: DoesNotExist
-    4. storageProviderEndpoint: 10\.\d\.\d\.\d:31659
+    4. storageProviderEndpoint: IP:31659
     5. annotations:
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
