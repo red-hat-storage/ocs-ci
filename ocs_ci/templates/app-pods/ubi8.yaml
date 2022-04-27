@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nsfs-interface
+  namespace: openshift-storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nsfs-interface
+  template:
+    metadata:
+      labels:
+        app: nsfs-interface
+    spec:
+      containers:
+      - image: registry.access.redhat.com/ubi8/ubi:8.5-214
+        command: ['/bin/sh']
+        stdin: true
+        tty: true
+        imagePullPolicy: IfNotPresent
+        name: ubi8
+        volumeMounts:
+        - name: null
+          mountPath: null
+      volumes:
+        - name: null
+          persistentVolumeClaim:
+            claimName: null
+      securityContext:
+        runAsUser: 0

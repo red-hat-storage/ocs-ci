@@ -6,12 +6,16 @@ import re
 import tarfile
 from pathlib import Path
 
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.utility import version
-from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
+from ocs_ci.ocs.constants import (
+    OPENSHIFT_STORAGE_NAMESPACE,
+    MANAGED_SERVICE_PLATFORMS,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +63,12 @@ class MustGather(object):
         ocs_version = float(
             f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         )
-        if self.type_log == "OTHERS" and storagecluster_independent_check():
+        if (
+            self.type_log == "OTHERS"
+            and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
+        ):
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_MANAGED_SERVICES"]
+        elif self.type_log == "OTHERS" and storagecluster_independent_check():
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
@@ -229,7 +238,8 @@ class MustGather(object):
         Validate must-gather
 
         """
-        self.verify_noobaa_diagnostics()
+        if config.ENV_DATA["platform"] not in MANAGED_SERVICE_PLATFORMS:
+            self.verify_noobaa_diagnostics()
         self.validate_file_size()
         self.validate_expected_files()
         self.print_invalid_files()

@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     ignore_leftover_label,
-    skipif_managed_service,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -23,13 +22,13 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers, disruption_helpers
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
 @tier4
 @tier4c
-@skipif_managed_service
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
@@ -94,10 +93,21 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
     pvc_size = 5
 
     @pytest.fixture()
-    def setup(self, interface, multi_pvc_factory, pod_factory):
+    def setup(self, request, interface, multi_pvc_factory, pod_factory):
         """
         Create PVCs and pods
         """
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            # Get the index of current consumer cluster
+            self.consumer_cluster_index = config.cur_index
+
+            def teardown():
+                # Switching to provider cluster context will be done during the test case.
+                # Switch back to consumer cluster context after the test case.
+                config.switch_to_consumer(self.consumer_cluster_index)
+
+            request.addfinalizer(teardown)
+
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
@@ -183,10 +193,26 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         Delete resource 'resource_to_delete' while PVCs creation, Pods
         creation and IO operation are progressing.
         """
+        # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
+        # Consumer cluster will be the primary cluster. Switching to provider cluster is required to get ceph pods
+        switch_to_provider_needed = (
+            True
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            )
+            and (resource_to_delete in ["mds", "mon", "mgr", "osd"])
+            else False
+        )
+
         num_of_new_pvcs = 5
         pvc_objs, io_pods, pvc_objs_new_pods, access_modes = setup
         proj_obj = pvc_objs[0].project
         storageclass = pvc_objs[0].storageclass
+
+        if switch_to_provider_needed:
+            # Switch to provider cluster context to get ceph pods
+            config.switch_to_provider()
 
         pod_functions = {
             "mds": partial(get_mds_pods),
@@ -207,6 +233,10 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Get number of pods of type 'resource_to_delete'
         initial_pods_num = len(pod_functions[resource_to_delete]())
+
+        if switch_to_provider_needed:
+            # Switch back to consumer cluster context to access PVCs and pods
+            config.switch_to_consumer(self.consumer_cluster_index)
 
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
@@ -328,6 +358,10 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         for pod_obj in all_pod_objs:
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
+        if switch_to_provider_needed:
+            # Switch to provider cluster context to get ceph pods
+            config.switch_to_provider()
+
         # Verify number of 'resource_to_delete' type pods
         final_pods_num = len(pod_functions[resource_to_delete]())
         assert final_pods_num == initial_pods_num, (
@@ -336,6 +370,10 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             f"{initial_pods_num}. Total number of pods present now: "
             f"{final_pods_num}"
         )
+
+        if switch_to_provider_needed:
+            # Switch back to consumer cluster context
+            config.switch_to_consumer(self.consumer_cluster_index)
 
         # Verify volumes are unmapped from nodes after deleting the pods
         node_pv_mounted = helpers.verify_pv_mounted_on_node(node_pv_dict)

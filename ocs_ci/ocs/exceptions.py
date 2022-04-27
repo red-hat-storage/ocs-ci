@@ -472,5 +472,21 @@ class BenchmarkTestFailed(Exception):
     pass
 
 
+class ACMClusterDeployException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
+    pass
+
+
+class ClusterNotFoundException(Exception):
+    pass
+
+
+class AlertingError(Exception):
+    pass
+
+
+class AuthError(Exception):
     pass

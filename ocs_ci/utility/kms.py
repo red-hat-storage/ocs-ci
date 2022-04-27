@@ -12,6 +12,7 @@ import shlex
 import tempfile
 import subprocess
 from subprocess import CalledProcessError
+from semantic_version import Version
 import base64
 
 from ocs_ci.framework import config, merge_dict
@@ -37,6 +38,7 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    encode,
 )
 
 
@@ -140,6 +142,12 @@ class Vault(KMS):
         self.vault_unseal()
         if config.ENV_DATA.get("use_vault_namespace"):
             self.vault_create_namespace()
+        if config.ENV_DATA.get("use_auth_path"):
+            self.cluster_id = get_running_cluster_id()
+            self.vault_kube_auth_path = (
+                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+            )
         self.vault_create_backend_path()
         self.create_ocs_vault_resources()
 
@@ -357,7 +365,10 @@ class Vault(KMS):
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
             self.create_ocs_kube_auth_resources()
-            self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+            self.vault_kube_auth_setup(
+                auth_path=self.vault_kube_auth_path,
+                token_reviewer_name=self.vault_cwd_kms_sa_name,
+            )
             self.create_vault_kube_auth_role(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                 role_name=self.vault_kube_auth_role,
@@ -372,10 +383,7 @@ class Vault(KMS):
             # create oc resource secret for token
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
             # token has to base64 encoded (with padding)
-            token_data["data"]["token"] = base64.b64encode(
-                # encode() because b64encode expects a byte type
-                self.vault_path_token.encode()
-            ).decode()  # decode() because b64encode returns a byte type
+            token_data["data"]["token"] = encode(self.vault_path_token)
             self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
@@ -383,7 +391,10 @@ class Vault(KMS):
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
-        connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.10"):
+            connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        else:
+            connection_data["data"].pop("VAULT_AUTH_METHOD")
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
@@ -399,8 +410,13 @@ class Vault(KMS):
             connection_data["data"][
                 "VAULT_AUTH_KUBERNETES_ROLE"
             ] = constants.VAULT_KUBERNETES_AUTH_ROLE
+
         else:
             connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
+        if config.ENV_DATA.get("use_auth_path"):
+            connection_data["data"]["VAULT_AUTH_MOUNT_PATH"] = self.vault_kube_auth_path
+        else:
+            connection_data["data"].pop("VAULT_AUTH_MOUNT_PATH")
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def vault_unseal(self):
@@ -1038,12 +1054,10 @@ class Vault(KMS):
 
         # enable kubernetes auth method
         if auth_path and auth_namespace:
-            self.vault_kube_auth_path = auth_path
             self.vault_kube_auth_namespace = auth_namespace
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
-            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -path={auth_path} kubernetes"
 
         elif auth_namespace:

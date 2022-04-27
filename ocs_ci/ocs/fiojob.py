@@ -288,6 +288,38 @@ def delete_fio_data(fio_job_file, delete_check_func):
         raise Exception(error_msg)
 
 
+def get_sc_name(fixture_name):
+    """
+    Return storage class name based on fixture name suffix.
+    """
+    if fixture_name.endswith("rbd"):
+        if config.DEPLOYMENT.get("external_mode"):
+            storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        else:
+            storage_class_name = constants.DEFAULT_STORAGECLASS_RBD
+    elif fixture_name.endswith("cephfs"):
+        if config.DEPLOYMENT.get("external_mode"):
+            storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        else:
+            storage_class_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+    else:
+        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    return storage_class_name
+
+
+def get_pool_name(fixture_name):
+    """
+    Return ceph pool name based on fixture name suffix.
+    """
+    if fixture_name.endswith("rbd"):
+        ceph_pool_name = "ocs-storagecluster-cephblockpool"
+    elif fixture_name.endswith("cephfs"):
+        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+    else:
+        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    return ceph_pool_name
+
+
 def workload_fio_storageutilization(
     fixture_name,
     project,
@@ -359,15 +391,8 @@ def workload_fio_storageutilization(
     if target_size is not None and target_percentage is not None:
         raise ValueError(val_err_msg + ", not both.")
 
-    # TODO: move out storage class names
-    if fixture_name.endswith("rbd"):
-        storage_class_name = "ocs-storagecluster-ceph-rbd"
-        ceph_pool_name = "ocs-storagecluster-cephblockpool"
-    elif fixture_name.endswith("cephfs"):
-        storage_class_name = "ocs-storagecluster-cephfs"
-        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
-    else:
-        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    storage_class_name = get_sc_name(fixture_name)
+    ceph_pool_name = get_pool_name(fixture_name)
 
     # make sure we communicate what is going to happen
     logger.info(

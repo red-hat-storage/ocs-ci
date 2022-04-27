@@ -16,6 +16,7 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -146,22 +147,29 @@ class ROSA(CloudDeploymentBase):
             logger.info("Running OCS basic installation")
         rosa.install_odf_addon(self.cluster_name)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-mon",
-            resource_count=3,
-            timeout=600,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-osd",
-            resource_count=3,
-            timeout=600,
-        )
+
+        if config.ENV_DATA.get("cluster_type") != "consumer":
+            # Check for Ceph pods
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector=constants.MON_APP_LABEL,
+                resource_count=3,
+                timeout=600,
+            )
+            assert pod.wait_for_resource(
+                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector=constants.OSD_APP_LABEL,
+                resource_count=3,
+                timeout=600,
+            )
+
+        if config.DEPLOYMENT.get("pullsecret_workaround"):
+            update_pull_secret()
+        if config.ENV_DATA.get("cluster_type") == "consumer":
+            patch_consumer_toolbox()
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)

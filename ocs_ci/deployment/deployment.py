@@ -111,6 +111,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
+from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -154,12 +155,12 @@ class Deployment(object):
 
         pass
 
-    def deploy_cluster(self, log_cli_level="DEBUG"):
+    def do_deploy_ocp(self, log_cli_level):
         """
-        We are handling both OCP and OCS deployment here based on flags
-
+        Deploy OCP
         Args:
-            log_cli_level (str): log level for installer (default: DEBUG)
+            log_cli_level (str): log level for the installer
+
         """
         if not config.ENV_DATA["skip_ocp_deployment"]:
             if is_cluster_running(self.cluster_path):
@@ -175,6 +176,76 @@ class Deployment(object):
                         collect_ocs_logs("deployment", ocs=False)
                     raise
 
+    def do_deploy_submariner(self):
+        """
+        Deploy Submariner operator
+
+        """
+        # Multicluster operations
+        if config.multicluster:
+            # Configure submariner only on non-ACM clusters
+            submariner = Submariner()
+            submariner.deploy()
+
+    def do_deploy_ocs(self):
+        """
+        Deploy OCS/ODF and run verification as well
+
+        """
+        if not config.ENV_DATA["skip_ocs_deployment"]:
+            for i in range(config.nclusters):
+                if config.multicluster and config.get_acm_index() == i:
+                    continue
+                config.switch_ctx(i)
+                try:
+                    self.deploy_ocs()
+
+                    if config.REPORTING["collect_logs_on_success_run"]:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                except Exception as e:
+                    logger.error(e)
+                    if config.REPORTING["gather_on_deploy_failure"]:
+                        # Let's do the collections separately to guard against one
+                        # of them failing
+                        collect_ocs_logs("deployment", ocs=False)
+                        collect_ocs_logs("deployment", ocp=False)
+                    raise
+            config.reset_ctx()
+            # Run ocs_install_verification here only in case of multicluster.
+            # For single cluster, test_deployment will take care.
+            if config.multicluster:
+                for i in range(config.multicluster):
+                    if config.get_acm_index() == i:
+                        continue
+                    else:
+                        config.switch_ctx(i)
+                        ocs_registry_image = config.DEPLOYMENT.get(
+                            "ocs_registry_image", None
+                        )
+                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
+                config.reset_ctx()
+        else:
+            logger.warning("OCS deployment will be skipped")
+
+    def do_deploy_rdr(self):
+        """
+        Call Regional DR deploy
+
+        """
+        # Multicluster: Handle all ODF multicluster DR ops
+        if config.multicluster:
+            dr_conf = self.get_rdr_conf()
+            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
+            deploy_dr.deploy()
+
+    def deploy_cluster(self, log_cli_level="DEBUG"):
+        """
+        We are handling both OCP and OCS deployment here based on flags
+
+        Args:
+            log_cli_level (str): log level for installer (default: DEBUG)
+        """
+        self.do_deploy_ocp(log_cli_level)
         # Deployment of network split scripts via machineconfig API happens
         # before OCS deployment.
         if config.DEPLOYMENT.get("network_split_setup"):
@@ -209,53 +280,9 @@ class Deployment(object):
             except Exception as e:
                 logger.error(e)
 
-        # Multicluster operations
-        if config.multicluster:
-            # Configure submariner only on non-ACM clusters
-            submariner = Submariner()
-            submariner.deploy()
-
-        if not config.ENV_DATA["skip_ocs_deployment"]:
-            for i in range(config.nclusters):
-                if config.multicluster and config.get_acm_index() == i:
-                    continue
-                config.switch_ctx(i)
-                try:
-                    self.deploy_ocs()
-
-                    if config.REPORTING["collect_logs_on_success_run"]:
-                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
-                except Exception as e:
-                    logger.error(e)
-                    if config.REPORTING["gather_on_deploy_failure"]:
-                        # Let's do the collections separately to guard against one
-                        # of them failing
-                        collect_ocs_logs("deployment", ocs=False)
-                        collect_ocs_logs("deployment", ocp=False)
-                    raise
-            config.reset_ctx()
-
-            # Run ocs_install_verification here only in case of multicluster.
-            # For single cluster, test_deployment will take care.
-            if config.multicluster:
-                for i in range(config.multicluster):
-                    if config.get_acm_index() == i:
-                        continue
-                    else:
-                        config.switch_ctx(i)
-                        ocs_registry_image = config.DEPLOYMENT.get(
-                            "ocs_registry_image", None
-                        )
-                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
-                config.reset_ctx()
-        else:
-            logger.warning("OCS deployment will be skipped")
-
-        # Multicluster: Handle all ODF multicluster DR ops
-        if config.multicluster:
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
-            deploy_dr.deploy()
+        self.do_deploy_submariner()
+        self.do_deploy_ocs()
+        self.do_deploy_rdr()
 
     def get_rdr_conf(self):
         """
@@ -473,13 +500,57 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
-        logger.info("Sleeping for 90 seconds after subscribing OCS")
-        time.sleep(90)
+        self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
             csv_name = package_manifest.get_current_csv(channel=custom_channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             csv.wait_for_phase("Installing", timeout=60)
+        self.wait_for_csv(ocs_operator_name)
+        logger.info("Sleeping for 30 seconds after CSV created")
+        time.sleep(30)
+
+    def wait_for_subscription(self, subscription_name):
+        """
+        Wait for the subscription to appear
+
+        Args:
+            subscription_name (str): Subscription name pattern
+
+        """
+        ocp.OCP(kind="subscription", namespace=self.namespace)
+        for sample in TimeoutSampler(
+            300, 10, ocp.OCP, kind="subscription", namespace=self.namespace
+        ):
+            subscriptions = sample.get().get("items", [])
+            for subscription in subscriptions:
+                found_subscription_name = subscription.get("metadata", {}).get(
+                    "name", ""
+                )
+                if subscription_name in found_subscription_name:
+                    logger.info(f"Subscription found: {found_subscription_name}")
+                    return
+                logger.debug(f"Still waiting for the subscription: {subscription_name}")
+
+    def wait_for_csv(self, csv_name):
+        """
+        Wait for the CSV to appear
+
+        Args:
+            csv_name (str): CSV name pattern
+
+        """
+        ocp.OCP(kind="subscription", namespace=self.namespace)
+        for sample in TimeoutSampler(
+            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
+        ):
+            csvs = sample.get().get("items", [])
+            for csv in csvs:
+                found_csv_name = csv.get("metadata", {}).get("name", "")
+                if csv_name in found_csv_name:
+                    logger.info(f"CSV found: {found_csv_name}")
+                    return
+                logger.debug(f"Still waiting for the CSV: {csv_name}")
 
     def get_arbiter_location(self):
         """
@@ -561,10 +632,19 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
             run_cmd(f"oc create -f {multus_data_yaml.name}")
 
+        disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
+
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
+        if (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and live_deployment
+            and not disable_addon
+        ):
+            self.deploy_odf_addon()
+            return
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -901,6 +981,22 @@ class Deployment(object):
                 command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
+
+    def deploy_odf_addon(self):
+        """
+        This method deploy ODF addon.
+
+        """
+        logger.info("Deploying odf with ocs addon.")
+        clustername = config.ENV_DATA.get("cluster_name")
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        cmd = (
+            f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
+            f"{ocs_version}.0"
+        )
+        run_ibmcloud_cmd(cmd)
+        time.sleep(120)
+        logger.info("Ocs addon started enabling.")
 
     def deployment_with_ui(self):
         """

@@ -139,6 +139,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
     ),
 )
 
+skipif_mcg_only = pytest.mark.skipif(
+    config.ENV_DATA["mcg_only_deployment"],
+    reason="This test cannot run on MCG-Only deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
@@ -299,6 +304,11 @@ skipif_disconnected_cluster = pytest.mark.skipif(
     reason="Test will not run on disconnected clusters",
 )
 
+skipif_proxy_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("proxy") is True,
+    reason="Test will not run on proxy clusters",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
@@ -389,3 +399,6 @@ magenta_squad = pytest.mark.magenta_squad
 orange_squad = pytest.mark.orange_squad
 purple_squad = pytest.mark.purple_squad
 red_squad = pytest.mark.red_squad
+
+# Marks to identify the cluster type in which the test case should run
+runs_on_provider = pytest.mark.runs_on_provider
