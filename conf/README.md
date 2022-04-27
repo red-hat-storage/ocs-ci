@@ -228,7 +228,7 @@ higher priority).
 * `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
-
+* `ms_env_type` - to choose managed service environment type staging or production, default set to staging
 #### UPGRADE
 
 Upgrade related configuration data.
