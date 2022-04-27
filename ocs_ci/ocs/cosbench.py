@@ -379,11 +379,12 @@ class Cosbench(object):
             return self.workload_id, workload_name
 
         if result:
-            self.get_performance_result(
+            throughput, bandwidth = self.get_performance_result(
                 workload_id=self.workload_id,
                 workload_name=workload_name,
                 size=size,
             )
+            return throughput, bandwidth
         else:
             return self.workload_id, workload_name
 
@@ -637,3 +638,4 @@ class Cosbench(object):
         logger.info(
             f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
         )
+        return throughput_data, bandwidth_data
