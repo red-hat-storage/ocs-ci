@@ -2064,7 +2064,8 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
         clone_type (str): type of clone (shallow, blobless, treeless). If any
-            parameter is passed other than above 3 mentioned, its considered as normal clone
+            parameter is passed other than above 3 mentioned, its considered as normal clone.
+            By default, shallow clone will be used.
 
     """
     if clone_type == "shallow":
