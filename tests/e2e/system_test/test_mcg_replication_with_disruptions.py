@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version, skipif_mcg_only
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier2, system_test
-from ocs_ci.ocs.node import get_worker_nodes, get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     write_random_test_objects_to_bucket,
@@ -15,9 +15,9 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.resources.pod import (
-    get_pod_objs,
     delete_pods,
     wait_for_pods_to_be_running,
+    get_rgw_pods,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
@@ -158,11 +158,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             tries=60,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
-        retry(
-            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
-            delay=15,
-        )(wait_for_nodes_status(timeout=1800))
         wait_for_pods_to_be_running(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Nodes rebooted successfully!!")
 
@@ -225,11 +220,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         pod_names = get_pod_name_by_pattern(
             "rgw", namespace=config.ENV_DATA["cluster_namespace"]
         )
-        pod_objs = get_pod_objs(
-            pod_names=pod_names,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            raise_pod_not_found_error=True,
-        )
+        pod_objs = get_rgw_pods(namespace=config.ENV_DATA["cluster_namespace"])
         delete_pods(pod_objs=pod_objs)
         wait_for_pods_to_be_running(
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
