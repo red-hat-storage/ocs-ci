@@ -68,7 +68,13 @@ def create_cluster(cluster_name, version, region):
         cmd += " --mode auto"
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
         aws = AWSUtil()
-        subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
+        subnet_ids = aws.get_cluster_subnet_ids(provider_name)
+        if not subnet_ids:
+            raise ValueError(
+                f"No subnets were found for provider {provider_name} "
+                f"in region {region}"
+            )
+        subnet_id = ",".join(subnet_ids)
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
     utils.run_cmd(cmd, timeout=1200)
