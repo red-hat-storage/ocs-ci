@@ -278,10 +278,7 @@ class Deployment(object):
             config.ENV_DATA.get("deploy_acm_hub_cluster")
             and ocp_version >= version.VERSION_4_9
         ):
-            try:
-                self.deploy_acm_hub()
-            except Exception as e:
-                logger.error(e)
+            self.deploy_acm_hub()
 
         self.do_deploy_submariner()
         self.do_deploy_ocs()
