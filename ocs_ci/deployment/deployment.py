@@ -659,6 +659,9 @@ class Deployment(object):
                 ocs_operator_names.append(defaults.MCG_OPERATOR)
             else:
                 ocs_operator_names.append(defaults.NOOBAA_OPERATOR)
+            # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
+            if live_deployment and ocs_version == version.VERSION_4_9:
+                ocs_operator_names.remove(defaults.MCG_OPERATOR)
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
 
