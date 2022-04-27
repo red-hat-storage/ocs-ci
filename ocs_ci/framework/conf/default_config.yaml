@@ -205,8 +205,10 @@ ENV_DATA:
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
 
-  #Managed service - Managed StorageCluster size in TiB
+  # Managed service git stat  default configurations
+  # Managed StorageCluster size in TiB
   size: '20'
+  ms_env_type: 'staging'
 
 # This section is related to upgrade
 UPGRADE:
