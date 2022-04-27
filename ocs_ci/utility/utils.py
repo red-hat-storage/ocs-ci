@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedImage,
+    UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
 )
@@ -2063,9 +2064,12 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         location (str): path where the repository will be cloned to
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
-        clone_type (str): type of clone (shallow, blobless, treeless). If any
-            parameter is passed other than above 3 mentioned, its considered as normal clone.
-            By default, shallow clone will be used.
+        clone_type (str): type of clone (shallow, blobless, treeless and normal)
+            By default, shallow clone will be used. For normal clone use
+            clone_type as "normal".
+
+    Raises:
+        UnknownCloneTypeException: In case of incorrect clone_type is used
 
     """
     if clone_type == "shallow":
@@ -2077,8 +2081,10 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         git_params = "--filter=blob:none"
     elif clone_type == "treeless":
         git_params = "--filter=tree:0"
-    else:
+    elif clone_type == "normal":
         git_params = ""
+    else:
+        raise UnknownCloneTypeException
 
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
