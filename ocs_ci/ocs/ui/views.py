@@ -383,7 +383,6 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
-    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
     "drop_down_projects": (
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
@@ -831,8 +830,7 @@ validation_4_9 = {
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
-        "//div[@class='odf-storageSystemPopup__item--margin']"
-        "//a[contains(text(),'ocs-external-storagecluster-storagesystem')]",
+        "(//a[contains(text(),'ocs-external-storagecluster-storagesystem')])[3]",
         By.XPATH,
     ),
     "storagesystem-details": (

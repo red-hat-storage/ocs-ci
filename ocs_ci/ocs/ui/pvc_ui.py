@@ -96,6 +96,7 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
+        time.sleep(1)
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
@@ -262,6 +263,7 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
+        time.sleep(1)
         logger.info(f"Go to PVC {pvc_name} page")
         self.do_click(get_element_type(pvc_name))
 

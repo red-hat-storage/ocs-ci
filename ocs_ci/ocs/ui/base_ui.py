@@ -389,7 +389,10 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_10:
+        if (
+            self.ocp_version_full >= version.VERSION_4_10
+            and ocs_version >= version.VERSION_4_10
+        ):
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
@@ -636,11 +639,10 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.10"):
-
+        if self.ocp_version_full >= version.VERSION_4_10:
+            time.sleep(1)
             default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//*[@data-test='showSystemSwitch']"
+                "//span[@class='pf-c-switch__toggle']"
             )
 
             if (
@@ -658,9 +660,8 @@ class PageNavigator(BaseUI):
             timeout=10,
         )
         if wait_for_project:
-            logger.info(f"Namespace {project_name} selected")
-            time.sleep(2)
             self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            logger.info(f"Namespace {project_name} selected")
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")
 
