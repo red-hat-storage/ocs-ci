@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     config,
 )
 from ocs_ci.helpers.helpers import (
@@ -50,6 +52,8 @@ else:
 @skipif_ocs_version("<4.7")
 @kms_config_required
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestRbdPvEncryption(ManageTest):
     """
     Test to verify RBD PV encryption

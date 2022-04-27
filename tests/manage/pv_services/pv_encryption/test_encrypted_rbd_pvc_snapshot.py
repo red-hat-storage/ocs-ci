@@ -10,6 +10,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers.helpers import (
@@ -55,6 +57,8 @@ else:
 @skipif_ocp_version("<4.8")
 @kms_config_required
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
     """
     Tests to take snapshots of encrypted RBD Block VolumeMode PVCs

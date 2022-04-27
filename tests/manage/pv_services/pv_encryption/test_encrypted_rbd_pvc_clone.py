@@ -9,6 +9,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     config,
 )
 from ocs_ci.ocs.resources import pvc
@@ -50,6 +52,8 @@ else:
 @skipif_ocp_version("<4.8")
 @kms_config_required
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,
