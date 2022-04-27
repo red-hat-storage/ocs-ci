@@ -51,7 +51,19 @@ def create_cluster(cluster_name, version, region):
         region (str): Cluster region
 
     """
-    rosa_ocp_version = get_latest_rosa_version(version)
+
+    rosa_ocp_version = config.DEPLOYMENT["installer_version"]
+    # Validate ocp version with rosa ocp supported version
+    # Select the valid version if given version is invalid
+    if not validate_ocp_version(rosa_ocp_version):
+        logger.warning(
+            f"Given OCP version {rosa_ocp_version} "
+            f"is not valid ROSA OCP version. "
+            f"Selecting latest rosa version for deployment"
+        )
+        rosa_ocp_version = get_latest_rosa_version(version)
+        logger.info(f"Using OCP version {rosa_ocp_version}")
+
     create_account_roles(version)
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
@@ -134,6 +146,32 @@ def get_latest_rosa_version(version):
             logger.info(f"{output.splitlines()[i + 1]}")
         raise UnsupportedPlatformVersionError
     return rosa_version
+
+
+def validate_ocp_version(version):
+    """
+    Validate the version whether given version is z-stream version available for ROSA.
+
+    Args:
+        version (str): OCP version string
+
+    Returns:
+        bool: True if given version is available in z-stream version for ROSA
+              else False
+    """
+    cmd = "rosa list versions -o json"
+    out = utils.run_cmd(cmd)
+    output = json.loads(out)
+    available_versions = [info["raw_id"] for info in output]
+    if version in available_versions:
+        logger.info(f"OCP versions {version} is available for ROSA")
+        return True
+    else:
+        logger.info(
+            f"Given OCP versions {version} is not available for ROSA. "
+            f"Valid OCP versions supported on ROSA are : {available_versions}"
+        )
+        return False
 
 
 def create_account_roles(version, prefix="ManagedOpenShift"):
