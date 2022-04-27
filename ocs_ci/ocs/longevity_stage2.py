@@ -1,10 +1,11 @@
+import time
 import logging
 import statistics
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.helpers import helpers, performance_lib
-from ocs_ci.ocs import constants, scale_noobaa_lib, ocp
+from ocs_ci.ocs import constants, scale_noobaa_lib, ocp, workload
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     sync_object_directory,
@@ -73,12 +74,12 @@ def measure_pod_to_pvc_attach_time(pod_objs):
         Attach time of all PODs, as well as the average time.
 
     """
-    start_time_dict_list = []
+    pod_start_time_dict_list = []
     for pod in pod_objs:
-        start_time_dict_list.append(helpers.pod_start_time(pod))
-    logger.info(str(start_time_dict_list))
+        pod_start_time_dict_list.append(helpers.pod_start_time(pod))
+    logger.info(str(pod_start_time_dict_list))
     time_measures = []
-    for attach_time in start_time_dict_list:
+    for attach_time in pod_start_time_dict_list:
         if "my-container" in attach_time:
             time_measures.append(attach_time["my-container"])
         else:
@@ -154,7 +155,6 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
 
     """
     accepted_creation_time = 1
-    pvc_no = 0
     for pvc_obj in pvc_objs:
         creation_time = performance_lib.measure_pvc_creation_time(
             interface, pvc_obj.name, start_time
@@ -166,18 +166,15 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
                 f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
                 f"{accepted_creation_time} seconds."
             )
-        pvc_no += 1
 
 
-def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_objs, pv_objs):
+def measure_pvc_deletion_time(interface, pvc_objs):
     """
     Measures and Logs PVC Deletion Time of all PVCs.
 
     Args:
         interface (str) : an interface (RBD or CephFS) to run on.
-        num_of_pvcs (int) : Number of PVCs we have created.
         pvc_objs (list) : List of PVC objects for which we have to measure the time.
-        pv_objs (list) : List of PV names created for the respective PVCs.
 
     Raises:
         PerformanceException : Raises an exception if PVC deletion time is greater than the accepted time.
@@ -187,14 +184,14 @@ def measure_pvc_deletion_time(interface, num_of_pvcs, pvc_objs, pv_objs):
 
     """
     accepted_deletion_time = 2 if interface == constants.CEPHFILESYSTEM else 1
+    num_of_pvcs = len(pvc_objs)
 
     for pvc_no in range(num_of_pvcs):
         pvc = pvc_objs[pvc_no]
-        pv = pv_objs[pvc_no]
         pvc_name = pvc.name
         pvc.ocp.wait_for_delete(resource_name=pvc_name)
-        helpers.validate_pv_delete(pv)
-        deletion_time = helpers.measure_pvc_deletion_time(interface, pv)
+        helpers.validate_pv_delete(pvc.backed_pv)
+        deletion_time = helpers.measure_pvc_deletion_time(interface, pvc.backed_pv)
         logger.info(f"PVC {pvc_name} was deleted in {deletion_time} seconds.")
         if deletion_time > accepted_deletion_time:
             raise ex.PerformanceException(
@@ -218,7 +215,7 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
     """
 
     def factory(
-        num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2", measure=False
+        num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2", measure=True
     ):
         """
         Args:
@@ -270,10 +267,8 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                 )
 
         # PVC and PV Teardown
-        pv_objs = list()
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
-            pv_objs.append(pvc_obj.backed_pv_obj.name)
             teardown_factory(pvc_obj.backed_pv_obj)
 
         # Create PODs
@@ -286,7 +281,7 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                             pvc=pvc_obj,
                             raw_block_pv=True,
                             status=constants.STATUS_RUNNING,
-                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                            pod_dict_path=constants.PERF_BLOCK_POD_YAML,
                         )
                     )
                 else:
@@ -294,18 +289,25 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                         pod_factory(
                             pvc=pvc_obj,
                             raw_block_pv=True,
-                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                            pod_dict_path=constants.PERF_BLOCK_POD_YAML,
                         )
                     )
             else:
                 if not bulk:
                     pod_objs.append(
-                        pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
+                        pod_factory(
+                            pvc=pvc_obj,
+                            status=constants.STATUS_RUNNING,
+                            pod_dict_path=constants.PERF_POD_YAML,
+                        )
                     )
                 else:
-                    pod_objs.append(pod_factory(pvc=pvc_obj))
+                    pod_objs.append(
+                        pod_factory(pvc=pvc_obj, pod_dict_path=constants.PERF_POD_YAML)
+                    )
 
-        logger.info("POD creation was successful.")
+            logger.info(f"POD {pod_objs[-1].name} creation was successful.")
+        logger.info("All PODs are created.")
 
         if bulk:
             for pod_obj in pod_objs:
@@ -315,6 +317,7 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                     constants.STATUS_RUNNING,
                     timeout=300,
                 )
+                logger.info(f"POD {pod_obj.name} reached Running State.")
 
             logger.info("All PODs reached Running State.")
 
@@ -323,13 +326,27 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
             measure_pod_to_pvc_attach_time(pod_objs)
 
         # POD Teardown
-        for pod in pod_objs:
-            teardown_factory(pod)
+        for pod_obj in pod_objs:
+            teardown_factory(pod_obj)
 
         # Run FIO on PODs
         fio_size = int(0.25 * pvc_size * 1024)
-        for pod in pod_objs:
-            pod.run_io("fs", f"{fio_size}M")
+        for pod_obj in pod_objs:
+            storage_type = (
+                "block"
+                if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+                else "fs"
+            )
+            pod_obj.wl_setup_done = True
+            pod_obj.wl_obj = workload.WorkLoad(
+                "test_workload_fio",
+                pod_obj.get_storage_path(storage_type),
+                "fio",
+                storage_type,
+                pod_obj,
+                1,
+            )
+            pod_obj.run_io(storage_type, f"{fio_size}M")
         logger.info("POD FIO was successful.")
 
         # Delete PODs
@@ -345,24 +362,23 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
             raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
         logger.info("PVC deletion was successful.")
 
+        # Validate PV Deletion
+        for pvc_obj in pvc_objs:
+            helpers.validate_pv_delete(pvc_obj.backed_pv)
+        logger.info("PV deletion was successful.")
+
         if measure:
             # Measure PVC Deletion Time
             for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
                 if interface == constants.CEPHFILESYSTEM:
-                    num_of_pvc = num_of_pvcs // 2
                     measure_pvc_deletion_time(
                         interface,
-                        num_of_pvc,
-                        pvc_objs[:num_of_pvc],
-                        pv_objs[:num_of_pvc],
+                        pvc_objs[: num_of_pvcs // 2],
                     )
                 else:
-                    num_of_pvc = num_of_pvcs - num_of_pvcs // 2
                     measure_pvc_deletion_time(
                         interface,
-                        num_of_pvc,
                         pvc_objs[num_of_pvcs // 2 :],
-                        pv_objs[num_of_pvcs // 2 :],
                     )
 
         logger.info(f"Successfully deleted {num_of_pvcs} PVCs")
@@ -389,7 +405,7 @@ def _multi_obc_lifecycle_factory(
 
     """
 
-    def factory(num_of_obcs=20, bulk=False, measure=False):
+    def factory(num_of_obcs=20, bulk=False, measure=True):
         """
         Args:
             num_of_obcs (int) : Number of OBCs we want to create of each type mentioned above.
@@ -412,9 +428,8 @@ def _multi_obc_lifecycle_factory(
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                num_of_obcs,
             ),
-            ("OC", None, num_of_obcs),
+            ("OC", None),
             (
                 "OC",
                 {
@@ -430,13 +445,12 @@ def _multi_obc_lifecycle_factory(
                         ]
                     },
                 },
-                num_of_obcs,
             ),
         ]
-        for _interface, _bucketclass, _num in obc_params:
-            if _num > 0:
+        for _interface, _bucketclass in obc_params:
+            if num_of_obcs > 0:
                 buckets = bucket_factory(
-                    amount=_num,
+                    amount=num_of_obcs,
                     interface=_interface,
                     bucketclass=_bucketclass,
                     verify_health=not bulk,
@@ -520,7 +534,8 @@ def stage2(
     pvc_size=2,
     num_of_obcs=20,
     run_time=1440,
-    measure=False,
+    measure=True,
+    delay=600,
 ):
     """
     Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and OBCs
@@ -536,6 +551,7 @@ def stage2(
         num_of_obcs (int) : Number of OBCs we want to create of each type. (Total OBCs = num_of_obcs * 5)
         run_time (int) : Total Run Time in minutes.
         measure (bool) : True if we want to measure the performance metrics, False otherwise.
+        delay (int) : Delay time (in seconds) between sequential and bulk operations as well as between cycles.
 
     """
     end_time = datetime.now() + timedelta(minutes=run_time)
@@ -543,10 +559,11 @@ def stage2(
 
     while datetime.now() < end_time:
         cycle_no += 1
-        logger.info(f"------------STARTING CYCLE:{cycle_no}------------")
+        logger.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
 
         for bulk in (False, True):
-            logger.info(f"-----BULK:{bulk}------")
+            current_ops = "BULK_OPERATION" if bulk else "SEQUENTIAL_OPERATION"
+            logger.info(f"#################[{current_ops}]#################")
             multi_pvc_pod_lifecycle_factory(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=pvc_size,
@@ -558,4 +575,16 @@ def stage2(
                 num_of_obcs=num_of_obcs, bulk=bulk, measure=measure
             )
 
-        logger.info(f"------------ENDING CYCLE:{cycle_no}------------")
+            # Delay between Sequential and Bulk Operations
+            if not bulk:
+                logger.info(
+                    f"#################[WAITING FOR {delay} SECONDS AFTER {current_ops}.]#################"
+                )
+                time.sleep(delay)
+
+        logger.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+
+        logger.info(
+            f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
+        )
+        time.sleep(delay)
