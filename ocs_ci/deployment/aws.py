@@ -304,9 +304,7 @@ class AWSUPI(AWSBase):
                     assert os.getenv(key) == value
 
             # git clone repo from openshift-qe repo
-            clone_repo(
-                constants.OCP_QE_MISC_REPO, self.upi_repo_path, clone_type="shallow"
-            )
+            clone_repo(constants.OCP_QE_MISC_REPO, self.upi_repo_path)
 
             # Sym link install-dir to cluster_path
             install_dir = os.path.join(self.upi_script_path, "install-dir")

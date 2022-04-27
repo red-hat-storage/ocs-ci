@@ -40,7 +40,7 @@ def clone_ibm_chart_project_factory_fixture(request):
         """
         bdi_dir.append(destination_dir)
         log.info(f"Cloning chart from github into {destination_dir}")
-        clone_repo(url=git_url, location=destination_dir, clone_type="shallow")
+        clone_repo(url=git_url, location=destination_dir)
 
     def finalizer():
         """

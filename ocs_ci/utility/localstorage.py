@@ -32,7 +32,7 @@ def fetch_all_device_paths():
 
     """
     path = os.path.join(constants.EXTERNAL_DIR, "device-by-id-ocp")
-    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path, clone_type="shallow")
+    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
     os.chdir(path)
     logger.info("Running script to fetch device paths...")
     run_cmd("ansible-playbook devices_by_id.yml")
@@ -68,7 +68,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     cur_device_list = output["spec"]["storageClassDevices"][0]["devicePaths"]
     # Clone repo and run playbook to fetch all device paths from each node
     path = os.path.join(constants.EXTERNAL_DIR, "device-by-id-ocp")
-    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path, clone_type="shallow")
+    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
     os.chdir(path)
     run_cmd("ansible-playbook devices_by_id.yml")
     # Filter unused/unallocated device paths

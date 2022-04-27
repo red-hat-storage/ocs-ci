@@ -76,4 +76,4 @@ class BusyBox(DRWorkload):
 
         """
         # Clone workload repo
-        clone_repo(self.workload_repo_url, self.target_clone_dir, clone_type="shallow")
+        clone_repo(self.workload_repo_url, self.target_clone_dir)

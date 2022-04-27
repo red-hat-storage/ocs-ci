@@ -351,7 +351,6 @@ class FlexyBase(object):
             self.flexy_private_conf_url,
             self.flexy_host_private_conf_dir_path,
             self.flexy_private_conf_branch,
-            clone_type="shallow",
         )
         # prepare flexy private repo keyfile (if it is base64 encoded)
         keyfile = os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)

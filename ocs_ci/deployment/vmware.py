@@ -149,18 +149,10 @@ class VSPHEREBASE(Deployment):
         logger.info(f"scale-up terraform data directory: {scaleup_terraform_data_dir}")
 
         # git clone repo from openshift-misc
-        clone_repo(
-            constants.VSPHERE_SCALEUP_REPO,
-            self.upi_scale_up_repo_path,
-            clone_type="shallow",
-        )
+        clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
 
         # git clone repo from v4-scaleup
-        clone_repo(
-            constants.VSPHERE_CLUSTER_LAUNCHER,
-            self.cluster_launcer_repo_path,
-            clone_type="shallow",
-        )
+        clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         helpers = VSPHEREHELPERS()
         helpers.modify_scaleup_repo()
@@ -787,7 +779,6 @@ class VSPHEREUPI(VSPHEREBASE):
                         constants.VSPHERE_INSTALLER_REPO,
                         upi_repo_path,
                         installer_release_branch,
-                        clone_type="shallow",
                     )
             except Exception as ex:
                 logger.error(ex)
@@ -818,17 +809,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 terraform.tfvars file
 
         """
-        clone_repo(
-            constants.VSPHERE_SCALEUP_REPO,
-            self.upi_scale_up_repo_path,
-            clone_type="shallow",
-        )
+        clone_repo(constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path)
         # git clone repo from v4-scaleup
-        clone_repo(
-            constants.VSPHERE_CLUSTER_LAUNCHER,
-            self.cluster_launcer_repo_path,
-            clone_type="shallow",
-        )
+        clone_repo(constants.VSPHERE_CLUSTER_LAUNCHER, self.cluster_launcer_repo_path)
 
         # modify scale-up repo
         helpers = VSPHEREHELPERS()
@@ -1084,24 +1067,17 @@ def clone_openshift_installer():
     # supporting folder structure from ocp4.5
     if Version.coerce(ocp_version) >= Version.coerce("4.5"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO,
-            upi_repo_path,
-            f"release-{ocp_version}",
-            clone_type="shallow",
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
         )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO,
             upi_repo_path,
             constants.VSPHERE_INSTALLER_BRANCH,
-            clone_type="shallow",
         )
     else:
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO,
-            upi_repo_path,
-            f"release-{ocp_version}",
-            clone_type="shallow",
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
         )
 
 
