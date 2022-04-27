@@ -11,6 +11,7 @@ from subprocess import PIPE, Popen
 import tempfile
 import time
 from pathlib import Path
+import base64
 
 import yaml
 
@@ -102,6 +103,7 @@ from ocs_ci.utility.utils import (
     add_stage_cert,
     modify_csv,
     wait_for_machineconfigpool_status,
+    load_auth_config,
     TimeoutSampler,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
@@ -1804,12 +1806,13 @@ class MultiClusterDROperatorsDeploy(object):
 
         Args:
             config_map_data (dict): base dictionary which will be later converted to yaml content
-            prefix(str): Used to identify temp yaml
+            prefix (str): Used to identify temp yaml
 
         """
-        # Ramen section's value will be a string rather than type dict
-        # So we have to load that string , convert back to dict and update
-        # config_map_data
+        logger.debug(
+            "Converting Ramen section (which is string) to dict and updating "
+            "config_map_data with the same dict"
+        )
         ramen_section = {
             f"{constants.DR_RAMEN_CONFIG_MANAGER_KEY}": yaml.safe_load(
                 config_map_data["data"].pop(f"{constants.DR_RAMEN_CONFIG_MANAGER_KEY}")
@@ -1818,8 +1821,7 @@ class MultiClusterDROperatorsDeploy(object):
         ramen_section[constants.DR_RAMEN_CONFIG_MANAGER_KEY][
             "drClusterOperator"
         ].update({"deploymentAutomationEnabled": "true"})
-        # At this point ramen_section has all the necessary data
-        # merge it back to config_map_data
+        logger.debug("Merge back the ramen_section with config_map_data")
         config_map_data["data"].update(ramen_section)
         for key in ["annotations", "creationTimestamp", "resourceVersion", "uid"]:
             if config_map_data["metadata"].get(key):
@@ -1829,9 +1831,10 @@ class MultiClusterDROperatorsDeploy(object):
             mode="w+", prefix=prefix, delete=False
         )
         yaml_serialized = yaml.dump(config_map_data)
-        # We need to put a "|" in stream for literal interpretation of
-        # part of the yaml, this comes exactly right after the key "ramen_manager_config.yaml"
-        # in the yaml
+        logger.debug(
+            "Update yaml stream with a '|' for literal interpretation"
+            " which comes exactly right after the key 'ramen_manager_config.yaml'"
+        )
         yaml_serialized = yaml_serialized.replace(
             f"{constants.DR_RAMEN_CONFIG_MANAGER_KEY}:",
             f"{constants.DR_RAMEN_CONFIG_MANAGER_KEY}: |",
