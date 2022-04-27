@@ -48,7 +48,6 @@ class TestPvcSnapshotPerformance(PASTest):
     @pytest.fixture()
     def base_setup(
         self,
-        request,
         interface_iterate,
         storageclass_factory,
         pvc_factory,
@@ -182,7 +181,7 @@ class TestPvcSnapshotPerformance(PASTest):
         argvalues=[pytest.param(*["1"]), pytest.param(*["10"]), pytest.param(*["100"])],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_snapshot_performance(self, teardown_factory, pvc_size):
+    def test_pvc_snapshot_performance(self, pvc_size):
         """
         1. Run I/O on a pod file.
         2. Calculate md5sum of the file.
@@ -195,7 +194,6 @@ class TestPvcSnapshotPerformance(PASTest):
 
         This scenario run 3 times and report all results
         Args:
-            teardown_factory: A fixture to destroy objects
             pvc_size: the size of the PVC to be tested - parametrize
 
         """
@@ -221,9 +219,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         all_results = []
 
-        self.full_log_path = get_full_test_logs_path(cname=self)
         self.results_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{self.interface}-{pvc_size}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
@@ -332,7 +328,6 @@ class TestPvcSnapshotPerformance(PASTest):
                 timeout=3600  # setting this to 60 Min.
                 # since it can be take long time to restore, and we want it to finished.
             )
-            teardown_factory(restore_pvc_obj)
             restore_pvc_obj.reload()
             log.info("PVC was restored from the snapshot")
             test_results["restore"]["time"] = helpers.measure_pvc_creation_time(
@@ -357,7 +352,6 @@ class TestPvcSnapshotPerformance(PASTest):
             helpers.wait_for_resource_state(
                 resource=restore_pod_object, state=constants.STATUS_RUNNING
             )
-            teardown_factory(restore_pod_object)
             restore_pod_object.reload()
 
             # Step 6. Verify that the file is present on the new pod also.
@@ -380,6 +374,9 @@ class TestPvcSnapshotPerformance(PASTest):
                 restore_pod_object, file_name, orig_md5_sum
             ), "Data integrity check failed"
             log.info("Data integrity check passed, md5sum are same")
+
+            restore_pod_object.delete()
+            restore_pvc_obj.delete()
 
             all_results.append(test_results)
 
@@ -528,9 +525,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         all_results = []
 
-        self.full_log_path = get_full_test_logs_path(cname=self)
         self.results_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{file_size}-{files}-{threads}-{interface}"
         log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
