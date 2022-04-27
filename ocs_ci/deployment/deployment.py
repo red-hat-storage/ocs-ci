@@ -92,7 +92,6 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_cluster_name,
     get_latest_ds_olm_tag,
-    get_ocs_build_number,
     is_cluster_running,
     run_cmd,
     run_cmd_multicluster,
@@ -653,12 +652,8 @@ class Deployment(object):
             ocs_operator_names = [
                 defaults.ODF_OPERATOR_NAME,
                 defaults.OCS_OPERATOR_NAME,
+                defaults.MCG_OPERATOR,
             ]
-            build_number = version.get_semantic_version(get_ocs_build_number())
-            if build_number >= version.get_semantic_version("4.9.0-231"):
-                ocs_operator_names.append(defaults.MCG_OPERATOR)
-            else:
-                ocs_operator_names.append(defaults.NOOBAA_OPERATOR)
             # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
             if live_deployment and ocs_version == version.VERSION_4_9:
                 ocs_operator_names.remove(defaults.MCG_OPERATOR)
