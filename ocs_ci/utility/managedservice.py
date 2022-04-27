@@ -94,7 +94,8 @@ def remove_header_footer_from_key(key):
 
 def get_storage_provider_endpoint(wait=False, timeout=1080):
     """
-    Get storage provider endpoint from storage cluster.
+    Get storage provider endpoint from Provider storage cluster or from
+    configuration if configured.
 
     Args:
         wait (bool): If true then wait for the value to be available for
@@ -106,9 +107,14 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
         str: value of storage provider endpoint
 
     """
-    # TODO(fbalak): use following command when https://github.com/red-hat-storage/ocs-ci/pull/5541
-    # is merged:
-    # config.switch_to_provider()
+    provider_endpoint = config.DEPLOYMENT.get("storage_provider_endpoint")
+    if provider_endpoint:
+        logger.info(
+            f"Provider endpoint was loaded from configuration: {provider_endpoint}"
+        )
+        return provider_endpoint
+
+    config.switch_to_provider()
     for i, cluster in enumerate(config.clusters):
         if cluster.ENV_DATA["cluster_type"] == "provider":
             provider_id = i
