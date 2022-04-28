@@ -438,10 +438,10 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
+    @skipif_external_mode
     @bugzilla("1861104")
     @bugzilla("1946573")
     @pytest.mark.polarion_id("OCS-2524")
-    @skipif_external_mode
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
         self,
