@@ -64,12 +64,14 @@ def check_automated_recovery_from_stopped_node(nodes):
     """
     1) Stop node.
     2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) The node should power on automatically.
-    4) The new osd pods with the same ids should start on the stopped node after it powered on.
+    3) The node should power on automatically, or if removed from the cluster,
+       a new node should create automatically.
+    4) The new osd pods with the same ids should start on the stopped node after it powered on,
+       or to start on the new osd node.
 
     """
     old_wnodes = get_worker_nodes()
-    log.info(f"start worker nodes: {old_wnodes}")
+    log.info(f"Current worker nodes: {old_wnodes}")
 
     osd_node_name = random.choice(get_osd_running_nodes())
     osd_node = get_node_objs([osd_node_name])[0]
@@ -121,7 +123,7 @@ def check_automated_recovery_from_terminated_node(nodes):
 
     """
     old_wnodes = get_worker_nodes()
-    log.info(f"start worker nodes: {old_wnodes}")
+    log.info(f"Current worker nodes: {old_wnodes}")
 
     osd_node_name = random.choice(get_osd_running_nodes())
     osd_node = get_node_objs([osd_node_name])[0]

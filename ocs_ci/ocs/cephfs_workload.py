@@ -25,6 +25,7 @@ class LogReaderWriterParallel(object):
     """
     This procedure in the test was originally created in the file
     'tests/e2e/workloads/test_data_consistency.py'. I just rearranged it in a class.
+
     Write and read logfile stored on cephfs volume, from all worker nodes of a
     cluster via k8s Deployment, while fetching content of the stored data via
     oc rsync to check the data locally.
@@ -75,6 +76,10 @@ class LogReaderWriterParallel(object):
         """
         Write and read logfile stored on cephfs volume, from all worker nodes of a
         cluster via k8s Deployment.
+
+        Raise:
+            NotFoundError: When given volume is not found in given spec
+            UnexpectedBehaviour: When an unexpected problem with starting the workload occurred
 
         """
 
@@ -140,6 +145,10 @@ class LogReaderWriterParallel(object):
         """
         while the workload is running, we will try to fetch and validate data
         from the cephfs volume of the workload.
+
+        Raise:
+            NotFoundError: When the given volume is not found in given spec
+            Exception: When the data verification job failed
 
         """
         # if no obvious problem was detected, run the logreader job to validate
