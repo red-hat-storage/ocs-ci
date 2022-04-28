@@ -5,7 +5,6 @@ the time is measure from the POD yaml file : started_time - creation_time.
 """
 import logging
 import os
-import pytest
 import statistics
 
 from ocs_ci.framework import config
@@ -64,7 +63,9 @@ class TestPodStartTime(PASTest):
         # TODO - This part (reading test config from file) need to be done at global level
         if not config.TEST_CONF[self.benchmark_name]:
             # Setting up default parameters
-            log.info("Setting up the test parameters to the defaults if no conf file provided")
+            log.info(
+                "Setting up the test parameters to the defaults if no conf file provided"
+            )
             self.acceptable_time = 30
             self.interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
             self.samples_num = 5
@@ -73,11 +74,15 @@ class TestPodStartTime(PASTest):
             if not config.TEST_CONF[self.benchmark_name].get("enabled"):
                 self.skip = True
                 return
-            self.acceptable_time = config.TEST_CONF[self.benchmark_name].get("acceptable_time", 30)
+            self.acceptable_time = config.TEST_CONF[self.benchmark_name].get(
+                "acceptable_time", 30
+            )
             self.interfaces = config.TEST_CONF[self.benchmark_name].get(
                 "interface", [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
             )
-            self.samples_num = config.TEST_CONF[self.benchmark_name].get("samples_num", 5)
+            self.samples_num = config.TEST_CONF[self.benchmark_name].get(
+                "samples_num", 5
+            )
             self.pvc_size = config.TEST_CONF[self.benchmark_name].get("pvc_size", 5)
 
         super(TestPodStartTime, self).setup()
@@ -125,7 +130,9 @@ class TestPodStartTime(PASTest):
             # Creating PVC to attach POD to it
             log.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
             pvc_obj = helpers.create_pvc(
-                sc_name=Interfaces_info[self.interface]["sc"], size=self.pvc_size, namespace=self.namespace
+                sc_name=Interfaces_info[self.interface]["sc"],
+                size=self.pvc_size,
+                namespace=self.namespace,
             )
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
             pvc_obj.reload()
@@ -143,7 +150,9 @@ class TestPodStartTime(PASTest):
                 helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
                 pod_obj.reload()
             except Exception as e:
-                log.error(f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}")
+                log.error(
+                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
+                )
                 raise ex.PodNotCreated("Pod on PVC was not created.")
             self.pod_result_list.append(pod_obj)
 
@@ -182,7 +191,9 @@ class TestPodStartTime(PASTest):
         for self.interface in self.interfaces:
             self.msg_prefix = f"Interface: {self.interface}, PVC size: {self.pvc_size}."
 
-            self.results_path = os.path.join("/", *self.results_path, "test_pod_start_time")
+            self.results_path = os.path.join(
+                "/", *self.results_path, "test_pod_start_time"
+            )
 
             # Getting the test start time
             self.test_start_time = self.get_time()
@@ -194,12 +205,16 @@ class TestPodStartTime(PASTest):
             self.get_env_info()
 
             # Initialize the results' doc file.
-            self.full_results = self.init_full_results(ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path))
+            self.full_results = self.init_full_results(
+                ResultsAnalyse(self.uuid, self.crd_data, self.full_log_path)
+            )
 
             # Verify that all sample are in the acceptable time range,
             time_measures = [t["performance"] for t in self.start_time_dict_list]
             for index, start_time in enumerate(time_measures):
-                log.info(f"{self.msg_prefix} pod number {index} start time: {start_time} seconds")
+                log.info(
+                    f"{self.msg_prefix} pod number {index} start time: {start_time} seconds"
+                )
                 if start_time > self.acceptable_time:
                     raise ex.PerformanceException(
                         f"{self.msg_prefix} Pod number {index} start time is {start_time},"
@@ -226,7 +241,9 @@ class TestPodStartTime(PASTest):
             self.test_end_time = self.get_time()
 
             # Add the test time to the ES report
-            self.full_results.add_key("test_time", {"start": self.test_start_time, "end": self.test_end_time})
+            self.full_results.add_key(
+                "test_time", {"start": self.test_start_time, "end": self.test_end_time}
+            )
 
             # Write the test results into the ES server
             if self.full_results.es_write():
@@ -237,5 +254,7 @@ class TestPodStartTime(PASTest):
                 self.write_result_to_file(res_link)
 
         # Push the test results into the performance dashboard
-        self.add_test_to_results_check(test="test_pod_start_time", test_count=2, test_name="PVC Attach Time")
+        self.add_test_to_results_check(
+            test="test_pod_start_time", test_count=2, test_name="PVC Attach Time"
+        )
         self.check_results_and_push_to_dashboard()

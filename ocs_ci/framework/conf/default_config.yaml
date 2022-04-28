@@ -280,3 +280,7 @@ MULTICLUSTER:
   multicluster_index: 0
   acm_cluster: False
   primary_cluster: False
+
+# This section is not mandatory and used for individual tests configuration
+TEST_CONF:
+  
