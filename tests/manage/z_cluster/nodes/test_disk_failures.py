@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     vsphere_platform_required,
     bugzilla,
     skipif_ibm_cloud,
+    skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -205,6 +206,7 @@ class TestDiskFailures(ManageTest):
 
     @bugzilla("1830702")
     @vsphere_platform_required
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-2172")
     def test_recovery_from_volume_deletion(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory

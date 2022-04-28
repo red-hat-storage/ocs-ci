@@ -18,6 +18,7 @@ from ocs_ci.ocs.node import (
     get_osd_running_nodes,
     get_node_objs,
     add_new_node_and_label_it,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework.testlib import (
@@ -440,6 +441,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @pytest.mark.polarion_id("OCS-2524")
+    @skipif_external_mode
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
         self,
