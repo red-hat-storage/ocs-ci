@@ -582,7 +582,18 @@ def verify_storage_system():
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
+    live_deployment = config.DEPLOYMENT.get("live_deployment")
+    ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
+    if (
+        live_deployment
+        and ocs_version == version.VERSION_4_9
+        and ocp_version == version.VERSION_4_10
+    ):
+        log.warning(
+            "Because of the BZ 2075422, we are skipping storage system validation!"
+        )
+        return
     if ocs_version >= version.VERSION_4_9 and not managed_service:
         log.info("Verifying storage system status")
         storage_system = OCP(
