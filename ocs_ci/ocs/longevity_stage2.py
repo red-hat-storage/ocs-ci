@@ -82,8 +82,10 @@ def measure_pod_to_pvc_attach_time(pod_objs):
     for attach_time in pod_start_time_dict_list:
         if "my-container" in attach_time:
             time_measures.append(attach_time["my-container"])
-        else:
+        elif "web-server" in attach_time:
             time_measures.append(attach_time["web-server"])
+        else:
+            time_measures.append(attach_time["performance"])
     for index, start_time in enumerate(time_measures):
         logger.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
         if start_time > 30:
