@@ -61,16 +61,7 @@ class TestPodStartTime(PASTest):
         log.info("Starting the test setup")
         self.benchmark_name = "pvc_attach_time"
         # TODO - This part (reading test config from file) need to be done at global level
-        if not config.TEST_CONF[self.benchmark_name]:
-            # Setting up default parameters
-            log.info(
-                "Setting up the test parameters to the defaults if no conf file provided"
-            )
-            self.acceptable_time = 30
-            self.interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
-            self.samples_num = 5
-            self.pvc_size = 5
-        else:
+        try:
             if not config.TEST_CONF[self.benchmark_name].get("enabled"):
                 self.skip = True
                 return
@@ -84,6 +75,16 @@ class TestPodStartTime(PASTest):
                 "samples_num", 5
             )
             self.pvc_size = config.TEST_CONF[self.benchmark_name].get("pvc_size", 5)
+
+        except KeyError:
+            # Setting up default parameters
+            log.info(
+                "Setting up the test parameters to the defaults if no conf file provided"
+            )
+            self.acceptable_time = 30
+            self.interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+            self.samples_num = 5
+            self.pvc_size = 5
 
         super(TestPodStartTime, self).setup()
 
