@@ -10,8 +10,8 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
     vsphere_platform_required,
     bugzilla,
-    skipif_ibm_cloud,
     skipif_external_mode,
+    skipif_ibm_cloud,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (

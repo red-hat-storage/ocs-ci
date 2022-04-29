@@ -17,8 +17,8 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
-    add_new_node_and_label_it,
     skipif_external_mode,
+    add_new_node_and_label_it,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework.testlib import (
