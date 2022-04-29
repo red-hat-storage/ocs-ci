@@ -894,11 +894,15 @@ class Vault(KMS):
             buf = json.loads(conn_str)
             buf["vaultAddress"] = f"https://{self.vault_server}:{self.port}"
             buf["vaultBackendPath"] = self.vault_backend_path
-            buf["vaultCAFromsecret"] = get_default_if_keyval_empty(
+            buf["vaultCAFromSecret"] = get_default_if_keyval_empty(
                 config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
             )
-            buf["vaultClientCertFromSecret"] = self.client_cert_name
-            buf["vaultClientCertKeyFromSecret"] = self.client_key_name
+            buf["vaultClientCertFromSecret"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            buf["vaultClientCertKeyFromSecret"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
             if self.vault_namespace:
                 buf["vaultNamespace"] = self.vault_namespace
             if self.vault_kube_auth_path:
@@ -1017,8 +1021,9 @@ class Vault(KMS):
             f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
         secrets = run_cmd(cmd=cmd).split()
+        secret_name = ""
         for secret in secrets:
-            if "-token-" in secret:
+            if "-token-" in secret and "docker" not in secret:
                 secret_name = secret
         if not secret_name:
             raise NotFoundError("Secret name not found")
@@ -1085,6 +1090,7 @@ class Vault(KMS):
                 f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
                 f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
             )
+
         os.environ.pop("VAULT_FORMAT")
         proc = subprocess.run(
             cmd,
@@ -1093,7 +1099,6 @@ class Vault(KMS):
             shell=True,
             env=os.environ,
         )
-
         if "Success" in proc.stdout.decode():
             logger.info("vault: Kubernetes auth method configured successfully")
         else:
