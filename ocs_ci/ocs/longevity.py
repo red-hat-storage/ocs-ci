@@ -556,10 +556,7 @@ class Longevity(object):
 
 
 def start_app_workload(
-    request,
-    workloads_list=None,
-    run_time=10,
-    run_in_bg=True,
+    request, workloads_list=None, run_time=10, run_in_bg=True, delay=600
 ):
     """
     This function reads the list of app workloads to run and
@@ -574,6 +571,7 @@ def start_app_workload(
         workloads_list (list): The list of app workloads to run
         run_time (int): The amount of time the workloads should run (in minutes)
         run_in_bg (bool): Runs the workload in background starting a thread
+        delay (int): Delay in seconds before starting the next cycle
 
     Raise:
         UnsupportedWorkloadError: When the workload is not found in the supported_app_workloads list
@@ -582,7 +580,12 @@ def start_app_workload(
     threads = []
     workloads = []
 
-    def factory(workloads_list=workloads_list, run_time=run_time, run_in_bg=run_in_bg):
+    def factory(
+        workloads_list=workloads_list,
+        run_time=run_time,
+        run_in_bg=run_in_bg,
+        delay=delay,
+    ):
 
         log.info(f"workloads_list: {workloads_list}")
         log.info(f"supported app workloads list: {supported_app_workloads}")
@@ -595,7 +598,9 @@ def start_app_workload(
         while datetime.now() < end_time:
             log.info(f"Current time is {datetime.now()}")
             log.info(f"End time is {end_time}")
-            log.info(f"##############STARTING CYCLE:{cycle_count}####################")
+            log.info(
+                f"##############[STARTING CYCLE:{cycle_count}]####################"
+            )
             for workload in workloads_list:
                 if workload == "pgsql":
                     pgsql = Postgresql()
@@ -640,8 +645,13 @@ def start_app_workload(
                 for t in threads:
                     t.result()
                 cleanup()
-            log.info(f"##############COMPLETED CYCLE:{cycle_count}####################")
+            log.info(
+                f"##############[COMPLETED CYCLE:{cycle_count}]####################"
+            )
             cycle_count += 1
+            log.info(
+                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT CYCLE]###########"
+            )
 
     def cleanup():
         for workload in workloads:

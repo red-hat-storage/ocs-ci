@@ -6,7 +6,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
-from ocs_ci.ocs.resources.pod import get_pod_obj, get_all_pods
+from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.helpers import helpers
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.exceptions import (
@@ -273,14 +273,12 @@ def check_if_monitoring_stack_exists():
     """
     logger.info("Checking if monitoring stack exists on the cluster")
     # Validate the pvc are created and bound
-    validate_pvc_created_and_bound_on_monitoring_pods()
-    # Get the list of monitoring pods
-    pods_list = get_all_pods(
-        namespace=defaults.OCS_MONITORING_NAMESPACE,
-        selector=["prometheus", "alertmanager"],
-    )
-    # Validate the pvc are mounted on pods
-    validate_pvc_are_mounted_on_monitoring_pods(pods_list)
-    logger.info("Monitoring stack already exists on the cluster")
-
-    return True
+    logger.info("Verify pvc are created")
+    pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
+    pvc_names = [pvc["metadata"]["name"] for pvc in pvc_list["items"]]
+    if pvc_names:
+        logger.info("Monitoring stack already exists on the cluster")
+        return True
+    else:
+        logger.info("Monitoring stack is not configured on the cluster")
+        return False

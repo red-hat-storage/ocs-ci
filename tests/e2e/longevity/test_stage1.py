@@ -1,7 +1,6 @@
 import logging
 from ocs_ci.framework.testlib import E2ETest, skipif_external_mode
 
-
 log = logging.getLogger(__name__)
 
 
@@ -28,7 +27,10 @@ class TestLongevity(E2ETest):
         """
         # Start stage-1
         log.info("Starting Longevity Stage-1")
-        # Start application workloads and continuously for the specified period of time
+        # Commenting the OCP workloads code for dry test runs
+        # log.info("Start configuring OCP workloads")
+        # start_ocp_workload(workloads_list=['logging','registry', 'monitoring'], run_in_bg=True)
+        # Start application workloads and continuously run the workloads for a specified period of time
         log.info("Start running application workloads")
         start_apps_workload(
             workloads_list=["pgsql", "couchbase", "cosbench"],

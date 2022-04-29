@@ -519,8 +519,13 @@ def check_if_registry_stack_exists():
 
     """
     logger.info("Checking if registry stack exists on the cluster")
-    # Validate the pvc are mounted on pods
-    validate_pvc_mount_on_registry_pod()
-    logger.info("Registry stack already exists on the cluster")
-
-    return True
+    reg_obj = ocp.OCP(
+        kind=constants.CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    )
+    config_dict = reg_obj.exec_oc_cmd(f"get {constants.IMAGE_REGISTRY_CONFIG} -o yaml ")
+    if "emptyDir" in config_dict.get("spec").get("storage"):
+        logger.info("Registry stack is not configured on the cluster")
+        return False
+    else:
+        logger.info("Registry stack already exists on the cluster")
+        return True
