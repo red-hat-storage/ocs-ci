@@ -1104,7 +1104,7 @@ def verify_managed_service_resources():
         csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
 
     # Verify alerting secrets creation
-    verify_managed_alerting_secrets()
+    verify_managed_secrets()
 
     # Verify alerting pods are Running
     pod_obj = OCP(
@@ -1139,8 +1139,14 @@ def verify_managed_service_resources():
     log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
     assert noobaa_deployment.replicas == 0
 
+    # Verify attributes specific to cluster types
+    sc = get_storage_cluster()
+    sc_data = sc.get()["items"][0]
     if config.ENV_DATA["cluster_type"].lower() == "provider":
+        verify_provider_storagecluster(sc_data)
         verify_provider_resources()
+    else:
+        verify_consumer_storagecluster(sc_data)
 
 
 def verify_provider_resources():
@@ -1149,7 +1155,6 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     3. Security groups are set up correctly
-    4. Storagecluster has the correct properties
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1173,8 +1178,6 @@ def verify_provider_resources():
 
     assert verify_worker_nodes_security_groups()
 
-    verify_provider_storagecluster()
-
 
 def verify_managed_service_networkpolicy():
     """
@@ -1194,13 +1197,14 @@ def verify_managed_service_networkpolicy():
         ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
 
 
-def verify_managed_alerting_secrets():
+def verify_managed_secrets():
     """
     Verify that ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch,
-    addon-ocs-provider-qe-parameters, alertmanager-managed-ocs-alertmanager-generated secrets
-    exist in openshift-storage namespace.
-    For a provider cluster verify existence of onboarding-ticket-key, ocs-provider-server
-    and rook-ceph-mon secrets.
+    addon-ocs-provider-parameters, alertmanager-managed-ocs-alertmanager-generated,
+    rook-ceph-mon secrets exist in openshift-storage namespace.
+    For a provider cluster verify existence of onboarding-ticket-key and ocs-provider-server
+    secrets.
+    For a consumer cluster verify existence of 5 rook-ceph-client secrets
     """
     secret_ocp_obj = OCP(
         kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -1211,6 +1215,7 @@ def verify_managed_alerting_secrets():
         managedservice.get_dms_secret_name(),
         managedservice.get_parameters_secret_name(),
         constants.MANAGED_ALERTMANAGER_SECRET,
+        constants.MANAGED_MON_SECRET,
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name
@@ -1219,14 +1224,21 @@ def verify_managed_alerting_secrets():
         for secret_name in {
             constants.MANAGED_ONBOARDING_SECRET,
             constants.MANAGED_PROVIDER_SERVER_SECRET,
-            constants.MANAGED_MON_SECRET,
         }:
             assert secret_ocp_obj.is_exist(
                 resource_name=secret_name
             ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+    else:
+        secrets = secret_ocp_obj.get().get("items")
+        client_secrets = []
+        for secret in secrets:
+            if secret["metadata"]["name"].startswith("rook-ceph-client"):
+                client_secrets.append(secret["metadata"]["name"])
+        log.info(f"rook-ceph-client secrets: {client_secrets}")
+        assert len(client_secrets) == 5
 
 
-def verify_provider_storagecluster():
+def verify_provider_storagecluster(sc_data):
     """
     Verify that storagecluster of the provider passes the following checks:
     1. allowRemoteStorageConsumers: true
@@ -1240,9 +1252,10 @@ def verify_provider_storagecluster():
     5. annotations:
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
+
+    Args:
+        sc_data (dict): storagecluster data dictionary
     """
-    sc = get_storage_cluster()
-    sc_data = sc.get()["items"][0]
     log.info(
         f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
     )
@@ -1260,7 +1273,33 @@ def verify_provider_storagecluster():
     assert re.match(
         "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
     )
+    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
+    )
     annotations = sc_data["metadata"]["annotations"]
     log.info(f"Annotations: {annotations}")
     assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
     assert annotations["uninstall.ocs.openshift.io/mode"] == "graceful"
+
+
+def verify_consumer_storagecluster(sc_data):
+    """
+    Verify that Storagecluster is has:
+    1. externalStorage: enable: true
+    2. storageProviderEndpoint: IP:31659
+    3. TODO: onboardingTicket
+    4. TODO: requestedCapacity
+
+    Args:
+    sc_data (dict): storagecluster data dictionary
+    """
+    log.info(f"externalStorage: enable: {sc_data['spec']['externalStorage']['enable']}")
+    assert sc_data["spec"]["externalStorage"]["enable"]
+    log.info(
+        f"storageProviderEndpoint: {sc_data['spec']['externalStorage']['storageProviderEndpoint']}"
+    )
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659",
+        sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
+    )
