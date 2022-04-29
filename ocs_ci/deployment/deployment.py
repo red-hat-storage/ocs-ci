@@ -655,7 +655,12 @@ class Deployment(object):
                 defaults.MCG_OPERATOR,
             ]
             # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
-            if live_deployment and ocs_version == version.VERSION_4_9:
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            if (
+                live_deployment
+                and ocp_version == version.VERSION_4_10
+                and ocs_version == version.VERSION_4_9
+            ):
                 ocs_operator_names.remove(defaults.MCG_OPERATOR)
         else:
             ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
