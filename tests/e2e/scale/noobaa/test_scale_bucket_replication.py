@@ -66,6 +66,10 @@ class TestScaleBucketReplication(E2ETest):
                 marks=[pytest.mark.polarion_id("OCS-2722")],
             ),
         ],
+        ids=[
+            "AWStoAZURE-BackingStore",
+            "AWStoAZURE-NamespaceStore",
+        ],
     )
     def test_scale_unidirectional_bucket_replication(
         self,
@@ -86,6 +90,7 @@ class TestScaleBucketReplication(E2ETest):
         replication_buckets = bucket_factory(
             amount=self.MCG_BUCKET,
             bucketclass=replication_bucketclass,
+            verify_health=False,
         )
         endpoints = list()
         source_buckets = list()
@@ -95,6 +100,7 @@ class TestScaleBucketReplication(E2ETest):
                 amount=1,
                 bucketclass=bucketclass,
                 replication_policy=replication_policy,
+                verify_health=False,
             )[0]
             end_point = (
                 "http://"
@@ -103,6 +109,7 @@ class TestScaleBucketReplication(E2ETest):
                 + f"{source_bucket.name}"
             )
             endpoints.append(end_point)
+            source_bucket.verify_health(timeout=180)
             source_buckets.append(source_bucket)
 
         for endpoint in endpoints:
@@ -136,6 +143,9 @@ class TestScaleBucketReplication(E2ETest):
                 marks=[pytest.mark.polarion_id("OCS-2723")],
             ),
         ],
+        ids=[
+            "AWStoAZURE-BackingStore",
+        ],
     )
     def test_scale_bidirectional_bucket_replication(
         self,
@@ -153,7 +163,9 @@ class TestScaleBucketReplication(E2ETest):
         """
 
         first_buckets = bucket_factory(
-            amount=self.MCG_BUCKET, bucketclass=first_bucketclass
+            amount=self.MCG_BUCKET,
+            bucketclass=first_bucketclass,
+            verify_health=False,
         )
         endpoints = list()
         second_buckets = list()
@@ -163,6 +175,7 @@ class TestScaleBucketReplication(E2ETest):
                 1,
                 bucketclass=second_bucketclass,
                 replication_policy=replication_policy,
+                verify_health=False,
             )[0]
             replication_policy_patch_dict = {
                 "spec": {
@@ -199,6 +212,7 @@ class TestScaleBucketReplication(E2ETest):
             )
             endpoints.append(first_end_point)
             endpoints.append(second_end_point)
+            second_bucket.verify_health(timeout=180)
             second_buckets.append(second_bucket)
 
         # Write objects to the buckets

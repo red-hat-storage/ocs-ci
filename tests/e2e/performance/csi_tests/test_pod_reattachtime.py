@@ -91,7 +91,7 @@ class TestPodReattachTimePerformance(PASTest):
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
-        self, pvc_factory, teardown_factory, copies, timeout, total_time_limit
+        self, pvc_factory, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
@@ -239,7 +239,10 @@ class TestPodReattachTimePerformance(PASTest):
             )
             time_measures.append(total_time)
 
-            teardown_factory(pod_obj2)
+            logger.info("Deleting the pod")
+            rsh_cmd = f"delete pod {pod_name}"
+            _ocp.exec_oc_cmd(rsh_cmd)
+            # teardown_factory(pod_obj2)
 
         average = statistics.mean(time_measures)
         logger.info(

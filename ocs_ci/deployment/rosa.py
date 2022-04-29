@@ -16,6 +16,7 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -29,6 +30,7 @@ class ROSAOCP(BaseOCPDeployment):
     def __init__(self):
         super(ROSAOCP, self).__init__()
         self.ocp_version = get_ocp_version()
+        self.region = config.ENV_DATA["region"]
 
     def deploy_prereq(self):
         """
@@ -57,7 +59,7 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version)
+        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -145,22 +147,29 @@ class ROSA(CloudDeploymentBase):
             logger.info("Running OCS basic installation")
         rosa.install_odf_addon(self.cluster_name)
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-mon",
-            resource_count=3,
-            timeout=600,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-osd",
-            resource_count=3,
-            timeout=600,
-        )
+
+        if config.ENV_DATA.get("cluster_type") != "consumer":
+            # Check for Ceph pods
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector=constants.MON_APP_LABEL,
+                resource_count=3,
+                timeout=600,
+            )
+            assert pod.wait_for_resource(
+                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+            )
+            assert pod.wait_for_resource(
+                condition="Running",
+                selector=constants.OSD_APP_LABEL,
+                resource_count=3,
+                timeout=600,
+            )
+
+        if config.DEPLOYMENT.get("pullsecret_workaround"):
+            update_pull_secret()
+        if config.ENV_DATA.get("cluster_type") == "consumer":
+            patch_consumer_toolbox()
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)
@@ -206,55 +215,40 @@ class ROSA(CloudDeploymentBase):
                     "FromPort": 6800,
                     "ToPort": 7300,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph OSDs",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
                     ],
                 },
                 {
                     "FromPort": 3300,
                     "ToPort": 3300,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph MONs rule1",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
                     ],
                 },
                 {
                     "FromPort": 6789,
                     "ToPort": 6789,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph MONs rule2",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
                     ],
                 },
                 {
                     "FromPort": 9283,
                     "ToPort": 9283,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "Ceph Manager",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
                     ],
                 },
                 {
                     "FromPort": 31659,
                     "ToPort": 31659,
                     "IpProtocol": "tcp",
-                    "UserIdGroupPairs": [
-                        {
-                            "Description": "API Server",
-                            "GroupId": sg_id,
-                        },
+                    "IpRanges": [
+                        {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
                     ],
                 },
             ],

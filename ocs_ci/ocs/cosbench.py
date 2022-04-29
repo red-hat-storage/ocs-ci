@@ -141,7 +141,7 @@ class Cosbench(object):
               <work type="init" workers="1" config="" />
             </workstage>
             <workstage name="prepare-objects">
-              <work type="prepare" workers="4" config="" />
+              <work type="prepare" workers="16" config="" />
             </workstage>
           </workflow>
         </workload>
@@ -153,6 +153,11 @@ class Cosbench(object):
             start_container if start_container else self.init_container
         )
         self.init_object = start_object if start_object else self.init_object
+        init_container_config = self.generate_container_stage_config(
+            self.range_selector,
+            self.init_container,
+            containers,
+        )
         init_config = self.generate_stage_config(
             self.range_selector,
             self.init_container,
@@ -162,7 +167,7 @@ class Cosbench(object):
         )
         for stage in xml_root.iter("work"):
             if stage.get("type") == "init":
-                stage.set("config", f"cprefix={prefix};{init_config}")
+                stage.set("config", f"cprefix={prefix};{init_container_config}")
             elif stage.get("type") == "prepare":
                 stage.set(
                     "config",
@@ -272,6 +277,7 @@ class Cosbench(object):
         timeout=300,
         extend_objects=None,
         validate=True,
+        result=True,
     ):
         """
         Creates and runs main Cosbench workload.
@@ -294,6 +300,7 @@ class Cosbench(object):
             validate (bool): Validates whether each stage is completed
             extend_objects (int): Extends the total number of objects to prevent overlap.
                                   Use only for Write and Delete operations.
+            result (bool): Get performance results when running workload is completed.
 
         Returns:
             Tuple[str, str]: Workload xml and its name
@@ -376,6 +383,15 @@ class Cosbench(object):
         else:
             return self.workload_id, workload_name
 
+        if result:
+            self.get_performance_result(
+                workload_id=self.workload_id,
+                workload_name=workload_name,
+                size=size,
+            )
+        else:
+            return self.workload_id, workload_name
+
     @staticmethod
     def generate_stage_config(
         selector, start_container, end_container, start_objects, end_object
@@ -399,6 +415,25 @@ class Cosbench(object):
             f"objects={selector}({str(start_objects)},{str(end_object)})"
         )
         return xml_config
+
+    @staticmethod
+    def generate_container_stage_config(selector, start_container, end_container):
+        """
+        Generates container config which creates buckets in bulk
+
+        Args:
+            selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
+            start_container (int): Start of containers
+            end_container (int): End of containers
+
+        Returns:
+            (str): Container and object configuration
+
+        """
+        container_config = (
+            f"containers={selector}({str(start_container)},{str(end_container)});"
+        )
+        return container_config
 
     def _create_tmp_xml(self, xml_tree, xml_file_prefix):
         """
@@ -590,3 +625,39 @@ class Cosbench(object):
         self.cosbench_config.delete()
         self.ns_obj.delete_project(self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
+
+    def get_performance_result(self, workload_name, workload_id, size):
+        workload_file = self.get_result_csv(
+            workload_id=workload_id, workload_name=workload_name
+        )
+        throughput_data = {}
+        bandwidth_data = {}
+        with open(workload_file, "r") as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            if header is not None:
+                for row in reader:
+                    throughput_data[row[1]] = row[13]
+                    bandwidth_data[row[1]] = row[14]
+            else:
+                raise UnexpectedBehaviour(
+                    f"Workload csv is incorrect/malformed. Dumping csv {reader}"
+                )
+        # Store throughput data on csv file
+        log_path = f"{self.cosbench_dir}"
+        with open(f"{log_path}/{workload_name}-{size}-throughput.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in throughput_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Throughput data present in {log_path}/{workload_name}-{size}-throughput.csv"
+        )
+
+        # Store bandwidth data on csv file
+        with open(f"{log_path}/{workload_name}-{size}-bandwidth.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in bandwidth_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
+        )

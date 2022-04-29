@@ -1,0 +1,4 @@
+ENV_DATA:
+  acm_ocp_deployment: True
+UI_SELENIUM:
+  headless: False

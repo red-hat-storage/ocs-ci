@@ -7,6 +7,7 @@ import time
 import pytest
 import yaml
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants
@@ -17,7 +18,8 @@ from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import job
 from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, update_container_with_mirrored_image
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 
 logger = logging.getLogger(__name__)
@@ -38,13 +40,21 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # we need to mount the volume on every worker node, so RWX/cephfs
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
-    pvc_dict["spec"]["storageClassName"] = constants.CEPHFILESYSTEM_SC
+    if storagecluster_independent_check():
+        sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+    else:
+        sc_name = constants.CEPHFILESYSTEM_SC
+    pvc_dict["spec"]["storageClassName"] = sc_name
     # there is no need for lot of storage capacity for this test
     pvc_dict["spec"]["resources"]["requests"]["storage"] = "1Gi"
 
     # get deployment dict for the reproducer logwriter workload
     with open(constants.LOGWRITER_CEPHFS_REPRODUCER, "r") as deployment_file:
         deploy_dict = yaml.safe_load(deployment_file.read())
+    # if we are running in disconnected environment, we need to mirror the
+    # container image first, and then use the mirror instead of the original
+    if config.DEPLOYMENT.get("disconnected"):
+        update_container_with_mirrored_image(deploy_dict["spec"]["template"])
     # we need to match deployment replicas with number of worker nodes
     deploy_dict["spec"]["replicas"] = len(get_worker_nodes())
     # drop topology spread constraints related to zones
@@ -167,6 +177,9 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # wrong with the IO or the data)
     with open(constants.LOGWRITER_CEPHFS_READER, "r") as job_file:
         job_dict = yaml.safe_load(job_file.read())
+    # mirroring for disconnected environment, if necessary
+    if config.DEPLOYMENT.get("disconnected"):
+        update_container_with_mirrored_image(job_dict["spec"]["template"])
     # drop topology spread constraints related to zones
     topology.drop_topology_constraint(
         job_dict["spec"]["template"]["spec"], topology.ZONE_LABEL

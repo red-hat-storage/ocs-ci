@@ -9,6 +9,7 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import AlertingError, AuthError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 
@@ -285,6 +286,30 @@ def log_parsing_error(query, resp_content, ex):
     logger.debug("prometheus reply which failed to load:\n%s\n", resp_content)
 
 
+def validate_status(content):
+    """
+    Validate content data from Prometheus. If this fails, Prometheus instance
+    or a query is so broken that test can't be performed. We assume that
+    Prometheus reports "success" even for queries which returns nothing.
+
+    Args:
+        content (dict): data from Prometheus
+
+    Raises:
+        TypeError: when content is not a dict
+        ValueError: when status of the content is not success
+    """
+    logger.debug("content value: %s", content)
+    if not isinstance(content, dict):
+        logger.error("content is not a dict, but %s", type(content))
+        raise TypeError("content is not a dict")
+    status = content.get("status")
+    if status != "success":
+        logger.error("content status is not success, but %s", status)
+        raise ValueError("content status is not success")
+    logger.info("content status is success as expected")
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -335,7 +360,9 @@ class PrometheusAPI(object):
         kube_data = ""
         with open(kubeconfig, "r") as kube_file:
             kube_data = kube_file.readlines()
-        assert ocp.login(self._user, self._password), "Login to OCP failed"
+        login_ok = ocp.login(self._user, self._password)
+        if not login_ok:
+            raise AuthError("Login to OCP failed")
         self._token = ocp.get_user_token()
         with open(kubeconfig, "w") as kube_file:
             kube_file.writelines(kube_data)
@@ -460,10 +487,7 @@ class PrometheusAPI(object):
             log_parsing_error(query_payload, resp.content, ex)
             raise
         if validate:
-            # If this fails, Prometheus instance or a query is so broken that
-            # test can't be performed. Note that prometheus reports "success"
-            # even for queryies which returns nothing.
-            assert content["status"] == "success"
+            validate_status(content)
         # return actual result of the query
         return content["data"]["result"]
 
@@ -509,17 +533,22 @@ class PrometheusAPI(object):
         if validate:
             # If this fails, Prometheus instance is so broken that test can't
             # be performed.
-            assert content["status"] == "success"
+            validate_status(content)
             # For a range query, we should always get a matrix result type, as
             # noted in Prometheus documentation, see:
             # https://prometheus.io/docs/prometheus/latest/querying/api/#range-vectors
-            assert content["data"]["resultType"] == "matrix"
+            result_type = content["data"].get("resultType")
+            if result_type != "matrix":
+                logger.error("unexpected resultType: %s", result_type)
+                raise ValueError("resultType is not matrix but %s", result_type)
             # All metric sample series has the same size.
             sizes = []
             for metric in content["data"]["result"]:
                 sizes.append(len(metric["values"]))
-            msg = "Metric sample series doesn't have the same size."
-            assert all(size == sizes[0] for size in sizes), msg
+            if not all(size == sizes[0] for size in sizes):
+                msg = "Metric sample series doesn't have the same size."
+                logger.error(msg)
+                raise ValueError(msg)
             # Check if the query result is empty (which is a valid answer from
             # validation standpoint).
             if len(sizes) == 0:
@@ -533,7 +562,17 @@ class PrometheusAPI(object):
                 end_dt = datetime.utcfromtimestamp(end)
                 duration = end_dt - start_dt
                 exp_samples = duration.seconds / step
-                assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
+                if exp_samples - 1 <= sizes[0] <= exp_samples + 1:
+                    logger.debug("there are no holes in the data")
+                else:
+                    msg = "there are holes in prometheus data"
+                    logger.error(
+                        msg
+                        + ": result size is %d while expected sample size is %d +-1",
+                        sizes[0],
+                        exp_samples,
+                    )
+                    raise ValueError(msg)
         # return actual result of the query
         return content["data"]["result"]
 
@@ -565,7 +604,9 @@ class PrometheusAPI(object):
                 },
             )
             msg = f"Request {alerts_response.request.url} failed"
-            assert alerts_response.ok, msg
+            if not alerts_response.ok:
+                logger.error(msg)
+                raise AlertingError(msg)
             if state:
                 alerts = [
                     alert
@@ -618,5 +659,9 @@ class PrometheusAPI(object):
             time_wait = 1
         cleared_alerts = self.wait_for_alert(name=label, state=None, timeout=time_wait)
         logger.info(f"Cleared alerts: {cleared_alerts}")
-        assert len(cleared_alerts) == 0, f"{label} alerts were not cleared"
-        logger.info(f"{label} alerts were cleared")
+        if len(cleared_alerts) == 0:
+            logger.info(f"{label} alerts were cleared")
+        else:
+            error_msg = f"{label} alerts were not cleared"
+            logger.error(error_msg)
+            raise AlertingError(error_msg)

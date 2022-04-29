@@ -4,7 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4c
+from ocs_ci.framework.testlib import tier4c, skipif_managed_service
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 @tier4c
 @pytest.mark.polarion_id("OCS-2323")
 @pytest.mark.bugzilla("1953615")
+@skipif_managed_service
 def test_rgw_unavailable(measure_stop_rgw):
     """
     Test that there is appropriate alert when RGW is unavailable and that

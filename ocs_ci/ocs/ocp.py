@@ -49,6 +49,7 @@ class OCP(object):
         selector=None,
         field_selector=None,
         threading_lock=None,
+        cluster_kubeconfig="",
     ):
         """
         Initializer function
@@ -64,6 +65,7 @@ class OCP(object):
                 '=', '==', and '!='. (e.g. status.phase=Running)
             threading_lock (threading.Lock): threading.Lock object that is used
                 for handling concurrent oc commands
+            cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
         """
         self._api_version = api_version
         self._kind = kind
@@ -73,6 +75,7 @@ class OCP(object):
         self.selector = selector
         self.field_selector = field_selector
         self.threading_lock = threading_lock
+        self.cluster_kubeconfig = cluster_kubeconfig
 
     @property
     def api_version(self):
@@ -134,8 +137,12 @@ class OCP(object):
         """
         oc_cmd = "oc "
         env_kubeconfig = os.getenv("KUBECONFIG")
-        if not env_kubeconfig or not os.path.exists(env_kubeconfig):
-            cluster_dir_kubeconfig = os.path.join(
+        kubeconfig_path = (
+            self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
+        )
+
+        if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
+            cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
                 config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
             )
             if os.path.exists(cluster_dir_kubeconfig):

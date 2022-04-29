@@ -2,24 +2,26 @@
 Test to verify performance of attaching number of pods as a bulk, each pod attached to one pvc only
 The test results will be uploaded to the ES server
 """
+import json
 import logging
-import os
 import pytest
 import pathlib
 import time
 
-from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import performance, polarion_id
-from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.ocs import defaults, constants, scale_lib
-from ocs_ci.ocs.resources.pod import get_pod_obj
+from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import ocsci_log_path
 
 log = logging.getLogger(__name__)
+
+Interfaces_info = {
+    constants.CEPHBLOCKPOOL: {"name": "RBD", "sc": constants.CEPHBLOCKPOOL_SC},
+    constants.CEPHFILESYSTEM: {"name": "CephFS", "sc": constants.CEPHFILESYSTEM_SC},
+}
 
 
 @performance
@@ -38,29 +40,53 @@ class TestBulkPodAttachPerformance(PASTest):
         super(TestBulkPodAttachPerformance, self).setup()
         self.benchmark_name = "bulk_pod_attach_time"
 
+        self.create_test_project()
         # Pulling the pod image to the worker node, so pull image will not calculate
         # in the total attach time
         helpers.pull_images(constants.PERF_IMAGE)
 
-    @pytest.fixture()
-    def base_setup(self, project_factory, interface_type, storageclass_factory):
+        # Initializing some parameters
+        self.pvc_objs = list()
+        self.pods_obj = locals()
+
+    def teardown(self):
         """
-        A setup phase for the test
-
-        Args:
-            interface_type: Interface type
-            storageclass_factory: A fixture to create everything needed for a storage class
+        Cleanup the test environment
         """
-        self.interface = interface_type
-        self.sc_obj = storageclass_factory(self.interface)
+        log.info("Starting the test environment celanup")
 
-        proj_obj = project_factory()
-        self.namespace = proj_obj.namespace
+        # Deleting All POD(s)
+        log.info("Try to delete all created PODs")
+        try:
+            self.pods_obj.delete(namespace=self.namespace)
+        except Exception as ex:
+            log.warn(f"Failed to delete POD(s) [{ex}]")
+        log.info("Wait for all PODs to be deleted")
+        performance_lib.wait_for_resource_bulk_status(
+            "pod", 0, self.namespace, constants.STATUS_BOUND, len(self.pvc_objs) * 2, 10
+        )
+        log.info("All POD(s) was deleted")
 
-        if self.interface == constants.CEPHFILESYSTEM:
-            self.sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            self.sc = "RBD"
+        # Deleting PVC(s) for deletion time mesurment
+        log.info("Try to delete all created PVCs")
+        for pvc_obj in self.pvc_objs:
+            pvc_obj.delete()
+        log.info("Wait for all PVC(s) to be deleted")
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", 0, self.namespace, constants.STATUS_BOUND, len(self.pvc_objs) * 2, 10
+        )
+        log.info("All PVC(s) was deleted")
+        log.info("Wait for all PVC(s) backed PV(s) to be deleted")
+        # Timeout for each PV to be deleted is 20 sec.
+        performance_lib.wait_for_resource_bulk_status(
+            "pv", 0, self.namespace, self.namespace, len(self.pvc_objs) * 20, 10
+        )
+        log.info("All backed PV(s) was deleted")
+
+        # Delete the test project (namespace)
+        self.delete_test_project()
+
+        super(TestBulkPodAttachPerformance, self).teardown()
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "bulk_size"],
@@ -79,60 +105,55 @@ class TestBulkPodAttachPerformance(PASTest):
             ),
         ],
     )
-    @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id("OCS-1620")
-    def test_bulk_pod_attach_performance(self, teardown_factory, bulk_size):
+    def test_bulk_pod_attach_performance(self, interface_type, bulk_size):
 
         """
         Measures pods attachment time in bulk_size bulk
 
         Args:
-            teardown_factory: A fixture used when we want a new resource that was created during the tests
-                               to be removed in the teardown phase.
-            bulk_size: Size of the bulk to be tested
+            interface_type (str): The interface type to be tested - CephBlockPool / CephFileSystem.
+            bulk_size (int): Size of the bulk to be tested
         Returns:
 
         """
+        self.interface = interface_type
+
+        if self.dev_mode:
+            bulk_size = 3
+
+        # Initialize some variables
+        timeout = bulk_size * 5
+        pvc_names_list = list()
+        pod_data_list = list()
+
         # Getting the test start time
-        test_start_time = PASTest.get_time()
+        test_start_time = self.get_time()
 
         log.info(f"Start creating bulk of new {bulk_size} PVCs")
-
-        pvc_objs, _ = helpers.create_multiple_pvcs(
-            sc_name=self.sc_obj.name,
+        self.pvc_objs, _ = helpers.create_multiple_pvcs(
+            sc_name=Interfaces_info[self.interface]["sc"],
             namespace=self.namespace,
             number_of_pvc=bulk_size,
             size=self.pvc_size,
             burst=True,
+            do_reload=False,
         )
+        log.info("Wait for all of the PVCs to be in Bound state")
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", bulk_size, self.namespace, constants.STATUS_BOUND, timeout, 10
+        )
+        # incase of creation faliure, the wait_for_resource_bulk_status function
+        # will raise an exception. so in this point the creation succeed
+        log.info("All PVCs was created and in Bound state.")
 
-        for pvc_obj in pvc_objs:
+        # Reload all PVC(s) information
+        for pvc_obj in self.pvc_objs:
             pvc_obj.reload()
-            teardown_factory(pvc_obj)
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj, constants.STATUS_BOUND
-                )
-
-                executor.submit(pvc_obj.reload)
-
-        start_time = helpers.get_provision_time(
-            self.interface, pvc_objs, status="start"
-        )
-        end_time = helpers.get_provision_time(self.interface, pvc_objs, status="end")
-        total_time = (end_time - start_time).total_seconds()
-        log.info(
-            f"{self.interface}: Bulk of {bulk_size} PVCs creation time is {total_time} seconds."
-        )
-
-        pvc_names_list = []
-        for pvc_obj in pvc_objs:
             pvc_names_list.append(pvc_obj.name)
+        log.debug(f"The PVCs names are : {pvc_names_list}")
 
-        log.info(f"{self.interface} : Before pod attach")
-        bulk_start_time = time.time()
-        pod_data_list = list()
+        # Create kube_job for pod creation
         pod_data_list.extend(
             scale_lib.attach_multiple_pvc_to_pod_dict(
                 pvc_list=pvc_names_list,
@@ -140,57 +161,44 @@ class TestBulkPodAttachPerformance(PASTest):
                 pvcs_per_pod=1,
             )
         )
-
-        lcl = locals()
-        tmp_path = pathlib.Path(ocsci_log_path())
-        obj_name = "obj1"
-        # Create kube_job for pod creation
-        lcl[f"pod_kube_{obj_name}"] = ObjectConfFile(
-            name=f"pod_kube_{obj_name}",
+        self.pods_obj = ObjectConfFile(
+            name="pod_kube_obj",
             obj_dict_list=pod_data_list,
-            project=defaults.ROOK_CLUSTER_NAMESPACE,
-            tmp_path=tmp_path,
+            project=self.namespace,
+            tmp_path=pathlib.Path(ocsci_log_path()),
         )
-        lcl[f"pod_kube_{obj_name}"].create(namespace=self.namespace)
+        log.debug(f"PODs data list is : {json.dumps(pod_data_list, indent=3)}")
 
-        log.info("Checking that pods are running")
+        log.info(f"{self.interface} : Before pod attach")
+        bulk_start_time = time.time()
+        self.pods_obj.create(namespace=self.namespace)
         # Check all the PODs reached Running state
-        pod_running_list = scale_lib.check_all_pod_reached_running_state_in_kube_job(
-            kube_job_obj=lcl[f"pod_kube_{obj_name}"],
-            namespace=self.namespace,
-            no_of_pod=len(pod_data_list),
-            timeout=180,
+        log.info("Checking that pods are running")
+        performance_lib.wait_for_resource_bulk_status(
+            "pod", bulk_size, self.namespace, constants.STATUS_RUNNING, timeout, 2
         )
-        for pod_name in pod_running_list:
-            pod_obj = get_pod_obj(pod_name, self.namespace)
-            teardown_factory(pod_obj)
-
+        log.info("All POD(s) are in Running State.")
         bulk_end_time = time.time()
         bulk_total_time = bulk_end_time - bulk_start_time
-        log.info(
-            f"Bulk attach time of {len(pod_running_list)} pods is {bulk_total_time} seconds"
-        )
+        log.info(f"Bulk attach time of {bulk_size} pods is {bulk_total_time} seconds")
 
         # Collecting environment information
         self.get_env_info()
 
         # Initialize the results doc file.
-        full_log_path = get_full_test_logs_path(cname=self)
-        self.results_path = get_full_test_logs_path(cname=self)
-        full_log_path += f"-{self.sc}"
         full_results = self.init_full_results(
             ResultsAnalyse(
-                self.uuid, self.crd_data, full_log_path, "pod_bulk_attachtime"
+                self.uuid, self.crd_data, self.full_log_path, "pod_bulk_attachtime"
             )
         )
 
-        full_results.add_key("storageclass", self.sc)
+        full_results.add_key("storageclass", Interfaces_info[self.interface]["name"])
         full_results.add_key("pod_bulk_attach_time", bulk_total_time)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_size", bulk_size)
 
         # Getting the test end time
-        test_end_time = PASTest.get_time()
+        test_end_time = self.get_time()
 
         # Add the test time to the ES report
         full_results.add_key(
@@ -198,6 +206,7 @@ class TestBulkPodAttachPerformance(PASTest):
         )
 
         # Write the test results into the ES server
+        self.results_path = helpers.get_full_test_logs_path(cname=self)
         if full_results.es_write():
             res_link = full_results.results_link()
             # write the ES link to the test results in the test log.
@@ -212,16 +221,12 @@ class TestBulkPodAttachPerformance(PASTest):
         and reporting the full results (links in the ES) of previous tests (4)
         """
 
-        self.number_of_tests = 4
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_bulk_pod_attach_performance"
+        self.add_test_to_results_check(
+            test="test_bulk_pod_attach_performance",
+            test_count=4,
+            test_name="Bulk Pod Attach Time",
         )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        log.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="Bulk Pod Attach Time")
+        self.check_results_and_push_to_dashboard()
 
     def init_full_results(self, full_results):
         """
@@ -236,5 +241,4 @@ class TestBulkPodAttachPerformance(PASTest):
         """
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
-        full_results.add_key("index", full_results.new_index)
         return full_results

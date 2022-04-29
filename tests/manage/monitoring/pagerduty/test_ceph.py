@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import managed_service_required, tier4, tier4a
+from ocs_ci.framework.testlib import (
+    managed_service_required,
+    skipif_ms_consumer,
+    tier4,
+    tier4a,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
 
@@ -12,6 +17,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @managed_service_required
+@skipif_ms_consumer
 @pytest.mark.polarion_id("OCS-2771")
 def test_corrupt_pg_pd(measure_corrupt_pg):
     """

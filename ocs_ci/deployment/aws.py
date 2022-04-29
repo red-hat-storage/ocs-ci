@@ -14,6 +14,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.node import drain_nodes
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
@@ -285,6 +286,7 @@ class AWSUPI(AWSBase):
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
+                "INSTALLER_BIN": "openshift-install",
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
@@ -647,11 +649,7 @@ class AWSUPI(AWSBase):
         for node in rhcos_workers:
             cordon = f"oc adm cordon {node}"
             run_cmd(cordon)
-            drain = (
-                f"oc adm drain {node} --force --delete-local-data "
-                f"--ignore-daemonsets"
-            )
-            run_cmd(drain)
+            drain_nodes([node])
             delete = f"oc delete nodes {node}"
             run_cmd(delete)
         if len(self.get_rhcos_workers()):

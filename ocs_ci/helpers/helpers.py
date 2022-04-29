@@ -686,7 +686,7 @@ def create_multiple_pvcs(
                 volume_mode=volume_mode,
             )
             for _ in range(number_of_pvc)
-        ]
+        ], None
 
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["namespace"] = namespace
@@ -1854,7 +1854,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         ]
         cmd = (
             f"ceph fs subvolume getpath {get_cephfs_name()}"
-            f" csi-vol-{image_uuid} csi"
+            f" csi-vol-{image_uuid} {get_cephfs_subvolumegroup()}"
         )
 
     try:
@@ -3861,3 +3861,28 @@ def create_reclaim_space_job(
         job_data["spec"]["retryDeadlineSeconds"] = retry_deadline_seconds
     ocs_obj = create_resource(**job_data)
     return ocs_obj
+
+
+def get_cephfs_subvolumegroup():
+    """
+    Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
+
+    Returns:
+        str: The name of cephfilesystemsubvolumegroup
+
+    """
+    if (
+        config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+    ):
+        subvolume_group = ocp.OCP(
+            kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        subvolume_group_obj = subvolume_group.get().get("items")[0]
+        subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
+    else:
+        subvolume_group_name = "csi"
+
+    return subvolume_group_name
