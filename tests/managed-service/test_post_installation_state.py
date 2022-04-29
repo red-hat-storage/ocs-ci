@@ -105,6 +105,31 @@ class TestPostInstallationState(ManageTest):
             assert consumer_yaml["status"]["grantedCapacity"] == "1Ti"
 
     @tier1
+    @pytest.mark.polarion_id("OCS-3917")
+    @ms_provider_required
+    def test_provider_server_logs(self):
+        """
+        Test that the logs of ocs-provider-server pod have entries for each consumer
+        """
+        provider_pod = pod.get_pods_having_label(
+            constants.PROVIDER_SERVER_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )[0]
+        provider_logs = pod.get_pod_logs(pod_name=provider_pod["metadata"]["name"])
+        log_lines = provider_logs.split("\n")
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            expected_log = (
+                f'successfully Enabled the StorageConsumer resource "{consumer_name}"'
+            )
+            log_found = False
+            for line in log_lines:
+                if expected_log in line:
+                    log_found = True
+                    log.info(f"'{expected_log}' found in ocs-provider-server logs")
+                    break
+            assert log_found, f"'{expected_log}' not found in ocs-provider-server logs"
+
+    @tier1
     @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
     def test_deployer_logs_not_empty(self):
