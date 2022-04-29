@@ -110,6 +110,15 @@ VAULT_TENANT_SA_CONNECTION_CONF = {
 # External cluster username
 EXTERNAL_CLUSTER_USER = "client.healthchecker"
 EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
+
+# External cluster CSI users
+ceph_csi_users = [
+    "client.csi-cephfs-node",
+    "client.csi-cephfs-provisioner",
+    "client.csi-rbd-node",
+    "client.csi-rbd-provisioner",
+]
+
 # Hpcs related defaults
 #
 # To be used for adding additional hpcs connections

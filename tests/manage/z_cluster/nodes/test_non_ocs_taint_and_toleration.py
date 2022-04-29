@@ -67,7 +67,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
-        2. Set tolerations on storagecluster, subscription and configmap
+        2. Set tolerations on storagecluster, subscription, configmap and ocsinit
         3. Respin all ocs pods and check if it runs on ocs nodes with tolerations
         4. Add Capacity
 
@@ -110,6 +110,20 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
             sub_obj.patch(params=param, format_type="merge")
 
+        # Add tolerations to the ocsinitializations.ocs.openshift.io
+        param = (
+            '{"spec":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}'
+        )
+
+        ocsini_obj = ocp.OCP(
+            resource_name=constants.OCSINIT,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            kind=constants.OCSINITIALIZATION,
+        )
+        ocsini_obj.patch(params=param, format_type="merge")
+
         # Add tolerations to the configmap rook-ceph-operator-config
         configmap_obj = ocp.OCP(
             kind=constants.CONFIGMAP,
@@ -128,14 +142,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         configmap_obj.patch(params=param_cmd, format_type="json")
 
         # After edit noticed few pod respins as expected
-        assert wait_for_pods_to_be_running()
+        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
         # Respin all pods and check it if is still running
-        # Excluding tool-box pod because of https://bugzilla.redhat.com/show_bug.cgi?id=2012084
         pod_list = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=["rook-ceph-tools"],
-            exclude_selector=True,
         )
         for pod in pod_list:
             pod.delete(wait=False)
@@ -159,5 +170,4 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             selector=constants.OSD_APP_LABEL,
             resource_count=count * replica_count,
         ), "New OSDs failed to reach running state"
-
         check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)

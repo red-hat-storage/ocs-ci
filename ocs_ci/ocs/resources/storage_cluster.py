@@ -1,7 +1,9 @@
 """
 StorageCluster related functionalities
 """
+import copy
 import logging
+import re
 import tempfile
 import yaml
 
@@ -15,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -35,6 +37,7 @@ from ocs_ci.ocs.node import (
     add_new_disk_for_vsphere,
     get_osd_running_nodes,
     get_encrypted_osd_devices,
+    verify_worker_nodes_security_groups,
 )
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
@@ -114,6 +117,9 @@ def ocs_install_verification(
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
+    external = config.DEPLOYMENT["external_mode"] or (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
 
     # Basic Verification for cluster
     basic_verification(ocs_registry_image)
@@ -126,7 +132,7 @@ def ocs_install_verification(
         namespace=namespace,
     )
     pod = OCP(kind=constants.POD, namespace=namespace)
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         osd_count = int(
             storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
         ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
@@ -155,7 +161,26 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
-    if not config.DEPLOYMENT["external_mode"]:
+
+    if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 3,
+                constants.OSD_APP_LABEL: osd_count,
+                constants.MGR_APP_LABEL: 1,
+                constants.MDS_APP_LABEL: 2,
+            }
+        )
+    elif managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+        resources_dict.update(
+            {
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+            }
+        )
+    elif not config.DEPLOYMENT["external_mode"]:
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 3,
@@ -238,7 +263,7 @@ def ocs_install_verification(
     assert list(missing_scs) == []
 
     # Verify OSDs are distributed
-    if not config.DEPLOYMENT["external_mode"]:
+    if not external:
         if not skip_osd_distribution_check:
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
@@ -254,7 +279,8 @@ def ocs_install_verification(
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
-    assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+    if not managed_service or config.ENV_DATA["cluster_type"].lower() != "provider":
+        assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -273,23 +299,43 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools:
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.RBD_NODE_SECRET
-        )
-        assert (
-            sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.RBD_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.RBD_NODE_SECRET
+            )
+            assert (
+                sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.RBD_PROVISIONER_SECRET
+            )
     if not disable_cephfs:
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-            == constants.CEPHFS_NODE_SECRET
-        )
-        assert (
-            sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-            == constants.CEPHFS_PROVISIONER_SECRET
-        )
+        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+            )
+            assert (
+                "rook-ceph-client"
+                in sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+            )
+        else:
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                == constants.CEPHFS_NODE_SECRET
+            )
+            assert (
+                sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                == constants.CEPHFS_PROVISIONER_SECRET
+            )
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
@@ -344,6 +390,22 @@ def ocs_install_verification(
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
+
+    # verify caps for external cluster
+    log.info("Verify CSI users and caps for external cluster")
+    if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
+        ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+        ceph_auth_data = ct_pod.exec_cmd_on_pod("ceph auth ls -f json")
+        for each in ceph_auth_data["auth_dump"]:
+            if each["entity"] in defaults.ceph_csi_users:
+                assert (
+                    "osd blocklist" in each["caps"]["mon"]
+                ), f"osd blocklist caps are not present for user {each['entity']}"
+                ceph_csi_users.remove(each["entity"])
+        assert (
+            not ceph_csi_users
+        ), f"CSI users {ceph_csi_users} not created in external cluster"
+        log.debug("All CSI users exists and have expected caps")
 
     # Verify CSI snapshotter sidecar container is not present
     # if the OCS version is < 4.6
@@ -628,7 +690,8 @@ def osd_encryption_verification():
             )
             raise ValueError("OSD is not encrypted")
 
-    if ocs_version > version.VERSION_4_6:
+    # skip OCS 4.8 as the fix for luks header info is still not available on it
+    if ocs_version > version.VERSION_4_6 and ocs_version != version.VERSION_4_8:
         log.info("Verify luks header label for encrypted devices")
         worker_nodes = get_osd_running_nodes()
         failures = 0
@@ -1014,11 +1077,12 @@ def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
     1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
-    2. ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch secrets
-    exist in openshift-storage namespace
-    3. 1 prometheus pod and 3 alertmanager pods are in Running state
-    4. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
-    5. Networkpolicy and EgressNetworkpolicy resources are present
+    2. 1 prometheus pod and 3 alertmanager pods are in Running state
+    3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
+    4. Verify that noobaa-operator replicas is set to 0
+    5. Verify managed ocs secrets
+    6. If cluster is Provider, verify resources specific to provider clusters
+    7. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1040,15 +1104,7 @@ def verify_managed_service_resources():
         csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
 
     # Verify alerting secrets creation
-    secret_ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    for secret_name in {
-        managedservice.get_pagerduty_secret_name(),
-        managedservice.get_smtp_secret_name(),
-        managedservice.get_dms_secret_name(),
-    }:
-        assert secret_ocp_obj.is_exist(
-            resource_name=secret_name
-        ), f"{secret_name} does not exist in openshift-storage namespace"
+    verify_managed_secrets()
 
     # Verify alerting pods are Running
     pod_obj = OCP(
@@ -1075,7 +1131,59 @@ def verify_managed_service_resources():
             managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
         ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
 
-    # Verify Networkpolicy and EgressNetworkpolicy creation
+    # Verify that noobaa-operator replicas is set to 0
+    noobaa_deployment = deployment.get_deployments_having_label(
+        "operators.coreos.com/mcg-operator.openshift-storage=",
+        constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )[0]
+    log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
+    assert noobaa_deployment.replicas == 0
+
+    # Verify attributes specific to cluster types
+    sc = get_storage_cluster()
+    sc_data = sc.get()["items"][0]
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        verify_provider_storagecluster(sc_data)
+        verify_provider_resources()
+    else:
+        verify_consumer_storagecluster(sc_data)
+
+
+def verify_provider_resources():
+    """
+    Verify resources specific to managed OCS provider:
+    1. Ocs-provider-server pod is Running
+    2. cephcluster is Ready and its hostNetworking is set to True
+    3. Security groups are set up correctly
+    """
+    # Verify ocs-provider-server pod is Running
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    pod_obj.wait_for_resource(
+        condition="Running", selector="app=ocsProviderApiServer", resource_count=1
+    )
+
+    # Verify that cephcluster is Ready and hostNetworking is True
+    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster_yaml = cephcluster.get().get("items")[0]
+    log.info("Verifying that cephcluster is Ready and hostNetworking is True")
+    assert (
+        cephcluster_yaml["status"]["phase"] == "Ready"
+    ), f"Status of cephcluster ocs-storagecluster-cephcluster is {cephcluster_yaml['status']['phase']}"
+    assert cephcluster_yaml["spec"]["network"][
+        "hostNetwork"
+    ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
+
+    assert verify_worker_nodes_security_groups()
+
+
+def verify_managed_service_networkpolicy():
+    """
+    Verify Networkpolicy and EgressNetworkpolicy creation
+    Temporarily left out for V2 offering
+    """
     for policy in {
         ("Networkpolicy", "ceph-ingress-rule"),
         ("EgressNetworkpolicy", "egress-rule"),
@@ -1087,3 +1195,111 @@ def verify_managed_service_resources():
         assert policy_obj.is_exist(
             resource_name=policy[1]
         ), f"{policy[0]} {policy}[1] does not exist in openshift-storage namespace"
+
+
+def verify_managed_secrets():
+    """
+    Verify that ocs-converged-pagerduty, ocs-converged-smtp, ocs-converged-deadmanssnitch,
+    addon-ocs-provider-parameters, alertmanager-managed-ocs-alertmanager-generated,
+    rook-ceph-mon secrets exist in openshift-storage namespace.
+    For a provider cluster verify existence of onboarding-ticket-key and ocs-provider-server
+    secrets.
+    For a consumer cluster verify existence of 5 rook-ceph-client secrets
+    """
+    secret_ocp_obj = OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    for secret_name in {
+        managedservice.get_pagerduty_secret_name(),
+        managedservice.get_smtp_secret_name(),
+        managedservice.get_dms_secret_name(),
+        managedservice.get_parameters_secret_name(),
+        constants.MANAGED_ALERTMANAGER_SECRET,
+        constants.MANAGED_MON_SECRET,
+    }:
+        assert secret_ocp_obj.is_exist(
+            resource_name=secret_name
+        ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        for secret_name in {
+            constants.MANAGED_ONBOARDING_SECRET,
+            constants.MANAGED_PROVIDER_SERVER_SECRET,
+        }:
+            assert secret_ocp_obj.is_exist(
+                resource_name=secret_name
+            ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+    else:
+        secrets = secret_ocp_obj.get().get("items")
+        client_secrets = []
+        for secret in secrets:
+            if secret["metadata"]["name"].startswith("rook-ceph-client"):
+                client_secrets.append(secret["metadata"]["name"])
+        log.info(f"rook-ceph-client secrets: {client_secrets}")
+        assert len(client_secrets) == 5
+
+
+def verify_provider_storagecluster(sc_data):
+    """
+    Verify that storagecluster of the provider passes the following checks:
+    1. allowRemoteStorageConsumers: true
+    2. hostNetwork: true
+    3. matchExpressions:
+    key: node-role.kubernetes.io/worker
+    operator: Exists
+    key: node-role.kubernetes.io/infra
+    operator: DoesNotExist
+    4. storageProviderEndpoint: IP:31659
+    5. annotations:
+    uninstall.ocs.openshift.io/cleanup-policy: delete
+    uninstall.ocs.openshift.io/mode: graceful
+
+    Args:
+        sc_data (dict): storagecluster data dictionary
+    """
+    log.info(
+        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+    )
+    assert sc_data["spec"]["allowRemoteStorageConsumers"]
+    log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
+    assert sc_data["spec"]["hostNetwork"]
+    expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]
+    for item in expressions:
+        log.info(f"Verifying {item}")
+        if item["key"] == "node-role.kubernetes.io/worker":
+            assert item["operator"] == "Exists"
+        else:
+            assert item["operator"] == "DoesNotExist"
+    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
+    )
+    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
+    )
+    annotations = sc_data["metadata"]["annotations"]
+    log.info(f"Annotations: {annotations}")
+    assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
+    assert annotations["uninstall.ocs.openshift.io/mode"] == "graceful"
+
+
+def verify_consumer_storagecluster(sc_data):
+    """
+    Verify that Storagecluster is has:
+    1. externalStorage: enable: true
+    2. storageProviderEndpoint: IP:31659
+    3. TODO: onboardingTicket
+    4. TODO: requestedCapacity
+
+    Args:
+    sc_data (dict): storagecluster data dictionary
+    """
+    log.info(f"externalStorage: enable: {sc_data['spec']['externalStorage']['enable']}")
+    assert sc_data["spec"]["externalStorage"]["enable"]
+    log.info(
+        f"storageProviderEndpoint: {sc_data['spec']['externalStorage']['storageProviderEndpoint']}"
+    )
+    assert re.match(
+        "\\d+(\\.\\d+){3}:31659",
+        sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
+    )

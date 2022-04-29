@@ -17,8 +17,13 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
+
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.managedservice import remove_header_footer_from_key
+from ocs_ci.utility.managedservice import (
+    remove_header_footer_from_key,
+    generate_onboarding_token,
+    get_storage_provider_endpoint,
+)
 
 
 logger = logging.getLogger(name=__file__)
@@ -36,34 +41,64 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
-def create_cluster(cluster_name, version):
+def create_cluster(cluster_name, version, region):
     """
     Create OCP cluster.
 
     Args:
         cluster_name (str): Cluster name
         version (str): cluster version
+        region (str): Cluster region
 
     """
-    rosa_ocp_version = get_latest_rosa_version(version)
+
+    rosa_ocp_version = config.DEPLOYMENT["installer_version"]
+    # Validate ocp version with rosa ocp supported version
+    # Select the valid version if given version is invalid
+    if not validate_ocp_version(rosa_ocp_version):
+        logger.warning(
+            f"Given OCP version {rosa_ocp_version} "
+            f"is not valid ROSA OCP version. "
+            f"Selecting latest rosa version for deployment"
+        )
+        rosa_ocp_version = get_latest_rosa_version(version)
+        logger.info(f"Using OCP version {rosa_ocp_version}")
+
     create_account_roles(version)
-    region = config.DEPLOYMENT["region"]
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
     cluster_type = config.ENV_DATA.get("cluster_type", "")
     provider_name = config.ENV_DATA.get("provider_name", "")
+    rosa_mode = config.ENV_DATA.get("rosa_mode", "")
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --mode auto --compute-machine-type "
+        f"--compute-nodes {compute_nodes} --compute-machine-type "
         f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
     )
+    if rosa_mode == "auto":
+        cmd += " --mode auto"
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
         aws = AWSUtil()
         subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
-    utils.run_cmd(cmd)
+    utils.run_cmd(cmd, timeout=1200)
+    if rosa_mode != "auto":
+        logger.info(
+            "Waiting for ROSA cluster status changed to waiting or pending state"
+        )
+        for cluster_info in utils.TimeoutSampler(
+            4500, 30, ocm.get_cluster_details, cluster_name
+        ):
+            status = cluster_info["status"]["state"]
+            logger.info(f"Current installation status: {status}")
+            if status == "waiting" or status == "pending":
+                logger.info(f"Cluster is in {status} state")
+                break
+        create_operator_roles(cluster_name)
+        create_oidc_provider(cluster_name)
+
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
         4500, 30, ocm.get_cluster_details, cluster_name
@@ -113,6 +148,32 @@ def get_latest_rosa_version(version):
     return rosa_version
 
 
+def validate_ocp_version(version):
+    """
+    Validate the version whether given version is z-stream version available for ROSA.
+
+    Args:
+        version (str): OCP version string
+
+    Returns:
+        bool: True if given version is available in z-stream version for ROSA
+              else False
+    """
+    cmd = "rosa list versions -o json"
+    out = utils.run_cmd(cmd)
+    output = json.loads(out)
+    available_versions = [info["raw_id"] for info in output]
+    if version in available_versions:
+        logger.info(f"OCP versions {version} is available for ROSA")
+        return True
+    else:
+        logger.info(
+            f"Given OCP versions {version} is not available for ROSA. "
+            f"Valid OCP versions supported on ROSA are : {available_versions}"
+        )
+        return False
+
+
 def create_account_roles(version, prefix="ManagedOpenShift"):
     """
     Create the required account-wide roles and policies, including Operator policies.
@@ -122,27 +183,20 @@ def create_account_roles(version, prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    cmd = (
-        f"rosa create account-roles --mode auto"
-        f' --permissions-boundary "" --prefix {prefix}  --yes'
-    )
+    cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
     utils.run_cmd(cmd, timeout=1200)
 
 
-def create_operator_roles(cluster, prefix='""'):
+def create_operator_roles(cluster):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
 
     Args:
         cluster (str): cluster name or cluster id
-        prefix (str): role prefix
 
     """
-    cmd = (
-        f"rosa create operator-roles --cluster {cluster} --prefix {prefix}"
-        f' --mode auto --permissions-boundary "" --yes'
-    )
+    cmd = f"rosa create operator-roles --cluster {cluster}" f" --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
 
 
@@ -205,6 +259,7 @@ def install_odf_addon(cluster):
     addon_name = config.ENV_DATA["addon_name"]
     size = config.ENV_DATA["size"]
     cluster_type = config.ENV_DATA.get("cluster_type", "")
+    provider_name = config.ENV_DATA.get("provider_name", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
@@ -215,6 +270,7 @@ def install_odf_addon(cluster):
         cmd = cmd + f" --notification-email-1 {notification_email_1}"
     if notification_email_2:
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
+
     if cluster_type.lower() == "provider":
         public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
         if not public_key:
@@ -228,9 +284,19 @@ def install_odf_addon(cluster):
         public_key_only = remove_header_footer_from_key(public_key)
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
+    if cluster_type.lower() == "consumer" and provider_name:
+        unit = config.ENV_DATA.get("unit", "Ti")
+        storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
+        cmd += f' --unit "{unit}" --storage-provider-endpoint "{storage_provider_endpoint}"'
+        onboarding_ticket = generate_onboarding_token()
+        if onboarding_ticket:
+            cmd += f' --onboarding-ticket "{onboarding_ticket}"'
+        else:
+            raise ValueError(" Invalid onboarding ticket configuration")
+
     utils.run_cmd(cmd, timeout=1200)
     for addon_info in utils.TimeoutSampler(
-        4000, 30, get_addon_info, cluster, addon_name
+        7200, 30, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "ready" in addon_info:

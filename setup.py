@@ -20,7 +20,7 @@ setup(
         "gevent==20.9.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
-        "paramiko==2.7.2",
+        "paramiko==2.10.1",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
@@ -77,7 +77,6 @@ setup(
         "mysql-connector-python==8.0.27",
         "pytest-repeat",
         "pexpect>=4.8.0",
-        "yq==2.14.0",
     ],
     entry_points={
         "console_scripts": [

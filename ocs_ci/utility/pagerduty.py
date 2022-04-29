@@ -317,7 +317,7 @@ class PagerDutyAPI(object):
             timeout -= sleep
         return incidents
 
-    def check_incident_cleared(self, summary, measure_end_time, time_min=240):
+    def check_incident_cleared(self, summary, measure_end_time, time_min=420):
         """
         Check that all incidents with provided summary are cleared.
 

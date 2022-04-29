@@ -14,7 +14,12 @@ from ocs_ci.ocs.bucket_utils import (
     complete_multipart_upload,
     sync_object_directory,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    tier3,
+    bugzilla,
+    skipif_ocs_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,3 +109,43 @@ class TestS3MultipartUpload(MCGTest):
             result_object_path=f"{res_dir}/{key}",
             awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"
+
+    @tier3
+    @pytest.mark.polarion_id("OCS-2775")
+    @skipif_ocs_version("<4.10")
+    @bugzilla("2040682")
+    def test_multipart_with_no_body(self, mcg_obj, bucket_factory):
+        """
+        Test Multipart upload with no body while uploading the part
+        """
+        bucket = bucket_factory(amount=1, interface="OC")[0].name
+        object_key = "ObjKey-" + str(uuid.uuid4().hex)
+
+        # Create & list Multipart Upload on the Bucket
+        logger.info(
+            f"Initiating Multipart Upload on Bucket: {bucket} with Key {object_key}"
+        )
+        upload_id = create_multipart_upload(mcg_obj, bucket, object_key)
+        logger.info(
+            f"Listing the Multipart Upload : {list_multipart_upload(mcg_obj, bucket)['Uploads']}"
+        )
+
+        # Uploading individual part with no body to the Bucket
+        logger.info(
+            f"Uploading individual parts to the bucket: {bucket} with no body specified"
+        )
+        part_etag = mcg_obj.s3_client.upload_part(
+            Bucket=bucket, Key=object_key, UploadId=upload_id, PartNumber=1
+        )["ETag"]
+        uploaded_part = [{"ETag": part_etag, "PartNumber": 1}]
+
+        # Listing the Uploaded part
+        logger.info(
+            f"Listing the individual part: {list_uploaded_parts(mcg_obj, bucket, object_key, upload_id)['Parts']}"
+        )
+
+        # Completing the Multipart Upload
+        logger.info(
+            f"Completing the Multipart Upload with a part and no body on bucket: {bucket}"
+        )
+        complete_multipart_upload(mcg_obj, bucket, object_key, upload_id, uploaded_part)

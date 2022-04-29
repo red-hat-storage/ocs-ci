@@ -199,11 +199,16 @@ ENV_DATA:
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
   cluster_type: ""
 
+  # RHEL template which are used for vSphere platform
+  rhel7_template: 'rhel79_ocs4qe'
+  rhel8_template: 'rhel85_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
 
-  #Managed service - Managed StorageCluster size in TiB
-  size: '1'
+  # Managed service git stat  default configurations
+  # Managed StorageCluster size in TiB
+  size: '20'
+  ms_env_type: 'staging'
 
 # This section is related to upgrade
 UPGRADE:

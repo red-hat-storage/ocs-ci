@@ -879,3 +879,14 @@ class PASTest(BaseTest):
         except CommandFailed:
             log.error(f"Cannot delete project {self.namespace}")
             raise CommandFailed(f"{self.namespace} was not created")
+
+    def set_results_path_and_file(self, func_name):
+        """
+        Setting the results_path and results_file parameter for a specific test
+
+        Args:
+            func_name (str): the name of the function which use for the test
+        """
+
+        self.results_path = os.path.join("/", *self.results_path, func_name)
+        self.results_file = os.path.join(self.results_path, "all_results.txt")

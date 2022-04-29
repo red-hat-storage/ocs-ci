@@ -6,11 +6,13 @@ currently supported KMSs: Vault and HPCS
 import logging
 import os
 
+import requests
 import json
 import shlex
 import tempfile
 import subprocess
 from subprocess import CalledProcessError
+from semantic_version import Version
 import base64
 
 from ocs_ci.framework import config, merge_dict
@@ -36,6 +38,7 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    encode,
 )
 
 
@@ -139,6 +142,12 @@ class Vault(KMS):
         self.vault_unseal()
         if config.ENV_DATA.get("use_vault_namespace"):
             self.vault_create_namespace()
+        if config.ENV_DATA.get("use_auth_path"):
+            self.cluster_id = get_running_cluster_id()
+            self.vault_kube_auth_path = (
+                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+            )
         self.vault_create_backend_path()
         self.create_ocs_vault_resources()
 
@@ -356,7 +365,10 @@ class Vault(KMS):
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
             self.create_ocs_kube_auth_resources()
-            self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+            self.vault_kube_auth_setup(
+                auth_path=self.vault_kube_auth_path,
+                token_reviewer_name=self.vault_cwd_kms_sa_name,
+            )
             self.create_vault_kube_auth_role(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                 role_name=self.vault_kube_auth_role,
@@ -371,10 +383,7 @@ class Vault(KMS):
             # create oc resource secret for token
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
             # token has to base64 encoded (with padding)
-            token_data["data"]["token"] = base64.b64encode(
-                # encode() because b64encode expects a byte type
-                self.vault_path_token.encode()
-            ).decode()  # decode() because b64encode returns a byte type
+            token_data["data"]["token"] = encode(self.vault_path_token)
             self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
@@ -382,7 +391,10 @@ class Vault(KMS):
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
-        connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.10"):
+            connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
+        else:
+            connection_data["data"].pop("VAULT_AUTH_METHOD")
         connection_data["data"]["VAULT_BACKEND_PATH"] = self.vault_backend_path
         connection_data["data"]["VAULT_CACERT"] = self.ca_cert_name
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
@@ -398,8 +410,13 @@ class Vault(KMS):
             connection_data["data"][
                 "VAULT_AUTH_KUBERNETES_ROLE"
             ] = constants.VAULT_KUBERNETES_AUTH_ROLE
+
         else:
             connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
+        if config.ENV_DATA.get("use_auth_path"):
+            connection_data["data"]["VAULT_AUTH_MOUNT_PATH"] = self.vault_kube_auth_path
+        else:
+            connection_data["data"].pop("VAULT_AUTH_MOUNT_PATH")
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def vault_unseal(self):
@@ -877,11 +894,15 @@ class Vault(KMS):
             buf = json.loads(conn_str)
             buf["vaultAddress"] = f"https://{self.vault_server}:{self.port}"
             buf["vaultBackendPath"] = self.vault_backend_path
-            buf["vaultCAFromsecret"] = get_default_if_keyval_empty(
+            buf["vaultCAFromSecret"] = get_default_if_keyval_empty(
                 config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
             )
-            buf["vaultClientCertFromSecret"] = self.client_cert_name
-            buf["vaultClientCertKeyFromSecret"] = self.client_key_name
+            buf["vaultClientCertFromSecret"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            buf["vaultClientCertKeyFromSecret"] = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
             if self.vault_namespace:
                 buf["vaultNamespace"] = self.vault_namespace
             if self.vault_kube_auth_path:
@@ -1000,8 +1021,9 @@ class Vault(KMS):
             f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
         secrets = run_cmd(cmd=cmd).split()
+        secret_name = ""
         for secret in secrets:
-            if "-token-" in secret:
+            if "-token-" in secret and "docker" not in secret:
                 secret_name = secret
         if not secret_name:
             raise NotFoundError("Secret name not found")
@@ -1037,12 +1059,10 @@ class Vault(KMS):
 
         # enable kubernetes auth method
         if auth_path and auth_namespace:
-            self.vault_kube_auth_path = auth_path
             self.vault_kube_auth_namespace = auth_namespace
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
-            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -path={auth_path} kubernetes"
 
         elif auth_namespace:
@@ -1070,6 +1090,7 @@ class Vault(KMS):
                 f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
                 f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
             )
+
         os.environ.pop("VAULT_FORMAT")
         proc = subprocess.run(
             cmd,
@@ -1078,7 +1099,6 @@ class Vault(KMS):
             shell=True,
             env=os.environ,
         )
-
         if "Success" in proc.stdout.decode():
             logger.info("vault: Kubernetes auth method configured successfully")
         else:
@@ -1263,6 +1283,101 @@ class HPCS(KMS):
         csi_kms_conn_details["data"]["1-hpcs"] = json.dumps(buf)
         csi_kms_conn_details["metadata"]["namespace"] = namespace
         self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
+    def cleanup(self):
+        """
+        Cleanup the backend resources in case of external
+
+        """
+        # nothing to cleanup as of now
+        logger.warning("Nothing to cleanup from HPCS")
+
+    def post_deploy_verification(self):
+        """
+        Validating the OCS deployment from hpcs perspective
+
+        """
+        if config.ENV_DATA.get("hpcs_deploy_mode") == "external":
+            self.validate_external_hpcs()
+
+    def get_token_for_ibm_api_key(self):
+        """
+        This function retrieves the access token in exchange of
+        an IBM API key
+
+        Return:
+            (str): access token for authentication with IBM endpoints
+        """
+        # decode service api key
+        api_key = base64.b64decode(self.ibm_kp_service_api_key).decode()
+        payload = {
+            "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+            "apikey": api_key,
+        }
+        r = requests.post(
+            self.ibm_kp_token_url,
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            data=payload,
+            verify=True,
+        )
+        assert r.ok, f"Couldn't get access token! StatusCode: {r.status_code}."
+        return "Bearer " + r.json()["access_token"]
+
+    def list_hpcs_keys(self):
+        """
+        This function lists the keys present in a HPCS instance
+
+        Return:
+            (list): list of keys in a HPCS instance
+        """
+        access_token = self.get_token_for_ibm_api_key()
+        r = requests.get(
+            f"{self.ibm_kp_base_url}" + "/api/v2/keys",
+            headers={
+                "accept": "application/vnd.ibm.kms.key+json",
+                "bluemix-instance": self.ibm_kp_service_instance_id,
+                "authorization": access_token,
+            },
+            verify=True,
+        )
+        assert r.ok, f"Couldn't list HPCS keys! StatusCode: {r.status_code}."
+        return r.json()["resources"]
+
+    def validate_external_hpcs(self):
+        """
+        This function is for post OCS deployment HPCS
+        verification
+
+        Following checks will be done
+        1. check osd encryption keys in the HPCS path
+        2. check noobaa keys in the HPCS path
+        3. check storagecluster CR for 'kms' enabled
+
+        Raises:
+            NotFoundError : if key not found in HPCS OR in the resource CR
+
+        """
+        self.gather_init_hpcs_conf()
+        kvlist = self.list_hpcs_keys()
+        # Check osd keys are present
+        osds = pod.get_osd_pods()
+        for osd in osds:
+            pvc = (
+                osd.get()
+                .get("metadata")
+                .get("labels")
+                .get(constants.CEPH_ROOK_IO_PVC_LABEL)
+            )
+            if any(pvc in k["name"] for k in kvlist):
+                logger.info(f"HPCS: Found key for {pvc}")
+            else:
+                logger.error(f"HPCS: Key not found for {pvc}")
+                raise NotFoundError("HPCS key not found")
+
+        # Check kms enabled
+        if not is_kms_enabled():
+            logger.error("KMS not enabled on storage cluster")
+            raise NotFoundError("KMS flag not found")
 
 
 kms_map = {"vault": Vault, "hpcs": HPCS}

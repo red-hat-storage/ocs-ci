@@ -2,7 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, gather_metrics_on_fail
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    gather_metrics_on_fail,
+    skipif_managed_service,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -16,6 +20,7 @@ log = logging.getLogger(__name__)
 @gather_metrics_on_fail(
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
+@skipif_managed_service
 def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
     """
     Test that there are appropriate alerts when ceph cluster is utilized
@@ -79,6 +84,7 @@ def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
 @gather_metrics_on_fail(
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
+@skipif_managed_service
 def test_cephfs_capacity_workload_alerts(workload_storageutilization_95p_cephfs):
     """
     Test that there are appropriate alerts when ceph cluster is utilized.
