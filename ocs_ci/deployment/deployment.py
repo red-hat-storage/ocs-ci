@@ -50,6 +50,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
+from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
@@ -1846,16 +1847,21 @@ class MultiClusterDROperatorsDeploy(object):
 
     def deploy_dr_hub_operator(self):
         # Create ODF HUB operator only on ACM HUB
+        channel = config.ENV_DATA.get("acm_hub_channel")
         dr_hub_operator_data = templating.load_yaml(constants.OPENSHIFT_DR_HUB_OPERATOR)
         dr_hub_operator_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_hub_operator_", delete=False
         )
+        resource_name = packagemanifest.get_current_csv(
+            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        )
+        dr_hub_operator_data["spec"]["startingCSV"] = resource_name
         templating.dump_data_to_temp_yaml(
             dr_hub_operator_data, dr_hub_operator_yaml.name
         )
         run_cmd(f"oc create -f {dr_hub_operator_yaml.name}")
         dr_hub_csv = CSV(
-            resource_name=dr_hub_operator_data["spec"]["startingCSV"],
+            resource_name=resource_name,
             namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
         )
         dr_hub_csv.wait_for_phase("Succeeded")

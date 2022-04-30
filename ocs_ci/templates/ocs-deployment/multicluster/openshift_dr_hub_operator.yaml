@@ -6,9 +6,9 @@ metadata:
   name: odr-hub-operator
   namespace: openshift-dr-system
 spec:
-  channel: stable-4.9
+  channel: stable-4.10
   installPlanApproval: Automatic
   name: odr-hub-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: odr-hub-operator.v4.9.1
+  startingCSV: PLACEHOLDER
