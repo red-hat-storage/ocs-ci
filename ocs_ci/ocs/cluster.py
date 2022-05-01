@@ -2026,6 +2026,17 @@ def validate_existence_of_blocking_pdb():
     return blocking_pdb_exist
 
 
+def is_managed_service_cluster():
+    """
+    Check if the cluster is a managed service cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service cluster. False, otherwise
+
+    """
+    return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities

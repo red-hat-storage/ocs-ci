@@ -1326,3 +1326,23 @@ def get_ceph_clients():
     """
     consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     return consumer.get().get("items")
+
+
+def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get the storage cluster state
+
+    Args:
+        sc_name (str): The storage cluster name
+        namespace (str): Namespace of the resource. The default value is:
+            'defaults.ROOK_CLUSTER_NAMESPACE'
+
+    Returns:
+        str: The storage cluster state
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    return sc_obj.get_resource(resource_name=sc_name, column="PHASE")
