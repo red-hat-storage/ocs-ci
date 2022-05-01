@@ -1729,3 +1729,8 @@ SPACE = " "
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+
+Interfaces_info = {
+    CEPHBLOCKPOOL: {"name": "RBD", "sc": CEPHBLOCKPOOL_SC},
+    CEPHFILESYSTEM: {"name": "CephFS", "sc": CEPHFILESYSTEM_SC},
+}

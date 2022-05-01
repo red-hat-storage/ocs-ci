@@ -50,6 +50,14 @@ def load_config(config_files):
             framework.config.update(custom_config_data)
 
 
+def get_tests_config():
+    results = []
+    for path, currentDirectory, files in os.walk("ocs_ci/framework/conf/tests.d/"):
+        for file in files:
+            results.append(os.path.join(path, file))
+    return results
+
+
 def init_ocsci_conf(arguments=None):
     """
     Update the config object with any files passed via the CLI
@@ -128,6 +136,7 @@ def process_ocsci_conf(arguments):
     )
 
     args, unknown = parser.parse_known_args(args=arguments)
+    load_config(get_tests_config())
     load_config(args.ocsci_conf)
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")

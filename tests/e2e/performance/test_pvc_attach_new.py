@@ -7,19 +7,14 @@ import logging
 import statistics
 
 from ocs_ci.framework import config
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import Interfaces_info
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
 
 log = logging.getLogger(__name__)
-
-# TODO: This dict can be move to the constant file to use in all other tests
-Interfaces_info = {
-    constants.CEPHBLOCKPOOL: {"name": "RBD", "sc": constants.CEPHBLOCKPOOL_SC},
-    constants.CEPHFILESYSTEM: {"name": "CephFS", "sc": constants.CEPHFILESYSTEM_SC},
-}
 
 
 class ResultsAnalyse(PerfResult):
@@ -88,24 +83,17 @@ class TestPodStartTime(PASTest):
         """
         log.info("Starting the test setup")
         self.benchmark_name = "pvc_attach_time"
-        # TODO - This part (reading test config from file) need to be done at global level
         try:
             self.params = config.TEST_CONF[self.benchmark_name]
             if not config.TEST_CONF[self.benchmark_name].get("enabled", True):
                 return
-
         except KeyError:
             # Setting up default parameters
-            log.info(
-                "Setting up the test parameters to the defaults since no conf file provided"
+            log.warning(
+                "No configuration is available for the test. Test will be skipped"
             )
-            self.params = {
-                "enabled": True,
-                "pvc_size": 5,
-                "samples_num": 5,
-                "acceptable_time": 30,
-                "interfaces": [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM],
-            }
+            self.params = {"enabled": False}
+            return
 
         super(TestPodStartTime, self).setup()
 
@@ -125,12 +113,12 @@ class TestPodStartTime(PASTest):
         """
         Cleanup the test environment
         """
-        log.info("Starting the test cleanup")
-
-        # Deleting the namespace used by the test
-        self.delete_test_project()
-
-        super(TestPodStartTime, self).teardown()
+        # teardown need to be run only if test wasn't skipped
+        if self.params.get("enabled", True):
+            log.info("Starting the test cleanup")
+            # Deleting the namespace used by the test
+            self.delete_test_project()
+            super(TestPodStartTime, self).teardown()
 
     def cleanup(self):
         """
@@ -139,12 +127,28 @@ class TestPodStartTime(PASTest):
         # Delete All created pods
         log.info("Delete all pods.....")
         for pod in self.pod_result_list:
-            pod.delete()
+            pod.delete(wait=False)
+        performance_lib.wait_for_resource_bulk_status(
+            resource="pod",
+            resource_count=0,
+            namespace=self.namespace,
+            status=constants.STATUS_RUNNING,
+            timeout=120,
+            sleep_time=5,
+        )
 
         # Delete All created pvcs
         log.info("Delete all pvcs.....")
         for pvc in self.pvc_list:
-            pvc.delete()
+            pvc.delete(wait=False)
+        performance_lib.wait_for_resource_bulk_status(
+            resource="pvc",
+            resource_count=0,
+            namespace=self.namespace,
+            status=constants.STATUS_RUNNING,
+            timeout=120,
+            sleep_time=5,
+        )
         self.pod_result_list = []
         self.pvc_list = []
 
