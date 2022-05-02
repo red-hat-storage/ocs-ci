@@ -1674,6 +1674,11 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
+ACM_HUB_DOWNSTREAM_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
+ACM_HUB_DOWNSTREAM_ICSP_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
+)
+ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
