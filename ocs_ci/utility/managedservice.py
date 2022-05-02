@@ -123,15 +123,17 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
             "'{.items[0].status.storageProviderEndpoint}'"
         )
 
-    if wait:
-        for result in TimeoutSampler(
-            timeout=timeout, sleep=5, func=_get_provider_endpoint
-        ):
-            if result:
-                provider_endpoint = result
-                break
-    else:
-        provider_endpoint = _get_provider_endpoint()
+    try:
+        if wait:
+            for result in TimeoutSampler(
+                timeout=timeout, sleep=5, func=_get_provider_endpoint
+            ):
+                if result:
+                    provider_endpoint = result
+                    break
+        else:
+            provider_endpoint = _get_provider_endpoint()
+    finally:
+        config.reset_ctx()
 
-    config.reset_ctx()
     return provider_endpoint
