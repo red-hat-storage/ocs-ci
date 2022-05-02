@@ -17,7 +17,6 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
-    skipif_external_mode,
     add_new_node_and_label_it,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
@@ -32,6 +31,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     skipif_bm,
     bugzilla,
+    skipif_external_mode,
     skipif_managed_service,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
