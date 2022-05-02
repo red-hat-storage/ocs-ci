@@ -115,11 +115,6 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
         return provider_endpoint
 
     config.switch_to_provider()
-    for i, cluster in enumerate(config.clusters):
-        if cluster.ENV_DATA["cluster_type"] == "provider":
-            provider_id = i
-            break
-    config.switch_ctx(provider_id)
 
     def _get_provider_endpoint():
         oc = ocp.OCP(namespace="openshift-config")
