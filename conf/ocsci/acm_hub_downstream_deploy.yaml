@@ -1,0 +1,5 @@
+---
+ENV_DATA:
+  deploy_acm_hub_cluster: true
+  skip_ocs_deployment: true
+  acm_hub_downstream: true

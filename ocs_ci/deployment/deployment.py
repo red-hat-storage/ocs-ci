@@ -6,6 +6,8 @@ platforms like AWS, VMWare, Baremetal etc.
 from copy import deepcopy
 import json
 import logging
+import os
+from subprocess import PIPE, Popen
 import tempfile
 import time
 from pathlib import Path
@@ -88,6 +90,7 @@ from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
 from ocs_ci.utility.utils import (
     ceph_health_check,
+    clone_repo,
     enable_huge_pages,
     exec_cmd,
     get_cluster_name,
@@ -274,10 +277,7 @@ class Deployment(object):
             config.ENV_DATA.get("deploy_acm_hub_cluster")
             and ocp_version >= version.VERSION_4_9
         ):
-            try:
-                self.deploy_acm_hub()
-            except Exception as e:
-                logger.error(e)
+            self.deploy_acm_hub()
 
         self.do_deploy_submariner()
         self.do_deploy_ocs()
@@ -1271,6 +1271,93 @@ class Deployment(object):
         """
         Handle ACM HUB deployment
         """
+        if config.ENV_DATA.get("acm_hub_downstream"):
+            self.deploy_acm_hub_downstream()
+        else:
+            self.deploy_acm_hub_upstream()
+
+    def deploy_acm_hub_downstream(self):
+        """
+        Handle ACM HUB downstream deployment
+        """
+        logger.info("Cloning open-cluster-management deploy repository")
+        acm_hub_downstream_deploy_dir = os.path.join(
+            constants.EXTERNAL_DIR, "acm_hub_downstream_deploy"
+        )
+        clone_repo(
+            constants.ACM_HUB_DOWNSTREAM_DEPLOY_REPO, acm_hub_downstream_deploy_dir
+        )
+
+        logger.info("Retrieving quay token")
+        docker_config = load_auth_config().get("quay", {}).get("cli_password", {})
+        pw = base64.b64decode(docker_config)
+        pw = pw.decode().replace("quay.io", "quay.io:443").encode()
+        quay_token = base64.b64encode(pw).decode()
+
+        kubeconfig_location = os.path.join(self.cluster_path, "auth", "kubeconfig")
+
+        logger.info("Setting env vars")
+        env_vars = {
+            "QUAY_TOKEN": quay_token,
+            "COMPOSITE_BUNDLE": "true",
+            "CUSTOM_REGISTRY_REPO": "quay.io:443/acm-d",
+            "DOWNSTREAM": "true",
+            "DEBUG": "true",
+            "KUBECONFIG": kubeconfig_location,
+        }
+        for key, value in env_vars.items():
+            if value:
+                os.environ[key] = value
+
+        logger.info("Writing pull-secret")
+        _templating = templating.Templating(
+            os.path.join(constants.TEMPLATE_DIR, "acm-deployment")
+        )
+        template_data = {"docker_config": docker_config}
+        data = _templating.render_template(
+            constants.ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE,
+            template_data,
+        )
+        pull_secret_path = os.path.join(
+            acm_hub_downstream_deploy_dir, "prereqs", "pull-secret.yaml"
+        )
+        with open(pull_secret_path, "w") as f:
+            f.write(data)
+
+        logger.info("Creating ImageContentSourcePolicy")
+        run_cmd(f"oc create -f {constants.ACM_HUB_DOWNSTREAM_ICSP_YAML}")
+
+        logger.info("Writing tag data to snapshot.ver")
+        image_tag = config.ENV_DATA.get(
+            "acm_downstream_image", config.ENV_DATA.get("default_acm_downstream_image")
+        )
+        with open(
+            os.path.join(acm_hub_downstream_deploy_dir, "snapshot.ver"), "w"
+        ) as f:
+            f.write(image_tag)
+
+        logger.info("Running open-cluster-management deploy")
+        cmd = ["./start.sh", "--silent"]
+        logger.info("Running cmd: %s", " ".join(cmd))
+        proc = Popen(
+            cmd,
+            cwd=acm_hub_downstream_deploy_dir,
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding="utf-8",
+        )
+        stdout, stderr = proc.communicate()
+        logger.info(stdout)
+        if proc.returncode:
+            logger.error(stderr)
+            raise CommandFailed("open-cluster-management deploy script error")
+
+        validate_acm_hub_install()
+
+    def deploy_acm_hub_upstream(self):
+        """
+        Handle ACM HUB upstream deployment
+        """
         channel = config.ENV_DATA.get("acm_hub_channel")
         logger.info("Creating ACM HUB namespace")
         acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
@@ -1320,18 +1407,26 @@ class Deployment(object):
         run_cmd(
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
-        acm_mch = ocp.OCP(
-            kind=constants.ACM_MULTICLUSTER_HUB,
-            namespace=constants.ACM_HUB_NAMESPACE,
-        )
-        acm_mch.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
-            column="STATUS",
-            timeout=720,
-            sleep=5,
-        )
-        logger.info("MultiClusterHub Deployment Succeeded")
+        validate_acm_hub_install()
+
+
+def validate_acm_hub_install():
+    """
+    Verify the ACM MultiClusterHub installation was successful.
+    """
+    logger.info("Verify ACM MultiClusterHub Installation")
+    acm_mch = ocp.OCP(
+        kind=constants.ACM_MULTICLUSTER_HUB,
+        namespace=constants.ACM_HUB_NAMESPACE,
+    )
+    acm_mch.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+        column="STATUS",
+        timeout=720,
+        sleep=5,
+    )
+    logger.info("MultiClusterHub Deployment Succeeded")
 
 
 def create_ocs_secret(namespace):
