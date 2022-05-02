@@ -248,6 +248,25 @@ class CephCluster(object):
 
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        if (
+            config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
+            and config.ENV_DATA["cluster_type"] == "consumer"
+        ):
+            # on Managed Service Consumer cluster, check that there are no
+            # extra Ceph pods
+            mon_pods = pod.get_mon_pods()
+            if mon_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mon pods!"
+                )
+            mds_pods = pod.get_mds_pods()
+            if mds_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mds pods!"
+                )
+            return True
+
         # This way of checking health of different cluster entities and
         # raising only CephHealthException is not elegant.
         # TODO: add an attribute in CephHealthException, called "reason"
