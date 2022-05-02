@@ -302,6 +302,7 @@ OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
+PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
