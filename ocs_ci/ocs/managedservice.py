@@ -98,6 +98,19 @@ def get_consumer_names():
     return [consumer["metadata"]["name"] for consumer in consumer_yamls]
 
 
+def get_ceph_clients():
+
+    """
+    Get the yamls of all ceph clients.
+    Runs on provider cluster
+
+    Returns:
+        list: yamls of all ceph clients
+    """
+    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    return consumer.get().get("items")
+
+
 def patch_consumer_toolbox(ceph_admin_key=None):
     """
     Patch the rook-ceph-tools deployment with ceph.admin key. Applicable for MS platform only to enable rook-ceph-tools
