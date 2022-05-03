@@ -139,6 +139,7 @@ def process_ocsci_conf(arguments):
 
     args, unknown = parser.parse_known_args(args=arguments)
     marker = arguments[arguments.index("-m") + 1] if "-m" in arguments else ""
+    load_config(get_tests_config("global"))
     load_config(get_tests_config(marker))
     load_config(args.ocsci_conf)
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
