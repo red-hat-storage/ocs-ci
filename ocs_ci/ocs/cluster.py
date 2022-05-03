@@ -269,6 +269,11 @@ class CephCluster(object):
                 raise exceptions.CephHealthException(
                     "Managed Service Consumer cluster shouldn't have any mon pods!"
                 )
+            osd_pods = pod.get_osd_pods()
+            if osd_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any osd pods!"
+                )
             mds_pods = pod.get_mds_pods()
             if mds_pods:
                 raise exceptions.CephHealthException(
