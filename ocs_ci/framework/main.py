@@ -50,9 +50,11 @@ def load_config(config_files):
             framework.config.update(custom_config_data)
 
 
-def get_tests_config():
+def get_tests_config(tire_path):
     results = []
-    for path, currentDirectory, files in os.walk("ocs_ci/framework/conf/tests.d/"):
+    for path, currentDirectory, files in os.walk(
+        f"ocs_ci/framework/conf/tests.d/{tire_path}"
+    ):
         for file in files:
             results.append(os.path.join(path, file))
     return results
@@ -136,7 +138,8 @@ def process_ocsci_conf(arguments):
     )
 
     args, unknown = parser.parse_known_args(args=arguments)
-    load_config(get_tests_config())
+    marker = arguments[arguments.index("-m") + 1] if "-m" in arguments else ""
+    load_config(get_tests_config(marker))
     load_config(args.ocsci_conf)
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
