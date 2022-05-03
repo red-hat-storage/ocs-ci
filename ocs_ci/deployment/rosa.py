@@ -83,8 +83,9 @@ class ROSAOCP(BaseOCPDeployment):
         ocm.destroy_cluster(self.cluster_name)
         sample = TimeoutSampler(
             timeout=1000,
-            sleep=3,
-            func=self.cluster_present(self.cluster_name),
+            sleep=5,
+            func=self.cluster_present,
+            cluster_name_prefix=self.cluster_name,
         )
         if not sample.wait_for_func_status(result=False):
             err_msg = f"Failed to delete {self.cluster_name}"
