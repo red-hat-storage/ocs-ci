@@ -248,6 +248,15 @@ class CephCluster(object):
 
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
+        # This way of checking health of different cluster entities and
+        # raising only CephHealthException is not elegant.
+        # TODO: add an attribute in CephHealthException, called "reason"
+        # which should tell because of which exact cluster entity health
+        # is not ok ?
+        expected_mon_count = self.mon_count
+        expected_mds_count = self.mds_count
+
+        self.scan_cluster()
 
         if (
             config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
@@ -267,15 +276,6 @@ class CephCluster(object):
                 )
             return True
 
-        # This way of checking health of different cluster entities and
-        # raising only CephHealthException is not elegant.
-        # TODO: add an attribute in CephHealthException, called "reason"
-        # which should tell because of which exact cluster entity health
-        # is not ok ?
-        expected_mon_count = self.mon_count
-        expected_mds_count = self.mds_count
-
-        self.scan_cluster()
         try:
             self.mon_health_check(expected_mon_count)
         except exceptions.MonCountException as e:
