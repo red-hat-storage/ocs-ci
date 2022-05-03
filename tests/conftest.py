@@ -4858,7 +4858,7 @@ def nsfs_bucket_factory_fixture(
         nsfs_obj.interface_pod = nsfs_interface_pod
         # Create a new MCG account
         nsfs_obj.s3_creds = mcg_account_factory(
-            "nsfs-integrity-test",
+            f"nsfs-integrity-test-{random.randrange(100)}",
             {"full_permission": True},
             nsfs_obj.nss.name,
             nsfs_obj.uid,
@@ -4868,7 +4868,7 @@ def nsfs_bucket_factory_fixture(
             False,
         )
         # Let the account propagate through the system
-        time.sleep(5)
+        time.sleep(15)
         # Create a boto3 S3 resource for commmunication with the NSFS bucket
         nsfs_s3_client = boto3.resource(
             "s3",
@@ -4903,15 +4903,29 @@ def nsfs_bucket_factory_fixture(
                     },
                 },
             )
+            created_rpc_buckets.append(nsfs_obj.bucket_name)
             # A hardcoded sleep is necessary since the bucket is not immediately available
             # for usage, despite it reporting a healthy status.
             # Instantly using the bucket results in a NoSuchKey error.
             time.sleep(15)
-            if nsfs_obj.verify_health:
-                assert (
-                    "optimal" in rpc_bucket_creation_response.text.lower()
-                ), f"RPC bucket isn't in optimal state; Full response: {rpc_bucket_creation_response.text}"
-            created_rpc_buckets.append(nsfs_obj.bucket_name)
+            try:
+                for resp in TimeoutSampler(
+                    60,
+                    5,
+                    mcg_obj_session.exec_mcg_cmd,
+                    f"bucket status {nsfs_obj.bucket_name}",
+                ):
+                    if "OPTIMAL" in resp.stdout:
+                        break
+                    else:
+                        log.info(
+                            f"""RPC bucket isn't in optimal state; Full creation response:
+                            {rpc_bucket_creation_response.text}"""
+                        )
+            except TimeoutExpiredError:
+                raise TimeoutExpiredError(
+                    f"Bucket {nsfs_obj.bucket_name} did not reach optimal state in time"
+                )
         # Otherwise, the new bucket will create a directory for itself
         else:
             nsfs_obj.bucket_name = bucket_factory(
