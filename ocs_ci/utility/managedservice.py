@@ -100,7 +100,7 @@ def get_storage_provider_endpoint(wait=False, timeout=1080):
     Args:
         wait (bool): If true then wait for the value to be available for
             number of seconds defined in timeout parameter. If false then
-            trye to return value only once.
+            try to return value only once.
         timeout (int): Number of seconds to wait for the value
 
     Returns:
