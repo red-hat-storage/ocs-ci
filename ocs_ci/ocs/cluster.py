@@ -257,6 +257,30 @@ class CephCluster(object):
         expected_mds_count = self.mds_count
 
         self.scan_cluster()
+
+        if (
+            config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
+            and config.ENV_DATA["cluster_type"] == "consumer"
+        ):
+            # on Managed Service Consumer cluster, check that there are no
+            # extra Ceph pods
+            mon_pods = pod.get_mon_pods()
+            if mon_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mon pods!"
+                )
+            osd_pods = pod.get_osd_pods()
+            if osd_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any osd pods!"
+                )
+            mds_pods = pod.get_mds_pods()
+            if mds_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mds pods!"
+                )
+            return True
+
         try:
             self.mon_health_check(expected_mon_count)
         except exceptions.MonCountException as e:
