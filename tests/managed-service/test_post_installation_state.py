@@ -130,6 +130,43 @@ class TestPostInstallationState(ManageTest):
             assert log_found, f"'{expected_log}' not found in ocs-provider-server logs"
 
     @tier1
+    @pytest.mark.polarion_id("OCS-3918")
+    @ms_provider_required
+    def test_ceph_clients(self):
+        """
+        Test that for every consumer there are  the following cephclients in
+        the provider cluster: rbd provisioner, rbd node, cephfs provisioner,
+        cephfs node, healthchecker.
+        """
+        cephclients = storage_cluster.get_ceph_clients()
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            found_clients = []
+            for cephclient in cephclients:
+                if (
+                    cephclient["metadata"]["annotations"][
+                        "ocs.openshift.io.storageconsumer"
+                    ]
+                    == consumer_name
+                ):
+                    found_client = (
+                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
+                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
+                    )
+                    log.info(f"Ceph client {found_client} for {consumer_name} found")
+                    found_clients.append(found_client)
+            for client in {
+                "rbd-provisioner",
+                "rbd-node",
+                "cephfs-provisioner",
+                "cephfs-node",
+                "global-healthchecker",
+            }:
+                assert (
+                    client in found_clients
+                ), f"Ceph client {client} for {consumer_name} not found"
+
+    @tier1
     @pytest.mark.polarion_id("OCS-2694")
     @managed_service_required
     def test_deployer_logs_not_empty(self):
