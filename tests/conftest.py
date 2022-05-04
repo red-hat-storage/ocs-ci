@@ -92,6 +92,7 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -1394,7 +1395,9 @@ def health_checker(request, tier_marks_name):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request, log_cli_level, record_testsuite_property):
+def cluster(
+    request, log_cli_level, record_testsuite_property, set_live_must_gather_images
+):
     """
     This fixture initiates deployment for both OCP and OCS clusters.
     Specific platform deployment classes will handle the fine details
@@ -5262,3 +5265,31 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         return pvcs, pods
 
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_live_must_gather_images(pytestconfig):
+    """
+    Set live must gather images
+    """
+    live_deployment = config.DEPLOYMENT["live_deployment"]
+    ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    # As we cannot use internal build of must gather for IBM Cloud platform
+    # we will use live must gather image as a W/A.
+    if live_deployment or ibm_cloud_platform:
+        update_live_must_gather_image()
+    # For non GAed version of ODF as a W/A we need to use upstream must gather image
+    # for IBM Cloud platform
+    if (
+        ibm_cloud_platform
+        and not live_deployment
+        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11)
+    ):
+        # There is a promise that in 4.10 or 4.11 there will be possible to change
+        # global pull secret. If that's the case, we can remove those workarounds.
+        config.REPORTING[
+            "default_ocs_must_gather_image"
+        ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
+        config.REPORTING[
+            "default_ocs_must_gather_latest_tag"
+        ] = defaults.MUST_GATHER_UPSTREAM_TAG
