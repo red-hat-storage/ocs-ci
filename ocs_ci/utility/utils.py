@@ -42,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedImage,
+    UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
 )
@@ -2053,7 +2054,7 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None):
+def clone_repo(url, location, branch="master", to_checkout=None, clone_type="shallow"):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2063,10 +2064,31 @@ def clone_repo(url, location, branch="master", to_checkout=None):
         location (str): path where the repository will be cloned to
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
+        clone_type (str): type of clone (shallow, blobless, treeless and normal)
+            By default, shallow clone will be used. For normal clone use
+            clone_type as "normal".
+
+    Raises:
+        UnknownCloneTypeException: In case of incorrect clone_type is used
+
     """
+    if clone_type == "shallow":
+        if branch != "master":
+            git_params = "--no-single-branch --depth=1"
+        else:
+            git_params = "--depth=1"
+    elif clone_type == "blobless":
+        git_params = "--filter=blob:none"
+    elif clone_type == "treeless":
+        git_params = "--filter=tree:0"
+    elif clone_type == "normal":
+        git_params = ""
+    else:
+        raise UnknownCloneTypeException
+
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {url} {location}")
+        run_cmd(f"git clone {git_params} {url} {location}")
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
