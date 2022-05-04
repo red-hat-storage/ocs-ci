@@ -1750,6 +1750,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         "4.7": "ocs-osd-removal-job",
         "4.8": "ocs-osd-removal-",
         "4.9": "ocs-osd-removal-job",
+        "4.10": "ocs-osd-removal-job",
     }
 
     ocs_version = config.ENV_DATA["ocs_version"]
