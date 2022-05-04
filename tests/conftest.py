@@ -4907,11 +4907,10 @@ def nsfs_bucket_factory_fixture(
             # A hardcoded sleep is necessary since the bucket is not immediately available
             # for usage, despite it reporting a healthy status.
             # Instantly using the bucket results in a NoSuchKey error.
-            time.sleep(15)
             try:
                 for resp in TimeoutSampler(
                     60,
-                    5,
+                    15,
                     mcg_obj_session.exec_mcg_cmd,
                     f"bucket status {nsfs_obj.bucket_name}",
                 ):
@@ -4928,9 +4927,9 @@ def nsfs_bucket_factory_fixture(
                 )
         # Otherwise, the new bucket will create a directory for itself
         else:
-            nsfs_obj.bucket_name = bucket_factory(
-                s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health
-            )[0].name
+            nsfs_obj.bucket_name = retry(ClientError, tries=4, delay=10)(
+                bucket_factory
+            )(s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health)[0].name
         nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
 
     def nsfs_bucket_factory_cleanup():
