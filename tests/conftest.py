@@ -4598,7 +4598,9 @@ def vault_tenant_sa_setup_factory(request):
                 vdict[vault.kmsid].pop("vaultNamespace")
                 vdict[vault.kmsid].pop("vaultAuthNamespace")
             if use_auth_path:
-                vdict[vault.kmsid]["vaultAuthPath"] = vault_resource_name
+                vdict[vault.kmsid][
+                    "vaultAuthPath"
+                ] = f"/v1/auth/{vault_resource_name}/login"
             else:
                 vdict[vault.kmsid].pop("vaultAuthPath")
             if use_backend:
