@@ -310,7 +310,7 @@ def get_drpc_name(namespace):
         str: DRPC resource name
     """
 
-    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace, ).get()[
+    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace,).get()[
         "items"
     ][0]
     return drpc_obj["metadata"]["name"]
@@ -323,9 +323,7 @@ def get_drpolicy_name():
         str: DRPolicy name
     """
 
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()[
-        "items"
-    ][0]
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()["items"][0]
     return drpolicy_obj["metadata"]["name"]
 
 
