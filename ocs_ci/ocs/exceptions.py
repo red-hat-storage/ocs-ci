@@ -490,3 +490,7 @@ class AlertingError(Exception):
 
 class AuthError(Exception):
     pass
+
+
+class UnknownCloneTypeException(Exception):
+    pass
