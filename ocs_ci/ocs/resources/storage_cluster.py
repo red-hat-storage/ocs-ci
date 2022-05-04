@@ -1314,3 +1314,16 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+
+
+def get_ceph_clients():
+
+    """
+    Get the yamls of all ceph clients.
+    Runs on provider cluster
+
+    Returns:
+        list: yamls of all ceph clients
+    """
+    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    return consumer.get().get("items")

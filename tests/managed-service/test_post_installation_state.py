@@ -133,7 +133,7 @@ class TestPostInstallationState(ManageTest):
     @pytest.mark.polarion_id("OCS-3918")
     @ms_provider_required
     def test_ceph_clients(self):
-        cephclients = managedservice.get_ceph_clients()
+        cephclients = storage_cluster.get_ceph_clients()
         consumer_names = managedservice.get_consumer_names()
         for consumer_name in consumer_names:
             found_clients = []
