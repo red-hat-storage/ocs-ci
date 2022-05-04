@@ -299,3 +299,99 @@ def wait_for_vr_deletion(namespace, timeout=300):
     """
     wait_for_vr_state("secondary", namespace, timeout)
     wait_for_vr_count(0, namespace, timeout)
+
+
+def get_drpc_name(namespace):
+    """
+    Get the DRPC Resource Name
+    Args:
+        namespace (str): Name of namespace
+    Returns:
+        str: DRPC resource name
+    """
+
+    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace, ).get()[
+        "items"
+    ][0]
+    return drpc_obj["metadata"]["name"]
+
+
+def get_drpolicy_name():
+    """
+    Get DRPolicy Name
+    Returns:
+        str: DRPolicy name
+    """
+
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()[
+        "items"
+    ][0]
+    return drpolicy_obj["metadata"]["name"]
+
+
+def get_primary_cluster_name(namespace):
+    """
+    Get Primary Cluster Name based on Namespace
+    Args:
+        namespace (str): Name of the Namespace
+    Returns:
+        str: Primary Cluster Name
+    """
+    config.switch_acm_ctx()
+    drpc_resource_name = get_drpc_name(namespace=namespace)
+    drpc_obj = ocp.OCP(
+        kind=constants.DRPC,
+        namespace=namespace,
+        resource_name=drpc_resource_name,
+    ).get()
+
+    if drpc_obj.get("spec").get("action") == constants.ACTION_FAILOVER:
+
+        cluster_name = drpc_obj["spec"]["failoverCluster"]
+
+    elif drpc_obj.get("spec").get("action") == constants.ACTION_RELOCATE:
+        cluster_name = drpc_obj["spec"]["preferredCluster"]
+
+    else:
+        cluster_name = drpc_obj["spec"]["preferredCluster"]
+
+    return cluster_name
+
+
+def set_primary_cluster_context(namespace):
+    """
+    Set Primary Cluster Context based on Namespace
+    Args:
+        namespace (str): Name of the Namespace
+    """
+    cluster_name = get_primary_cluster_name(namespace)
+    config.switch_to_cluster_by_name(cluster_name)
+
+
+def get_secondary_cluster_name(namespace):
+    """
+    Get Secondary Cluster Name based on Namespace
+    Args:
+        namespace (str): Name of the Namespace
+    Returns:
+        str: Secondary cluster name
+    """
+    config.switch_acm_ctx()
+    drpc_resource_name = get_drpolicy_name()
+    primary_cluster_name = get_primary_cluster_name(namespace)
+    drpolicy_obj = ocp.OCP(
+        kind=constants.DRPOLICY, namespace=namespace, resource_name=drpc_resource_name
+    ).get()
+    for cluster_name in drpolicy_obj["spec"]["drClusterSet"]:
+        if not cluster_name["name"] == primary_cluster_name:
+            return cluster_name["name"]
+
+
+def set_secondary_cluster_context(namespace):
+    """
+    Set Secondary Cluster Context based on Namespace
+    Args:
+        namespace (str): Name of the Namespace
+    """
+    cluster_name = get_secondary_cluster_name(namespace)
+    config.switch_to_cluster_by_name(cluster_name)
