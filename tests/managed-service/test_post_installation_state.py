@@ -133,6 +133,11 @@ class TestPostInstallationState(ManageTest):
     @pytest.mark.polarion_id("OCS-3918")
     @ms_provider_required
     def test_ceph_clients(self):
+        """
+        Test that for every consumer there are  the following cephclients in
+        the provider cluster: rbd provisioner, rbd node, cephfs provisioner,
+        cephfs node, healthchecker.
+        """
         cephclients = storage_cluster.get_ceph_clients()
         consumer_names = managedservice.get_consumer_names()
         for consumer_name in consumer_names:

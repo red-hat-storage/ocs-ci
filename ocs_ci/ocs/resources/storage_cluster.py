@@ -1317,7 +1317,6 @@ def verify_consumer_storagecluster(sc_data):
 
 
 def get_ceph_clients():
-
     """
     Get the yamls of all ceph clients.
     Runs on provider cluster
