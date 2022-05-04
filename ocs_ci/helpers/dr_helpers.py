@@ -92,18 +92,15 @@ def get_drpc_name(namespace):
     return drpc_obj["metadata"]["name"]
 
 
-def get_drpolicy_name(namespace):
+def get_drpolicy_name():
     """
     Get DRPolicy Name
-
-    Args:
-        namespace (str) : Name of namespace
 
     Returns:
         str: DRPolicy name
     """
 
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY, namespace=namespace,).get()[
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()[
         "items"
     ][0]
     return drpolicy_obj["metadata"]["name"]
@@ -123,7 +120,7 @@ def get_primary_cluster_name(namespace):
     drpc_resource_name = get_drpc_name(namespace=namespace)
     drpc_obj = ocp.OCP(
         kind=constants.DRPC,
-        namespace="busybox-workloads-2",
+        namespace=namespace,
         resource_name=drpc_resource_name,
     ).get()
 
@@ -149,11 +146,7 @@ def set_primary_cluster_context(namespace):
 
     """
     cluster_name = get_primary_cluster_name(namespace)
-
-    for index, cluster in enumerate(config.clusters):
-        if cluster.ENV_DATA["cluster_name"] == cluster_name:
-            config.switch_ctx(index)
-
+    config.switch_to_cluster_by_name(cluster_name)
 
 def get_secondary_cluster_name(namespace):
     """
@@ -166,7 +159,7 @@ def get_secondary_cluster_name(namespace):
         str: Secondary cluster name
     """
     config.switch_acm_ctx()
-    drpc_resource_name = get_drpolicy_name(namespace)
+    drpc_resource_name = get_drpolicy_name()
     primary_cluster_name = get_primary_cluster_name(namespace)
     drpolicy_obj = ocp.OCP(
         kind=constants.DRPOLICY, namespace=namespace, resource_name=drpc_resource_name
@@ -184,6 +177,4 @@ def set_secondary_cluster_context(namespace):
         namespace (str): Name of the Namespace
     """
     cluster_name = get_secondary_cluster_name(namespace)
-    for index, cluster in enumerate(config.clusters):
-        if cluster.ENV_DATA["cluster_name"] == cluster_name:
-            config.switch_ctx(index)
+    config.switch_to_cluster_by_name(cluster_name)
