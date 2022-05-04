@@ -13,6 +13,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
+    ExternalClusterRGWEndPointPortMissing,
     ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -105,10 +106,17 @@ class ExternalCluster(object):
             str: RGW endpoint port
 
         """
-        cmd = "ceph dashboard get-rgw-api-port"
+        port = None
+        cmd = "ceph config dump -f json"
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
-        logger.info(f"External cluster rgw endpoint api port: {out}")
-        return out
+        config_dump = json.loads(out)
+        for each in config_dump:
+            if "rgw" in each["section"]:
+                port = each["value"].split("=")[-1]
+                logger.info(f"External cluster rgw endpoint api port: {port}")
+                return port
+        if not port:
+            raise ExternalClusterRGWEndPointPortMissing
 
     def get_rhel_version(self):
         """
