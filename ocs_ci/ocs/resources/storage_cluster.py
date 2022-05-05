@@ -1314,6 +1314,10 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    log.info(
+        f"Onboarding ticket begins with: sc_data['spec']['externalStorage']['onboardingTicket'][:50]"
+    )
+    assert len(sc_data["spec"]["externalStorage"]["onboardingTicket"]) > 500
 
 
 def get_ceph_clients():
