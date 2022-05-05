@@ -94,22 +94,23 @@ class ROSAOCP(BaseOCPDeployment):
         rosa.delete_operator_roles(cluster_id)
         rosa.delete_oidc_provider(cluster_id)
 
-    def cluster_present(self, cluster_name_prefix):
+    def cluster_present(self, cluster_name):
         """
         Check if the cluster is present in the cluster list, regardless of its
         state.
 
         Args:
-            cluster_name_prefix (str): name prefix which identifies a cluster
+            cluster_name (str): name which identifies the cluster
 
         Returns:
-            bool: True if a cluster with the same name prefix exists,
+            bool: True if a cluster with the given name exists,
                 False otherwise
 
         """
         cluster_list = ocm.list_cluster()
         for cluster in cluster_list:
-            if cluster[0].startswith(cluster_name_prefix):
+            if cluster[0] == cluster_name:
+                logger.info(f"Cluster found: {cluster[0]}")
                 return True
         return False
 
