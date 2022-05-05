@@ -5,8 +5,8 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     managed_service_required,
     skipif_ms_consumer,
+    tier1,
     tier4,
-    tier4b,
     tier4c,
 )
 from ocs_ci.ocs import constants
@@ -77,8 +77,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
         )
 
 
-@tier4
-@tier4b
+@tier1
 @managed_service_required
 @skipif_ms_consumer
 @bugzilla("2072612")
