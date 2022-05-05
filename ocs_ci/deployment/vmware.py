@@ -423,6 +423,10 @@ class VSPHEREUPI(VSPHEREBASE):
             # git clone repo from openshift installer
             clone_openshift_installer()
 
+            # comment sensitive variable as current terraform version doesn't support
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                comment_sensitive_var()
+
             # generate terraform variable file
             generate_terraform_vars_and_update_machine_conf()
 
@@ -723,6 +727,11 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+            comment_sensitive_var()
+
         rename_files = [constants.VSPHERE_MAIN, constants.VM_MAIN]
         for each_file in rename_files:
             if os.path.exists(f"{each_file}.backup") and os.path.exists(
@@ -1509,3 +1518,15 @@ def get_ignition_provider_version():
         return "v2.1.2"
     else:
         return "v2.1.0"
+
+
+def comment_sensitive_var():
+    """
+    Comment out sensitive var in vm/variables.tf
+    """
+    str_to_modify = "sensitive = true"
+    target_str = "//sensitive = true"
+    logger.debug(
+        f"commenting out {str_to_modify} in {constants.VM_VAR} as current terraform version doesn't support"
+    )
+    replace_content_in_file(constants.VM_VAR, str_to_modify, target_str)
