@@ -20,7 +20,11 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    RDMDiskNotFound,
+    PassThroughEnabledDeviceNotFound,
+)
 from ocs_ci.ocs.node import (
     get_node_ips,
     get_typed_worker_nodes,
@@ -295,6 +299,33 @@ class VSPHEREBASE(Deployment):
 
         """
         self.vsphere.add_rdm_disk(vm, device_name)
+
+    def add_pci_devices(self):
+        """
+        Attach PCI devices to compute nodes
+
+        Raises:
+            PassThroughEnabledDeviceNotFound: In case there is no passthrough enabled device
+                not found on host
+
+        """
+        logger.info("Adding PCI devices to all compute nodes")
+        compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in compute_vms:
+            passthrough_enabled_device = self.vsphere.get_passthrough_enabled_devices(
+                vm
+            )[0]
+            if not passthrough_enabled_device:
+                raise PassThroughEnabledDeviceNotFound
+
+            # power off the VM before adding PCI device
+            self.vsphere.poweroff_vms([vm])
+
+            # add PCI device
+            self.vsphere.add_pci_device(vm, passthrough_enabled_device)
+
+            # power on the VM
+            self.vsphere.poweron_vms([vm])
 
     def post_destroy_checks(self):
         """
