@@ -417,6 +417,50 @@ class VSPHERE(object):
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
         logger.info(f"RDM disk {device_name} added successfully to {vm.config.name}")
 
+    def add_pci_device(self, vm, pci_device):
+        """
+        Attaches PCI device to VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            pci_device (vim.vm.PciPassthroughInfo): PCI device to add
+
+        """
+        host = vm.runtime.host.name
+        logger.info(
+            f"Adding PCI device with ID:{pci_device.pciDevice.id} on host {host} to {vm.name}"
+        )
+        deviceId = hex(pci_device.pciDevice.deviceId % 2**16).lstrip("0x")
+        backing = vim.VirtualPCIPassthroughDeviceBackingInfo(
+            deviceId=deviceId,
+            id=pci_device.pciDevice.id,
+            systemId=pci_device.systemId,
+            vendorId=pci_device.pciDevice.vendorId,
+            deviceName=pci_device.pciDevice.deviceName,
+        )
+
+        hba_object = vim.VirtualPCIPassthrough(key=-100, backing=backing)
+        new_device_config = vim.VirtualDeviceConfigSpec(device=hba_object)
+        new_device_config.operation = "add"
+
+        vmConfigSpec = vim.vm.ConfigSpec()
+        vmConfigSpec.memoryReservationLockedToMax = True
+        vmConfigSpec.deviceChange = [new_device_config]
+        WaitForTask(vm.ReconfigVM_Task(spec=vmConfigSpec))
+
+    def get_passthrough_enabled_devices(self, vm):
+        """
+        Fetches the passthrough enabled devices
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: List of PciPassthroughInfo
+
+        """
+        return vm.environmentBrowser.QueryConfigTarget(host=None).pciPassthrough
+
     def get_vm_power_status(self, vm):
         """
         Get the VM power status
