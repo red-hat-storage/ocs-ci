@@ -489,7 +489,8 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
-        obc_data["spec"]["additionalConfig"] = self.quota
+        if self.quota:
+            obc_data["spec"]["additionalConfig"] = self.quota
         if storagecluster_independent_check():
             obc_data["spec"][
                 "storageClassName"
