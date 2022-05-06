@@ -40,7 +40,7 @@ class Disruptions:
         )
         return kubeconfig_parameter
 
-    def set_resource(self, resource, leader_type="provisioner"):
+    def set_resource(self, resource, leader_type="provisioner", cluster_index=None):
         self.resource = resource
         if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
             resource in CEPH_PODS
@@ -55,6 +55,16 @@ class Disruptions:
                 ),
             )
             self.cluster_kubeconfig = provider_kubeconfig
+        elif config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS:
+            # cluster_index is used to identify the the cluster in which the pod is residing. If cluster_index is not
+            # passed, assume that the context is already changed to the cluster where the pod is residing.
+            cluster_index = (
+                cluster_index if cluster_index is not None else config.cur_index
+            )
+            self.cluster_kubeconfig = os.path.join(
+                config.clusters[cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[cluster_index].RUN.get("kubeconfig_location"),
+            )
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -93,6 +103,28 @@ class Disruptions:
         if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
+        if self.resource == "ocs_operator":
+            self.resource_obj = [pod.get_ocs_operator_pod()]
+            self.selector = constants.OCS_OPERATOR_LABEL
+        if self.resource == "alertmanager_managed_ocs_alertmanager":
+            self.resource_obj = pod.get_alertmanager_managed_ocs_alertmanager_pods()
+            self.selector = constants.MANAGED_ALERTMANAGER_LABEL
+        if self.resource == "ocs_osd_controller_manager":
+            self.resource_obj = [pod.get_ocs_osd_controller_manager_pod()]
+            self.selector = constants.MANAGED_CONTROLLER_LABEL
+            # Setting resource_count because odf-operator-controller-manager pod also have the same label.
+            resource_count = len(
+                pod.get_pods_having_label(
+                    constants.MANAGED_CONTROLLER_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
+                )
+            )
+        if self.resource == "prometheus_managed_ocs_prometheus":
+            self.resource_obj = [pod.get_prometheus_managed_ocs_prometheus_pod()]
+            self.selector = constants.MANAGED_PROMETHEUS_LABEL
+        if self.resource == "prometheus_operator":
+            self.resource_obj = [pod.get_prometheus_operator_pod()]
+            self.selector = constants.PROMETHEUS_OPERATOR_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 

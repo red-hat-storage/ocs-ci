@@ -5100,6 +5100,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         deployment_config=False,
         sc_rbd=None,
         sc_cephfs=None,
+        pod_dict_path=None,
     ):
         """
         Args:
@@ -5128,6 +5129,8 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 of 'StorageClass' kind
             sc_cephfs (OCS): Cephfs storage class. ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind
+            pod_dict_path (str): YAML path for the pod.
+
         Returns:
             tuple: List of pvcs and pods
         """
@@ -5198,13 +5201,12 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else:
                 interface = constants.CEPHBLOCKPOOL
 
-            # TODO: Remove pod_dict_path variable if issue 2524 is fixed
             if deployment_config:
-                pod_dict_path = constants.FEDORA_DC_YAML
+                pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
             elif pvc_obj.volume_mode == "Block":
-                pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
             else:
-                pod_dict_path = ""
+                pod_dict_path = pod_dict_path if pod_dict_path else ""
 
             num_pods = (
                 pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1

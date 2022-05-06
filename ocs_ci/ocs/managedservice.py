@@ -113,10 +113,10 @@ def patch_consumer_toolbox(ceph_admin_key=None):
         ceph_admin_key
         or os.environ.get("CEPHADMINKEY")
         or config.AUTH.get("external", {}).get("ceph_admin_key")
+        or get_admin_key_from_provider()
     )
 
     if not ceph_admin_key:
-        # TODO: Get the key from provider rook-ceph-tools pod after implementing multicluster deployment
         logger.warning(
             "Ceph admin key not found to patch rook-ceph-tools deployment on consumer with ceph.admin key. "
             "Skipping the step."
@@ -166,3 +166,32 @@ def patch_consumer_toolbox(ceph_admin_key=None):
     )[0]
     new_tools_pod = Pod(**new_tools_pod_info)
     helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
+
+
+def get_admin_key_from_provider():
+    """
+    Get admin key from rook-ceph-tools pod on provider
+
+    Returns:
+        str: The admin key obtained from rook-ceph-tools pod on provider.
+            Return empty string if admin key is not obtained.
+
+    """
+    initial_cluster_index = config.cur_index
+    config.switch_to_provider()
+    admin_key = ""
+    try:
+        # Get the key from provider cluster rook-ceph-tools pod
+        provider_tools_pod = get_ceph_tools_pod()
+        admin_key = (
+            provider_tools_pod.exec_cmd_on_pod("grep key /etc/ceph/keyring")
+            .strip()
+            .split()[-1]
+        )
+    except Exception as exc:
+        logger.error(
+            f"Couldn't find admin key from provider due to the error:\n{str(exc)}"
+        )
+    finally:
+        config.switch_ctx(initial_cluster_index)
+        return admin_key
