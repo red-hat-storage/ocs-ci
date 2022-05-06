@@ -149,11 +149,15 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         ), f"Rook Ceph pods status didn't change after {timeout} seconds"
 
         log.info("Check the rook ceph pods are in 'Running' or 'Completed' state")
-        timeout = 480
+        previous_timeout = 480
+        timeout = 600
         are_pods_running = wait_for_pods_to_be_running(
             pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30
         )
-        assert are_pods_running, f"The pods are not 'Running' after {timeout} seconds"
+        assert are_pods_running, (
+            f"Increased timeout from {previous_timeout} to {timeout} seconds, "
+            f"The pods are not 'Running' even after {timeout} seconds"
+        )
 
         # Get the rook ceph pods without the osd, and mon pods have the old node ids
         osd_pods = get_osd_pods()
