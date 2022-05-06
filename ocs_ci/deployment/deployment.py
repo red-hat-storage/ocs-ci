@@ -1677,8 +1677,8 @@ class RBDDRDeployOps(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         try:
-            mirror_peer.wait_for_phase(phase='ExchangedSecret', timeout=1200)
-            logger.info(f"Mirror peer is in expected phase 'ExchangedSecret'")
+            mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
+            logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
         except ResourceWrongStatusException:
             logger.exception("Mirror peer couldn't attain expected phase")
             raise
@@ -1690,7 +1690,7 @@ class RBDDRDeployOps(object):
             if cluster.MULTICLUSTER["multicluster_index"] == config.get_acm_index():
                 continue
             else:
-                config.switch_ctx(cluster.MULTICLUSTER['multicluster_index'])
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 token_xchange_agent = get_pods_having_label(
                     constants.TOKEN_EXCHANGE_AGENT_LABEL,
                     constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -1771,7 +1771,8 @@ class MultiClusterDROperatorsDeploy(object):
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
         current_csv = package_manifest.get_current_csv(
-            channel=self.channel, csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+            channel=self.channel,
+            csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
         )
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
         odf_multicluster_orchestrator_data["spec"]["currentCSV"] = current_csv
@@ -1934,7 +1935,9 @@ class MultiClusterDROperatorsDeploy(object):
                 secret_temp_file = tempfile.NamedTemporaryFile(
                     mode="w+", prefix=secret, delete=False
                 )
-                templating.dump_data_to_temp_yaml(secret_data.data, secret_temp_file.name)
+                templating.dump_data_to_temp_yaml(
+                    secret_data.data, secret_temp_file.name
+                )
                 secret_yaml_files.append(secret_temp_file.name)
 
             # Create s3 secret on all clusters except ACM
