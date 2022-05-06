@@ -7,6 +7,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
 from ocs_ci.helpers.pvc_ops import create_pvcs
 from ocs_ci.utility.utils import ceph_health_check
@@ -31,6 +32,7 @@ class Sanity:
         self.obc_objs = list()
         self.obj_data = ""
         self.ceph_cluster = CephCluster()
+        self.ceph_cluster_external = CephClusterExternal()
 
     def health_check(self, cluster_check=True, tries=20):
         """
@@ -44,7 +46,9 @@ class Sanity:
             ceph_health_check(
                 namespace=config.ENV_DATA["cluster_namespace"], tries=tries
             )
-            if cluster_check:
+            if cluster_check and storagecluster_independent_check:
+                self.ceph_cluster_external.cluster_health_check(timeout=60)
+            elif cluster_check:
                 self.ceph_cluster.cluster_health_check(timeout=60)
 
     def create_resources(
