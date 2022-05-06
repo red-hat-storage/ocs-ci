@@ -71,7 +71,11 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
-        self.cluster_kubeconfig = cluster_kubeconfig
+        # Setting cluster_kubeconfig to current cluster if not specified
+        self.cluster_kubeconfig = cluster_kubeconfig or os.path.join(
+            config.clusters[config.cur_index].ENV_DATA["cluster_path"],
+            config.clusters[config.cur_index].RUN.get("kubeconfig_location"),
+        )
 
     @property
     def api_version(self):
