@@ -724,7 +724,7 @@ def get_ocs_osd_controller_manager_pod(
         namespace (str): Namespace in which ocs-osd-controller-manager pod is residing
 
     Returns:
-        Pod: Pod objects of ocs-osd-controller-manager pod
+        Pod: Pod object of ocs-osd-controller-manager pod
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
@@ -748,7 +748,7 @@ def get_prometheus_managed_ocs_prometheus_pod(
         namespace (str): Namespace in which prometheus-managed-ocs-prometheus pod is residing
 
     Returns:
-        Pod: Pod objects of prometheus-managed-ocs-prometheus pod
+        Pod: Pod object of prometheus-managed-ocs-prometheus pod
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
@@ -767,12 +767,29 @@ def get_prometheus_operator_pod(
         namespace (str): Namespace in which prometheus-operator pod is residing
 
     Returns:
-        Pod: Pod objects of prometheus-operator pod
+        Pod: Pod object of prometheus-operator pod
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     prometheus_operator = get_pods_having_label(label, namespace)
     return Pod(**prometheus_operator[0])
+
+
+def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace=None):
+    """
+    Get ocs-provider-server pod in the cluster
+
+    Args:
+        label (str): Label associated with ocs-provider-server pod
+        namespace (str): Namespace in which ocs-provider-server pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-provider-server pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocs_provider_server = get_pods_having_label(label, namespace)
+    return Pod(**ocs_provider_server[0])
 
 
 def list_ceph_images(pool_name="rbd"):
