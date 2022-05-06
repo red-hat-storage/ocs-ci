@@ -78,6 +78,7 @@ class PVC(OCS):
         data["kind"] = "PersistentVolume"
         data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
         pv_obj = OCS(**data)
+        pv_obj.ocp.cluster_kubeconfig = self.ocp.cluster_kubeconfig
         pv_obj.reload()
         return pv_obj
 

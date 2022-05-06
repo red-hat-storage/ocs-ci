@@ -65,7 +65,7 @@ class TestPodDisruptions(ManageTest):
                 config.clusters[cluster_index].ENV_DATA["cluster_path"],
                 config.clusters[cluster_index].RUN.get("kubeconfig_location"),
             )
-            _, io_pods = create_pvcs_and_pods(
+            pvcs, io_pods = create_pvcs_and_pods(
                 pvc_size=25,
                 pods_for_rwx=1,
                 access_modes_rbd=None,
@@ -78,6 +78,8 @@ class TestPodDisruptions(ManageTest):
                 sc_cephfs=None,
                 pod_dict_path=constants.PERF_POD_YAML,
             )
+            for pvc_obj in pvcs:
+                pvc_obj.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
             for io_pod in io_pods:
                 io_pod.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
             self.io_pods.extend(io_pods)
