@@ -681,7 +681,7 @@ RBD_SIDECAR_PATCH_CMD = (
     ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
     '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
-RBD_SIDECAR_COUNT = 16
+RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -1685,6 +1685,8 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
 )
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
+ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"

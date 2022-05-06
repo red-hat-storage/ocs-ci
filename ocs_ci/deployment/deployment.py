@@ -1676,32 +1676,21 @@ class RBDDRDeployOps(object):
         )
         mirror_peer._has_phase = True
         mirror_peer.get()
-        # Wait for either of the phases
-        for phase in ["ExchangingSecret", "ExchangedSecret"]:
-            try:
-                mirror_peer.wait_for_phase(phase=phase, timeout=5)
-            except ResourceWrongStatusException:
-                if phase == "ExchangingSecret":
-                    logger.warning(
-                        f"Mirror peer is not in {phase} phase"
-                        " Trying other alternatives"
-                    )
-                    continue
-                else:
-                    logger.exception("Mirror peer couldn't attain expected phase")
-                    raise
-            logger.info(f"Mirror peer is in expected phase {phase}")
-            break
+        try:
+            mirror_peer.wait_for_phase(phase='ExchangedSecret', timeout=1200)
+            logger.info(f"Mirror peer is in expected phase 'ExchangedSecret'")
+        except ResourceWrongStatusException:
+            logger.exception("Mirror peer couldn't attain expected phase")
+            raise
 
         # Check for token-exchange-agent pod and its status has to be running
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
-        index = 0
         for cluster in config.clusters:
             if cluster.MULTICLUSTER["multicluster_index"] == config.get_acm_index():
                 continue
             else:
-                config.switch_ctx(index)
+                config.switch_ctx(cluster.MULTICLUSTER['multicluster_index'])
                 token_xchange_agent = get_pods_having_label(
                     constants.TOKEN_EXCHANGE_AGENT_LABEL,
                     constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -1713,7 +1702,6 @@ class RBDDRDeployOps(object):
                     ResourceWrongStatusException(
                         pod_name, expected="Running", got=pod_status
                     )
-                index += 1
         # Switching back CTX to ACM
         config.switch_acm_ctx()
 
@@ -1740,6 +1728,7 @@ class MultiClusterDROperatorsDeploy(object):
         # Default to s3 for metadata store
         self.meta_obj_store = dr_conf.get("dr_metadata_store", "awss3")
         self.meta_obj = self.meta_map[self.meta_obj_store]()
+        self.channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
     def deploy(self):
         """
@@ -1752,33 +1741,7 @@ class MultiClusterDROperatorsDeploy(object):
         run_cmd_multicluster(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} "
         )
-
-        odf_multicluster_orchestrator_data = templating.load_yaml(
-            constants.ODF_MULTICLUSTER_ORCHESTRATOR
-        )
-        if config.ENV_DATA.get("multicluster_orchestrator_channel"):
-            odf_multicluster_orchestrator_data["spec"]["channel"] = config.ENV_DATA[
-                "multicluster_orchestrator_channel"
-            ]
-        if config.ENV_DATA.get("multicluster_orchestrator_current_csv"):
-            odf_multicluster_orchestrator_data["spec"]["currentCSV"] = config.ENV_DATA[
-                "multicluster_orchestrator_current_csv"
-            ]
-        odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="odf_multicluster_orchestrator", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            odf_multicluster_orchestrator_data, odf_multicluster_orchestrator.name
-        )
-        run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
-        orchestrator_controller = ocp.OCP(
-            kind="Deployment",
-            resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
-            namespace=constants.OPENSHIFT_OPERATORS,
-        )
-        orchestrator_controller.wait_for_resource(
-            condition="1", column="AVAILABLE", resource_count=1, timeout=600
-        )
+        self.deploy_dr_multicluster_orchestrator()
         # create ODF orchestrator operator group
         run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
         # Create prereq namespace and DR operator group
@@ -1797,9 +1760,40 @@ class MultiClusterDROperatorsDeploy(object):
         self.meta_obj.conf.update({"dr_policy_name": self.dr_policy_name})
         self.update_ramen_config_misc()
 
+    def deploy_dr_multicluster_orchestrator(self):
+        """
+        Deploy multicluster orchestrator
+        """
+        odf_multicluster_orchestrator_data = templating.load_yaml(
+            constants.ODF_MULTICLUSTER_ORCHESTRATOR
+        )
+        package_manifest = packagemanifest.PackageManifest(
+            resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+        )
+        current_csv = package_manifest.get_current_csv(
+            channel=self.channel, csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+        )
+        odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
+        odf_multicluster_orchestrator_data["spec"]["currentCSV"] = current_csv
+        odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="odf_multicluster_orchestrator", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            odf_multicluster_orchestrator_data, odf_multicluster_orchestrator.name
+        )
+        run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
+        orchestrator_controller = ocp.OCP(
+            kind="Deployment",
+            resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        orchestrator_controller.wait_for_resource(
+            condition="1", column="AVAILABLE", resource_count=1, timeout=600
+        )
+
     def update_ramen_config_misc(self):
         config_map_data = self.meta_obj.get_ramen_resource()
-        self.update_config_map_commit(config_map_data)
+        self.update_config_map_commit(config_map_data.data)
 
     def update_config_map_commit(self, config_map_data, prefix=None):
         """
@@ -1821,7 +1815,7 @@ class MultiClusterDROperatorsDeploy(object):
         }
         ramen_section[constants.DR_RAMEN_CONFIG_MANAGER_KEY][
             "drClusterOperator"
-        ].update({"deploymentAutomationEnabled": "true"})
+        ].update({"deploymentAutomationEnabled": True})
         logger.debug("Merge back the ramen_section with config_map_data")
         config_map_data["data"].update(ramen_section)
         for key in ["annotations", "creationTimestamp", "resourceVersion", "uid"]:
@@ -1847,21 +1841,26 @@ class MultiClusterDROperatorsDeploy(object):
 
     def deploy_dr_hub_operator(self):
         # Create ODF HUB operator only on ACM HUB
-        channel = config.ENV_DATA.get("acm_hub_channel")
         dr_hub_operator_data = templating.load_yaml(constants.OPENSHIFT_DR_HUB_OPERATOR)
         dr_hub_operator_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_hub_operator_", delete=False
         )
-        resource_name = packagemanifest.get_current_csv(
-            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        package_manifest = PackageManifest(
+            resource_name=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
         )
-        dr_hub_operator_data["spec"]["startingCSV"] = resource_name
+        current_csv = package_manifest.get_current_csv(
+            channel=self.channel, csv_pattern=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
+        )
+        dr_hub_operator_data["spec"]["channel"] = self.channel
+        dr_hub_operator_data["spec"]["startingCSV"] = current_csv
         templating.dump_data_to_temp_yaml(
             dr_hub_operator_data, dr_hub_operator_yaml.name
         )
         run_cmd(f"oc create -f {dr_hub_operator_yaml.name}")
+        logger.info("Sleeping for 90 seconds after subscribing ")
+        time.sleep(90)
         dr_hub_csv = CSV(
-            resource_name=resource_name,
+            resource_name=current_csv,
             namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
         )
         dr_hub_csv.wait_for_phase("Succeeded")
@@ -1900,7 +1899,7 @@ class MultiClusterDROperatorsDeploy(object):
         sample = TimeoutSampler(
             timeout=600,
             sleep=3,
-            func=self._get_status,
+            func=self.meta_obj._get_status,
             resource_data=dr_policy_resource,
         )
         if not sample.wait_for_func_status(True):
@@ -1931,11 +1930,11 @@ class MultiClusterDROperatorsDeploy(object):
                 )
                 secret_data.get()
                 for key in ["creationTimestamp", "resourceVersion", "uid"]:
-                    secret_data["metadata"].pop(key)
+                    secret_data.data["metadata"].pop(key)
                 secret_temp_file = tempfile.NamedTemporaryFile(
                     mode="w+", prefix=secret, delete=False
                 )
-                templating.dump_data_to_temp_yaml(secret_data, secret_temp_file.name)
+                templating.dump_data_to_temp_yaml(secret_data.data, secret_temp_file.name)
                 secret_yaml_files.append(secret_temp_file.name)
 
             # Create s3 secret on all clusters except ACM

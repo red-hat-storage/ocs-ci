@@ -514,9 +514,8 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
-    index = 0
     for cluster in config.clusters:
-        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+        if (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -525,7 +524,7 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[index] = exec_cmd(
+                completed_process[cluster.MULTICLUSTER["multicluster_index"]] = exec_cmd(
                     cmd,
                     secrets=secrets,
                     timeout=timeout,
@@ -539,7 +538,6 @@ def run_cmd_multicluster(
                     f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
                 )
                 raise
-            index = +1
     config.switch_ctx(restore_ctx_index)
     return completed_process
 
