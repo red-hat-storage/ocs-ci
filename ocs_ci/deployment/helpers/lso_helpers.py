@@ -19,6 +19,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     run_cmd,
     wait_for_machineconfigpool_status,
+    wipe_all_disk_partitions_for_node,
 )
 
 
@@ -382,9 +383,13 @@ def add_disk_for_vsphere_platform():
             )
 
         if lso_type == constants.DIRECTPATH:
-            raise NotImplementedError(
-                "LSO Deployment for VMDirectPath is not implemented"
-            )
+            logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")
+            vsphere_base.add_pci_devices()
+
+            # wipe partition table on newly added PCI devices
+            compute_nodes = get_compute_node_names()
+            for compute_node in compute_nodes:
+                wipe_all_disk_partitions_for_node(compute_node)
 
 
 def add_disk_for_rhv_platform():
