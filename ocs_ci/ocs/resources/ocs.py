@@ -86,8 +86,10 @@ class OCS(object):
         After creating a resource from a yaml file, the actual yaml file is
         being changed and more information about the resource is added.
         """
+        cluster_kubeconfig = self.ocp.cluster_kubeconfig
         self.data = self.get()
         self.__init__(**self.data)
+        self.ocp.cluster_kubeconfig = cluster_kubeconfig
 
     def get(self, out_yaml_format=True):
         return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
