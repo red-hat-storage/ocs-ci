@@ -125,6 +125,9 @@ class Disruptions:
         if self.resource == "prometheus_operator":
             self.resource_obj = [pod.get_prometheus_operator_pod()]
             self.selector = constants.PROMETHEUS_OPERATOR_LABEL
+        if self.resource == "ocs_provider_server":
+            self.resource_obj = [pod.get_ocs_provider_server_pod()]
+            self.selector = constants.PROVIDER_SERVER_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 
