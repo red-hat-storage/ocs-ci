@@ -766,10 +766,14 @@ class VSPHEREUPI(VSPHEREBASE):
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
             terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                terraform_provider_ignition_file = "terraform-provider-ignition_v2.1.2"
+            else:
+                terraform_provider_ignition_file = "terraform-provider-ignition"
             terraform_ignition_provider_path = os.path.join(
                 terraform_data_dir,
                 terraform_plugins_path,
-                "terraform-provider-ignition",
+                terraform_provider_ignition_file,
             )
 
             # check the upgrade history of cluster and checkout to the
