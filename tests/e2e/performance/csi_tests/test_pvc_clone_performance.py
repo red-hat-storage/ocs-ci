@@ -39,6 +39,19 @@ class TestPVCClonePerformance(PASTest):
         super(TestPVCClonePerformance, self).setup()
         self.benchmark_name = "pvc_clone_permorance"
 
+        self.create_test_project()
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+        logger.info("Starting the test environment celanup")
+
+        # Delete the test project (namespace)
+        self.delete_test_project()
+
+        super(TestPVCClonePerformance, self).teardown()
+
     @pytest.fixture()
     def base_setup(
         self, interface_type, pvc_size, pvc_factory, pod_factory, storageclass_factory
