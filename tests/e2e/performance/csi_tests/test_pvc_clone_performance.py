@@ -126,32 +126,37 @@ class TestPVCClonePerformance(PASTest):
         self.pvc_size = pvc_size
 
         # Creating the basic PVC to be cloned
+        logger.info("Creating PVC to be cloned")
         self.pvc_obj = helpers.create_pvc(
             sc_name=Interfaces_info[self.interface]["sc"],
             pvc_name="pvc-pas-test",
-            size=pvc_size,
+            size=f"{pvc_size}Gi",
             namespace=self.namespace,
         )
         # Wait for the PVC to be Bound
         performance_lib.wait_for_resource_bulk_status(
             "pvc", 1, self.namespace, constants.STATUS_BOUND, 60, 5
         )
+        logger.info(f"The PVC {self.pvc_obj.name} was created and in Bound state.")
 
-        # Creating the basic POD which will be attache to the PVC and write data to it
+        # Creating pod which fill the PVC with data
+        self.create_fio_pod_yaml(pvc_size=int(self.pvc_size), filesize=file_size)
+
+        logger.info("Creating Pod and Starting IO on it")
         self.pod_object = helpers.create_pod(
-            interface_type=self.interface,
             pvc_name=self.pvc_obj.name,
             namespace=self.namespace,
+            interface_type=self.interface,
             pod_name="pod-pas-test",
+            pod_dict_path=self.pod_yaml_file.name,
         )
-        # Wait for the POD to be Run
+        assert self.pod_object, "Failed to create pod"
+
+        logger.info("Wait for the POD to be created, and compleat running I/O")
         performance_lib.wait_for_resource_bulk_status(
-            "pod", 1, self.namespace, constants.STATUS_RUNNING, 60, 5
+            "pod", 1, self.namespace, constants.STATUS_COMPLETED, 600, 5
         )
-
-        file_size_for_io = file_size[:-1]
-
-        performance_lib.write_fio_on_pod(self.pod_object, file_size_for_io)
+        logger.info("I/O Completed on all POD(s)")
 
         max_num_of_clones = 10
         if self.dev_mode:
