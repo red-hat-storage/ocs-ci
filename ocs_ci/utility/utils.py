@@ -1,6 +1,8 @@
+import pytest
 from functools import reduce
 import base64
 import io
+import itertools
 import json
 import logging
 import os
@@ -45,6 +47,7 @@ from ocs_ci.ocs.exceptions import (
     UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
+    MissingRequiredConfigKeyError,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -3669,3 +3672,44 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_parameters(test_name="", args_list=None):
+    """
+    Converting test configuration data from file into pytest.parametrize variables
+    if the test_names dosent have variables in the configuration, raising an exception
+
+    Args :
+
+        test_name (str): the name of the test to get the parameters from the config section
+        args_list (list): list of variables to get from the test config section
+
+    Return:
+        pytest.param : values of parameters to a test
+
+    Raise:
+        MissingRequiredConfigKeyError : if not all variables exists, arg_list is empty or test_name
+            doesn't exist in the configuration
+
+    """
+    try:
+        test_params = config.TEST_CONF[test_name]
+    except KeyError:
+        raise MissingRequiredConfigKeyError("There is no variables for the test.")
+    if args_list is None:
+        raise MissingRequiredConfigKeyError("There is no arguments for the test.")
+
+    results = []
+    for key in args_list:
+        single_data = test_params.get(key, [])
+        if single_data == []:
+            raise MissingRequiredConfigKeyError(
+                f"The variable [{key}] doesn't exist in the configuration"
+            )
+        if isinstance(single_data, list):
+            results.append(single_data)
+        else:
+            results.append([single_data])
+    results = sorted(list(itertools.product(*results)))
+    for res in results:
+        yield pytest.param(*res)

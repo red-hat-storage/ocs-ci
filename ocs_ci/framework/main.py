@@ -50,10 +50,10 @@ def load_config(config_files):
             framework.config.update(custom_config_data)
 
 
-def get_tests_config(tire_path):
+def get_tests_config(tier_path):
     results = []
     for path, currentDirectory, files in os.walk(
-        f"ocs_ci/framework/conf/tests.d/{tire_path}"
+        f"ocs_ci/framework/conf/tests.d/{tier_path}"
     ):
         for file in files:
             results.append(os.path.join(path, file))
