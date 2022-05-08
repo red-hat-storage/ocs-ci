@@ -246,9 +246,15 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             log.info(
                 "Verify that the current replica count is equal to the ready replica count"
             )
-            machine.change_current_replica_count_to_ready_replica_count(
-                self.machineset_name
+            ready_replica_count = machine.get_ready_replica_count(self.machineset_name)
+            res = machine.wait_for_current_replica_count_to_reach_expected_value(
+                self.machineset_name, expected_value=ready_replica_count
             )
+            if not res:
+                machine.change_current_replica_count_to_ready_replica_count(
+                    self.machineset_name
+                )
+
             log.info("Check again that the Ceph Health is Health OK")
             ceph_health_check()
 
