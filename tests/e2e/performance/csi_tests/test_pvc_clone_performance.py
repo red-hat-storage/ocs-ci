@@ -22,6 +22,11 @@ from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
+Interfaces_info = {
+    constants.CEPHBLOCKPOOL: {"name": "RBD", "sc": constants.CEPHBLOCKPOOL_SC},
+    constants.CEPHFILESYSTEM: {"name": "CephFS", "sc": constants.CEPHFILESYSTEM_SC},
+}
+
 
 @performance
 class TestPVCClonePerformance(PASTest):
@@ -47,37 +52,26 @@ class TestPVCClonePerformance(PASTest):
         """
         logger.info("Starting the test environment celanup")
 
+        # Delete The test POD
+        self.pod_object.delete()
+        # Wait for the POD to be deleted
+        performance_lib.wait_for_resource_bulk_status(
+            "pod", 0, self.namespace, constants.STATUS_RUNNING, 60, 5
+        )
+        logger.info("The POD was deleted successfully")
+
+        # Delete the test PVC
+        self.pvc_obj.delete()
+        # Wait for the PVC to be deleted
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", 0, self.namespace, constants.STATUS_BOUND, 60, 5
+        )
+        logger.info("The PVC was deleted successfully")
+
         # Delete the test project (namespace)
         self.delete_test_project()
 
         super(TestPVCClonePerformance, self).teardown()
-
-    @pytest.fixture()
-    def base_setup(
-        self, interface_type, pvc_size, pvc_factory, pod_factory, storageclass_factory
-    ):
-        """
-        create resources for the test
-        Args:
-            interface_type(str): The type of the interface
-                (e.g. CephBlockPool, CephFileSystem)
-            pvc_size: Size of the created PVC
-            pvc_factory: A fixture to create new pvc
-            pod_factory: A fixture to create new pod
-
-        """
-        self.interface = interface_type
-        self.pvc_size = pvc_size
-
-        self.pvc_obj = pvc_factory(
-            interface=interface_type, size=pvc_size, status=constants.STATUS_BOUND
-        )
-
-        self.pod_object = pod_factory(
-            interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
-        )
-        logger.info(f"pod object is : {self.pod_object}")
-        logger.info(f"pod object is : {self.pod_object.name}")
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "pvc_size", "file_size"],
@@ -116,7 +110,6 @@ class TestPVCClonePerformance(PASTest):
             ),
         ],
     )
-    @pytest.mark.usefixtures(base_setup.__name__)
     def test_clone_create_delete_performance(
         self, interface_type, pvc_size, file_size, teardown_factory
     ):
@@ -128,6 +121,33 @@ class TestPVCClonePerformance(PASTest):
         Measure clone average deletion time and speed
         Note: by increasing max_num_of_clones value you increase number of the clones to be created/deleted
         """
+
+        self.interface = interface_type
+        self.pvc_size = pvc_size
+
+        # Creating the basic PVC to be cloned
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=Interfaces_info[self.interface]["sc"],
+            pvc_name="pvc-pas-test",
+            size=pvc_size,
+            namespace=self.namespace,
+        )
+        # Wait for the PVC to be Bound
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", 1, self.namespace, constants.STATUS_BOUND, 60, 5
+        )
+
+        # Creating the basic POD which will be attache to the PVC and write data to it
+        self.pod_object = helpers.create_pod(
+            interface_type=self.interface,
+            pvc_name=self.pvc_obj.name,
+            namespace=self.namespace,
+            pod_name="pod-pas-test",
+        )
+        # Wait for the POD to be Run
+        performance_lib.wait_for_resource_bulk_status(
+            "pod", 1, self.namespace, constants.STATUS_RUNNING, 60, 5
+        )
 
         file_size_for_io = file_size[:-1]
 
