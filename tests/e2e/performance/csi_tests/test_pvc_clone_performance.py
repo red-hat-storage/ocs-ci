@@ -68,7 +68,6 @@ class TestPVCClonePerformance(PASTest):
         """
         self.interface = interface_type
         self.pvc_size = pvc_size
-        self.sc_obj = storageclass_factory(interface_type)
 
         self.pvc_obj = pvc_factory(
             interface=interface_type, size=pvc_size, status=constants.STATUS_BOUND
