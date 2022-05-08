@@ -122,6 +122,9 @@ class TestPVCClonePerformance(PASTest):
         performance_lib.write_fio_on_pod(self.pod_object, file_size_for_io)
 
         max_num_of_clones = 10
+        if self.dev_mode:
+            max_num_of_clones = 3
+
         clone_creation_measures = []
         csi_clone_creation_measures = []
         clones_list = []
