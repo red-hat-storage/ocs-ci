@@ -82,6 +82,7 @@ class TestPodDisruptions(ManageTest):
                 pvc_obj.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
             for io_pod in io_pods:
                 io_pod.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
+            pvcs[0].project.cluster_kubeconfig = consumer_cluster_kubeconfig
             self.io_pods.extend(io_pods)
 
     def test_pod_disruptions(self):
