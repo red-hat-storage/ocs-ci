@@ -20,6 +20,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -142,7 +143,11 @@ class CouchBase(PillowFight):
         log.info("Creating Couchbase worker pods...")
         cb_example = templating.load_yaml(constants.COUCHBASE_WORKER_EXAMPLE)
 
-        if storagecluster_independent_check():
+        if (
+            storagecluster_independent_check()
+            and config.ENV_DATA["platform"].lower()
+            not in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             cb_example["spec"]["volumeClaimTemplates"][0]["spec"][
                 "storageClassName"
             ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
