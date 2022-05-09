@@ -369,7 +369,7 @@ def is_odf_addon_installed(cluster_name=None):
 
     """
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
-    addon_name = config.ENV_DATA["addon_name"]
+    addon_name = config.ENV_DATA.get("addon_name")
     addon_info = get_addon_info(cluster_name, addon_name)
 
     if addon_info and "ready" in addon_info:

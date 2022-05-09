@@ -783,7 +783,7 @@ def get_ocs_nodes(num_of_nodes=None):
     # So in that case, we will get the worker nodes without searching for the OCS label.
     ms_with_odf_addon = is_managed_service_cluster() and is_odf_addon_installed()
     external_mode_with_ocs = (
-        config.DEPLOYMENT["external_mode"]
+        config.DEPLOYMENT.get("external_mode")
         and get_storage_cluster_state(constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE)
         == constants.STATUS_READY
     )
