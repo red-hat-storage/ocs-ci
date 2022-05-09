@@ -752,11 +752,14 @@ class VSPHEREUPI(VSPHEREBASE):
         # remove csi users in case of external deployment
         if config.DEPLOYMENT["external_mode"]:
             logger.debug("deleting csi users")
-            toolbox = pod.get_ceph_tools_pod()
-            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
-            toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
-            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
-            toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+            try:
+                toolbox = pod.get_ceph_tools_pod()
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+            except AssertionError as ex:
+                logger.debug(ex)
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
