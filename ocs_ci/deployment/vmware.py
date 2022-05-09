@@ -759,6 +759,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
                 toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
             except AssertionError as ex:
+                logger.warning(
+                    "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
+                )
                 logger.debug(ex)
 
         # terraform initialization and destroy cluster
