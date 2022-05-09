@@ -1299,7 +1299,7 @@ def verify_consumer_storagecluster(sc_data):
     Verify that Storagecluster is has:
     1. externalStorage: enable: true
     2. storageProviderEndpoint: IP:31659
-    3. TODO: onboardingTicket
+    3. onboardingTicket is present
     4. TODO: requestedCapacity
 
     Args:
