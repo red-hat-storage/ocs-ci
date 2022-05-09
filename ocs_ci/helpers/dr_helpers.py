@@ -5,6 +5,9 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +78,9 @@ def relocate(preferred_cluster, drpc_name, namespace):
     config.switch_ctx(prev_index)
 
 
-def check_mirroring_status(replaying_images=None):
+def check_mirroring_status_ok(replaying_images=None):
     """
-    Check if mirroring status have expected health and states values
+    Check if mirroring status has health OK and expected number of replaying images
 
     Args:
         replaying_images (int): Expected number of images in replaying state
@@ -95,23 +98,73 @@ def check_mirroring_status(replaying_images=None):
     logger.info(f"Mirroring status: {mirroring_status}")
     keys_to_check = ["health", "daemon_health", "image_health", "states"]
     for key in keys_to_check:
-        value = mirroring_status.get(key)
-        if key == "states":
-            if replaying_images:
-                value = value.get("replaying")
-                expected_value = replaying_images
-            else:
-                continue
-        else:
+        if key != "states":
             expected_value = "OK"
+            value = mirroring_status.get(key)
+        elif key == "states" and replaying_images:
+            # Replaying images count can be higher due to presence of dummy images
+            expected_value = range(replaying_images, replaying_images + 3)
+            value = mirroring_status.get(key).get("replaying")
+        else:
+            continue
 
-        if value != expected_value:
-            logger.error(
+        if value not in expected_value:
+            logger.warning(
                 f"Unexpected {key} status. Current status is {value} but expected {expected_value}"
             )
             return False
 
     return True
+
+
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
+    """
+    Wait for mirroring status to reach health OK and expected number of replaying
+    images for each of the ODF cluster
+
+    Args:
+        replaying_images (int): Expected number of images in replaying state
+        timeout (int): time in seconds to wait for mirroring status reach OK
+
+    Returns:
+        bool: True if status contains expected health and states values
+
+    Raises:
+        AssertionError: In case of unexpected mirroring status
+
+    """
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(
+            f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
+        )
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=check_mirroring_status_ok,
+            replaying_images=replaying_images,
+        )
+        assert sample.wait_for_func_status(result=True), (
+            "The mirroring status does not have expected values within the time"
+            f" limit on cluster {cluster.ENV_DATA['cluster_name']}"
+        )
+
+
+def get_all_vrs(namespace=None):
+    """
+    Gets all VRs in given namespace
+
+    Args:
+        namespace (str): the namespace of the VR resources
+
+    Returns:
+         list: list of all VR in namespace
+
+    """
+    vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
+    vr_items = vr_obj.get().get("items")
+    vr_list = [vr.get("metadata").get("name") for vr in vr_items]
+    return vr_list
 
 
 def check_vr_status(state, namespace):
@@ -127,8 +180,7 @@ def check_vr_status(state, namespace):
 
     """
     vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
-    vr_items = vr_obj.get().get("items")
-    vr_list = [vr.get("metadata").get("name") for vr in vr_items]
+    vr_list = get_all_vrs(namespace)
 
     vr_state_mismatch = []
     for vr in vr_list:
@@ -145,8 +197,56 @@ def check_vr_status(state, namespace):
             vr_state_mismatch.append(vr)
 
     if not vr_state_mismatch:
-        logger.info(f"All VR reached desired state {desired_state}")
+        logger.info(f"All {len(vr_list)} VR are in expected state {state}")
         return True
     else:
-        logger.error(f"Following VR haven't reached desired state: {vr_state_mismatch}")
+        logger.warning(
+            f"Following {len(vr_state_mismatch)} VR are not in expected state: {vr_state_mismatch}"
+        )
         return False
+
+
+def wait_for_vr(count, namespace, state="primary", timeout=300):
+    """
+    Wait for all VR resources to exist in expected state in the given namespace
+
+    Args:
+        count (int): Expected number of VR resources
+        namespace (str): the namespace of the VR resources
+        state (str): The VR state to check for (e.g. 'primary', 'secondary')
+        timeout (int): time in seconds to wait for VR resources to be created
+            or reach expected state
+
+    Returns:
+        bool: True if all VR are in expected state
+
+    Raises:
+        Exception: In case of unexpected VR resource count or status
+
+    """
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_all_vrs,
+            namespace=namespace,
+        ):
+            current_num = len(sample)
+            logger.info(
+                f"Expected VR resources: {count}, "
+                f"Current VR resources: {current_num}"
+            )
+            if current_num == count:
+                break
+    except TimeoutExpiredError:
+        logger.exception(f"Current VR resources did not reach expected count {count}")
+        raise
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=5, func=check_vr_status, state=state, namespace=namespace
+    )
+    assert sample.wait_for_func_status(
+        result=True
+    ), f"One or more VR haven't reached expected state {state} within the time limit."
+
+    return True
