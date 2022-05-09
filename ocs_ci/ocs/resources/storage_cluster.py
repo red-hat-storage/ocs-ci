@@ -1315,7 +1315,7 @@ def verify_consumer_storagecluster(sc_data):
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
     log.info(
-        f"Onboarding ticket begins with: sc_data['spec']['externalStorage']['onboardingTicket'][:50]"
+        f"Onboarding ticket begins with: {sc_data['spec']['externalStorage']['onboardingTicket'][:50]}"
     )
     assert len(sc_data["spec"]["externalStorage"]["onboardingTicket"]) > 500
 
