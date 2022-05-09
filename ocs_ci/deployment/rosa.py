@@ -83,7 +83,7 @@ class ROSAOCP(BaseOCPDeployment):
         ocm.destroy_cluster(self.cluster_name)
         sample = TimeoutSampler(
             timeout=1000,
-            sleep=5,
+            sleep=20,
             func=self.cluster_present,
             cluster_name=self.cluster_name,
         )
