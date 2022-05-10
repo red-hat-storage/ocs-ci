@@ -1062,7 +1062,7 @@ def wait_for_ready_replica_count_to_reach_expected_value(
 
 
 def wait_for_current_replica_count_to_reach_expected_value(
-    machine_set, expected_value, timeout=180
+    machine_set, expected_value, timeout=360
 ):
     """
     Wait for the current replica count to reach an expected value
