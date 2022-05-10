@@ -41,6 +41,7 @@ from ocs_ci.helpers.helpers import (
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
     storagecluster_independent_check,
+    wait_for_resource_state,
 )
 import subprocess
 
@@ -80,7 +81,9 @@ class MCG:
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
-
+        wait_for_resource_state(
+            resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
         self.retrieve_noobaa_cli_binary()
 
         """
