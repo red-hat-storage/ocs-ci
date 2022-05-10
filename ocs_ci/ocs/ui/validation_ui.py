@@ -261,7 +261,7 @@ class ValidationUI(PageNavigator):
             expected_text="Storage System",
         )
         if storage_system_presence:
-            logger.info("Click on Storage System under Status card on Overview page")
+            logger.info("Click on 'Storage System' under Status card on Overview page")
             self.do_click(self.validation_loc["storagesystem-status-card"])
             block_and_file_health_message_check = (
                 self.wait_until_expected_text_is_found(
