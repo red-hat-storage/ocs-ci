@@ -323,7 +323,9 @@ def oc_create_namespacestore(
 def template_pvc(
     name,
     namespace=config.ENV_DATA["cluster_namespace"],
-    storageclass=constants.CEPHFILESYSTEM_SC,
+    storageclass=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+    if config.DEPLOYMENT.get("external_mode")
+    else constants.DEFAULT_STORAGECLASS_CEPHFS,
     access_mode=constants.ACCESS_MODE_RWX,
     size="20Gi",
 ):
