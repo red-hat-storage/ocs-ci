@@ -1739,14 +1739,12 @@ class MultiClusterDROperatorsDeploy(object):
         config.switch_acm_ctx()
         # Create openshift-dr-system namespace
         run_cmd_multicluster(
-            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} "
+            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
         )
         self.deploy_dr_multicluster_orchestrator()
-        # create ODF orchestrator operator group
-        run_cmd(f"oc create -f {constants.ODF_ORCHESTRATOR_OPERATOR_GROUP}")
-        # Create prereq namespace and DR operator group
-        run_cmd_multicluster(
-            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}"
+        # Please create this only on ACM
+        run_cmd(
+            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}",
         )
         self.deploy_dr_hub_operator()
 
@@ -1774,8 +1772,9 @@ class MultiClusterDROperatorsDeploy(object):
             channel=self.channel,
             csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
         )
+        logger.info(f"CurrentCSV={current_csv}")
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
-        odf_multicluster_orchestrator_data["spec"]["currentCSV"] = current_csv
+        odf_multicluster_orchestrator_data["spec"]["startingCSV"] = current_csv
         odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odf_multicluster_orchestrator", delete=False
         )
