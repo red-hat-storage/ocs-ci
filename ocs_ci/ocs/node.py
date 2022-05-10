@@ -34,6 +34,7 @@ from ocs_ci.ocs.resources.pv import (
     get_node_pv_objs,
 )
 from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.utility.rosa import is_odf_addon_installed
 
 
 log = logging.getLogger(__name__)
@@ -771,13 +772,30 @@ def get_ocs_nodes(num_of_nodes=None):
             it returns all the ocs nodes.
 
     Returns:
-        list: List of ocs nodes
+        list: List of the ocs nodes
 
     """
-    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    # Import inside the function to avoid circular loop
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster_state
+
+    # If we use managed service or external mode the worker nodes are without the OCS label.
+    # So in that case, we will get the worker nodes without searching for the OCS label.
+    ms_with_odf_addon = is_managed_service_cluster() and is_odf_addon_installed()
+    external_mode_with_ocs = (
+        config.DEPLOYMENT.get("external_mode")
+        and get_storage_cluster_state(constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE)
+        == constants.STATUS_READY
+    )
+    if ms_with_odf_addon or external_mode_with_ocs:
+        ocs_node_names = get_worker_nodes()
+    else:
+        ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+
+    assert ocs_node_names, "Didn't find the ocs nodes"
+
     ocs_nodes = get_node_objs(ocs_node_names)
     num_of_nodes = num_of_nodes or len(ocs_nodes)
-
     return ocs_nodes[:num_of_nodes]
 
 
