@@ -257,15 +257,15 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         pod_obj = pod_factory(interface=interface)
         pod_obj.run_io(storage_type="fs", size="500M")
 
-        if self.consumer_cluster_index is not None:
-            config.switch_to_provider()
-
     @pytest.fixture()
     def validate_all_mon_svc_are_up_at_teardown(self, request):
         """
         Verifies all mon services are running
 
         """
+        # Use provider cluster in managed service platform
+        if self.consumer_cluster_index is not None:
+            config.switch_to_provider()
 
         # Get all mon services
         mon_svc_list = get_services_by_label(
@@ -277,6 +277,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         mon_pods_list = get_mon_pods()
 
         def finalizer():
+            # Use provider cluster in managed service platform
+            if self.consumer_cluster_index is not None:
+                config.switch_to_provider()
 
             # Validate all mon services are running
             if len(mon_svc_list) != len(
@@ -422,6 +425,3 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         # Create and delete resources
         self.sanity_helpers.create_pvc_delete(multi_pvc_factory=multi_pvc_factory)
-
-        if self.consumer_cluster_index is not None:
-            config.switch_to_provider()
