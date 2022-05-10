@@ -20,7 +20,6 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4c
 @managed_service_required
-@skipif_ms_consumer
 @runs_on_provider
 @bugzilla("1998056")
 @pytest.mark.polarion_id("OCS-2766")
