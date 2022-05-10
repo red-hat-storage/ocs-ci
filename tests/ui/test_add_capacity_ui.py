@@ -44,7 +44,7 @@ class TestAddCapacityUI(object):
     @skipif_external_mode
     @skipif_ui_not_support("add_capacity")
     @brown_squad
-    def test_add_capacity_internal(self, setup_ui):
+    def test_add_capacity_internal(self, setup_ui_class):
         """
         Test Add Capacity on Internal cluster via UI
 
@@ -54,7 +54,7 @@ class TestAddCapacityUI(object):
         osd_count = len(osd_pods_before_add_capacity)
 
         logger.info("Add capacity via UI")
-        infra_ui_obj = AddReplaceDeviceUI(setup_ui)
+        infra_ui_obj = AddReplaceDeviceUI(setup_ui_class)
         infra_ui_obj.add_capacity_ui()
 
         logger.info("Wait for osd pods to be in Running state")
