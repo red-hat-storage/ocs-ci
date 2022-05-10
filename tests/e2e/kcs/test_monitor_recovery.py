@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
-@skipif_ocs_version("<4.9")
+@skipif_ocs_version("<4.8")
 @skipif_openshift_dedicated
 @skipif_external_mode
 class TestMonitorRecovery(E2ETest):
@@ -122,12 +122,13 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.scale_rook_ocs_operators(replica=0)
 
         logger.info(
-            "Patching OSDs to remove LivenessProbe and setting sleep to infinity"
+            "Preparing script and patching OSDs to remove LivenessProbe and sleep to infinity"
         )
+        mon_recovery.prepare_monstore_script()
         mon_recovery.patch_sleep_on_osds()
 
         logger.info("Getting mon-store from OSDs")
-        mon_recovery.get_monstore_from_osds()
+        mon_recovery.run_mon_store()
 
         logger.info("Patching MONs to sleep infinitely")
         mon_recovery.patch_sleep_on_mon()
@@ -180,7 +181,15 @@ class TestMonitorRecovery(E2ETest):
                 f"Verified: md5sum of {self.filename} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
-        # Create new project, pvc, dc pods
+
+        logger.info("Getting object after recovery")
+        assert bucket_utils.s3_get_object(
+            s3_obj=mcg_obj,
+            bucketname=self.bucket_name,
+            object_key=self.object_key,
+        ), "Failed: PutObject"
+
+        # New pvc, dc pods, obcs
         new_dc_pods = [
             dc_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
@@ -191,13 +200,6 @@ class TestMonitorRecovery(E2ETest):
         ]
         for pod_obj in new_dc_pods:
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-
-        logger.info("Getting object after recovery")
-        assert bucket_utils.s3_get_object(
-            s3_obj=mcg_obj,
-            bucketname=self.bucket_name,
-            object_key=self.object_key,
-        ), "Failed: PutObject"
 
         logger.info("Creating new bucket and write object")
         new_bucket = bucket_factory(interface="OC")[0].name
@@ -281,9 +283,9 @@ class MonitorRecovery(object):
         for osd in get_osd_pods():
             wait_for_resource_state(resource=osd, state=constants.STATUS_RUNNING)
 
-    def get_monstore_from_osds(self):
+    def prepare_monstore_script(self):
         """
-        Retrieve the `monstore` cluster map from OSDs
+        Prepares the script to retrieve the `monstore` cluster map from OSDs
 
         """
         recover_mon = """
@@ -311,8 +313,28 @@ class MonitorRecovery(object):
         with open(f"{self.backup_dir}/recover_mon.sh", "w") as file:
             file.write(recover_mon)
         exec_cmd(cmd=f"chmod +x {self.backup_dir}/recover_mon.sh")
-        logger.info("Running mon-store script")
-        exec_cmd(cmd=f"sh {self.backup_dir}/recover_mon.sh")
+
+    @retry(CommandFailed, tries=15, delay=5, backoff=1)
+    def run_mon_store(self):
+        """
+        Runs script to get the mon store from OSDs
+
+        Raise:
+            CommandFailed
+        """
+        logger.info("Running mon-store script..")
+        result = exec_cmd(cmd=f"sh {self.backup_dir}/recover_mon.sh")
+        result.stdout = result.stdout.decode()
+        logger.info(f"OSD mon store retrieval stdout {result.stdout}")
+        result.stderr = result.stderr.decode()
+        logger.info(f"OSD mon store retrieval stderr {result.stderr}")
+        search_pattern = re.search(
+            pattern="error|unable to open mon store", string=result.stderr
+        )
+        if search_pattern:
+            logger.info(f"Error found: {search_pattern}")
+            raise CommandFailed
+        logger.info("Successfully collected mon store from OSDs")
 
     def patch_sleep_on_mon(self):
         """
