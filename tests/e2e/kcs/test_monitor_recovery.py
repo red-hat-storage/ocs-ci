@@ -15,7 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     system_test,
 )
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.framework.testlib import E2ETest, config
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -126,6 +126,7 @@ class TestMonitorRecovery(E2ETest):
         )
         mon_recovery.prepare_monstore_script()
         mon_recovery.patch_sleep_on_osds()
+        switch_to_project(constants.OPENSHIFT_STORAGE_NAMESPACE)
 
         logger.info("Getting mon-store from OSDs")
         mon_recovery.run_mon_store()
