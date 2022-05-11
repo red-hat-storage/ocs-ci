@@ -226,7 +226,7 @@ def download_rosa_cli():
         and config.DEPLOYMENT["force_download_rosa_cli"]
     )
     return utils.get_rosa_cli(
-        config.DEPLOYMENT["rosa_cli_version"], force_download=force_download
+        config.ENV_DATA["rosa_cli_version"], force_download=force_download
     )
 
 
