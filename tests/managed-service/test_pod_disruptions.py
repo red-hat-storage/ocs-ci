@@ -29,6 +29,7 @@ class TestPodDisruptions(ManageTest):
     Tests to verify pod disruption
 
     """
+
     pvc_size = 25
 
     @pytest.fixture(autouse=True)
