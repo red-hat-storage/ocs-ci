@@ -9,17 +9,16 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     skipif_ocp_version,
-    skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
 @tier4c
-@skipif_managed_service
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @ignore_leftover_label(constants.drain_canary_pod_label)
@@ -31,12 +30,31 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
 
     """
 
+    provider_index = None
+    consumer_index = None
+
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, pvc_clone_factory, create_pvcs_and_pods):
+    def setup(self, request, project_factory, pvc_clone_factory, create_pvcs_and_pods):
         """
         Create PVCs and pods
 
         """
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            # Get the index of current cluster
+            initial_cluster_index = config.cur_index
+            # Get the index of provider cluster. provider_index will be used as a flag to decide whether switching to
+            # provider cluster index is required
+            self.provider_index = config.get_provider_index()
+            # Get the index of a consumer cluster
+            self.consumer_index = config.get_consumer_indexes_list()
+
+            def finalizer():
+                # Switching to provider cluster context will be done during the test case.
+                # Switch back to consumer cluster context after the test case.
+                config.switch_ctx(initial_cluster_index)
+
+            request.addfinalizer(finalizer)
+
         self.pvc_size = 3
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=self.pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=4
@@ -96,11 +114,16 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
 
         # Select the pods to be deleted
         for disruption, pod_type in zip(disruption_ops, pods_to_delete):
-            disruption.set_resource(resource=pod_type)
+            cluster_index = None
+            # 'provider_index' will not be None if the platform is Managed Services
+            if self.provider_index is not None and pod_type in ["osd", "mgr"]:
+                cluster_index = self.provider_index
+                config.switch_to_provider()
+            elif self.provider_index:
+                cluster_index = self.consumer_index
+                config.switch_ctx(cluster_index)
 
-        # Select the pods to be deleted
-        for disruption, pod_type in zip(disruption_ops, pods_to_delete):
-            disruption.set_resource(resource=pod_type)
+            disruption.set_resource(resource=pod_type, cluster_index=cluster_index)
 
         # Clone PVCs
         log.info("Start creating clone of PVCs")
