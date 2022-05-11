@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4b,
     tier4c,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4c
 @managed_service_required
-@skipif_ms_consumer
+@runs_on_provider
 @bugzilla("1998056")
 @pytest.mark.polarion_id("OCS-2766")
 def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
@@ -48,7 +49,7 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 @tier4
 @tier4c
 @managed_service_required
-@skipif_ms_consumer
+@runs_on_provider
 @pytest.mark.polarion_id("OCS-2769")
 def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """
@@ -111,7 +112,7 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
 @tier4
 @tier4c
 @managed_service_required
-@skipif_ms_consumer
+@runs_on_provider
 @pytest.mark.polarion_id("OCS-3716")
 def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
     """
@@ -143,7 +144,7 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
 @tier4
 @tier4c
 @managed_service_required
-@skipif_ms_consumer
+@runs_on_provider
 @pytest.mark.polarion_id("OCS-3717")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 def test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
