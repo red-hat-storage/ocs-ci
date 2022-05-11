@@ -80,7 +80,9 @@ def create_cluster(cluster_name, version, region):
         cmd += " --mode auto"
     if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
         aws = AWSUtil()
-        subnet_id = ",".join(aws.get_cluster_subnet_ids(provider_name))
+        subnet_id = config.ENV_DATA.get("subnet_ids") or ",".join(
+            aws.get_cluster_subnet_ids(provider_name)
+        )
         cmd = f"{cmd} --subnet-ids {subnet_id}"
 
     utils.run_cmd(cmd, timeout=1200)
