@@ -126,6 +126,10 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
 
             disruption.set_resource(resource=pod_type, cluster_index=cluster_index)
 
+        # Switch cluster context if the platform is MS. 'provider_index' will not be None if platform is MS.
+        if self.provider_index is not None:
+            config.switch_ctx(self.consumer_index)
+
         # Clone PVCs
         log.info("Start creating clone of PVCs")
         for pvc_obj in self.pvcs:
