@@ -582,7 +582,18 @@ def verify_storage_system():
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
+    live_deployment = config.DEPLOYMENT.get("live_deployment")
+    ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
+    if (
+        live_deployment
+        and ocs_version == version.VERSION_4_9
+        and ocp_version == version.VERSION_4_10
+    ):
+        log.warning(
+            "Because of the BZ 2075422, we are skipping storage system validation!"
+        )
+        return
     if ocs_version >= version.VERSION_4_9 and not managed_service:
         log.info("Verifying storage system status")
         storage_system = OCP(
@@ -1303,3 +1314,35 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+
+
+def get_ceph_clients():
+    """
+    Get the yamls of all ceph clients.
+    Runs on provider cluster
+
+    Returns:
+        list: yamls of all ceph clients
+    """
+    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    return consumer.get().get("items")
+
+
+def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get the storage cluster state
+
+    Args:
+        sc_name (str): The storage cluster name
+        namespace (str): Namespace of the resource. The default value is:
+            'defaults.ROOK_CLUSTER_NAMESPACE'
+
+    Returns:
+        str: The storage cluster state
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    return sc_obj.get_resource(resource_name=sc_name, column="PHASE")

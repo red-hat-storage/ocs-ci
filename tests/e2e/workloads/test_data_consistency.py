@@ -40,7 +40,9 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # we need to mount the volume on every worker node, so RWX/cephfs
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
-    if storagecluster_independent_check():
+    if (
+        config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS
+    ) and storagecluster_independent_check():
         sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
     else:
         sc_name = constants.CEPHFILESYSTEM_SC

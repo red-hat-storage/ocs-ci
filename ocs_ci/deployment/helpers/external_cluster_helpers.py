@@ -13,6 +13,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
+    ExternalClusterRGWEndPointPortMissing,
     ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -99,16 +100,44 @@ class ExternalCluster(object):
 
     def get_rgw_endpoint_api_port(self):
         """
-        Fetches rgw endpoint api port
+        Fetches rgw endpoint api port.
+
+        For ceph 5.x, get port information from ceph config dump and for
+        ceph 4.x, get port information from ceph.conf on rgw node
 
         Returns:
             str: RGW endpoint port
 
         """
-        cmd = "ceph dashboard get-rgw-api-port"
-        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
-        logger.info(f"External cluster rgw endpoint api port: {out}")
-        return out
+        port = None
+        try:
+            # For ceph 5.x versions
+            cmd = "ceph config dump -f json"
+            _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+            config_dump = json.loads(out)
+            for each in config_dump:
+                if each["name"].lower() == "rgw_frontends":
+                    port = each["value"].split("=")[-1]
+                    break
+            # if port doesn't have value, need to check ceph.conf from rgw node
+            if not port:
+                raise AttributeError(
+                    "config dump has no rgw port information. checking ceph.conf file on rgw node"
+                )
+        except Exception as ex:
+            # For ceph 4.x versions
+            logger.info(ex)
+            cmd = "grep -e '^rgw frontends' /etc/ceph/ceph.conf"
+            rgw_node = get_rgw_endpoint()
+            rgw_conn = Connection(host=rgw_node, user=self.user, password=self.password)
+            _, out, _ = rgw_conn.exec_cmd(cmd)
+            port = out.split(":")[-1]
+
+        if not port:
+            raise ExternalClusterRGWEndPointPortMissing
+
+        logger.info(f"External cluster rgw endpoint api port: {port}")
+        return port
 
     def get_rhel_version(self):
         """

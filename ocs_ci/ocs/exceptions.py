@@ -260,6 +260,10 @@ class ExternalClusterRGWEndPointMissing(Exception):
     pass
 
 
+class ExternalClusterRGWEndPointPortMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -489,4 +493,8 @@ class AlertingError(Exception):
 
 
 class AuthError(Exception):
+    pass
+
+
+class UnknownCloneTypeException(Exception):
     pass

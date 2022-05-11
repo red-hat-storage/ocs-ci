@@ -239,13 +239,14 @@ def get_addon_info(cluster, addon_name):
         addon_name (str): addon name
 
     Returns:
-        str: line of the command for relevant addon
+        str: line of the command for relevant addon. If not found, it returns None.
 
     """
     cmd = f"rosa list addons -c {cluster}"
     output = utils.run_cmd(cmd)
     line = [line for line in output.splitlines() if re.match(f"^{addon_name} ", line)]
-    return line[0]
+    addon_info = line[0] if line else None
+    return addon_info
 
 
 def install_odf_addon(cluster):
@@ -288,7 +289,9 @@ def install_odf_addon(cluster):
         unit = config.ENV_DATA.get("unit", "Ti")
         storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
         cmd += f' --unit "{unit}" --storage-provider-endpoint "{storage_provider_endpoint}"'
-        onboarding_ticket = generate_onboarding_token()
+        onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
+        if not onboarding_ticket:
+            onboarding_ticket = generate_onboarding_token()
         if onboarding_ticket:
             cmd += f' --onboarding-ticket "{onboarding_ticket}"'
         else:
@@ -352,3 +355,24 @@ def delete_oidc_provider(cluster_id):
     """
     cmd = f"rosa delete oidc-provider -c {cluster_id} --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
+
+
+def is_odf_addon_installed(cluster_name=None):
+    """
+    Check if the odf addon is installed
+
+    Args:
+        cluster_name (str): The cluster name. The default value is 'config.ENV_DATA["cluster_name"]'
+
+    Returns:
+        bool: True, if the odf addon is installed. False, otherwise
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    addon_name = config.ENV_DATA.get("addon_name")
+    addon_info = get_addon_info(cluster_name, addon_name)
+
+    if addon_info and "ready" in addon_info:
+        return True
+    else:
+        return False

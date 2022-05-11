@@ -34,6 +34,7 @@ from ocs_ci.ocs.resources.pv import (
     get_node_pv_objs,
 )
 from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.utility.rosa import is_odf_addon_installed
 
 
 log = logging.getLogger(__name__)
@@ -771,13 +772,30 @@ def get_ocs_nodes(num_of_nodes=None):
             it returns all the ocs nodes.
 
     Returns:
-        list: List of ocs nodes
+        list: List of the ocs nodes
 
     """
-    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    # Import inside the function to avoid circular loop
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster_state
+
+    # If we use managed service or external mode the worker nodes are without the OCS label.
+    # So in that case, we will get the worker nodes without searching for the OCS label.
+    ms_with_odf_addon = is_managed_service_cluster() and is_odf_addon_installed()
+    external_mode_with_ocs = (
+        config.DEPLOYMENT.get("external_mode")
+        and get_storage_cluster_state(constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE)
+        == constants.STATUS_READY
+    )
+    if ms_with_odf_addon or external_mode_with_ocs:
+        ocs_node_names = get_worker_nodes()
+    else:
+        ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+
+    assert ocs_node_names, "Didn't find the ocs nodes"
+
     ocs_nodes = get_node_objs(ocs_node_names)
     num_of_nodes = num_of_nodes or len(ocs_nodes)
-
     return ocs_nodes[:num_of_nodes]
 
 
@@ -1938,7 +1956,12 @@ def recover_node_to_ready_state(node_obj):
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
 
-    node_status = get_node_status(node_obj)
+    try:
+        node_status = get_node_status(node_obj)
+    except Exception as e:
+        log.info(f"failed to get the node status due to the exception {str(e)}")
+        return False
+
     node_name = node_obj.name
     log.info(f"The status of the node {node_name} is {node_status} ")
 
@@ -2189,3 +2212,110 @@ def wait_for_all_osd_ids_come_up_on_nodes(
         )
 
     return False
+
+
+def get_other_worker_nodes_in_same_rack_or_zone(
+    failure_domain, node_obj, node_names_to_search=None
+):
+    """
+    Get other worker nodes in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for other
+            worker nodes in the same rack or zone.
+        node_names_to_search (list): The list of node names to search the other worker nodes in
+            the same rack or zone. If not specified, it will search in all the worker nodes.
+
+    Returns:
+        list: The list of the other worker nodes in the same rack or zone of the given node.
+
+    """
+    node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    log.info(f"The node {node_obj.name} rack or zone is {node_rack_or_zone}")
+    wnode_names = node_names_to_search or get_worker_nodes()
+    other_wnode_names = [name for name in wnode_names if name != node_obj.name]
+    other_wnodes = get_node_objs(other_wnode_names)
+
+    other_wnodes_in_same_rack_or_zone = [
+        wnode
+        for wnode in other_wnodes
+        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+    ]
+
+    wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
+    log.info(f"other worker nodes in the same rack or zone are: {wnode_names}")
+    return other_wnodes_in_same_rack_or_zone
+
+
+def get_another_osd_node_in_same_rack_or_zone(
+    failure_domain, node_obj, node_names_to_search=None
+):
+    """
+    Get another osd node in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for another
+            osd node in the same rack or zone.
+        node_names_to_search (list): The list of node names to search for another osd node in the
+            same rack or zone. If not specified, it will search in all the worker nodes.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The osd node in the same rack or zone of the given node.
+            If not found, it returns None.
+
+    """
+    osd_node_names = get_osd_running_nodes()
+    other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
+        failure_domain, node_obj, node_names_to_search
+    )
+
+    osd_node_in_same_rack_or_zone = None
+    for wnode in other_wnodes_in_same_rack_or_zone:
+        if wnode.name in osd_node_names:
+            osd_node_in_same_rack_or_zone = wnode
+            break
+
+    return osd_node_in_same_rack_or_zone
+
+
+def get_nodes_racks_or_zones(failure_domain, node_names):
+    """
+    Get the nodes racks or zones
+
+    failure_domain (str): The failure domain
+    node_names (list): The node names to get their racks or zones
+
+    Return:
+        list: The nodes racks or zones
+
+    """
+    node_objects = get_node_objs(node_names)
+    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+
+
+def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+    """
+    Wait for the nodes racks or zones to appear
+
+    Args:
+        failure_domain (str): The failure domain
+        node_names (list): The node names to get their racks or zones
+        timeout (int): The time to wait for the racks or zones to appear on the nodes
+
+    Raise:
+        TimeoutExpiredError: In case not all the nodes racks or zones appear in the given timeout
+
+    """
+    for nodes_racks_or_zones in TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nodes_racks_or_zones,
+        failure_domain=failure_domain,
+        node_names=node_names,
+    ):
+        log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
+        if all(nodes_racks_or_zones):
+            log.info("All the nodes racks or zones exist!")
+            break

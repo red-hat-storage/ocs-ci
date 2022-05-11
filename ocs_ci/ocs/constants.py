@@ -302,6 +302,7 @@ OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
+PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -829,6 +830,7 @@ VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
+VM_VAR = os.path.join(VSPHERE_DIR, "vm/variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
@@ -1673,6 +1675,11 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
+ACM_HUB_DOWNSTREAM_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
+ACM_HUB_DOWNSTREAM_ICSP_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
+)
+ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"

@@ -423,6 +423,10 @@ class VSPHEREUPI(VSPHEREBASE):
             # git clone repo from openshift installer
             clone_openshift_installer()
 
+            # comment sensitive variable as current terraform version doesn't support
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                comment_sensitive_var()
+
             # generate terraform variable file
             generate_terraform_vars_and_update_machine_conf()
 
@@ -723,6 +727,11 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+            comment_sensitive_var()
+
         rename_files = [constants.VSPHERE_MAIN, constants.VM_MAIN]
         for each_file in rename_files:
             if os.path.exists(f"{each_file}.backup") and os.path.exists(
@@ -757,10 +766,14 @@ class VSPHEREUPI(VSPHEREBASE):
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
             terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                terraform_provider_ignition_file = "terraform-provider-ignition_v2.1.2"
+            else:
+                terraform_provider_ignition_file = "terraform-provider-ignition"
             terraform_ignition_provider_path = os.path.join(
                 terraform_data_dir,
                 terraform_plugins_path,
-                "terraform-provider-ignition",
+                terraform_provider_ignition_file,
             )
 
             # check the upgrade history of cluster and checkout to the
@@ -1509,3 +1522,15 @@ def get_ignition_provider_version():
         return "v2.1.2"
     else:
         return "v2.1.0"
+
+
+def comment_sensitive_var():
+    """
+    Comment out sensitive var in vm/variables.tf
+    """
+    str_to_modify = "sensitive = true"
+    target_str = "//sensitive = true"
+    logger.debug(
+        f"commenting out {str_to_modify} in {constants.VM_VAR} as current terraform version doesn't support"
+    )
+    replace_content_in_file(constants.VM_VAR, str_to_modify, target_str)
