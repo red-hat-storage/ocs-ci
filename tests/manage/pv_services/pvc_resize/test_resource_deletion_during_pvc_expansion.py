@@ -51,7 +51,9 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         Create PVCs and pods
 
         """
-        if (config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS) and (resource_to_delete in ["mds", "mon", "mgr", "osd"]):
+        if (
+            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        ) and (resource_to_delete in ["mds", "mon", "mgr", "osd"]):
             # Get the index of current cluster
             self.initial_cluster_index = config.cur_index
             # Get the index of a consumer cluster
