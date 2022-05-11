@@ -1549,7 +1549,10 @@ def wait_for_storage_pods(timeout=200):
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
-        if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
+        if any(
+            i in pod_obj.name
+            for i in ["-1-deploy", "ocs-deviceset", "rook-ceph-osd-prepare"]
+        ):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
