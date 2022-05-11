@@ -46,7 +46,7 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
             # provider cluster index is required
             self.provider_index = config.get_provider_index()
             # Get the index of a consumer cluster
-            self.consumer_index = config.get_consumer_indexes_list()
+            self.consumer_index = config.get_consumer_indexes_list()[0]
 
             def finalizer():
                 # Switching to provider cluster context will be done during the test case.
@@ -116,12 +116,13 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         for disruption, pod_type in zip(disruption_ops, pods_to_delete):
             cluster_index = None
             # 'provider_index' will not be None if the platform is Managed Services
-            if self.provider_index is not None and pod_type in ["osd", "mgr"]:
-                cluster_index = self.provider_index
-                config.switch_to_provider()
-            elif self.provider_index:
-                cluster_index = self.consumer_index
-                config.switch_ctx(cluster_index)
+            if self.provider_index is not None:
+                if pod_type in ["osd", "mgr"]:
+                    cluster_index = self.provider_index
+                    config.switch_to_provider()
+                else:
+                    cluster_index = self.consumer_index
+                    config.switch_ctx(cluster_index)
 
             disruption.set_resource(resource=pod_type, cluster_index=cluster_index)
 
