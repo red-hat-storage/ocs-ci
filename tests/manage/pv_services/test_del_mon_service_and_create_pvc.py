@@ -327,9 +327,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 # Check the ceph health OK
                 ceph_health_check(tries=90, delay=15)
 
-                # Switch the context to consumer cluster if needed
-                if self.consumer_cluster_index is not None:
-                    config.switch_to_consumer(self.consumer_cluster_index)
+            # Switch the context to consumer cluster if needed
+            if self.consumer_cluster_index is not None:
+                config.switch_to_consumer(self.consumer_cluster_index)
 
         request.addfinalizer(finalizer)
 
