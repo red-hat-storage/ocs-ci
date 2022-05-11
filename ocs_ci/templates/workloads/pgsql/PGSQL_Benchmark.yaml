@@ -7,7 +7,7 @@ spec:
   workload:
     name: "pgbench"
     args:
-      timeout: 5
+      job_timeout: 50000
       clients:
         - 20
       threads: 2
