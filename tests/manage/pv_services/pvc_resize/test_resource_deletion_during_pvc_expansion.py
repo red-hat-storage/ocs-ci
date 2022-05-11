@@ -9,16 +9,15 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     skipif_upgraded_from,
-    skipif_managed_service,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers import disruption_helpers
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
 @tier4c
-@skipif_managed_service
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 @ignore_leftover_label(constants.drain_canary_pod_label)
@@ -44,22 +43,37 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
 
     """
 
+    provider_index = None
+
     @pytest.fixture(autouse=True)
-    def setup(self, create_pvcs_and_pods):
+    def setup(self, resource_to_delete, create_pvcs_and_pods):
         """
         Create PVCs and pods
 
         """
+        if (config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS) and (resource_to_delete in ["mds", "mon", "mgr", "osd"]):
+            # Get the index of current cluster
+            self.initial_cluster_index = config.cur_index
+            # Get the index of a consumer cluster
+            self.consumer_index = config.get_consumer_indexes_list()[0]
+            # Get the index of provider cluster. provider_index will act as the flag to decide if switch to provider is
+            # required
+            self.provider_index = config.get_provider_index()
         self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=10, pods_for_rwx=2)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
+        Switch back to initial cluster context if applicable
         Make sure ceph health is ok
 
         """
 
         def finalizer():
+            # Switching to provider cluster context will be done during the test case in certain cases.
+            # Switch back to consumer cluster context after the test case.
+            if self.provider_index:
+                config.switch_ctx(self.initial_cluster_index)
             assert ceph_health_check(), "Ceph cluster health is not OK"
             log.info("Ceph cluster health is OK")
 
@@ -98,8 +112,15 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
             log.info(f"Verified IO on pod {pod_obj.name}.")
         log.info("IO is successful on all pods before PVC expansion.")
 
+        if self.provider_index is not None:
+            # Switch to provider cluster context to get ceph pods
+            config.switch_to_provider()
+
         # Select the pod to be deleted
         disruption_ops.set_resource(resource=resource_to_delete)
+
+        if self.provider_index is not None:
+            config.switch_ctx(self.consumer_index)
 
         log.info("Expanding all PVCs.")
         for pvc_obj in self.pvcs:
