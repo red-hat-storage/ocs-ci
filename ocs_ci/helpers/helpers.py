@@ -231,6 +231,7 @@ def create_pod(
         elif (
             pod_dict_path == constants.NGINX_POD_YAML
             or pod_dict == constants.CSI_RBD_POD_YAML
+            or pod_dict == constants.PERF_POD_YAML
         ):
             temp_dict = [
                 {

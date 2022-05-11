@@ -271,13 +271,14 @@ class Pod(OCS):
             .get("mountPath")
         )
 
-    def workload_setup(self, storage_type, jobs=1):
+    def workload_setup(self, storage_type, jobs=1, fio_installed=False):
         """
         Do setup on pod for running FIO
 
         Args:
             storage_type (str): 'fs' or 'block'
             jobs (int): Number of jobs to execute FIO
+            fio_installed (bool): True if fio is already installed on the pod
         """
         work_load = "fio"
         name = f"test_workload_{work_load}"
@@ -285,7 +286,8 @@ class Pod(OCS):
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(name, path, work_load, storage_type, self, jobs)
-        assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
+        if not (fio_installed and work_load == "fio"):
+            assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
         self.wl_setup_done = True
 
     def run_io(
@@ -307,6 +309,7 @@ class Pod(OCS):
         buffer_pattern=None,
         readwrite=None,
         direct=0,
+        fio_installed=False,
     ):
         """
         Execute FIO on a pod
@@ -341,10 +344,13 @@ class Pod(OCS):
             buffer_pattern (str): fio will fill the I/O buffers with this pattern
             readwrite (str): Type of I/O pattern default is randrw from yaml
             direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
+            fio_installed (bool): True if fio is already installed on the pod
 
         """
         if not self.wl_setup_done:
-            self.workload_setup(storage_type=storage_type, jobs=jobs)
+            self.workload_setup(
+                storage_type=storage_type, jobs=jobs, fio_installed=fio_installed
+            )
 
         if io_direction == "rw":
             self.io_params = templating.load_yaml(constants.FIO_IO_RW_PARAMS_YAML)
@@ -693,6 +699,107 @@ def get_ocs_operator_pod(ocs_label=constants.OCS_OPERATOR_LABEL, namespace=None)
     ocs_operator = get_pods_having_label(ocs_label, namespace)
     ocs_operator_pod = Pod(**ocs_operator[0])
     return ocs_operator_pod
+
+
+def get_alertmanager_managed_ocs_alertmanager_pods(
+    label=constants.MANAGED_ALERTMANAGER_LABEL, namespace=None
+):
+    """
+    Get alertmanager-managed-ocs-alertmanager pods in the cluster
+
+    Args:
+        label (str): Label associated with alertmanager-managed-ocs-alertmanager pods
+        namespace (str): Namespace in which alertmanager-managed-ocs-alertmanager pods are residing
+
+    Returns:
+        list: Pod objects of alertmanager-managed-ocs-alertmanager pods
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    alertmanager_managed_pods = get_pods_having_label(label, namespace)
+    return [
+        Pod(**alertmanager_managed)
+        for alertmanager_managed in alertmanager_managed_pods
+    ]
+
+
+def get_ocs_osd_controller_manager_pod(
+    label=constants.MANAGED_CONTROLLER_LABEL, namespace=None
+):
+    """
+    Get ocs-osd-controller-manager pod in the cluster
+
+    Args:
+        label (str): Label associated with ocs-osd-controller-manager pod
+        namespace (str): Namespace in which ocs-osd-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-osd-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    # odf-operator-controller-manager pod also have the same label. Select ocs-osd-controller-manager pod only.
+    controller_manager_pods = [
+        controller_manager
+        for controller_manager in get_pods_having_label(label, namespace)
+        if "ocs-osd-controller-manager" in controller_manager["metadata"]["name"]
+    ]
+    return Pod(**controller_manager_pods[0])
+
+
+def get_prometheus_managed_ocs_prometheus_pod(
+    label=constants.MANAGED_PROMETHEUS_LABEL, namespace=None
+):
+    """
+    Get prometheus-managed-ocs-prometheus pod in the cluster
+
+    Args:
+        label (str): Label associated with prometheus-managed-ocs-prometheus pod
+        namespace (str): Namespace in which prometheus-managed-ocs-prometheus pod is residing
+
+    Returns:
+        Pod: Pod object of prometheus-managed-ocs-prometheus pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    prometheus_managed_ocs_prometheus = get_pods_having_label(label, namespace)
+    return Pod(**prometheus_managed_ocs_prometheus[0])
+
+
+def get_prometheus_operator_pod(
+    label=constants.PROMETHEUS_OPERATOR_LABEL, namespace=None
+):
+    """
+    Get prometheus-operator pod in the cluster
+
+    Args:
+        label (str): Label associated with prometheus-operator pod
+        namespace (str): Namespace in which prometheus-operator pod is residing
+
+    Returns:
+        Pod: Pod object of prometheus-operator pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    prometheus_operator = get_pods_having_label(label, namespace)
+    return Pod(**prometheus_operator[0])
+
+
+def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace=None):
+    """
+    Get ocs-provider-server pod in the cluster
+
+    Args:
+        label (str): Label associated with ocs-provider-server pod
+        namespace (str): Namespace in which ocs-provider-server pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-provider-server pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocs_provider_server = get_pods_having_label(label, namespace)
+    return Pod(**ocs_provider_server[0])
 
 
 def list_ceph_images(pool_name="rbd"):

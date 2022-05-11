@@ -303,6 +303,7 @@ MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
+PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
