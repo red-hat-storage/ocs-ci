@@ -363,22 +363,26 @@ def check_rbd_mirrored_image_status(namespace, image_state):
     """
     # TODO: Handle code if user looking for image state in secondary cluster
     ct_pod = pod.get_ceph_tools_pod()
-    cmd = f"rbd mirror pool status {constants.DEFAULT_BLOCKPOOL} --verbose --debug-rbd 0"
+    cmd = (
+        f"rbd mirror pool status {constants.DEFAULT_BLOCKPOOL} --verbose --debug-rbd 0"
+    )
     rbd_mirror_image_status_output = ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")
     image_name_list = list()
-    pv_dict = get_all_pvs()['items']
+    pv_dict = get_all_pvs()["items"]
     failed_count = 0
     for pv_name in pv_dict:
-        if pv_name['spec']['claimRef']['namespace'] == namespace:
+        if pv_name["spec"]["claimRef"]["namespace"] == namespace:
             pv_data_dict = {
-                "pvc_name": pv_name['spec']['claimRef']['name'] ,
-                "rbd_image_name": pv_name["spec"]["csi"]["volumeAttributes"]["imageName"]
+                "pvc_name": pv_name["spec"]["claimRef"]["name"],
+                "rbd_image_name": pv_name["spec"]["csi"]["volumeAttributes"][
+                    "imageName"
+                ],
             }
             image_name_list.append(pv_data_dict)
     for ceph_image_name in image_name_list:
-        for rbd_images in rbd_mirror_image_status_output['images']:
-            if ceph_image_name['rbd_image_name'] == rbd_images['name']:
-                if rbd_images['state'] == image_state:
+        for rbd_images in rbd_mirror_image_status_output["images"]:
+            if ceph_image_name["rbd_image_name"] == rbd_images["name"]:
+                if rbd_images["state"] == image_state:
                     logger.info(
                         f"Rbd mirror image status check for "
                         f"{ceph_image_name['rbd_image_name']}/{ceph_image_name['pvc_name']} Passed"
