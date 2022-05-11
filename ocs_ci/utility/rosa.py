@@ -342,8 +342,8 @@ def delete_operator_roles(cluster_id):
     Args:
         cluster_id (str): the id of the cluster
     """
-    cmd = f"rosa delete operator-roles -c {cluster_id}"
-    utils.run_cmd(cmd)
+    cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def delete_oidc_provider(cluster_id):
@@ -353,8 +353,8 @@ def delete_oidc_provider(cluster_id):
     Args:
         cluster_id (str): the id of the cluster
     """
-    cmd = f"rosa delete oidc-provider -c {cluster_id}"
-    utils.run_cmd(cmd)
+    cmd = f"rosa delete oidc-provider -c {cluster_id} --mode auto --yes"
+    utils.run_cmd(cmd, timeout=1200)
 
 
 def is_odf_addon_installed(cluster_name=None):
