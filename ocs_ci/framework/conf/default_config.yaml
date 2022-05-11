@@ -210,6 +210,7 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
+  rosa_cli_version: '1.2.0'
 
 # This section is related to upgrade
 UPGRADE:
