@@ -207,5 +207,4 @@ class HsBench(object):
         """
         log.info("Deleting pods and deployment config")
         run_cmd(f"oc delete deploymentconfig/{self.pod_name} -n {self.namespace}")
-        self.pod_obj.delete()
         self.pvc_obj.delete()

@@ -2,7 +2,7 @@ import logging
 import pytest
 from ocs_ci.ocs import hsbench
 from ocs_ci.utility import utils
-from ocs_ci.framework.testlib import E2ETest, scale, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     bugzilla,
@@ -43,7 +43,6 @@ def s3bench(request):
 
 
 @scale
-@ignore_leftovers
 class TestHsBench(E2ETest):
     """
     Test writing one million S3 objects to a single bucket
