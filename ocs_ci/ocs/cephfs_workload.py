@@ -23,9 +23,6 @@ logger = logging.getLogger(__name__)
 class LogReaderWriterParallel(object):
 
     """
-    This procedure in the test was originally created in the file
-    'tests/e2e/workloads/test_data_consistency.py'. I just rearranged it in a class.
-
     Write and read logfile stored on cephfs volume, from all worker nodes of a
     cluster via k8s Deployment, while fetching content of the stored data via
     oc rsync to check the data locally.
@@ -143,7 +140,7 @@ class LogReaderWriterParallel(object):
 
     def fetch_and_validate_data(self):
         """
-        while the workload is running, we will try to fetch and validate data
+        While the workload is running, try to validate the data
         from the cephfs volume of the workload.
 
         Raise:
