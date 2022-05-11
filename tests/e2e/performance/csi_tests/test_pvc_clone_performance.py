@@ -251,8 +251,9 @@ class TestPVCClonePerformance(PASTest):
     def create_pod_and_wait_for_compleat(self, **kwargs):
         # Creating pod yaml file to run as a Job, the command to run on the pod and
         # arguments to it will replace in the create_pod function
-        self.create_fio_pod_yaml(pvc_size=int(self.pvc_size), filesize="1M")
-
+        self.create_fio_pod_yaml(
+            pvc_size=int(self.pvc_size), filesize=kwargs.pop("filesize", "1M")
+        )
         # Create a pod
         logger.info(f"Creating Pod with pvc {self.pvc_obj.name}")
 
@@ -397,8 +398,7 @@ class TestPVCClonePerformance(PASTest):
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
-        self.create_pod_and_wait_for_compleat()
-
+        self.create_pod_and_wait_for_compleat(filesize=f"{file_size_mb}M")
         # taking the time, so parsing the provision log will be faster.
         start_time = self.get_time("csi")
         self.clones_list = self.create_and_delete_clones()
