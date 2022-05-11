@@ -498,3 +498,7 @@ class AuthError(Exception):
 
 class UnknownCloneTypeException(Exception):
     pass
+
+
+class CephToolBoxNotFoundException(Exception):
+    pass
