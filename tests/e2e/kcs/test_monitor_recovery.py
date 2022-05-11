@@ -138,13 +138,13 @@ class TestMonitorRecovery(E2ETest):
         update_mon_initial_delay()
 
         logger.info("Generating monitor map command using the IPs")
-        self.mon_map_cmd = generate_monmap_cmd()
+        mon_map_cmd = generate_monmap_cmd()
 
         logger.info("Getting ceph keyring from ocs secrets")
-        self.keyring_files = mon_recovery.get_ceph_keyrings()
+        mon_recovery.get_ceph_keyrings()
 
         logger.info("Rebuilding Monitors to recover store db")
-        mon_recovery.monitor_rebuild()
+        mon_recovery.monitor_rebuild(mon_map_cmd)
 
         logger.info("Reverting mon, osd and mgr deployments")
         mon_recovery.revert_patches(mons_revert)
@@ -225,7 +225,6 @@ class MonitorRecovery(object):
         """
         self.backup_dir = tempfile.mkdtemp(prefix="mon-backup-")
         self.keyring_dir = tempfile.mkdtemp(dir=self.backup_dir, prefix="keyring-")
-        self.mon_map_cmd = ""
         self.keyring_files = []
         self.dep_ocp = OCP(
             kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -358,9 +357,12 @@ class MonitorRecovery(object):
                 params=params,
             )
 
-    def monitor_rebuild(self):
+    def monitor_rebuild(self, mon_map_cmd):
         """
         Rebuilds the monitor
+
+        Args:
+            mon_map_cmd (str): mon-store tool command
 
         """
         logger.info("Re-spinning the mon pods")
@@ -379,7 +381,7 @@ class MonitorRecovery(object):
         _exec_cmd_on_pod(cmd="chown -R ceph:ceph /tmp/monstore", pod_obj=mon_a)
         self.copy_and_import_keys(mon_obj=mon_a)
         logger.info("Creating monitor map")
-        _exec_cmd_on_pod(cmd=self.mon_map_cmd, pod_obj=mon_a)
+        _exec_cmd_on_pod(cmd=mon_map_cmd, pod_obj=mon_a)
 
         rebuild_mon_cmd = "ceph-monstore-tool /tmp/monstore rebuild -- --keyring /tmp/keyring --monmap /tmp/monmap"
         logger.info("Running command to rebuild monitor")
@@ -501,9 +503,6 @@ class MonitorRecovery(object):
         """
         Gets all ceph and csi related keyring from OCS secrets
 
-        Returns:
-            list: keyring files
-
         """
         mon_k = get_ceph_caps(["rook-ceph-mons-keyring"])
         if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
@@ -536,7 +535,6 @@ class MonitorRecovery(object):
             "fs_provisinor": fs_provisinor_k,
             "rbd_provisinor": rbd_provisinor_k,
         }
-        keyring_files = []
         mon_a = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)[0]
         logger.info(f"Working on monitor: {mon_a.name}")
 
@@ -544,8 +542,7 @@ class MonitorRecovery(object):
             if caps:
                 with open(f"{self.keyring_dir}/{secret}.keyring", "w") as fd:
                     fd.write(caps)
-                    keyring_files.append(f"{self.keyring_dir}/{secret}.keyring")
-        return keyring_files
+                    self.keyring_files.append(f"{self.keyring_dir}/{secret}.keyring")
 
     def mds_deployments_to_revert(self):
         """
