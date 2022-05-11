@@ -3,6 +3,9 @@ Helper functions specific for DR
 """
 import logging
 
+from ocs_ci.helpers.helpers import get_all_pvs
+from ocs_ci.ocs.resources import pod
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pod import get_all_pods
@@ -344,3 +347,51 @@ def wait_for_workload_resource_deletion(namespace, timeout=120):
     all_pvcs = get_all_pvc_objs(namespace=namespace)
     for pvc_obj in all_pvcs:
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name, timeout=timeout)
+
+
+def check_rbd_mirrored_image_status(namespace, image_state):
+    """
+    Check RBD mirror image status for mirrored images
+
+    Args:
+        namespace (str): Name of namespace
+        image_state (str): Image state based on primary and secomdary
+
+    Returns:
+        bool: True if all images are in expected state or else False
+
+    """
+    # TODO: Handle code if user looking for image state in secondary cluster
+    ct_pod = pod.get_ceph_tools_pod()
+    cmd = f"rbd mirror pool status {constants.DEFAULT_BLOCKPOOL} --verbose --debug-rbd 0"
+    rbd_mirror_image_status_output = ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")
+    image_name_list = list()
+    pv_dict = get_all_pvs()['items']
+    failed_count = 0
+    for pv_name in pv_dict:
+        if pv_name['spec']['claimRef']['namespace'] == namespace:
+            pv_data_dict = {
+                "pvc_name": pv_name['spec']['claimRef']['name'] ,
+                "rbd_image_name": pv_name["spec"]["csi"]["volumeAttributes"]["imageName"]
+            }
+            image_name_list.append(pv_data_dict)
+    for ceph_image_name in image_name_list:
+        for rbd_images in rbd_mirror_image_status_output['images']:
+            if ceph_image_name['rbd_image_name'] == rbd_images['name']:
+                if rbd_images['state'] == image_state:
+                    logger.info(
+                        f"Rbd mirror image status check for "
+                        f"{ceph_image_name['rbd_image_name']}/{ceph_image_name['pvc_name']} Passed"
+                    )
+                else:
+                    logger.error(
+                        f"Rbd mirror image status check for "
+                        f"{ceph_image_name['rbd_image_name']}/{ceph_image_name['pvc_name']} Failed "
+                        f"\n Image status:= {rbd_images['state']}"
+                        f" Description:= {rbd_images['description']}"
+                    )
+                    failed_count += 1
+
+    if failed_count:
+        return False
+    return True
