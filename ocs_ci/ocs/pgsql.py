@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_pod_obj,
@@ -68,7 +69,11 @@ class Postgresql(BenchmarkOperator):
             pgsql_cmap = templating.load_yaml(constants.PGSQL_CONFIGMAP_YAML)
             pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
             pgsql_sset["spec"]["replicas"] = replicas
-            if storagecluster_independent_check():
+            if (
+                storagecluster_independent_check()
+                and config.ENV_DATA["platform"].lower()
+                not in constants.MANAGED_SERVICE_PLATFORMS
+            ):
                 pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
                     "storageClassName"
                 ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
