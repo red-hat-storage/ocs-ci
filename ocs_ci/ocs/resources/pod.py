@@ -21,6 +21,7 @@ from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    CephToolBoxNotFoundException,
     CommandFailed,
     NotAllPodsHaveSameImagesError,
     NonUpgradedImagesFoundError,
@@ -571,23 +572,32 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod():
+def get_ceph_tools_pod(skip_creating_pod=False):
     """
     Get the Ceph tools pod
 
+    Args:
+        skip_creating_pod (bool): True if user doesn't want to create new tool box
+            if it doesn't exist
+
     Returns:
         Pod object: The Ceph tools pod object
+
+    Raises:
+        ToolBoxNotFoundException: In case of tool box not found
+
     """
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
     ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
-    if not ct_pod_items:
+    if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
         ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
 
-    assert ct_pod_items, "No Ceph tools pod found"
+    if not ct_pod_items:
+        raise CephToolBoxNotFoundException
 
     # In the case of node failure, the CT pod will be recreated with the old
     # one in status Terminated. Therefore, need to filter out the Terminated pod
