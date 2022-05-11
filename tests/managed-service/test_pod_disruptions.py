@@ -23,15 +23,13 @@ log = logging.getLogger(__name__)
 @tier4c
 @managed_service_required
 @ignore_leftover_label("rook-ceph-tools")
-@pytest.mark.polarion_id("")
+@pytest.mark.polarion_id("OCS-3924")
 class TestPodDisruptions(ManageTest):
     """
     Tests to verify pod disruption
 
     """
-
-    provider_cluster_index = config.get_provider_index()
-    consumer_indexes = config.get_consumer_indexes_list()
+    pvc_size = 25
 
     @pytest.fixture(autouse=True)
     def setup(self, request, create_pvcs_and_pods):
@@ -39,6 +37,8 @@ class TestPodDisruptions(ManageTest):
         Prepare pods for the test and add finalizer.
 
         """
+        self.provider_cluster_index = config.get_provider_index()
+        self.consumer_indexes = config.get_consumer_indexes_list()
         if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             # Get the index of current cluster
             initial_cluster_index = config.cur_index
@@ -66,16 +66,8 @@ class TestPodDisruptions(ManageTest):
                 config.clusters[cluster_index].RUN.get("kubeconfig_location"),
             )
             pvcs, io_pods = create_pvcs_and_pods(
-                pvc_size=25,
-                pods_for_rwx=1,
-                access_modes_rbd=None,
-                access_modes_cephfs=None,
-                num_of_rbd_pvc=None,
-                num_of_cephfs_pvc=None,
+                pvc_size=self.pvc_size,
                 replica_count=1,
-                deployment_config=False,
-                sc_rbd=None,
-                sc_cephfs=None,
                 pod_dict_path=constants.PERF_POD_YAML,
             )
             for pvc_obj in pvcs:
@@ -85,7 +77,7 @@ class TestPodDisruptions(ManageTest):
             pvcs[0].project.cluster_kubeconfig = consumer_cluster_kubeconfig
             self.io_pods.extend(io_pods)
 
-    def test_pod_disruptions(self):
+    def test_pod_disruptions(self, create_pvcs_and_pods):
         """
         Test to perform pod disruption in consumer and provider cluster
 
@@ -224,3 +216,50 @@ class TestPodDisruptions(ManageTest):
             assert (
                 cephcluster_yaml["status"]["phase"] == expected_phase
             ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
+
+        # Create PVC and pods on all consumer clusters
+        log.info("Creating new PVCs and pods")
+        pods = list()
+        for cluster_index in self.consumer_indexes:
+            config.switch_ctx(cluster_index)
+            consumer_cluster_kubeconfig = os.path.join(
+                config.clusters[cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[cluster_index].RUN.get("kubeconfig_location"),
+            )
+            pvcs, io_pods = create_pvcs_and_pods(
+                pvc_size=self.pvc_size,
+                replica_count=1,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+            for pvc_obj in pvcs:
+                pvc_obj.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
+            for io_pod in io_pods:
+                io_pod.ocp.cluster_kubeconfig = consumer_cluster_kubeconfig
+            pvcs[0].project.cluster_kubeconfig = consumer_cluster_kubeconfig
+            pods.extend(io_pods)
+
+        # Run I/O on new pods
+        log.info("Running I/O on new pods")
+        for pod_obj in pods:
+            if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK:
+                storage_type = "block"
+                direct = 1
+            else:
+                storage_type = "fs"
+                direct = 0
+            pod_obj.run_io(
+                storage_type=storage_type,
+                size="10G",
+                fio_filename=f"{pod_obj.name}",
+                runtime=320,
+                end_fsync=1,
+                direct=direct,
+                invalidate=0,
+                fio_installed=True,
+            )
+
+        log.info("Wait for I/O to complete on new pods")
+        for pod_obj in pods:
+            pod_obj.get_fio_results()
+            log.info(f"Verified IO on the new pod {pod_obj.name}")
+        log.info("IO is successful on new pods")
