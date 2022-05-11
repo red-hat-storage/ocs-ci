@@ -604,8 +604,13 @@ def verify_storage_system():
         for condition in storage_system_data["items"][0]["status"]["conditions"]:
             storage_system_status[condition["type"]] = condition["status"]
         log.debug(f"storage system status: {storage_system_status}")
-        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+        expected_storage_system_status = constants.STORAGE_SYSTEM_STATUS
+        if ocs_version >= version.VERSION_4_11 and config.DEPLOYMENT["external_mode"]:
+            expected_storage_system_status = (
+                constants.STORAGE_SYSTEM_STATUS_ODF_4_11_EXTERNAL_MODE
+            )
+        assert storage_system_status == expected_storage_system_status, (
+            f"Storage System status is not in expected state. Expected {expected_storage_system_status}"
             f" but found {storage_system_status}"
         )
 

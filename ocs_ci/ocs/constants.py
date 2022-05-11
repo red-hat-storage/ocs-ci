@@ -1641,6 +1641,13 @@ STORAGE_SYSTEM_STATUS = {
     "VendorCsvReady": "True",
     "VendorSystemPresent": "True",
 }
+# storage system status for => ODF 4.11 External Mode
+STORAGE_SYSTEM_STATUS_ODF_4_11_EXTERNAL_MODE = {
+    "Available": "True",
+    "Progressing": "False",
+    "VendorCsvReady": "True",
+    "VendorSystemPresent": "True",
+}
 
 PATCH_DEFAULT_SOURCES_CMD = (
     "oc patch operatorhub.config.openshift.io/cluster -p="
