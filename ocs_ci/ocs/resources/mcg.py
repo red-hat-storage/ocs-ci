@@ -877,7 +877,7 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -895,9 +895,18 @@ class MCG:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
-        result = exec_cmd(
-            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}", **kwargs
-        )
+
+        if use_yes:
+            result = exec_cmd(
+                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                shell=True,
+                **kwargs,
+            )
+        else:
+            result = exec_cmd(
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                **kwargs,
+            )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
