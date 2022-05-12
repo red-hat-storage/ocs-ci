@@ -1263,138 +1263,6 @@ def set_image_lookup(image_name):
     return status
 
 
-def get_snapshot_time(interface, snap_name, status):
-    """
-    Get the starting/ending creation time of a PVC based on provisioner logs
-
-    The time and date extraction code below has been modified to read
-    the month and day data in the logs.  This fixes an error where negative
-    time values are calculated when test runs cross midnight.  Also, previous
-    calculations would not set the year, and so the calculations were done
-    as if the year were 1900.  This is not a problem except that 1900 was
-    not a leap year and so the next February 29th would throw ValueErrors
-    for the whole day.  To avoid this problem, changes were made to also
-    include the current year.
-
-    Incorrect times will still be given for tests that cross over from
-    December 31 to January 1.
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str / list): Name of the PVC(s) for creation time
-                               the list will be list of pvc objects
-        status (str): the status that we want to get - Start / End
-
-    Returns:
-        datetime object: Time of PVC(s) creation
-
-    """
-
-    def get_pattern_time(log, snapname, pattern):
-        """
-        Get the time of pattern in the log
-
-        Args:
-            log (list): list of all lines in the log file
-            snapname (str): the name of the snapshot
-            pattern (str): the pattern that need to be found in the log (start / bound)
-
-        Returns:
-            str: string of the pattern timestamp in the log, if not found None
-
-        """
-        this_year = str(datetime.datetime.now().year)
-        for line in log:
-            if re.search(snapname, line) and re.search(pattern, line):
-                mon_day = " ".join(line.split(" ")[0:2])
-                return f"{this_year} {mon_day}"
-        return None
-
-    logs = ""
-
-    # the starting and ending time are taken from different logs,
-    # the start creation time is taken from the snapshot controller, while
-    # the end creation time is taken from the csi snapshot driver
-    if status.lower() == "start":
-        pattern = "Creating content for snapshot"
-        # Get the snapshoter-controller pod
-        pod_name = pod.get_csi_snapshoter_pod()
-        logs = pod.get_pod_logs(
-            pod_name, namespace="openshift-cluster-storage-operator"
-        )
-    elif status.lower() == "end":
-        pattern = "readyToUse true"
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-    else:
-        logger.error(f"the status {status} is invalid.")
-        return None
-
-    logs = logs.split("\n")
-
-    stat = None
-    # Extract the time for the one PVC snapshot provisioning
-    if isinstance(snap_name, str):
-        stat = get_pattern_time(logs, snap_name, pattern)
-    # Extract the time for the list of PVCs snapshot provisioning
-    if isinstance(snap_name, list):
-        all_stats = []
-        for snapname in snap_name:
-            all_stats.append(get_pattern_time(logs, snapname.name, pattern))
-        all_stats = sorted(all_stats)
-        if status.lower() == "end":
-            stat = all_stats[-1]  # return the highest time
-        elif status.lower() == "start":
-            stat = all_stats[0]  # return the lowest time
-    if stat:
-        return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-    else:
-        return None
-
-
-def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid=None):
-    """
-    Measure Snapshot creation time based on logs
-
-    Args:
-        snap_name (str): Name of the snapshot for creation time measurement
-
-    Returns:
-        float: Creation time for the snapshot
-
-    """
-    start = get_snapshot_time(interface, snap_name, status="start")
-    end = get_snapshot_time(interface, snap_con_name, status="end")
-    logs = ""
-    if start and end:
-        total = end - start
-        return total.total_seconds()
-    else:
-        # at 4.8 the log messages was changed, so need different parsing
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logger.info(f"Read logs from {log_pod}")
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-        logs = logs.split("\n")
-        pattern = "CSI CreateSnapshot: snapshot-"
-        for line in logs:
-            if (
-                re.search(snap_uid, line)
-                and re.search(pattern, line)
-                and re.search("readyToUse \\[true\\]", line)
-            ):
-                # The creation time log is in nanosecond, so, it need to convert to seconds.
-                results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
-                    10**-9
-                )
-                return float(f"{results:.3f}")
-
-        return None
-
-
 def get_provision_time(interface, pvc_name, status="start"):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
@@ -2429,13 +2297,13 @@ def memory_leak_analysis(median_dict):
         logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
-            start_value = float(1024**2 * float(start_value[:-1]))
+            start_value = float(1024 ** 2 * float(start_value[:-1]))
         elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
         if end_value.__contains__("g"):
-            end_value = float(1024**2 * float(end_value[:-1]))
+            end_value = float(1024 ** 2 * float(end_value[:-1]))
         elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
