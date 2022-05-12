@@ -645,6 +645,8 @@ def start_app_workload(
                 for t in threads:
                     t.result()
                 cleanup()
+            threads.clear()
+            workloads.clear()
             log.info(
                 f"##############[COMPLETED CYCLE:{cycle_count}]####################"
             )
