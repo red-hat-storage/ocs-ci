@@ -1430,19 +1430,25 @@ def wait_for_storage_pods(timeout=200):
 
     """
     all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    # Ignoring pods with "app=rook-ceph-detect-version" app label
 
+    # Ignoring detect version pods
+    labels_to_ignore = [
+        constants.ROOK_CEPH_DETECT_VERSION_LABEL,
+        constants.CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL,
+        constants.CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL,
+    ]
     all_pod_obj = [
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
-        not in pod.get_labels().values()
+        and all(
+            label[4:] not in pod.get_labels().values() for label in labels_to_ignore
+        )
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
-        if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
+        if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
