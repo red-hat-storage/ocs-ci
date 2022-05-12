@@ -101,6 +101,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         logger.info("Uni-directional bucket replication working as expected")
 
         # change from uni-directional to bi-directional replication policy
+        logger.info("Changing the replication policy from uni to bi-directional!")
         bi_replication_policy_dict = {
             "spec": {
                 "additionalConfig": {
@@ -125,6 +126,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
 
         # write objects to the second bucket and see if it's replicated on the other
+        logger.info("checking if bi-directional replication works!!")
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
@@ -140,6 +142,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         logger.info("Bi directional bucket replication working as expected")
 
         # write some object to any of the bucket, followed by immediate cluster restart
+        logger.info("Checking replication when there is a cluster reboot!!")
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
@@ -152,7 +155,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 
         node_list = get_worker_nodes()
         node_objs = get_node_objs(node_list)
-        nodes.restart_nodes(node_objs, force=False, timeout=500)
+        nodes.restart_nodes(node_objs, timeout=500)
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=60,
@@ -168,6 +171,9 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 
         # delete all the s3-compatible namespace buckets objects and then recover it from other namespace bucket on
         # write
+        logger.info(
+            "checking replication when one of the bucket's objects are deleted!!"
+        )
         rgw_objects = [
             obj.key
             for obj in mcg_obj_session.s3_list_all_objects_in_bucket(target_bucket_name)
@@ -207,6 +213,9 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
 
         # restart RGW pods and then see if object sync still works
+        logger.info(
+            "Checking if the replication works when there is RGW pod restarts!!"
+        )
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
