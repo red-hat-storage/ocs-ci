@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
     copy_objects,
@@ -33,10 +33,8 @@ class TestPrefixList:
 
         bucket = bucket_factory()[0]
         bucket_name = bucket.name
-        bucket_uls_name = bucket.bucketclass.backingstores[0].uls_name
-        logger.info(f"Underlying storage: {bucket_uls_name}")
         file_dir = test_directory_setup.origin_dir
-        obc_obj = OBC(bucket_name)
+        s3_obj = MCG(bucket_name)
         prefix = "mrbts"
         err_msg = "Error during pagination: The same next token was received twice"
         pref_str = [
@@ -53,27 +51,28 @@ class TestPrefixList:
 
         for pref in pref_str:
             first_prefix_path = (
-                f"s3://{bucket_uls_name}/{prefix}/{pref[2]}/{pref[0]}/{object}"
+                f"s3://{bucket_name}/{prefix}/{pref[2]}/{pref[0]}/{object}"
             )
             second_prefix_path = (
-                f"s3://{bucket_uls_name}/{prefix}/{pref[2]}/{pref[1]}/{object}"
+                f"s3://{bucket_name}/{prefix}/{pref[2]}/{pref[1]}/{object}"
             )
 
             copy_objects(
-                awscli_pod_session, src_obj, target=first_prefix_path, s3_obj=obc_obj
+                awscli_pod_session, src_obj, target=first_prefix_path, s3_obj=s3_obj
             )
             logger.info("uploaded first prefix")
             copy_objects(
-                awscli_pod_session, src_obj, target=second_prefix_path, s3_obj=obc_obj
+                awscli_pod_session, src_obj, target=second_prefix_path, s3_obj=s3_obj
             )
             logger.info("uploaded second prefix")
 
+            full_prefix = f"{prefix}/{pref[2]}/"
             try:
                 listed_objects = list_objects_from_bucket(
                     podobj=awscli_pod_session,
-                    s3_obj=obc_obj,
+                    s3_obj=s3_obj,
                     target=bucket_name,
-                    prefix=prefix,
+                    prefix=full_prefix,
                 )
                 logger.info(f"listed objects: {listed_objects}")
             except CommandFailed as err:
