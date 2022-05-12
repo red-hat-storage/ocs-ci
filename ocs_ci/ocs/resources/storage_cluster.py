@@ -1315,7 +1315,7 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
-    catsrc = ocp.OCP(kind="catsrc", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith(
