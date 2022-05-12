@@ -506,3 +506,7 @@ class CephToolBoxNotFoundException(Exception):
 
 class UnsupportedWorkloadError(Exception):
     pass
+
+
+class RebootEventNotFoundException(Exception):
+    pass
