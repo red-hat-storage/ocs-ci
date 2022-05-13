@@ -2297,13 +2297,13 @@ def memory_leak_analysis(median_dict):
         logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
-            start_value = float(1024 ** 2 * float(start_value[:-1]))
+            start_value = float(1024**2 * float(start_value[:-1]))
         elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
         if end_value.__contains__("g"):
-            end_value = float(1024 ** 2 * float(end_value[:-1]))
+            end_value = float(1024**2 * float(end_value[:-1]))
         elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
