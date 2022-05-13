@@ -5,6 +5,7 @@ import logging
 import random
 import time
 from prettytable import PrettyTable
+from datetime import datetime
 
 from ocs_ci.ocs.benchmark_operator import BenchmarkOperator, BMO_NAME
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -649,10 +650,17 @@ class Postgresql(BenchmarkOperator):
         self.setup_postgresql(replicas=1)
         # Create pgbench benchmark
         self.create_pgbench_benchmark(
-            replicas=1, transactions=15000, scaling_factor=100, samples=10
+            replicas=1, transactions=15000, scaling_factor=100, samples=30
         )
+        # Start measuring time
+        start_time = datetime.now()
         # Wait for pg_bench pod to initialized and complete
-        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=3000)
+        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=10800)
+        # Calculate the Pgbench pod run time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"pgbench pod reached to completed state after {diff_time}")
+
         # Get pgbench pods
         pgbench_pods = self.get_pgbench_pods()
         # Validate pgbench run and parse logs

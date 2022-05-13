@@ -4,6 +4,7 @@ Couchbase workload class
 import logging
 import random
 from concurrent.futures.thread import ThreadPoolExecutor
+from datetime import datetime
 
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.csv import CSV
@@ -309,5 +310,11 @@ class CouchBase(PillowFight):
         # Create couchbase workers
         self.create_cb_cluster(replicas=3)
         self.create_data_buckets()
+        # Start measuring time
+        start_time = datetime.now()
         # Run couchbase workload
-        self.run_workload(replicas=3, num_items=50000, timeout=3600)
+        self.run_workload(replicas=3, num_items=50000, timeout=10800)
+        # Calculate the PillowFight pod run time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"Pillowfight pod reached to completed state after {diff_time}")

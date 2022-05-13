@@ -27,7 +27,7 @@ class TestLongevity(E2ETest):
         """
         # Start stage-1
         log.info("Starting Longevity Stage-1")
-        # Commenting the OCP workloads code for dry test runs
+        # Commenting the OCP workloads code for dry test runs, will be uncomment this code in another PR
         # log.info("Start configuring OCP workloads")
         # start_ocp_workload(workloads_list=['logging','registry', 'monitoring'], run_in_bg=True)
         # Start application workloads and continuously run the workloads for a specified period of time

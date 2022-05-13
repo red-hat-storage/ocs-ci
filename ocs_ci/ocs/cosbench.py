@@ -4,6 +4,7 @@ import os
 import re
 from tempfile import mkdtemp, NamedTemporaryFile
 from xml.etree import ElementTree
+from datetime import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -671,7 +672,7 @@ class Cosbench(object):
         """
         bucket_prefix = "bucket-"
         buckets = 10
-        objects = 50
+        objects = 1000
 
         # Operations to perform and its ratio(%)
         operations = {"read": 50, "write": 50}
@@ -683,6 +684,8 @@ class Cosbench(object):
         self.run_init_workload(
             prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
         )
+        # Start measuring time
+        start_time = datetime.now()
 
         # Run main workload
         self.run_main_workload(
@@ -691,7 +694,13 @@ class Cosbench(object):
             containers=buckets,
             objects=objects,
             validate=True,
+            timeout=10800,
         )
+
+        # Calculate the total run time of Cosbench workload
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        logger.info(f"Cosbench workload completed after {diff_time}")
 
         # Dispose containers and objects
         self.run_cleanup_workload(
