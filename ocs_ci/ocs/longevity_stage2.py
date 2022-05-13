@@ -182,22 +182,28 @@ def measure_pvc_deletion_time(interface, pvc_objs):
         PerformanceException : Raises an exception if PVC deletion time is greater than the accepted time.
 
     Logs:
-        PVC Creation Time of all the PVCs.
+        PVC Deletion Time of all the PVCs.
 
     """
     accepted_deletion_time = 2 if interface == constants.CEPHFILESYSTEM else 1
     num_of_pvcs = len(pvc_objs)
+    pv_name_list = list()
+    pv_to_pvc = dict()
 
     for pvc_no in range(num_of_pvcs):
-        pvc = pvc_objs[pvc_no]
-        pvc_name = pvc.name
-        pvc.ocp.wait_for_delete(resource_name=pvc_name)
-        helpers.validate_pv_delete(pvc.backed_pv)
-        deletion_time = helpers.measure_pvc_deletion_time(interface, pvc.backed_pv)
-        logger.info(f"PVC {pvc_name} was deleted in {deletion_time} seconds.")
+        pv_name = pvc_objs[pvc_no].backed_pv
+        pv_name_list.append(pv_name)
+        pv_to_pvc[pv_name] = pvc_objs[pvc_no].name
+
+    pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+        interface=interface, pv_name_list=pv_name_list
+    )
+
+    for pv_name, deletion_time in pvc_deletion_time.items():
+        logger.info(f"PVC {pv_to_pvc[pv_name]} was deleted in {deletion_time} seconds.")
         if deletion_time > accepted_deletion_time:
             raise ex.PerformanceException(
-                f"PVC {pvc_name} deletion time is {deletion_time} and is greater than "
+                f"PVC {pv_to_pvc[pv_name]} deletion time is {deletion_time} and is greater than "
                 f"{accepted_deletion_time} seconds."
             )
 

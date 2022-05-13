@@ -9,6 +9,9 @@ spec:
    - name: performance
      image: quay.io/ocsci/perf:latest
      imagePullPolicy: IfNotPresent
+     securityContext:
+       capabilities:
+         add: [ "SYS_ADMIN" ]
      command: ['/bin/sh']
      stdin: true
      tty: true
