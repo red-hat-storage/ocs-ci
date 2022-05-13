@@ -577,11 +577,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         for _ in range(len(yaml_first_line)):
             actions.send_keys(Keys.ARROW_RIGHT).perform()
             time.sleep(1)
-            log.debug(
-                "Ugly code required,Otherwise every key sent will be in a "
-                " queue upon perform() all the keys in the queue will "
-                " be sent to yaml editor"
-            )
+            # Ugly code required,Otherwise every key sent will be in a
+            # queue upon perform() all the keys in the queue will
+            # be sent to yaml editor
             _reset()
         actions.send_keys(Keys.ENTER).perform()
         time.sleep(1)

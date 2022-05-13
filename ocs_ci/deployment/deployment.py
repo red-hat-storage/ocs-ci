@@ -1742,7 +1742,7 @@ class MultiClusterDROperatorsDeploy(object):
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
         )
         self.deploy_dr_multicluster_orchestrator()
-        # Please create this only on ACM
+        # create this only on ACM
         run_cmd(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}",
         )
