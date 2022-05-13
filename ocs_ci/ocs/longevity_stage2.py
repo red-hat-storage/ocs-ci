@@ -5,13 +5,12 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.helpers import helpers, performance_lib
-from ocs_ci.ocs import constants, scale_noobaa_lib, ocp, workload
+from ocs_ci.ocs import constants, scale_noobaa_lib, workload
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     sync_object_directory,
     wait_for_cache,
 )
-from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import delete_pods
 import ocs_ci.ocs.exceptions as ex
@@ -208,7 +207,9 @@ def measure_pvc_deletion_time(interface, pvc_objs):
             )
 
 
-def _multi_pvc_pod_lifecycle_factory(project_factory, multi_pvc_factory, pod_factory, teardown_factory):
+def _multi_pvc_pod_lifecycle_factory(
+    project_factory, multi_pvc_factory, pod_factory, teardown_factory
+):
     """
     Creates a factory that is used to:
     1. Create/Delete PVCs of type:
