@@ -5902,3 +5902,61 @@ def lvm_storageclass_factory_fixture(request, storageclass_factory):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session")
+def fedora_pod_session(request):
+    return fedora_pod_fixture(request, scope_name="session")
+
+
+def fedora_pod_fixture(request, scope_name):
+    """
+    Creates a new fedora pod containing ~500k files
+    on it in the folder /home/linux_tar_dir/
+
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
+
+    Returns:
+        pod: A fedora pod running
+
+    """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.FEDORA_SERVICE_CA_YAML)
+    service_ca_configmap_name = create_unique_resource_name(
+        "fedora-service-ca", scope_name
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    log.info("Trying to create the fedora service CA")
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
+
+    # Create fedora pod
+    pod_dict_path = constants.FEDORA_WITH_LINUXTAR_FILES_YAML
+    fedora_pod_dict = templating.load_yaml(pod_dict_path)
+    fedora_pod_dict["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    fedora_pod_name = create_unique_resource_name("fedora-pod", scope_name)
+    fedora_pod_dict["metadata"]["name"] = fedora_pod_name
+
+    update_container_with_mirrored_image(fedora_pod_dict)
+
+    fedora_pod_obj = Pod(**fedora_pod_dict)
+    assert fedora_pod_obj.create(
+        do_reload=True
+    ), f"Failed to create Pod {fedora_pod_name}"
+    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+    helpers.wait_for_resource_state(
+        fedora_pod_obj, constants.STATUS_RUNNING, timeout=240
+    )
+
+    def fedora_pod_cleanup():
+        fedora_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(fedora_pod_cleanup)
+
+    return fedora_pod_obj
