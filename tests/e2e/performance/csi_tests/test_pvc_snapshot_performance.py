@@ -310,10 +310,12 @@ class TestPvcSnapshotPerformance(PASTest):
             )
             log.info(f' Test {test_num} dataset is {test_results["dataset"]} MiB')
             log.info(
-                f'Snapshot name {snap_name} and id {self.snap_uid} creation time is : {test_results["create"]["time"]} sec.'
+                f"Snapshot name {snap_name} and id {self.snap_uid} creation time is"
+                f' : {test_results["create"]["time"]} sec.'
             )
             log.info(
-                f'Snapshot name {snap_name} and id {self.snap_uid} csi creation time is : {test_results["create"]["csi_time"]} sec.'
+                f"Snapshot name {snap_name} and id {self.snap_uid} csi creation time is"
+                f' : {test_results["create"]["csi_time"]} sec.'
             )
             log.info(f'Snapshot speed is : {test_results["create"]["speed"]} MB/sec')
 
@@ -642,7 +644,8 @@ class TestPvcSnapshotPerformance(PASTest):
                 interface=interface,
             )
             log.info(
-                f'Snapshot with name {snap_name} and id {self.snap_uid} creation time is {test_results["creation_time"]} seconds'
+                f"Snapshot with name {snap_name} and id {self.snap_uid} creation time is"
+                f' {test_results["creation_time"]} seconds'
             )
 
             test_results[
@@ -651,7 +654,8 @@ class TestPvcSnapshotPerformance(PASTest):
                 interface=interface, snapshot_id=self.snap_uid, start_time=start_time
             )
             log.info(
-                f'Snapshot with name {snap_name} and id {self.snap_uid} csi creation time is {test_results["csi_creation_time"]} seconds'
+                f"Snapshot with name {snap_name} and id {self.snap_uid} csi creation time is"
+                f' {test_results["csi_creation_time"]} seconds'
             )
 
             all_results.append(test_results)

@@ -488,7 +488,7 @@ def get_snapshot_time(snap_name, status, start_time):
     for line in pods:
         if (
             "csi-snapshot-controller" in line
-            and not "csi-snapshot-controller-operator" in line
+            and "csi-snapshot-controller-operator" not in line
         ):
             log_names.append(line.split()[0])
 
