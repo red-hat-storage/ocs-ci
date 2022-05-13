@@ -471,6 +471,9 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
     assert utils.ceph_health_check(namespace, health_check_tries, health_check_delay)
+    # Let's wait for storage system after ceph health is OK to prevent fails on
+    # Progressing': 'True' state.
+    verify_storage_system()
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -512,6 +515,7 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
+    verify_storage_system()
 
 
 def basic_verification(ocs_registry_image=None):
@@ -524,7 +528,6 @@ def basic_verification(ocs_registry_image=None):
 
     """
     verify_ocs_csv(ocs_registry_image)
-    verify_storage_system()
     verify_storage_cluster()
     verify_noobaa_endpoint_count()
     verify_storage_cluster_images()
