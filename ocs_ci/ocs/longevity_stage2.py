@@ -202,7 +202,7 @@ def measure_pvc_deletion_time(interface, pvc_objs):
             )
 
 
-def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_factory):
+def _multi_pvc_pod_lifecycle_factory(project_factory, multi_pvc_factory, pod_factory, teardown_factory):
     """
     Creates a factory that is used to:
     1. Create/Delete PVCs of type:
@@ -229,7 +229,7 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                                 False otherwise.
 
         """
-        project = helpers.create_project(project_name=namespace)
+        project = project_factory(namespace)
         pvc_objs = list()
         executor = ThreadPoolExecutor(max_workers=1)
         start_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -384,11 +384,6 @@ def _multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_fa
                     )
 
         logger.info(f"Successfully deleted {num_of_pvcs} PVCs")
-
-        ocp_obj = ocp.OCP()
-        ocp_obj.delete_project(namespace)
-        ocp_obj.wait_for_delete(resource_name=namespace, timeout=90)
-        switch_to_project(constants.DEFAULT_NAMESPACE)
 
     return factory
 
@@ -564,13 +559,13 @@ def stage2(
         logger.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
 
         for bulk in (False, True):
-            current_ops = "BULK_OPERATION" if bulk else "SEQUENTIAL_OPERATION"
+            current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
             logger.info(f"#################[{current_ops}]#################")
             multi_pvc_pod_lifecycle_factory(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=pvc_size,
                 bulk=bulk,
-                namespace="stage-2-cycle-" + str(cycle_no),
+                namespace=f"stage-2-cycle-{cycle_no}-{current_ops.lower()}",
                 measure=measure,
             )
             multi_obc_lifecycle_factory(

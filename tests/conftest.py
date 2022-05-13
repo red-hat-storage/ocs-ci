@@ -5249,9 +5249,9 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
 
 
 @pytest.fixture()
-def multi_pvc_pod_lifecycle_factory(multi_pvc_factory, pod_factory, teardown_factory):
+def multi_pvc_pod_lifecycle_factory(project_factory, multi_pvc_factory, pod_factory, teardown_factory):
     return _multi_pvc_pod_lifecycle_factory(
-        multi_pvc_factory, pod_factory, teardown_factory
+        project_factory, multi_pvc_factory, pod_factory, teardown_factory
     )
 
 
