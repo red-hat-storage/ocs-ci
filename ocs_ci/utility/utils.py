@@ -1492,7 +1492,7 @@ def move_summary_to_top(soup):
 
     """
     summary = []
-    summary.append(soup.find("h2", text="Summary"))
+    summary.append(soup.find("h2", string="Summary"))
     for tag in summary[0].next_siblings:
         if tag.name == "h2":
             break
