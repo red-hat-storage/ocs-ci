@@ -141,8 +141,13 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
             incidents=incidents,
             urgency="high",
         )
+        # adding 1 extra minute to wait for clearing of the alert
+        # CephMonQuorumAtRisk alert takes longer time to be cleared
+        time_min = 480
         api.check_incident_cleared(
-            summary=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+            summary=target_label,
+            measure_end_time=measure_stop_ceph_mon.get("stop"),
+            time_min=time_min,
         )
 
 
