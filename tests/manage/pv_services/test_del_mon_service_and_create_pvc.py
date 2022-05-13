@@ -42,9 +42,12 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     """
 
     consumer_cluster_index = None
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        # Get the index of consumer cluster
-        consumer_cluster_index = config.get_consumer_indexes_list()[0]
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            # Get the index of consumer cluster
+            self.consumer_cluster_index = config.get_consumer_indexes_list()[0]
 
     @bugzilla("1858195")
     @runs_on_provider
