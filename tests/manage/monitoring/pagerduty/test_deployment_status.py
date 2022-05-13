@@ -70,7 +70,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     # check that incidents CephOSDDisdNotResponding and CephClusterWarningState
     # alert are correctly raised
     for target_label in [
-        constants.ALERT_OSDDISKNOTRESPONDING,
+        constants.ALERT_OSDDISKUNAVAILABLE,
         constants.ALERT_CLUSTERWARNINGSTATE,
     ]:
         assert pagerduty.check_incident_list(
