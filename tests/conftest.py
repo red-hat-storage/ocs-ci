@@ -5084,7 +5084,7 @@ def switch_to_provider_for_test(request):
 @pytest.fixture()
 def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory):
     """
-    Create rbd, cephfs PVCs and pods. To be used for test cases which need
+    Create rbd, cephfs PVCs and dc pods. To be used for test cases which need
     rbd and cephfs PVCs with different access modes.
 
     """

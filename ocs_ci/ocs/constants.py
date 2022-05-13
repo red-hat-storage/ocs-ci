@@ -143,6 +143,7 @@ NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
+CATSRC = "catsrc"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
