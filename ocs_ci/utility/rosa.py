@@ -179,9 +179,9 @@ def appliance_mode_cluster(cluster_name, ocp_version, region):
         4500, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
-        logger.info(f"Current installation status: {status}")
+        logger.info(f"Cluster installation status: {status}")
         if status == "ready":
-            logger.info("Cluster was installed")
+            logger.info("Cluster is installed")
             break
     if cluster_info["status"]["state"] == "ready":
         for addon_info in utils.TimeoutSampler(
@@ -189,7 +189,7 @@ def appliance_mode_cluster(cluster_name, ocp_version, region):
         ):
             logger.info(f"Current addon installation info: " f"{addon_info}")
             if "ready" in addon_info:
-                logger.info(f"Addon {addon_name} was installed")
+                logger.info(f"Addon {addon_name} is installed")
                 break
             if "failed" in addon_info:
                 raise ManagedServiceAddonDeploymentError(
@@ -219,7 +219,7 @@ def get_rosa_service_details(cluster):
     """
     cmd = "rosa list services"
     # cmd = f"rosa list services -o json --region {region}"
-    services_details = utils.run_cmd(cmd, 1200)
+    services_details = utils.run_cmd(cmd, timeout=1200)
     # services_details = json.loads(out)
     for service_info in services_details.splitlines():
         if cluster in service_info:
