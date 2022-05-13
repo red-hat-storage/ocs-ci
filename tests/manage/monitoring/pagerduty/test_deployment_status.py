@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 @managed_service_required
 @runs_on_provider
 @bugzilla("1998056")
+@bugzilla("2033284")
 @pytest.mark.polarion_id("OCS-2766")
 def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     """
@@ -34,16 +35,20 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     # get incidents from time when manager deployment was scaled down
     incidents = measure_stop_ceph_mgr.get("pagerduty_incidents")
     target_label = constants.ALERT_MGRISABSENT
+    for target_label in [
+        constants.ALERT_MGRISABSENT,
+        constants.ALERT_MGRISMISSINGREPLICAS,
+    ]:
 
-    # TODO(fbalak): check the whole string in summary and incident alerts
-    assert pagerduty.check_incident_list(
-        summary=target_label,
-        incidents=incidents,
-        urgency="high",
-    )
-    api.check_incident_cleared(
-        summary=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
-    )
+        # TODO(fbalak): check the whole string in summary and incident alerts
+        assert pagerduty.check_incident_list(
+            summary=target_label,
+            incidents=incidents,
+            urgency="high",
+        )
+        api.check_incident_cleared(
+            summary=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
+        )
 
 
 @tier4
