@@ -34,7 +34,6 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 
     # get incidents from time when manager deployment was scaled down
     incidents = measure_stop_ceph_mgr.get("pagerduty_incidents")
-    target_label = constants.ALERT_MGRISABSENT
     for target_label in [
         constants.ALERT_MGRISABSENT,
         constants.ALERT_MGRISMISSINGREPLICAS,
