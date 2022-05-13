@@ -155,6 +155,7 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
 @tier4c
 @managed_service_required
 @runs_on_provider
+@bugzilla("2076670")
 @pytest.mark.polarion_id("OCS-3717")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 def test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
