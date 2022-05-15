@@ -13,7 +13,7 @@ from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
 
 logger = logging.getLogger(__name__)
@@ -196,30 +196,34 @@ class TestPVCClonePerformance(PASTest):
 
         # Delete the test project (namespace)
         self.delete_test_project()
-        self.delete_ceph_pool(self.pool_name)
-        # Verify deletion by checking the backend CEPH pools using the toolbox
-        results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
-        logger.debug(f"Existing pools are : {results}")
-        if self.pool_name in results.split():
-            logger.warning(
-                "The pool did not deleted by CSI, forcing delete it manually"
-            )
-            self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                f"ceph osd pool delete {self.pool_name} {self.pool_name} "
-                "--yes-i-really-really-mean-it"
-            )
-        else:
-            logger.info(f"The pool {self.pool_name} was deleted successfully")
+        try:
+            self.delete_ceph_pool(self.pool_name)
+            # Verify deletion by checking the backend CEPH pools using the toolbox
+            results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
+            logger.debug(f"Existing pools are : {results}")
+            if self.pool_name in results.split():
+                logger.warning(
+                    "The pool did not deleted by CSI, forcing delete it manually"
+                )
+                self.ceph_cluster.toolbox.exec_cmd_on_pod(
+                    f"ceph osd pool delete {self.pool_name} {self.pool_name} "
+                    "--yes-i-really-really-mean-it"
+                )
+            else:
+                logger.info(f"The pool {self.pool_name} was deleted successfully")
+        except Exception:
+            pass
 
         super(TestPVCClonePerformance, self).teardown()
 
     def create_new_pool_and_sc(self, secret_factory):
+
         self.pool_name = (
             f"pas-test-pool-{Interfaces_info[self.interface]['name'].lower()}"
         )
+        secret = secret_factory(interface=self.interface)
         self.create_new_pool(self.pool_name)
         # Creating new StorageClass (pool) for the test.
-        secret = secret_factory(interface=self.interface)
         self.sc_obj = helpers.create_storage_class(
             interface_type=self.interface,
             interface_name=self.pool_name,
@@ -248,7 +252,7 @@ class TestPVCClonePerformance(PASTest):
         )
         logger.info(f"The PVC {self.pvc_obj.name} was created and in Bound state.")
 
-    def create_pod_and_wait_for_compleat(self, **kwargs):
+    def create_pod_and_wait_for_completion(self, **kwargs):
         # Creating pod yaml file to run as a Job, the command to run on the pod and
         # arguments to it will replace in the create_pod function
         self.create_fio_pod_yaml(
@@ -393,12 +397,22 @@ class TestPVCClonePerformance(PASTest):
 
         test_start_time = self.get_time()
 
-        # Creating new pool to run the test on it
-        self.create_new_pool_and_sc(secret_factory)
+        # Create new pool and sc only for RBD, for CepgFS use thr default
+        if self.interface == constants.CEPHBLOCKPOOL:
+            # Creating new pool to run the test on it
+            self.create_new_pool_and_sc(secret_factory)
+        else:
+            self.sc_obj = ocs.OCS(
+                kind="StorageCluster",
+                metadata={
+                    "namespace": self.namespace,
+                    "name": Interfaces_info[self.interface]["sc"],
+                },
+            )
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
-        self.create_pod_and_wait_for_compleat(filesize=f"{file_size_mb}M")
+        self.create_pod_and_wait_for_completion(filesize=f"{file_size_mb}M")
         # taking the time, so parsing the provision log will be faster.
         start_time = self.get_time("csi")
         self.clones_list = self.create_and_delete_clones()
@@ -503,7 +517,7 @@ class TestPVCClonePerformance(PASTest):
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
-        self.create_pod_and_wait_for_compleat(
+        self.create_pod_and_wait_for_completion(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )
