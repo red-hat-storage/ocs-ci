@@ -154,18 +154,12 @@ def osd_device_replacement(nodes):
         logger.info(f"Verify that the old PV '{osd_pv_name}' is in the expected status")
         if cluster.is_lso_cluster():
             expected_old_pv_statuses = [constants.STATUS_RELEASED]
-        else:
-            expected_old_pv_statuses = [
-                constants.STATUS_RELEASED,
-                constants.STATUS_FAILED,
-            ]
-
-        assert (
-            osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses
-        ), logger.warning(
-            f"The old PV '{osd_pv_name}' is not in "
-            f"the expected statuses: {expected_old_pv_statuses}"
-        )
+            assert (
+                osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses
+            ), logger.warning(
+                f"The old PV '{osd_pv_name}' is not in "
+                f"the expected statuses: {expected_old_pv_statuses}"
+            )
 
     # Delete PV
     logger.info(f"Verifying deletion of PV {osd_pv_name}")
