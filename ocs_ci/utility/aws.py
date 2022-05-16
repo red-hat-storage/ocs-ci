@@ -468,10 +468,20 @@ class AWS(object):
             string of space separated subnet ids
 
         """
+        az_count_dict = {}
         subnets = self.ec2_client.describe_subnets(
             Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
         )
-        subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+        subnets = subnets["Subnets"]
+
+        subnet_ids = []
+        for subnet in subnets:
+            az = subnet["AvailabilityZone"]
+            az_count_dict[az] = az_count_dict.get(az, 0) + 1
+            # Check if we don't have more than 2 subnet ids in the same availability zone
+            if az_count_dict[az] <= 2:
+                subnet_ids.append(subnet["SubnetId"])
+
         return subnet_ids
 
     def detach_and_delete_volume(self, volume, timeout=120):
