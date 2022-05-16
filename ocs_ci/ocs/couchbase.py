@@ -4,6 +4,7 @@ Couchbase workload class
 import logging
 import random
 from concurrent.futures.thread import ThreadPoolExecutor
+from datetime import datetime
 
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.csv import CSV
@@ -38,13 +39,14 @@ class CouchBase(PillowFight):
         """
         super().__init__(**kwargs)
         self.args = kwargs
-        self.pod_obj = OCP(kind="pod")
+        self.pod_obj = OCP(kind="pod", namespace=constants.COUCHBASE_OPERATOR)
         self.ns_obj = OCP(kind="namespace")
         self.couchbase_pod = OCP(kind="pod")
         self.create_namespace(namespace=constants.COUCHBASE_OPERATOR)
         self.cb_create_cb_secret = False
         self.cb_create_cb_cluster = False
         self.cb_create_bucket = False
+        self.cb_subscription = False
 
     def create_namespace(self, namespace):
         """
@@ -87,6 +89,7 @@ class CouchBase(PillowFight):
         )
         self.subscription_yaml = OCS(**subscription_yaml)
         self.subscription_yaml.create()
+        self.cb_subscription = False
 
         # Wait for the CSV to reach succeeded state
         cb_csv = self.get_couchbase_csv()
@@ -184,7 +187,9 @@ class CouchBase(PillowFight):
         log.info("Successfully created data buckets")
         self.cb_create_bucket = True
 
-    def run_workload(self, replicas, num_items=None, num_threads=None, run_in_bg=False):
+    def run_workload(
+        self, replicas, num_items=None, num_threads=None, run_in_bg=False, timeout=1800
+    ):
         """
         Running workload with pillow fight operator
         Args:
@@ -204,6 +209,7 @@ class CouchBase(PillowFight):
                 replicas=replicas,
                 num_items=num_items,
                 num_threads=num_threads,
+                timeout=timeout,
             )
             return self.result
         PillowFight.run_pillowfights(
@@ -267,18 +273,24 @@ class CouchBase(PillowFight):
             nodes_set.add(pod.get().get("spec").get("nodeName"))
         return list(nodes_set)
 
-    def teardown(self):
+    def cleanup(self):
         """
         Cleaning up the resources created during Couchbase deployment
 
         """
+        switch_to_project(constants.COUCHBASE_OPERATOR)
         if self.cb_create_cb_secret:
+            self.cb_secrets._is_deleted = False
             self.cb_secrets.delete()
         if self.cb_create_cb_cluster:
+            self.cb_example._is_deleted = False
             self.cb_example.delete()
         if self.cb_create_bucket:
+            self.cb_bucket._is_deleted = False
             self.cb_bucket.delete()
-        self.subscription_yaml.delete()
+        if self.cb_subscription:
+            self.subscription_yaml._is_deleted = False
+            self.subscription_yaml.delete()
         switch_to_project("default")
         self.ns_obj.delete_project(constants.COUCHBASE_OPERATOR)
         self.ns_obj.wait_for_delete(
@@ -286,3 +298,23 @@ class CouchBase(PillowFight):
         )
         PillowFight.cleanup(self)
         switch_to_default_rook_cluster_project()
+
+    def couchbase_full(self):
+        """
+        Run full CouchBase workload
+        """
+        # Create Couchbase subscription
+        self.couchbase_subscription()
+        # Create Couchbase worker secrets
+        self.create_cb_secrets()
+        # Create couchbase workers
+        self.create_cb_cluster(replicas=3)
+        self.create_data_buckets()
+        # Start measuring time
+        start_time = datetime.now()
+        # Run couchbase workload
+        self.run_workload(replicas=3, num_items=50000, timeout=10800)
+        # Calculate the PillowFight pod run time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"Pillowfight pod reached to completed state after {diff_time}")
