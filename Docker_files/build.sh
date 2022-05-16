@@ -12,7 +12,7 @@
 Multi=0
 
 # List of architecture for the multi-arch build
-Platforms="linux/amd64,linux/ppc64le,linux/s390x"
+Platforms="linux/amd64,linux/ppc64le,linux/s390x,linux/arm64"
 
 # The tool to use for the build.
 # using docker since podman doesn't not support the multi-arch
