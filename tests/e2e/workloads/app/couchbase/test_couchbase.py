@@ -13,7 +13,7 @@ def couchbase(request):
     couchbase = CouchBase()
 
     def teardown():
-        couchbase.teardown()
+        couchbase.cleanup()
 
     request.addfinalizer(teardown)
     return couchbase

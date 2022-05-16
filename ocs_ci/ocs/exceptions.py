@@ -502,3 +502,7 @@ class UnknownCloneTypeException(Exception):
 
 class CephToolBoxNotFoundException(Exception):
     pass
+
+
+class UnsupportedWorkloadError(Exception):
+    pass
