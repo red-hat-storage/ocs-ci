@@ -515,8 +515,18 @@ class TestPVCClonePerformance(PASTest):
 
         test_start_time = self.get_time()
 
-        # Creating new pool to run the test on it
-        self.create_new_pool_and_sc(secret_factory)
+        # Create new pool and sc only for RBD, for CepgFS use thr default
+        if self.interface == constants.CEPHBLOCKPOOL:
+            # Creating new pool to run the test on it
+            self.create_new_pool_and_sc(secret_factory)
+        else:
+            self.sc_obj = ocs.OCS(
+                kind="StorageCluster",
+                metadata={
+                    "namespace": self.namespace,
+                    "name": Interfaces_info[self.interface]["sc"],
+                },
+            )
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
