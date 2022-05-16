@@ -62,10 +62,14 @@ class ClonesResultsAnalyse(ResultsAnalyse):
         # Print the results into the log.
         for clone in test_times:
 
-            creation_time_list.append(test_times[clone]["create"]["time"])
-            csi_creation_time_list.append(test_times[clone]["csi_create"]["time"])
-            deletion_time_list.append(test_times[clone]["delete"]["time"])
-            csi_deletion_time_list.append(test_times[clone]["csi_delete"]["time"])
+            creation_time_list.append(test_times[clone]["create"].get("time", 0))
+            csi_creation_time_list.append(
+                test_times[clone]["csi_create"].get("time", 0)
+            )
+            deletion_time_list.append(test_times[clone]["delete"].get("time", 0))
+            csi_deletion_time_list.append(
+                test_times[clone]["csi_delete"].get("time", 0)
+            )
 
             logger.info(f"Test report for clone {clone} :")
             logger.info(
