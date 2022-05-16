@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
     UnsupportedFeatureError,
 )
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +268,11 @@ class FioPodScale(object):
         self.ms_name = list()
 
         # Check for expected worker count
-        expected_worker_count = get_expected_worker_count(scale_count)
+        if is_managed_service_cluster():
+            expected_worker_count = 3
+        else:
+            expected_worker_count = get_expected_worker_count(scale_count)
+
         if check_and_add_enough_worker(expected_worker_count):
             if (
                 (

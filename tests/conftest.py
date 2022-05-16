@@ -43,6 +43,7 @@ from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implement
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
@@ -5296,3 +5297,40 @@ def set_live_must_gather_images(pytestconfig):
         config.REPORTING[
             "default_ocs_must_gather_latest_tag"
         ] = defaults.MUST_GATHER_UPSTREAM_TAG
+
+
+@pytest.fixture(scope="function", autouse=True)
+def create_resources_using_kube_job(request):
+    """
+    Create resources using k8s fixture. This fixture makes use of the FioPodScale class
+    to create the expected number of POD+PVC
+    """
+
+    fioscale = None
+
+    def factory(
+        scale_pvc=1500,
+        pvc_per_pod_count=20,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+    ):
+        # Scale FIO pods in the cluster
+        fioscale = FioPodScale(
+            kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
+        )
+        kube_pod_obj_list, kube_pvc_obj_list = fioscale.create_scale_pods(
+            scale_count=scale_pvc,
+            pvc_per_pod_count=pvc_per_pod_count,
+            start_io=start_io,
+            io_runtime=io_runtime,
+            pvc_size=pvc_size,
+        )
+        return kube_pod_obj_list, kube_pvc_obj_list
+
+    def finalizer():
+        if fioscale:
+            fioscale.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
