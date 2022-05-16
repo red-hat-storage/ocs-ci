@@ -66,9 +66,6 @@ def measure_pod_to_pvc_attach_time(pod_objs):
     Args:
         pod_objs (list) : List of POD objects for which we have to measure the time.
 
-    Raises:
-        PerformanceException : Raises an exception if POD attach time is greater than the accepted time.
-
     Logs:
         Attach time of all PODs, as well as the average time.
 
@@ -86,9 +83,10 @@ def measure_pod_to_pvc_attach_time(pod_objs):
         else:
             time_measures.append(attach_time["performance"])
     for index, start_time in enumerate(time_measures):
-        logger.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
-        if start_time > 30:
-            raise ex.PerformanceException(
+        if start_time <= 30:
+            logger.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
+        else:
+            logger.error(
                 f"POD {pod_objs[index].name} attach time is {start_time},"
                 f"which is greater than 30 seconds"
             )
@@ -106,9 +104,6 @@ def measure_pod_creation_time(namespace, num_of_pods):
     Args:
         namespace (str) : Namespace in which the PODs are created.
         num_of_pods (int) : Number of PODs created.
-
-    Raises:
-        PerformanceException : Raises an exception if POD creation time is greater than the accepted time.
 
     Logs:
         POD Creation Time of all the PODs.
@@ -130,9 +125,12 @@ def measure_pod_creation_time(namespace, num_of_pods):
         elif "Created" in line:
             created_time = int(line.split()[0][:-1])
             creation_time = scheduled_time - created_time
-            logger.info(f"POD number {pod_no} was created in {creation_time} seconds.")
-            if creation_time > accepted_creation_time:
-                raise ex.PerformanceException(
+            if creation_time <= accepted_creation_time:
+                logger.info(
+                    f"POD number {pod_no} was created in {creation_time} seconds."
+                )
+            else:
+                logger.error(
                     f"POD creation time is {creation_time} and is greater than "
                     f"{accepted_creation_time} seconds."
                 )
@@ -148,9 +146,6 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
         pvc_objs (list) : List of PVC objects for which we have to measure the time.
         start_time (str) : Formatted time from which and on to search the relevant logs.
 
-    Raises:
-        PerformanceException : Raises an exception if PVC creation time is greater than the accepted time.
-
     Logs:
         PVC Creation Time of all the PVCs.
 
@@ -161,9 +156,10 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
             interface, pvc_obj.name, start_time
         )
 
-        logger.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
-        if creation_time > accepted_creation_time:
-            raise ex.PerformanceException(
+        if creation_time <= accepted_creation_time:
+            logger.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
+        else:
+            logger.error(
                 f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
                 f"{accepted_creation_time} seconds."
             )
@@ -177,14 +173,11 @@ def measure_pvc_deletion_time(interface, pvc_objs):
         interface (str) : an interface (RBD or CephFS) to run on.
         pvc_objs (list) : List of PVC objects for which we have to measure the time.
 
-    Raises:
-        PerformanceException : Raises an exception if PVC deletion time is greater than the accepted time.
-
     Logs:
         PVC Deletion Time of all the PVCs.
 
     """
-    accepted_deletion_time = 2 if interface == constants.CEPHFILESYSTEM else 1
+    accepted_deletion_time = 30
     num_of_pvcs = len(pvc_objs)
     pv_name_list = list()
     pv_to_pvc = dict()
@@ -199,9 +192,12 @@ def measure_pvc_deletion_time(interface, pvc_objs):
     )
 
     for pv_name, deletion_time in pvc_deletion_time.items():
-        logger.info(f"PVC {pv_to_pvc[pv_name]} was deleted in {deletion_time} seconds.")
-        if deletion_time > accepted_deletion_time:
-            raise ex.PerformanceException(
+        if deletion_time <= accepted_deletion_time:
+            logger.info(
+                f"PVC {pv_to_pvc[pv_name]} was deleted in {deletion_time} seconds."
+            )
+        else:
+            logger.error(
                 f"PVC {pv_to_pvc[pv_name]} deletion time is {deletion_time} and is greater than "
                 f"{accepted_deletion_time} seconds."
             )
