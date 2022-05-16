@@ -8,15 +8,14 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_from_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
-)
+from ocs_ci.framework.pytest_customization.marks import bugzilla, tier2
 
 logger = logging.getLogger(__name__)
 
 
 @bugzilla("2068110")
 @pytest.mark.polarion_id("OCS-3925")
+@tier2
 class TestPrefixList:
 
     """
