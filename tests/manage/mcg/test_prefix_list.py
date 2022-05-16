@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.bucket_utils import (
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @bugzilla("2068110")
+@pytest.mark.polarion_id("OCS-3925")
 class TestPrefixList:
 
     """
