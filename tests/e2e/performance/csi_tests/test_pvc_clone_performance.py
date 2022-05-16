@@ -196,25 +196,26 @@ class TestPVCClonePerformance(PASTest):
 
         # Delete the test project (namespace)
         self.delete_test_project()
-        logger.info(f"Try to delete the Storage pool {self.pool_name}")
-        try:
-            self.delete_ceph_pool(self.pool_name)
-        except Exception:
-            pass
-        finally:
-            # Verify deletion by checking the backend CEPH pools using the toolbox
-            results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
-            logger.debug(f"Existing pools are : {results}")
-            if self.pool_name in results.split():
-                logger.warning(
-                    "The pool did not deleted by CSI, forcing delete it manually"
-                )
-                self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                    f"ceph osd pool delete {self.pool_name} {self.pool_name} "
-                    "--yes-i-really-really-mean-it"
-                )
-            else:
-                logger.info(f"The pool {self.pool_name} was deleted successfully")
+        if self.interface == constants.CEPHBLOCKPOOL:
+            logger.info(f"Try to delete the Storage pool {self.pool_name}")
+            try:
+                self.delete_ceph_pool(self.pool_name)
+            except Exception:
+                pass
+            finally:
+                # Verify deletion by checking the backend CEPH pools using the toolbox
+                results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
+                logger.debug(f"Existing pools are : {results}")
+                if self.pool_name in results.split():
+                    logger.warning(
+                        "The pool did not deleted by CSI, forcing delete it manually"
+                    )
+                    self.ceph_cluster.toolbox.exec_cmd_on_pod(
+                        f"ceph osd pool delete {self.pool_name} {self.pool_name} "
+                        "--yes-i-really-really-mean-it"
+                    )
+                else:
+                    logger.info(f"The pool {self.pool_name} was deleted successfully")
 
         super(TestPVCClonePerformance, self).teardown()
 
