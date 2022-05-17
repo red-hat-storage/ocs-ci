@@ -16,6 +16,9 @@ log = logging.getLogger(__name__)
 def hsbenchs3(request):
 
     hsbenchs3 = hsbench.HsBench()
+    hsbenchs3.create_test_user()
+    hsbenchs3.create_resource_hsbench()
+    hsbenchs3.install_hsbench()
 
     def teardown():
         hsbenchs3.delete_test_user()
@@ -55,14 +58,6 @@ class TestHsBench(E2ETest):
         * Install hs S3 benchmark
         * Run hs S3 benchmark to create 1M objects
         """
-        # Create RGW user
-        hsbenchs3.create_test_user()
-
-        # Create resource for hsbench
-        hsbenchs3.create_resource_hsbench()
-
-        # Install hsbench
-        hsbenchs3.install_hsbench()
 
         # Running hsbench
         hsbenchs3.run_benchmark(num_obj=1000000, timeout=7200)
@@ -87,7 +82,8 @@ class TestHsBench(E2ETest):
         * Post writing objects verify OBC creation
         """
         # Create an Object bucket
-        object_bucket = bucket_factory(amount=1, interface="OC")[0]
+        object_bucket = bucket_factory(amount=1, interface="OC", verify_health=False)[0]
+        object_bucket.verify_health(timeout=180)
 
         # Write 700k objects to the object bucket
         s3bench.run_benchmark(
@@ -99,4 +95,5 @@ class TestHsBench(E2ETest):
         )
 
         # Create new OBC and verify it is bound
-        bucket_factory(interface="OC")
+        bucket = bucket_factory(interface="OC", verify_health=False)[0]
+        bucket.verify_health(timeout=180)
