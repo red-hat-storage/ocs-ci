@@ -190,10 +190,8 @@ class LogReaderWriterParallel(object):
                 sleep_time=30,
             )
         except exceptions.TimeoutExpiredError:
-            error_msg = (
-                "verification failed to complete in time: data loss or broken cluster?"
-            )
-            logger.exception(error_msg)
+            error_msg = "verification failed to complete in time: probably data loss or broken cluster"
+            raise Exception(error_msg)
         # and then check that the job completed with success
         logger.info("checking the result of data validation job")
         logger.debug(job_file.describe())
