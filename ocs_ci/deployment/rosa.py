@@ -13,9 +13,9 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
+from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
 from ocs_ci.ocs.resources import pvc
 
@@ -78,13 +78,41 @@ class ROSAOCP(BaseOCPDeployment):
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
+        cluster_details = ocm.get_cluster_details(self.cluster_name)
+        cluster_id = cluster_details.get("id")
         ocm.destroy_cluster(self.cluster_name)
-        # TODO: investigate why steps below fail despite being in accordance with
-        # https://docs.openshift.com/rosa/rosa_getting_started_sts/rosa-sts-deleting-cluster.html
-        # cluster_details = ocm.get_cluster_details(self.cluster_name)
-        # cluster_id = cluster_details.get("id")
-        # rosa.delete_operator_roles(cluster_id)
-        # rosa.delete_oidc_provider(cluster_id)
+        sample = TimeoutSampler(
+            timeout=1000,
+            sleep=20,
+            func=self.cluster_present,
+            cluster_name=self.cluster_name,
+        )
+        if not sample.wait_for_func_status(result=False):
+            err_msg = f"Failed to delete {self.cluster_name}"
+            logger.error(err_msg)
+            raise TimeoutExpiredError(err_msg)
+        rosa.delete_operator_roles(cluster_id)
+        rosa.delete_oidc_provider(cluster_id)
+
+    def cluster_present(self, cluster_name):
+        """
+        Check if the cluster is present in the cluster list, regardless of its
+        state.
+
+        Args:
+            cluster_name (str): name which identifies the cluster
+
+        Returns:
+            bool: True if a cluster with the given name exists,
+                False otherwise
+
+        """
+        cluster_list = ocm.list_cluster()
+        for cluster in cluster_list:
+            if cluster[0] == cluster_name:
+                logger.info(f"Cluster found: {cluster[0]}")
+                return True
+        return False
 
 
 class ROSA(CloudDeploymentBase):
@@ -117,7 +145,8 @@ class ROSA(CloudDeploymentBase):
 
     def check_cluster_existence(self, cluster_name_prefix):
         """
-        Check cluster existence based on a cluster name.
+        Check cluster existence based on a cluster name. Cluster in Uninstalling
+        phase is not considered to be existing
 
         Args:
             cluster_name_prefix (str): name prefix which identifies a cluster

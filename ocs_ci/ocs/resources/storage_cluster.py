@@ -471,6 +471,9 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
     assert utils.ceph_health_check(namespace, health_check_tries, health_check_delay)
+    # Let's wait for storage system after ceph health is OK to prevent fails on
+    # Progressing': 'True' state.
+    verify_storage_system()
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -512,6 +515,7 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
+    verify_storage_system()
 
 
 def basic_verification(ocs_registry_image=None):
@@ -524,7 +528,6 @@ def basic_verification(ocs_registry_image=None):
 
     """
     verify_ocs_csv(ocs_registry_image)
-    verify_storage_system()
     verify_storage_cluster()
     verify_noobaa_endpoint_count()
     verify_storage_cluster_images()
@@ -1301,6 +1304,7 @@ def verify_consumer_storagecluster(sc_data):
     2. storageProviderEndpoint: IP:31659
     3. TODO: onboardingTicket
     4. TODO: requestedCapacity
+    5. catsrc existence
 
     Args:
     sc_data (dict): storagecluster data dictionary
@@ -1314,3 +1318,41 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    catsrc_info = catsrc.get().get("items")[0]
+    log.info(f"Catalogsource: {catsrc_info}")
+    assert catsrc_info["spec"]["displayName"].startswith(
+        "Red Hat OpenShift Data Foundation Managed Service Consumer"
+    )
+
+
+def get_ceph_clients():
+    """
+    Get the yamls of all ceph clients.
+    Runs on provider cluster
+
+    Returns:
+        list: yamls of all ceph clients
+    """
+    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    return consumer.get().get("items")
+
+
+def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get the storage cluster state
+
+    Args:
+        sc_name (str): The storage cluster name
+        namespace (str): Namespace of the resource. The default value is:
+            'defaults.ROOK_CLUSTER_NAMESPACE'
+
+    Returns:
+        str: The storage cluster state
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    return sc_obj.get_resource(resource_name=sc_name, column="PHASE")

@@ -5,6 +5,7 @@ import logging
 import random
 import time
 from prettytable import PrettyTable
+from datetime import datetime
 
 from ocs_ci.ocs.benchmark_operator import BenchmarkOperator, BMO_NAME
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -18,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_pod_obj,
@@ -33,7 +35,7 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
 )
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-
+from ocs_ci.ocs.ocp import switch_to_project
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +70,11 @@ class Postgresql(BenchmarkOperator):
             pgsql_cmap = templating.load_yaml(constants.PGSQL_CONFIGMAP_YAML)
             pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
             pgsql_sset["spec"]["replicas"] = replicas
-            if storagecluster_independent_check():
+            if (
+                storagecluster_independent_check()
+                and config.ENV_DATA["platform"].lower()
+                not in constants.MANAGED_SERVICE_PLATFORMS
+            ):
                 pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
                     "storageClassName"
                 ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -104,6 +110,7 @@ class Postgresql(BenchmarkOperator):
         transactions=None,
         scaling_factor=None,
         timeout=None,
+        samples=None,
         wait=True,
     ):
         """
@@ -143,6 +150,8 @@ class Postgresql(BenchmarkOperator):
                 pg_data["spec"]["workload"]["args"]["transactions"] = transactions
             if scaling_factor is not None:
                 pg_data["spec"]["workload"]["args"]["scaling_factor"] = scaling_factor
+            if samples is not None:
+                pg_data["spec"]["workload"]["args"]["samples"] = samples
             pg_obj = OCS(**pg_data)
             pg_obj_list.append(pg_obj)
             pg_obj.create()
@@ -518,10 +527,14 @@ class Postgresql(BenchmarkOperator):
         Clean up
 
         """
+        switch_to_project(BMO_NAME)
         log.info("Deleting postgres pods and configuration")
         if self.pgsql_is_setup:
+            self.pgsql_sset._is_deleted = False
             self.pgsql_sset.delete()
+            self.pgsql_cmap._is_deleted = False
             self.pgsql_cmap.delete()
+            self.pgsql_service._is_deleted = False
             self.pgsql_service.delete()
         log.info("Deleting pgbench pods")
         pods_obj = self.get_pgbench_pods()
@@ -629,3 +642,26 @@ class Postgresql(BenchmarkOperator):
             filespace = filespace.split()[0]
             pod_obj.filespace = filespace
         return pod_obj_list
+
+    def pgsql_full(self):
+        """
+        Run full pgsql workload
+        """
+        self.setup_postgresql(replicas=1)
+        # Create pgbench benchmark
+        self.create_pgbench_benchmark(
+            replicas=1, transactions=15000, scaling_factor=100, samples=30
+        )
+        # Start measuring time
+        start_time = datetime.now()
+        # Wait for pg_bench pod to initialized and complete
+        self.wait_for_pgbench_status(status=constants.STATUS_COMPLETED, timeout=10800)
+        # Calculate the Pgbench pod run time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"pgbench pod reached to completed state after {diff_time}")
+
+        # Get pgbench pods
+        pgbench_pods = self.get_pgbench_pods()
+        # Validate pgbench run and parse logs
+        self.validate_pgbench_run(pgbench_pods)

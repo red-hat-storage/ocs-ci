@@ -69,6 +69,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     wait_for_pods_to_be_running,
     get_ceph_tools_pod,
+    get_all_pods,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -126,6 +127,7 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.longevity import start_app_workload
 
 
 log = logging.getLogger(__name__)
@@ -2436,7 +2438,7 @@ def bucket_factory_fixture(
             current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
-                created_bucket.verify_health(**kwargs)
+                created_bucket.verify_health(timeout=180, **kwargs)
 
         return current_call_created_buckets
 
@@ -2798,6 +2800,20 @@ def fio_job_dict_session():
 
 
 @pytest.fixture(scope="function")
+def start_apps_workload(request):
+    """
+    Application workload fixture which reads the list of app workloads to run and
+    starts running those iterating over the workloads in the list for a specified
+    duration
+
+    Usage:
+    start_app_workload(workloads_list=['pgsql', 'couchbase', 'cosbench'], run_time=60,
+    run_in_bg=True)
+    """
+    return start_app_workload(request)
+
+
+@pytest.fixture(scope="function")
 def pgsql_factory_fixture(request):
     """
     Pgsql factory fixture
@@ -2810,6 +2826,7 @@ def pgsql_factory_fixture(request):
         threads=None,
         transactions=None,
         scaling_factor=None,
+        samples=None,
         timeout=None,
         sc_name=None,
     ):
@@ -2822,6 +2839,8 @@ def pgsql_factory_fixture(request):
             threads (int): Number of threads
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
+            samples (int): Number of samples to run
+
             timeout (int): Time in seconds to wait
 
         """
@@ -2835,6 +2854,7 @@ def pgsql_factory_fixture(request):
             threads=threads,
             transactions=transactions,
             scaling_factor=scaling_factor,
+            samples=samples,
             timeout=timeout,
         )
 
@@ -2954,7 +2974,7 @@ def couchbase_factory_fixture(request):
         """
         Clean up
         """
-        couchbase.teardown()
+        couchbase.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
@@ -4598,7 +4618,9 @@ def vault_tenant_sa_setup_factory(request):
                 vdict[vault.kmsid].pop("vaultNamespace")
                 vdict[vault.kmsid].pop("vaultAuthNamespace")
             if use_auth_path:
-                vdict[vault.kmsid]["vaultAuthPath"] = vault_resource_name
+                vdict[vault.kmsid][
+                    "vaultAuthPath"
+                ] = f"/v1/auth/{vault_resource_name}/login"
             else:
                 vdict[vault.kmsid].pop("vaultAuthPath")
             if use_backend:
@@ -5076,3 +5098,167 @@ def switch_to_provider_for_test(request):
             config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
 
     request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory):
+    """
+    Create rbd, cephfs PVCs and dc pods. To be used for test cases which need
+    rbd and cephfs PVCs with different access modes.
+
+    """
+
+    def factory(
+        pvc_size=3,
+        pods_for_rwx=1,
+        access_modes_rbd=None,
+        access_modes_cephfs=None,
+        num_of_rbd_pvc=None,
+        num_of_cephfs_pvc=None,
+        replica_count=1,
+        deployment_config=False,
+        sc_rbd=None,
+        sc_cephfs=None,
+    ):
+        """
+        Args:
+            pvc_size (int): The requested size for the PVC in GB
+            pods_for_rwx (int): Number of pods to be created if PVC
+                access mode is RWX
+            access_modes_rbd (list): List of access modes. One of the
+                access modes will be chosen for creating each PVC. To specify
+                volume mode, append volume mode in the access mode name
+                separated by '-'. Default is set as
+                ['ReadWriteOnce', 'ReadWriteOnce-Block', 'ReadWriteMany-Block']
+            access_modes_cephfs (list): List of access modes.
+                One of the access modes will be chosen for creating each PVC.
+                Default is set as ['ReadWriteOnce', 'ReadWriteMany']
+            num_of_rbd_pvc (int): Number of rbd PVCs to be created. Value
+                should be greater than or equal to the number of elements in
+                the list 'access_modes_rbd'. Pass 0 for not creating RBD PVC.
+            num_of_cephfs_pvc (int): Number of cephfs PVCs to be created
+                Value should be greater than or equal to the number of
+                elements in the list 'access_modes_cephfs'. Pass 0 for not
+                creating CephFS PVC
+            replica_count (int): The replica count for deployment config
+            deployment_config (bool): True for DeploymentConfig creation,
+                False otherwise
+            sc_rbd (OCS): RBD storage class. ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind
+            sc_cephfs (OCS): Cephfs storage class. ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind
+        Returns:
+            tuple: List of pvcs and pods
+        """
+
+        access_modes_rbd = access_modes_rbd or [
+            constants.ACCESS_MODE_RWO,
+            f"{constants.ACCESS_MODE_RWO}-Block",
+            f"{constants.ACCESS_MODE_RWX}-Block",
+        ]
+
+        access_modes_cephfs = access_modes_cephfs or [
+            constants.ACCESS_MODE_RWO,
+            constants.ACCESS_MODE_RWX,
+        ]
+
+        num_of_rbd_pvc = (
+            num_of_rbd_pvc if num_of_rbd_pvc is not None else len(access_modes_rbd)
+        )
+        num_of_cephfs_pvc = (
+            num_of_cephfs_pvc
+            if num_of_cephfs_pvc is not None
+            else len(access_modes_cephfs)
+        )
+
+        pvcs_rbd = multi_pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            storageclass=sc_rbd,
+            size=pvc_size,
+            access_modes=access_modes_rbd,
+            status=constants.STATUS_BOUND,
+            num_of_pvc=num_of_rbd_pvc,
+            timeout=180,
+        )
+        for pvc_obj in pvcs_rbd:
+            pvc_obj.interface = constants.CEPHBLOCKPOOL
+
+        project = pvcs_rbd[0].project if pvcs_rbd else None
+
+        pvcs_cephfs = multi_pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project,
+            storageclass=sc_cephfs,
+            size=pvc_size,
+            access_modes=access_modes_cephfs,
+            status=constants.STATUS_BOUND,
+            num_of_pvc=num_of_cephfs_pvc,
+            timeout=180,
+        )
+        for pvc_obj in pvcs_cephfs:
+            pvc_obj.interface = constants.CEPHFILESYSTEM
+
+        pvcs = pvcs_cephfs + pvcs_rbd
+
+        # Set volume mode on PVC objects
+        for pvc_obj in pvcs:
+            pvc_info = pvc_obj.get()
+            setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
+
+        sa_obj = service_account_factory(project=project) if deployment_config else None
+
+        pods_dc = []
+        pods = []
+
+        # Create pods
+        for pvc_obj in pvcs:
+            if constants.CEPHFS_INTERFACE in pvc_obj.storageclass.name:
+                interface = constants.CEPHFILESYSTEM
+            else:
+                interface = constants.CEPHBLOCKPOOL
+
+            # TODO: Remove pod_dict_path variable if issue 2524 is fixed
+            if deployment_config:
+                pod_dict_path = constants.FEDORA_DC_YAML
+            elif pvc_obj.volume_mode == "Block":
+                pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+            else:
+                pod_dict_path = ""
+
+            num_pods = (
+                pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
+            )
+            for _ in range(num_pods):
+                # pod_obj will be a Pod instance if deployment_config=False,
+                # otherwise an OCP instance of kind DC
+                pod_obj = pod_factory(
+                    interface=interface,
+                    pvc=pvc_obj,
+                    pod_dict_path=pod_dict_path,
+                    raw_block_pv=pvc_obj.volume_mode == "Block",
+                    deployment_config=deployment_config,
+                    service_account=sa_obj,
+                    replica_count=replica_count,
+                )
+                pod_obj.pvc = pvc_obj
+                pods_dc.append(pod_obj) if deployment_config else pods.append(pod_obj)
+
+        # Get pod objects if deployment_config is True
+        # pods_dc will be an empty list if deployment_config is False
+        for pod_dc in pods_dc:
+            pod_objs = get_all_pods(
+                namespace=pvcs[0].project.namespace,
+                selector=[pod_dc.name],
+                selector_label="name",
+            )
+            for pod_obj in pod_objs:
+                pod_obj.pvc = pod_dc.pvc
+            pods.extend(pod_objs)
+
+        log.info(
+            f"Created {len(pvcs_cephfs)} cephfs PVCs and {len(pvcs_rbd)} rbd "
+            f"PVCs. Created {len(pods)} pods. "
+        )
+        return pvcs, pods
+
+    return factory
