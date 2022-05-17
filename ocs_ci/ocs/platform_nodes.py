@@ -15,7 +15,11 @@ from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    NotAllNodesCreated,
+    RebootEventNotFoundException,
+)
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
@@ -304,18 +308,10 @@ class VMWareNodes(NodesBase):
                 reaches READY state. False otherwise
 
         """
-        num_events_pre_reboot = {}
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
 
-        for node in nodes:
-            reboot_events_cmd = (
-                "get events -A --field-selector involvedObject.name="
-                f"{node.name},reason=Rebooted -o yaml"
-            )
-            num_events_pre_reboot[node.name] = len(
-                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
-            )
+        num_events_pre_reboot = self.get_reboot_events(nodes)
 
         self.vsphere.restart_vms(vms, force=force)
 
@@ -327,9 +323,6 @@ class VMWareNodes(NodesBase):
             When the reboot operation is completed and the VM is reachable the
             OCP node reaches status Ready and a Reboot event is logged.
             """
-            logger.info("Waiting for 30 seconds for reboot to complete...")
-            time.sleep(30)
-
             nodes_names = [n.name for n in nodes]
 
             wait_for_nodes_status(
@@ -340,10 +333,50 @@ class VMWareNodes(NodesBase):
                     "get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
+                try:
+                    for node_reboot_events in TimeoutSampler(
+                        timeout=300, sleep=3, func=self.get_reboot_events, nodes=[node]
+                    ):
+                        if (
+                            node_reboot_events[node.name]
+                            != num_events_pre_reboot[node.name]
+                        ):
+                            break
+                except TimeoutExpiredError:
+                    logger.error(
+                        f"{node.name}: reboot events before reboot are {num_events_pre_reboot[node.name]} and "
+                        f"reboot events after reboot are {node_reboot_events[node.name]}"
+                    )
+                    raise RebootEventNotFoundException
+
                 assert num_events_pre_reboot[node.name] < len(
                     node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
                 ), f"Reboot event not found on node {node.name}"
                 logger.info(f"Node {node.name} rebooted")
+
+    def get_reboot_events(self, nodes):
+        """
+        Gets the number of reboot events
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            dict: Dictionary which contains node names as key and value as number
+                of reboot events
+                e.g: {'compute-0': 11, 'compute-1': 9, 'compute-2': 9}
+
+        """
+        num_reboot_events = {}
+        for node in nodes:
+            reboot_events_cmd = (
+                "get events -A --field-selector involvedObject.name="
+                f"{node.name},reason=Rebooted -o yaml"
+            )
+            num_reboot_events[node.name] = len(
+                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
+            )
+        return num_reboot_events
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
