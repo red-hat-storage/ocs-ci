@@ -248,9 +248,22 @@ class VMWareNodes(NodesBase):
         ]
 
     def get_node_by_attached_volume(self, volume):
-        raise NotImplementedError(
-            "get node by attached volume functionality is not implemented"
-        )
+        """
+        Get node OCS object of the VM instance that has the volume attached to
+
+        Args:
+            volume (Volume): The volume to get the VM according to
+
+        Returns:
+            OCS: The OCS object of the VM instance
+
+        """
+        volume_kube_path = f"kubernetes.io/vsphere-volume/{volume}"
+        all_nodes = get_node_objs()
+        for node in all_nodes:
+            for volume in node.data["status"]["volumesAttached"]:
+                if volume_kube_path in volume.values():
+                    return node
 
     def stop_nodes(self, nodes, force=True, wait=True):
         """
