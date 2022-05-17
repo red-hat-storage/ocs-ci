@@ -103,8 +103,9 @@ def check_mirroring_status_ok(replaying_images=None):
             value = mirroring_status.get(key)
         elif key == "states" and replaying_images:
             # Replaying images count can be higher due to presence of dummy images
+            # There can be upto 2 dummy images in each ODF cluster
             expected_value = range(replaying_images, replaying_images + 3)
-            value = mirroring_status.get(key).get("replaying")
+            value = mirroring_status.get("states").get("replaying")
         else:
             continue
 
@@ -221,7 +222,8 @@ def wait_for_vr(count, namespace, state="primary", timeout=300):
         bool: True if all VR are in expected state
 
     Raises:
-        Exception: In case of unexpected VR resource count or status
+        TimeoutExpiredError: If expected number of VR resource not created within timeout
+        AssertionError: If VR resources are not in expected state
 
     """
     try:
