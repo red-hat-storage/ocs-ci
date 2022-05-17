@@ -1271,22 +1271,20 @@ class Deployment(object):
         """
         Handle ACM HUB deployment
         """
-        if config.ENV_DATA.get("acm_hub_downstream"):
-            self.deploy_acm_hub_downstream()
+        if config.ENV_DATA.get("acm_hub_unreleased"):
+            self.deploy_acm_hub_unreleased()
         else:
-            self.deploy_acm_hub_upstream()
+            self.deploy_acm_hub_released()
 
-    def deploy_acm_hub_downstream(self):
+    def deploy_acm_hub_unreleased(self):
         """
-        Handle ACM HUB downstream deployment
+        Handle ACM HUB unreleased image deployment
         """
         logger.info("Cloning open-cluster-management deploy repository")
-        acm_hub_downstream_deploy_dir = os.path.join(
-            constants.EXTERNAL_DIR, "acm_hub_downstream_deploy"
+        acm_hub_deploy_dir = os.path.join(
+            constants.EXTERNAL_DIR, "acm_hub_unreleased_deploy"
         )
-        clone_repo(
-            constants.ACM_HUB_DOWNSTREAM_DEPLOY_REPO, acm_hub_downstream_deploy_dir
-        )
+        clone_repo(constants.ACM_HUB_UNRELEASED_DEPLOY_REPO, acm_hub_deploy_dir)
 
         logger.info("Retrieving quay token")
         docker_config = load_auth_config().get("quay", {}).get("cli_password", {})
@@ -1315,25 +1313,23 @@ class Deployment(object):
         )
         template_data = {"docker_config": docker_config}
         data = _templating.render_template(
-            constants.ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE,
+            constants.ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE,
             template_data,
         )
         pull_secret_path = os.path.join(
-            acm_hub_downstream_deploy_dir, "prereqs", "pull-secret.yaml"
+            acm_hub_deploy_dir, "prereqs", "pull-secret.yaml"
         )
         with open(pull_secret_path, "w") as f:
             f.write(data)
 
         logger.info("Creating ImageContentSourcePolicy")
-        run_cmd(f"oc create -f {constants.ACM_HUB_DOWNSTREAM_ICSP_YAML}")
+        run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
         image_tag = config.ENV_DATA.get(
-            "acm_downstream_image", config.ENV_DATA.get("default_acm_downstream_image")
+            "acm_unreleased_image", config.ENV_DATA.get("default_acm_unreleased_image")
         )
-        with open(
-            os.path.join(acm_hub_downstream_deploy_dir, "snapshot.ver"), "w"
-        ) as f:
+        with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
 
         logger.info("Running open-cluster-management deploy")
@@ -1341,7 +1337,7 @@ class Deployment(object):
         logger.info("Running cmd: %s", " ".join(cmd))
         proc = Popen(
             cmd,
-            cwd=acm_hub_downstream_deploy_dir,
+            cwd=acm_hub_deploy_dir,
             stdout=PIPE,
             stderr=PIPE,
             encoding="utf-8",
@@ -1354,9 +1350,9 @@ class Deployment(object):
 
         validate_acm_hub_install()
 
-    def deploy_acm_hub_upstream(self):
+    def deploy_acm_hub_released(self):
         """
-        Handle ACM HUB upstream deployment
+        Handle ACM HUB released image deployment
         """
         channel = config.ENV_DATA.get("acm_hub_channel")
         logger.info("Creating ACM HUB namespace")
