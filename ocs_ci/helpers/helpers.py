@@ -2877,7 +2877,7 @@ def wait_for_pv_delete(pv_objs):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
 
-@retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+@retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
 def fetch_used_size(cbp_name, exp_val=None):
     """
     Fetch used size in the pool
