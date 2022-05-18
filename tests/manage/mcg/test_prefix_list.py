@@ -8,7 +8,11 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_from_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.pytest_customization.marks import bugzilla, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    tier2,
+    skipif_ocs_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +20,7 @@ logger = logging.getLogger(__name__)
 @bugzilla("2068110")
 @pytest.mark.polarion_id("OCS-3925")
 @tier2
+@skipif_ocs_version("<4.11")
 class TestPrefixList:
 
     """
@@ -61,11 +66,11 @@ class TestPrefixList:
             copy_objects(
                 awscli_pod_session, src_obj, target=first_prefix_path, s3_obj=s3_obj
             )
-            logger.info("uploaded first prefix")
+            logger.info(f"uploaded first prefix: {first_prefix_path}")
             copy_objects(
                 awscli_pod_session, src_obj, target=second_prefix_path, s3_obj=s3_obj
             )
-            logger.info("uploaded second prefix")
+            logger.info(f"uploaded second prefix: {second_prefix_path}")
 
             full_prefix = f"{prefix}/{pref[2]}/"
             try:
