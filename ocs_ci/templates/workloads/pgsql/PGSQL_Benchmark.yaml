@@ -11,7 +11,7 @@ spec:
       clients:
         - 20
       threads: 2
-      transactions: 15000
+      transactions: 100
       cmd_flags: ''
       init_cmd_flags: ''
       scaling_factor: 100

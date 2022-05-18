@@ -290,7 +290,7 @@ class Postgresql(BenchmarkOperator):
         if status == constants.STATUS_RUNNING:
             timeout = 900
         elif status == constants.STATUS_COMPLETED:
-            timeout = 9000
+            timeout = 900000
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
         pgbench_pod_objs = self.get_pgbench_pods()
