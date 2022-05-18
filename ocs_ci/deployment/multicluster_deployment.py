@@ -40,6 +40,12 @@ class OCPDeployWithACM(Deployment):
         ACM based OCP cluster deployments
 
         """
+        if config.ENV_DATA["skip_ocp_deployment"]:
+            logger.warning(
+                "Skipping OCP deployment through ACM because skip_ocp_deployment "
+                "has been specified"
+            )
+            return
         if self.multicluster_mode == constants.RDR_MODE:
             self.do_rdr_acm_ocp_deploy()
 

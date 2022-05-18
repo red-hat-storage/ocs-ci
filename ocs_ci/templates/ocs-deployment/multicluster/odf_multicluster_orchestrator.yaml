@@ -6,9 +6,9 @@ metadata:
   name: odf-multicluster-orchestrator
   namespace: openshift-operators
 spec:
-  channel: stable-4.9
+  channel: PLACEHOLDER
   installPlanApproval: Automatic
   name: odf-multicluster-orchestrator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: odf-multicluster-orchestrator.v4.9.1
+  startingCSV: PLACEHOLDER
