@@ -17,6 +17,7 @@ def pvc_to_pvc_clone(pvc_factory, pod_factory, teardown_factory, data_process_di
     for interface_type in [constants.CEPHBLOCKPOOL]:
         try:
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
+            logger.info("PVC FACTORY 123")
             pvc_obj = pvc_factory(
                 interface=interface_type, size=1, status=constants.STATUS_BOUND
             )
@@ -24,6 +25,7 @@ def pvc_to_pvc_clone(pvc_factory, pod_factory, teardown_factory, data_process_di
             pod_obj = pod_factory(
                 interface=interface_type, pvc=pvc_obj, status=constants.STATUS_RUNNING
             )
+            logger.info("POD FACTORY 123")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
             logger.info(f"Running IO on pod {pod_obj.name}")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
@@ -31,9 +33,11 @@ def pvc_to_pvc_clone(pvc_factory, pod_factory, teardown_factory, data_process_di
             logger.info(f"File created during IO {file_name}")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
             pod_obj.run_io(storage_type="fs", size="500M", fio_filename=file_name)
+            logger.info("IO FACTORY 123")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
             # Wait for fio to finish
             pod_obj.get_fio_results()
+            logger.info("IO RESULTS 123")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
             logger.info(f"Io completed on pod {pod_obj.name}.")
             logger.info(f"********{config.ENV_DATA.get('cluster_name')}************")
@@ -123,6 +127,7 @@ def pvc_to_pvc_clone(pvc_factory, pod_factory, teardown_factory, data_process_di
             ] = True
         except Exception as e:
             logger.info(e)
+            logger.info(f"{e}EXCEPTION 123")
             if "pod_obj" in locals():
                 delete_pods(pod_objs=[pod_obj])
             if "pvc_obj" in locals():
@@ -135,6 +140,7 @@ def pvc_to_pvc_clone(pvc_factory, pod_factory, teardown_factory, data_process_di
                 ocp_obj = ocp.OCP(namespace=pvc_obj.namespace)
                 delete_projects([ocp_obj])
         finally:
+            logger.info("Finally 123")
             if "pod_obj" in locals():
                 delete_pods(pod_objs=[pod_obj])
             if "pvc_obj" in locals():

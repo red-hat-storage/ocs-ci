@@ -33,6 +33,7 @@ class TestAcceptanceManagedService(ManageTest):
             expected_tests.append(
                 f"{config.clusters[index].ENV_DATA.get('cluster_name')}_pvc_to_pvc_clone_{constants.CEPHBLOCKPOOL}"
             )
+        logger.info(f"Expected tests 123{expected_tests}")
         process_list = list()
         manager = multiprocessing.Manager()
         data_process_dict = manager.dict()
