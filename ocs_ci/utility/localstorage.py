@@ -16,6 +16,7 @@ from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.utility import version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
@@ -220,9 +221,12 @@ def get_lso_channel():
     versions.sort()
     sorted_versions = [v.vstring for v in versions]
 
-    if ocp_version in channel_names:
-        # Use channel corresponding to OCP version
-        return ocp_version
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+        return "stable"
     else:
-        # Use latest channel
-        return sorted_versions[-1]
+        if ocp_version in channel_names:
+            # Use channel corresponding to OCP version
+            return ocp_version
+        else:
+            # Use latest channel
+            return sorted_versions[-1]
