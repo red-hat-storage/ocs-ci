@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.10.0-0.nightly'
+  client_version: '4.11.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -42,18 +42,18 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.10.0-0.nightly"
+  installer_version: "4.11.0-0.nightly"
   force_download_installer: True
   force_download_client: True
   skip_download_client: False
-  default_latest_tag: 'latest-stable-4.10'
+  default_latest_tag: 'latest-stable-4.11'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.10"
+  ocs_csv_channel: "stable-4.11"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.10"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.11"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -115,7 +115,7 @@ REPORTING:
   overwrite_must_gather_image: true
   ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
   odf_live_must_gather_image: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
-  default_ocs_must_gather_latest_tag: 'latest-4.10'
+  default_ocs_must_gather_latest_tag: 'latest-4.11'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
@@ -139,7 +139,7 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.10'
+  ocs_version: '4.11'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
@@ -204,20 +204,21 @@ ENV_DATA:
   rhel8_template: 'rhel85_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
-  default_acm_downstream_image: "2.5.0-DOWNSTREAM-2022-04-22-19-53-05"
+  default_acm_unreleased_image: "2.5.0-DOWNSTREAM-2022-04-22-19-53-05"
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
+  rosa_cli_version: '1.2.0'
 
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.10"
+  ocp_channel: "stable-4.11"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.10"
+  upgrade_logging_channel: "4.11"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team

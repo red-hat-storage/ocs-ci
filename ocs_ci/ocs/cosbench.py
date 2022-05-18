@@ -4,10 +4,11 @@ import os
 import re
 from tempfile import mkdtemp, NamedTemporaryFile
 from xml.etree import ElementTree
+from datetime import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -616,11 +617,12 @@ class Cosbench(object):
         )
         return f"{self.cosbench_dir}/{archive_file}.csv"
 
-    def cosbench_teardown(self):
+    def cleanup(self):
         """
-        Cosbench teardown
+        Cosbench cleanup
 
         """
+        switch_to_project(constants.COSBENCH_PROJECT)
         logger.info("Deleting Cosbench pod, configmap and namespace")
         self.cosbench_pod.delete()
         self.cosbench_config.delete()
@@ -663,3 +665,44 @@ class Cosbench(object):
             f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
         )
         return throughput_data, bandwidth_data
+
+    def cosbench_full(self):
+        """
+        Run full Cosbench workload
+        """
+        bucket_prefix = "bucket-"
+        buckets = 10
+        objects = 1000
+
+        # Operations to perform and its ratio(%)
+        operations = {"read": 50, "write": 50}
+
+        # Deployment of cosbench
+        self.setup_cosbench()
+
+        # Create initial containers and objects
+        self.run_init_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )
+        # Start measuring time
+        start_time = datetime.now()
+
+        # Run main workload
+        self.run_main_workload(
+            operation_type=operations,
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+            timeout=10800,
+        )
+
+        # Calculate the total run time of Cosbench workload
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        logger.info(f"Cosbench workload completed after {diff_time}")
+
+        # Dispose containers and objects
+        self.run_cleanup_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )

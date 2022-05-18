@@ -13,12 +13,14 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
+    ExternalClusterRGWEndPointPortMissing,
     ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
 )
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.utility import version
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import upload_file, encode, decode
@@ -99,16 +101,44 @@ class ExternalCluster(object):
 
     def get_rgw_endpoint_api_port(self):
         """
-        Fetches rgw endpoint api port
+        Fetches rgw endpoint api port.
+
+        For ceph 5.x, get port information from ceph config dump and for
+        ceph 4.x, get port information from ceph.conf on rgw node
 
         Returns:
             str: RGW endpoint port
 
         """
-        cmd = "ceph dashboard get-rgw-api-port"
-        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
-        logger.info(f"External cluster rgw endpoint api port: {out}")
-        return out
+        port = None
+        try:
+            # For ceph 5.x versions
+            cmd = "ceph config dump -f json"
+            _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+            config_dump = json.loads(out)
+            for each in config_dump:
+                if each["name"].lower() == "rgw_frontends":
+                    port = each["value"].split("=")[-1]
+                    break
+            # if port doesn't have value, need to check ceph.conf from rgw node
+            if not port:
+                raise AttributeError(
+                    "config dump has no rgw port information. checking ceph.conf file on rgw node"
+                )
+        except Exception as ex:
+            # For ceph 4.x versions
+            logger.info(ex)
+            cmd = "grep -e '^rgw frontends' /etc/ceph/ceph.conf"
+            rgw_node = get_rgw_endpoint()
+            rgw_conn = Connection(host=rgw_node, user=self.user, password=self.password)
+            _, out, _ = rgw_conn.exec_cmd(cmd)
+            port = out.split(":")[-1]
+
+        if not port:
+            raise ExternalClusterRGWEndPointPortMissing
+
+        logger.info(f"External cluster rgw endpoint api port: {port}")
+        return port
 
     def get_rhel_version(self):
         """
@@ -238,6 +268,7 @@ def generate_exporter_script():
         str: path to the exporter script
 
     """
+    logger.info("generating external exporter script")
     # generate exporter script through packagemanifest
     ocs_operator_name = defaults.OCS_OPERATOR_NAME
     operator_selector = get_selector_for_ocs_operator()
@@ -246,9 +277,14 @@ def generate_exporter_script():
         selector=operator_selector,
     )
     ocs_operator_data = package_manifest.get()
-    encoded_script = ocs_operator_data["status"]["channels"][0]["currentCSVDesc"][
-        "annotations"
-    ]["external.features.ocs.openshift.io/export-script"]
+    csv = get_ocs_csv()
+    for each_csv in ocs_operator_data["status"]["channels"]:
+        if each_csv["currentCSV"] == csv.resource_name:
+            logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
+            encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                "external.features.ocs.openshift.io/export-script"
+            ]
+            break
 
     # decode the exporter script and write to file
     external_script = decode(encoded_script)

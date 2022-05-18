@@ -260,6 +260,10 @@ class ExternalClusterRGWEndPointMissing(Exception):
     pass
 
 
+class ExternalClusterRGWEndPointPortMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -476,6 +480,10 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class RDRDeploymentException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 
@@ -493,4 +501,16 @@ class AuthError(Exception):
 
 
 class UnknownCloneTypeException(Exception):
+    pass
+
+
+class CephToolBoxNotFoundException(Exception):
+    pass
+
+
+class UnsupportedWorkloadError(Exception):
+    pass
+
+
+class RebootEventNotFoundException(Exception):
     pass

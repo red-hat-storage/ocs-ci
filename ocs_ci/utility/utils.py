@@ -514,9 +514,8 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
-    index = 0
     for cluster in config.clusters:
-        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -525,7 +524,9 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[index] = exec_cmd(
+                completed_process[
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ] = exec_cmd(
                     cmd,
                     secrets=secrets,
                     timeout=timeout,
@@ -539,7 +540,6 @@ def run_cmd_multicluster(
                     f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
                 )
                 raise
-            index = +1
     config.switch_ctx(restore_ctx_index)
     return completed_process
 
@@ -1492,7 +1492,7 @@ def move_summary_to_top(soup):
 
     """
     summary = []
-    summary.append(soup.find("h2", text="Summary"))
+    summary.append(soup.find("h2", string="Summary"))
     for tag in summary[0].next_siblings:
         if tag.name == "h2":
             break
@@ -3196,7 +3196,7 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # Download and untar
     download_file(url, terraform_ignition_provider_zip_file)
-    run_cmd(f"unzip {terraform_ignition_provider_zip_file}")
+    run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)

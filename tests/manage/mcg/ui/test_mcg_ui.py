@@ -55,7 +55,7 @@ class TestStoreUserInterface(object):
         ],
     )
     def test_store_creation_and_deletion(
-        self, setup_ui, cld_mgr, cloud_uls_factory, kind
+        self, setup_ui_class, cld_mgr, cloud_uls_factory, kind
     ):
         """
         Test creation and deletion of MCG stores via the UI
@@ -67,7 +67,7 @@ class TestStoreUserInterface(object):
             resource_description="ui", resource_type=kind
         )
 
-        store_ui_obj = MCGStoreUI(setup_ui)
+        store_ui_obj = MCGStoreUI(setup_ui_class)
         store_ui_obj.create_store_ui(
             kind, store_name, cld_mgr.aws_client.secret.name, uls_name
         )
@@ -124,7 +124,7 @@ class TestBucketclassUserInterface(object):
     )
     def test_standard_bc_creation_and_deletion(
         self,
-        setup_ui,
+        setup_ui_class,
         backingstore_factory,
         policy,
         bs_amount,
@@ -139,7 +139,7 @@ class TestBucketclassUserInterface(object):
             resource_description="ui", resource_type="bucketclass"
         )
 
-        bc_ui_obj = BucketClassUI(setup_ui)
+        bc_ui_obj = BucketClassUI(setup_ui_class)
         bc_ui_obj.create_standard_bucketclass_ui(
             bc_name, policy, [bs.name for bs in test_stores]
         )
@@ -178,7 +178,7 @@ class TestBucketclassUserInterface(object):
     )
     def test_namespace_bc_creation_and_deletion(
         self,
-        setup_ui,
+        setup_ui_class,
         backingstore_factory,
         namespace_store_factory,
         policy,
@@ -204,7 +204,7 @@ class TestBucketclassUserInterface(object):
             resource_description="ui", resource_type="bucketclass"
         )
 
-        bc_ui_obj = BucketClassUI(setup_ui)
+        bc_ui_obj = BucketClassUI(setup_ui_class)
         bc_ui_obj.create_namespace_bucketclass_ui(bc_name, policy, nss_names, bs_names)
 
         assert bc_ui_obj.verify_current_page_resource_status(
@@ -253,7 +253,7 @@ class TestObcUserInterface(object):
             )
         ],
     )
-    def test_obc_creation_and_deletion(self, setup_ui, storageclass, bucketclass):
+    def test_obc_creation_and_deletion(self, setup_ui_class, storageclass, bucketclass):
         """
         Test creation and deletion of an OBC via the UI
 
@@ -262,7 +262,7 @@ class TestObcUserInterface(object):
             resource_description="ui", resource_type="obc"
         )
 
-        obc_ui_obj = ObcUI(setup_ui)
+        obc_ui_obj = ObcUI(setup_ui_class)
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 
         assert obc_ui_obj.verify_current_page_resource_status(
