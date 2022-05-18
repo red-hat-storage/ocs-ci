@@ -1719,6 +1719,7 @@ ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "registry.ci.openshift.org/ocp/release"
 ACM_VSPHERE_NETWORK = "VM Network"
 ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
+ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 # Concatenated CA file for vcenter

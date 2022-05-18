@@ -5,7 +5,11 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
+<<<<<<< HEAD
 from selenium.webdriver.common.action_chains import ActionChains
+=======
+from ocs_ci.deployment import vmware
+>>>>>>> 68877c1d (Implement teardown for ACM deployed OCP clusters)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
@@ -17,6 +21,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.ocs.constants import (
+    ACM_CLUSTER_DESTROY_TIMEOUT,
     PLATFORM_XPATH_MAP,
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
     VSPHERE_CA_FILE_PATH,
@@ -29,6 +34,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.ipam import IPAM
 
 
 log = logging.getLogger(__name__)
@@ -146,11 +152,17 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         self.cluster_path = self.cluster_conf.ENV_DATA["cluster_path"]
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.deployment_status = None
+        self.destroy_status = None
         self.cluster_deploy_timeout = self.cluster_conf.ENV_DATA.get(
             "cluster_deploy_timeout", ACM_CLUSTER_DEPLOY_TIMEOUT
         )
+        self.cluster_destroy_timeout = self.cluster_conf.ENV_DATA.get(
+            "cluster_destroy_timeout", ACM_CLUSTER_DESTROY_TIMEOUT
+        )
         self.deployment_failed_reason = None
+        self.destroy_failed_reason = None
         self.deployment_start_time = 0
+        self.destroy_start_time = 0
 
     def create_cluster_prereq(self):
         raise NotImplementedError("Child class has to implement this method")
@@ -330,6 +342,76 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         """
         raise NotImplementedError("Child class should implement this function")
 
+    def destroy_cluster(self):
+        """
+        ACM UI based destroy cluster,
+        select the cluster from UI, click on destroy
+
+        """
+        # Navigate to Clusters page
+        self.navigate_clusters_page()
+        # Click on cluster name from the table
+        locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
+        self.do_click(locator=locator)
+        # Click on 'Actions' dropdown
+        action_dropdown = format_locator(
+            self.acm_page_nav["cc_delete_cluster_action_dropdown"],
+            f"{self.cluster_name}-actions",
+        )
+        self.do_click(action_dropdown, timeout=300)
+        # From the 'Actions' dropdown click on 'Destroy Cluster'
+        self.do_click(locator=self.acm_page_nav["cc_destroy_cluster"], timeout=300)
+        # A confirmation window pops up
+        # Fill cluster name in the confirmation window's text box
+        self.do_click(
+            self.acm_page_nav["cc_destroy_cluster_confirm_textbox"], timeout=300
+        )
+        self.do_send_keys(
+            self.acm_page_nav["cc_destroy_cluster_confirm_textbox"], self.cluster_name
+        )
+        # Click on destroy button
+        self.do_click(self.acm_page_nav["cc_destroy_button"], timeout=300)
+        if not self.check_element_presence(
+            locator=self.acm_page_nav["cc_cluster_being_destroyed_heading"], timeout=600
+        ):
+            raise ACMClusterDeployException(
+                "Something went wrong with destroy action "
+                f"for the cluster {self.cluster_name}"
+            )
+        self.destroy_status = "Destroying"
+        self.destr_start_time = time.time()
+
+    def get_destroy_status(self):
+        """
+        Return the current status of destroy operation
+
+        """
+        self.navigate_clusters_page()
+        locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
+        if not self.check_element_presence(locator, timeout=300):
+            # Cluster deletion has happened
+            self.destroy_status = "Done"
+        else:
+            self.do_click(locator)
+            if not self.check_element_presence(
+                locator=self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                timeout=300,
+            ):
+                self.destroy_status = "Failed"
+            else:
+                elapsed_time = int(time.time() - self.destroy_start_time)
+                if elapsed_time > self.cluster_destroy_timeout:
+                    self.destroy_status = "Failed"
+                    self.destroy_failed_reason = "timeout"
+
+    def post_destroy_ops(self):
+        """
+        Post destroy ops should be implemented by child classes because
+        post destroy ops are mostly specific to the platform
+
+        """
+        log.warn("Platform specific class has to implement post_destroy_ops")
+
 
 class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     """
@@ -346,6 +428,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         )
         # API VIP & Ingress IP
         self.ips = None
+        self.nvips = 2
         self.vsphere_network = None
 
     def create_cluster_prereq(self, timeout=600):
@@ -488,7 +571,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # Switch context to cluster which we are about to create
         prev_ctx = config.cur_index
         config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
-        self.ips = vmware.assign_ips(2)
+        self.ips = vmware.assign_ips(self.nvips)
         vmware.create_dns_records(self.ips)
         config.switch_ctx(prev_ctx)
         self.driver.close()
@@ -663,6 +746,23 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     def get_ocp_release_img(self):
         vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
         return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}:{vers}"
+
+    def post_destroy_ops(self):
+        """
+        Post destroy ops includes
+        1. deleting DNS entries
+        2. Freeing the ips assigned
+
+        """
+        prev_ctx = config.cur_index
+        config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
+        vmware.delete_dns_records()
+        ipam = IPAM(appiapp="address")
+        hosts = [
+            f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(self.nvips)
+        ]
+        ipam.release_ips(hosts)
+        config.switch_ctx(prev_ctx)
 
 
 class ACMOCPDeploymentFactory(object):
