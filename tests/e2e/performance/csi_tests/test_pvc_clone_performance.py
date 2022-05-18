@@ -49,11 +49,12 @@ class ClonesResultsAnalyse(ResultsAnalyse):
 
     def analyse_results(self, test_times, speed=False, total_data=0):
 
-        creation_time_list = []
-        csi_creation_time_list = []
-
-        deletion_time_list = []
-        csi_deletion_time_list = []
+        op_types = ["create", "csi_create", "delete", "csi_delete"]
+        all_data = {}
+        avg_data = {}
+        for op in op_types:
+            all_data[op] = []
+            avg_data[op] = []
 
         if speed:
             creation_speed_list = []
@@ -62,61 +63,42 @@ class ClonesResultsAnalyse(ResultsAnalyse):
         # Print the results into the log.
         for clone in test_times:
 
-            creation_time_list.append(test_times[clone]["create"].get("time", 0))
-            csi_creation_time_list.append(
-                test_times[clone]["csi_create"].get("time", 0)
-            )
-            deletion_time_list.append(test_times[clone]["delete"].get("time", 0))
-            csi_deletion_time_list.append(
-                test_times[clone]["csi_delete"].get("time", 0)
-            )
-
             logger.info(f"Test report for clone {clone} :")
-            logger.info(
-                f"Creation time is     : {test_times[clone]['create']['time']} Secounds"
-            )
-            logger.info(
-                f"CSI-Creation time is : {test_times[clone]['csi_create']['time']} Secounds"
-            )
-            logger.info(
-                f"Deletion time is     : {test_times[clone]['delete']['time']} Secounds"
-            )
-            logger.info(
-                f"CSI-Deletion time is : {test_times[clone]['csi_delete']['time']} Secounds"
-            )
+            for op in op_types:
+                data = test_times[clone][op]["time"]
+                title = f"{op.capitalize()}ion time is"
+                logger.info(f"{title:29} : {data} Secounds")
+                if data is None:
+                    data = 0
+                all_data[op].append(data)
 
             if speed:
                 creation_speed = total_data / test_times[clone]["create"]["time"]
                 deleteion_speed = total_data / test_times[clone]["delete"]["time"]
-                logger.info(f"Creation speed is    : {creation_speed:,.3f} MB/Sec.")
-                logger.info(f"Deletion speed is    : {deleteion_speed:,.3f} MB/Sec.")
+                logger.info(
+                    f"Creation speed is             : {creation_speed:,.3f} MB/Sec."
+                )
+                logger.info(
+                    f"Deletion speed is             : {deleteion_speed:,.3f} MB/Sec."
+                )
                 creation_speed_list.append(float(creation_speed))
                 deletion_speed_list.append(float(deleteion_speed))
 
-        average_creation_time = f"{statistics.mean(creation_time_list):.3f}"
-        average_csi_creation_time = f"{statistics.mean(csi_creation_time_list):.3f}"
-        average_deletion_time = f"{statistics.mean(deletion_time_list):.3f}"
-        average_csi_deletion_time = f"{statistics.mean(csi_deletion_time_list):.3f}"
-
-        logger.info("========== Average results ==========")
-        logger.info(f"Average creation time is     : {average_creation_time} secs.")
-        logger.info(f"Average csi-creation time is : {average_csi_creation_time} secs.")
-        logger.info(f"Average deletion time is     : {average_deletion_time} secs.")
-        logger.info(f"Average csi-deletion time is : {average_csi_deletion_time} secs.")
-
-        self.add_key("average_clone_creation_time", average_creation_time)
-        self.add_key("average_csi_clone_creation_time", average_csi_creation_time)
-        self.add_key("average_clone_deletion_time", average_deletion_time)
-        self.add_key("average_csi_clone_deletion_time", average_csi_deletion_time)
+        logger.info("=============== Average results ================")
+        for op in op_types:
+            avg_data[op] = f"{statistics.mean(all_data[op]):.3f}"
+            title = f"Average {op.capitalize()}ion time is"
+            logger.info(f"{title:29} : {avg_data[op]} Secounds")
+            self.add_key(f"average_clone_{op}ion_time", avg_data[op])
 
         if speed:
             average_creation_speed = f"{statistics.mean(creation_speed_list):.3f}"
             average_deletion_speed = f"{statistics.mean(deletion_speed_list):.3f}"
             logger.info(
-                f"Average creation speed is    : {average_creation_speed} MB/Sec."
+                f"Average creation speed is     : {average_creation_speed} MB/Sec."
             )
             logger.info(
-                f"Average deletion speed is    : {average_deletion_speed} MB/Sec."
+                f"Average deletion speed is     : {average_deletion_speed} MB/Sec."
             )
             self.add_key("average_clone_creation_speed", average_creation_speed)
             self.add_key("average_clone_deletion_speed", average_deletion_speed)
@@ -438,7 +420,10 @@ class TestPVCClonePerformance(PASTest):
             f"on {self.interface} PVC of size {self.pvc_size} GB:"
         )
         # Produce ES report
-        full_results.analyse_results(results_times, total_data=file_size_mb)
+        speed = True if self.interface == constants.CEPHFILESYSTEM else False
+        full_results.analyse_results(
+            results_times, total_data=file_size_mb, speed=speed
+        )
         # Add the test time to the ES report
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
