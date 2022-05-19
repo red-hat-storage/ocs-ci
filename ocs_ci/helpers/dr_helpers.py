@@ -328,7 +328,9 @@ def get_drpolicy_name(namespace):
 
     """
     drpc_name = get_drpc_name(namespace)
-    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPOLICY).get()["items"][0]
+    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPOLICY).get()[
+        "items"
+    ][0]
     return drpolicy_obj["spec"]["drPolicyRef"]["name"]
 
 
@@ -386,7 +388,9 @@ def get_secondary_cluster_name(namespace):
     drpolicy_resource_name = get_drpolicy_name()
     primary_cluster_name = get_primary_cluster_name(namespace)
     drpolicy_obj = ocp.OCP(
-        kind=constants.DRPOLICY, namespace=namespace, resource_name=drpolicy_resource_name
+        kind=constants.DRPOLICY,
+        namespace=namespace,
+        resource_name=drpolicy_resource_name,
     ).get()
     for cluster_name in drpolicy_obj["spec"]["drClusterSet"]:
         if not cluster_name["name"] == primary_cluster_name:
