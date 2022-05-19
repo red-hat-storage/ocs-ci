@@ -1328,10 +1328,11 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
     log.info(
-        f"Onboarding ticket begins with: {sc_data['spec']['externalStorage']['onboardingTicket'][:10]}"
+        f"Onboarding ticket begins with: {ticket[:10]} and ends with {ticket[-10:]}"
     )
-    assert len(sc_data["spec"]["externalStorage"]["onboardingTicket"]) > 500
+    assert len(ticket) > 500
     catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
