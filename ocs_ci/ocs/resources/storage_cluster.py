@@ -1329,7 +1329,7 @@ def verify_consumer_storagecluster(sc_data):
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
     log.info(
-        f"Onboarding ticket begins with: {sc_data['spec']['externalStorage']['onboardingTicket'][:50]}"
+        f"Onboarding ticket begins with: {sc_data['spec']['externalStorage']['onboardingTicket'][:10]}"
     )
     assert len(sc_data["spec"]["externalStorage"]["onboardingTicket"]) > 500
     catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
