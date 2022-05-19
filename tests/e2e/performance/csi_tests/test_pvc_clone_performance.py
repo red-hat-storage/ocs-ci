@@ -57,8 +57,7 @@ class ClonesResultsAnalyse(ResultsAnalyse):
             avg_data[op] = []
 
         if speed:
-            creation_speed_list = []
-            deletion_speed_list = []
+            speeds = {"create": [], "delete": []}
 
         # Print the results into the log.
         for clone in test_times:
@@ -69,39 +68,27 @@ class ClonesResultsAnalyse(ResultsAnalyse):
                 title = f"{op.capitalize()}ion time is"
                 logger.info(f"{title:29} : {data} Secounds")
                 if data is None:
-                    data = 0
-                all_data[op].append(data)
-
-            if speed:
-                creation_speed = total_data / test_times[clone]["create"]["time"]
-                deleteion_speed = total_data / test_times[clone]["delete"]["time"]
-                logger.info(
-                    f"Creation speed is             : {creation_speed:,.3f} MB/Sec."
-                )
-                logger.info(
-                    f"Deletion speed is             : {deleteion_speed:,.3f} MB/Sec."
-                )
-                creation_speed_list.append(float(creation_speed))
-                deletion_speed_list.append(float(deleteion_speed))
+                    logger.warning(f"   There is no {op.capitalize()}ion time !")
+                else:
+                    all_data[op].append(data)
+                if speed and "csi" not in op:
+                    speeds[op].append(float(total_data / test_times[clone][op]["time"]))
+                    logger.info(
+                        f"{op.capitalize()}ion speed is            : {speeds[op][-1]:,.2f} MB/Sec."
+                    )
 
         logger.info("=============== Average results ================")
         for op in op_types:
-            avg_data[op] = f"{statistics.mean(all_data[op]):.3f}"
+            avg_data[op] = statistics.mean(all_data[op])
             title = f"Average {op.capitalize()}ion time is"
-            logger.info(f"{title:29} : {avg_data[op]} Secounds")
+            logger.info(f"{title:29} : {avg_data[op]:.3f} Secounds")
             self.add_key(f"average_clone_{op}ion_time", avg_data[op])
-
-        if speed:
-            average_creation_speed = f"{statistics.mean(creation_speed_list):.3f}"
-            average_deletion_speed = f"{statistics.mean(deletion_speed_list):.3f}"
-            logger.info(
-                f"Average creation speed is     : {average_creation_speed} MB/Sec."
-            )
-            logger.info(
-                f"Average deletion speed is     : {average_deletion_speed} MB/Sec."
-            )
-            self.add_key("average_clone_creation_speed", average_creation_speed)
-            self.add_key("average_clone_deletion_speed", average_deletion_speed)
+            if speed and "csi" not in op:
+                average_speed = statistics.mean(speeds[op])
+                logger.info(
+                    f"Average {op}ion speed is    : {average_speed:,.2f} MB/Sec."
+                )
+                self.add_key(f"average_clone_{op}ion_speed", average_speed)
 
         self.all_results = test_times
         logger.info("test_clones_creation_performance finished successfully.")
