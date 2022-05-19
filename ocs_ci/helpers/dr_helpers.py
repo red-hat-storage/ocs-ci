@@ -353,8 +353,6 @@ def get_primary_cluster_name(namespace):
 
     if drpc_obj.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_obj["spec"]["failoverCluster"]
-    elif drpc_obj.get("spec").get("action") == constants.ACTION_RELOCATE:
-        cluster_name = drpc_obj["spec"]["preferredCluster"]
     else:
         cluster_name = drpc_obj["spec"]["preferredCluster"]
 
