@@ -1312,7 +1312,7 @@ def verify_consumer_storagecluster(sc_data):
     Verify that Storagecluster is has:
     1. externalStorage: enable: true
     2. storageProviderEndpoint: IP:31659
-    3. TODO: onboardingTicket
+    3. onboardingTicket is present
     4. TODO: requestedCapacity
     5. catsrc existence
 
@@ -1328,6 +1328,11 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
+    log.info(
+        f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
+    )
+    assert len(ticket) > 500
     catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
