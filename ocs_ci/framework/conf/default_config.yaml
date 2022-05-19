@@ -135,6 +135,8 @@ ENV_DATA:
   base_domain: 'qe.rh-ocs.com'
   master_instance_type: 'm4.xlarge'
   worker_instance_type: 'm5.4xlarge'
+  # vm_type_bootstrap is used in AWS UPI deployments
+  vm_type_bootstrap: 'i3.large'
   master_replicas: 3
   worker_replicas: 3
   skip_ocp_deployment: false
