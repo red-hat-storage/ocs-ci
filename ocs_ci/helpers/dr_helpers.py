@@ -304,10 +304,13 @@ def wait_for_vr_deletion(namespace, timeout=300):
 def get_drpc_name(namespace):
     """
     Get the DRPC Resource Name
+
     Args:
         namespace (str): Name of namespace
+
     Returns:
         str: DRPC resource name
+
     """
 
     drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace,).get()[
@@ -319,8 +322,10 @@ def get_drpc_name(namespace):
 def get_drpolicy_name():
     """
     Get DRPolicy Name
+
     Returns:
         str: DRPolicy name
+
     """
 
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()["items"][0]
@@ -330,10 +335,13 @@ def get_drpolicy_name():
 def get_primary_cluster_name(namespace):
     """
     Get Primary Cluster Name based on Namespace
+
     Args:
         namespace (str): Name of the Namespace
+
     Returns:
         str: Primary Cluster Name
+
     """
     config.switch_acm_ctx()
     drpc_resource_name = get_drpc_name(namespace=namespace)
@@ -359,8 +367,10 @@ def get_primary_cluster_name(namespace):
 def set_primary_cluster_context(namespace):
     """
     Set Primary Cluster Context based on Namespace
+
     Args:
         namespace (str): Name of the Namespace
+
     """
     cluster_name = get_primary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
@@ -369,10 +379,13 @@ def set_primary_cluster_context(namespace):
 def get_secondary_cluster_name(namespace):
     """
     Get Secondary Cluster Name based on Namespace
+
     Args:
         namespace (str): Name of the Namespace
+
     Returns:
         str: Secondary cluster name
+
     """
     config.switch_acm_ctx()
     drpc_resource_name = get_drpolicy_name()
@@ -388,8 +401,10 @@ def get_secondary_cluster_name(namespace):
 def set_secondary_cluster_context(namespace):
     """
     Set Secondary Cluster Context based on Namespace
+
     Args:
         namespace (str): Name of the Namespace
+
     """
     cluster_name = get_secondary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
