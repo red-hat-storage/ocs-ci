@@ -319,17 +319,17 @@ def get_drpc_name(namespace):
     return drpc_obj["metadata"]["name"]
 
 
-def get_drpolicy_name():
+def get_drpolicy_name(namespace):
     """
-    Get DRPolicy Name
+    Get DRPolicy Name based on DRPC namespace
 
     Returns:
         str: DRPolicy name
 
     """
-
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY).get()["items"][0]
-    return drpolicy_obj["metadata"]["name"]
+    drpc_name = get_drpc_name(namespace)
+    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPOLICY).get()["items"][0]
+    return drpolicy_obj["spec"]["drPolicyRef"]["name"]
 
 
 def get_primary_cluster_name(namespace):
@@ -352,12 +352,9 @@ def get_primary_cluster_name(namespace):
     ).get()
 
     if drpc_obj.get("spec").get("action") == constants.ACTION_FAILOVER:
-
         cluster_name = drpc_obj["spec"]["failoverCluster"]
-
     elif drpc_obj.get("spec").get("action") == constants.ACTION_RELOCATE:
         cluster_name = drpc_obj["spec"]["preferredCluster"]
-
     else:
         cluster_name = drpc_obj["spec"]["preferredCluster"]
 
@@ -388,10 +385,10 @@ def get_secondary_cluster_name(namespace):
 
     """
     config.switch_acm_ctx()
-    drpc_resource_name = get_drpolicy_name()
+    drpolicy_resource_name = get_drpolicy_name()
     primary_cluster_name = get_primary_cluster_name(namespace)
     drpolicy_obj = ocp.OCP(
-        kind=constants.DRPOLICY, namespace=namespace, resource_name=drpc_resource_name
+        kind=constants.DRPOLICY, namespace=namespace, resource_name=drpolicy_resource_name
     ).get()
     for cluster_name in drpolicy_obj["spec"]["drClusterSet"]:
         if not cluster_name["name"] == primary_cluster_name:
