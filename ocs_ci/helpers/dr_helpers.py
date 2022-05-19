@@ -5,7 +5,6 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -151,7 +150,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
         )
 
 
-def get_all_vrs(namespace=None):
+def get_all_vrs(namespace):
     """
     Gets all VRs in given namespace
 
@@ -168,7 +167,21 @@ def get_all_vrs(namespace=None):
     return vr_list
 
 
-def check_vr_status(state, namespace):
+def get_vr_count(namespace):
+    """
+    Gets VR resource count in given namespace
+
+    Args:
+        namespace (str): the namespace of the VR resources
+
+    Returns:
+         int: VR resource count
+
+    """
+    return len(get_all_vrs(namespace))
+
+
+def check_vr_state(state, namespace):
     """
     Check if all VR in the given namespace are in expected state
 
@@ -202,19 +215,43 @@ def check_vr_status(state, namespace):
         return True
     else:
         logger.warning(
-            f"Following {len(vr_state_mismatch)} VR are not in expected state: {vr_state_mismatch}"
+            f"Following {len(vr_state_mismatch)} VR are not in expected {state} state: {vr_state_mismatch}"
         )
         return False
 
 
-def wait_for_vr(count, namespace, state="primary", timeout=300):
+def wait_for_vr_count(count, namespace, timeout=300):
     """
-    Wait for all VR resources to exist in expected state in the given namespace
+    Wait for all VR resources to reach expected count in the given namespace
 
     Args:
         count (int): Expected number of VR resources
         namespace (str): the namespace of the VR resources
+        timeout (int): time in seconds to wait for VR resources to be created
+            or reach expected state
+
+    Returns:
+        bool: True if all VR are in expected state
+
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_vr_count,
+        namespace=namespace,
+    )
+    sample.wait_for_func_value(count)
+
+    return True
+
+
+def wait_for_vr_state(state, namespace, timeout=300):
+    """
+    Wait for all VR resources to reach expected state in the given namespace
+
+    Args:
         state (str): The VR state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the VR resources
         timeout (int): time in seconds to wait for VR resources to be created
             or reach expected state
 
@@ -222,33 +259,43 @@ def wait_for_vr(count, namespace, state="primary", timeout=300):
         bool: True if all VR are in expected state
 
     Raises:
-        TimeoutExpiredError: If expected number of VR resource not created within timeout
         AssertionError: If VR resources are not in expected state
 
     """
-    try:
-        for sample in TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=get_all_vrs,
-            namespace=namespace,
-        ):
-            current_num = len(sample)
-            logger.info(
-                f"Expected VR resources: {count}, "
-                f"Current VR resources: {current_num}"
-            )
-            if current_num == count:
-                break
-    except TimeoutExpiredError:
-        logger.exception(f"Current VR resources did not reach expected count {count}")
-        raise
-
     sample = TimeoutSampler(
-        timeout=timeout, sleep=5, func=check_vr_status, state=state, namespace=namespace
+        timeout=timeout, sleep=3, func=check_vr_state, state=state, namespace=namespace
     )
     assert sample.wait_for_func_status(
         result=True
     ), f"One or more VR haven't reached expected state {state} within the time limit."
 
     return True
+
+
+def wait_for_vr_creation(count, namespace, timeout=300):
+    """
+    Wait for all VR resources to be deleted in the given namespace
+
+    Args:
+        count (int): Expected number of VR resources
+        namespace (str): the namespace of the VR resources
+        timeout (int): time in seconds to wait for VR resources to be created
+            or reach expected state
+
+    """
+    wait_for_vr_count(count, namespace, timeout)
+    wait_for_vr_state("primary", namespace, timeout)
+
+
+def wait_for_vr_deletion(namespace, timeout=300):
+    """
+    Wait for all VR resources to be deleted in the given namespace
+
+    Args:
+        namespace (str): the namespace of the VR resources
+        timeout (int): time in seconds to wait for VR resources to be created
+            or reach expected state
+
+    """
+    wait_for_vr_state("secondary", namespace, timeout)
+    wait_for_vr_count(0, namespace, timeout)
