@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-3925")
 @tier2
 @skipif_ocs_version("<4.11")
-class TestPrefixList:
+class TestS3PrefixList:
 
     """
     Test S3 prefix list operations
     """
 
-    def test_prefix_list(
+    def test_s3_prefix_list(
         self,
         awscli_pod_session,
         bucket_factory,
@@ -73,6 +73,7 @@ class TestPrefixList:
             logger.info(f"uploaded second prefix: {second_prefix_path}")
 
             full_prefix = f"{prefix}/{pref[2]}/"
+
             try:
                 listed_objects = list_objects_from_bucket(
                     podobj=awscli_pod_session,

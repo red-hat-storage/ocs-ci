@@ -159,7 +159,7 @@ def retrieve_anon_s3_resource():
 
 
 def list_objects_from_bucket(
-    podobj, target, prefix=None, s3_obj=None, signed_request_creds=None, **kwargs
+    pod_obj, target, prefix=None, s3_obj=None, signed_request_creds=None, **kwargs
 ):
     """
     Lists objects in a bucket using s3 ls command
@@ -170,9 +170,11 @@ def list_objects_from_bucket(
         target: target bucket
         prefix: prefix
         s3_obj: obc/mcg object
+
     Returns:
         List of objects in a bucket
     """
+
     if prefix:
         retrieve_cmd = f"ls {target}/{prefix}"
     else:
@@ -187,7 +189,7 @@ def list_objects_from_bucket(
         ]
     else:
         secrets = None
-    podobj.exec_cmd_on_pod(
+    return pod_obj.exec_cmd_on_pod(
         command=craft_s3_command(
             retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
         ),
