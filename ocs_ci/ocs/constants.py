@@ -1360,7 +1360,7 @@ HAPROXY_SERVICE = "/etc/systemd/system/haproxy.service"
 CHRONY_CONF = "/etc/chrony.conf"
 
 # NTP server
-RH_NTP_CLOCK = "clock.redhat.com"
+RH_NTP_CLOCK = "clock1.rdu2.redhat.com"
 
 # Disruptions pod names
 OSD = "osd"
