@@ -261,3 +261,24 @@ def check_ceph_metrics_available():
         current_platform=config.ENV_DATA["platform"].lower(),
     )
     return list_of_metrics_without_results == []
+
+
+def check_if_monitoring_stack_exists():
+    """
+    Check if monitoring is configured on the cluster with ODF backed PVCs
+
+    Returns:
+        bool: True if monitoring is configured on the cluster, false otherwise
+
+    """
+    logger.info("Checking if monitoring stack exists on the cluster")
+    # Validate the pvc are created and bound
+    logger.info("Verify pvc are created")
+    pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
+    pvc_names = [pvc["metadata"]["name"] for pvc in pvc_list["items"]]
+    if pvc_names:
+        logger.info("Monitoring stack already exists on the cluster")
+        return True
+    else:
+        logger.info("Monitoring stack is not configured on the cluster")
+        return False

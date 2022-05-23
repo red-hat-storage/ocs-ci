@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
 )
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.utility import version
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import upload_file, encode, decode
@@ -267,6 +268,7 @@ def generate_exporter_script():
         str: path to the exporter script
 
     """
+    logger.info("generating external exporter script")
     # generate exporter script through packagemanifest
     ocs_operator_name = defaults.OCS_OPERATOR_NAME
     operator_selector = get_selector_for_ocs_operator()
@@ -275,9 +277,14 @@ def generate_exporter_script():
         selector=operator_selector,
     )
     ocs_operator_data = package_manifest.get()
-    encoded_script = ocs_operator_data["status"]["channels"][0]["currentCSVDesc"][
-        "annotations"
-    ]["external.features.ocs.openshift.io/export-script"]
+    csv = get_ocs_csv()
+    for each_csv in ocs_operator_data["status"]["channels"]:
+        if each_csv["currentCSV"] == csv.resource_name:
+            logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
+            encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                "external.features.ocs.openshift.io/export-script"
+            ]
+            break
 
     # decode the exporter script and write to file
     external_script = decode(encoded_script)

@@ -562,6 +562,12 @@ acm_configuration = {
         "//span[@class='pf-c-card__header-toggle-icon']",
         By.XPATH,
     ),
+    "cc_deployment_yaml_toggle_button": (
+        "//span[@class='pf-c-switch__toggle']",
+        By.XPATH,
+    ),
+    "cc_yaml_editor": ("//div[@class='yamlEditorContainer']", By.CSS_SELECTOR),
+    "cc_install_config_tab": ("//a[normalize-space()='install-config']", By.XPATH),
 }
 
 add_capacity = {

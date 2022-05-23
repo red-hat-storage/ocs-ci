@@ -131,6 +131,7 @@ from ocs_ci.ocs.longevity_stage2 import (
     _multi_pvc_pod_lifecycle_factory,
     _multi_obc_lifecycle_factory,
 )
+from ocs_ci.ocs.longevity import start_app_workload
 
 log = logging.getLogger(__name__)
 
@@ -2802,6 +2803,20 @@ def fio_job_dict_session():
 
 
 @pytest.fixture(scope="function")
+def start_apps_workload(request):
+    """
+    Application workload fixture which reads the list of app workloads to run and
+    starts running those iterating over the workloads in the list for a specified
+    duration
+
+    Usage:
+    start_app_workload(workloads_list=['pgsql', 'couchbase', 'cosbench'], run_time=60,
+    run_in_bg=True)
+    """
+    return start_app_workload(request)
+
+
+@pytest.fixture(scope="function")
 def pgsql_factory_fixture(request):
     """
     Pgsql factory fixture
@@ -2814,6 +2829,7 @@ def pgsql_factory_fixture(request):
         threads=None,
         transactions=None,
         scaling_factor=None,
+        samples=None,
         timeout=None,
         sc_name=None,
     ):
@@ -2826,6 +2842,8 @@ def pgsql_factory_fixture(request):
             threads (int): Number of threads
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
+            samples (int): Number of samples to run
+
             timeout (int): Time in seconds to wait
 
         """
@@ -2839,6 +2857,7 @@ def pgsql_factory_fixture(request):
             threads=threads,
             transactions=transactions,
             scaling_factor=scaling_factor,
+            samples=samples,
             timeout=timeout,
         )
 
@@ -2958,7 +2977,7 @@ def couchbase_factory_fixture(request):
         """
         Clean up
         """
-        couchbase.teardown()
+        couchbase.cleanup()
 
     request.addfinalizer(finalizer)
     return factory

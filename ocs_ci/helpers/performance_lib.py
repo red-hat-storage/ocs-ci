@@ -13,6 +13,7 @@ from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
+
 interface_data = {
     constants.CEPHBLOCKPOOL: {
         "prov": "csi-rbdplugin-provisioner",
@@ -400,6 +401,166 @@ def extruct_timestamp_from_log(line):
     results = f"{this_year} {mon_day}"
     logger.debug(f"The Results timestamp is : {results}")
     return results
+
+
+def measure_total_snapshot_creation_time(snap_name, start_time):
+    """
+    Measure Snapshot creation time based on logs
+
+    Args:
+        snap_name (str): Name of the snapshot for creation time measurement
+        start_time (str): start time, starting from which the logs are searched
+
+    Returns:
+        float: Creation time for the snapshot
+
+    """
+    start = get_snapshot_time(snap_name, "start", start_time)
+    end = get_snapshot_time(snap_name, "end", start_time)
+
+    if start and end:
+        total = end - start
+        return total.total_seconds()
+
+    if start is None:
+        err_msg = f"Can not find start creation time of snapshot {snap_name}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+    if end is None:
+        err_msg = f"Can not find end creation time of snapshot {snap_name}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+
+def get_snapshot_time(snap_name, status, start_time):
+    """
+    Get the starting/ending creation time of a snapshot based on logs
+
+    The time and date extraction code below has been modified to read
+    the month and day data in the logs.  This fixes an error where negative
+    time values are calculated when test runs cross midnight.  Also, previous
+    calculations would not set the year, and so the calculations were done
+    as if the year were 1900.  This is not a problem except that 1900 was
+    not a leap year and so the next February 29th would throw ValueErrors
+    for the whole day.  To avoid this problem, changes were made to also
+    include the current year.
+
+    Incorrect times will still be given for tests that cross over from
+    December 31 to January 1.
+
+    Args:
+        pvc_name (str / list): Name of the PVC(s) for creation time
+                               the list will be list of pvc objects
+        status (str): the status that we want to get - Start / End
+        start_time (str): start time, starting from which the logs are searched
+
+    Returns:
+        datetime object: Time of searched snapshot operation
+
+    """
+
+    def get_pattern_time(log, snapname, pattern):
+        """
+        Get the time of pattern in the log
+
+        Args:
+            log (list): list of all lines in the log file
+            snapname (str): the name of the snapshot
+            pattern (str): the pattern that need to be found in the log (start / bound)
+
+        Returns:
+            str: string of the pattern timestamp in the log, if not found None
+
+        """
+        this_year = str(datetime.now().year)
+        for line in log:
+            if re.search(snapname, line) and re.search(pattern, line):
+                mon_day = " ".join(line.split(" ")[0:2])
+                return f"{this_year} {mon_day}"
+        return None
+
+    pods = run_oc_command(cmd="get pod", namespace="openshift-cluster-storage-operator")
+
+    if "Error in command" in pods:
+        raise Exception("Can not get csi controller pod")
+
+    log_names = []
+    for line in pods:
+        if (
+            "csi-snapshot-controller" in line
+            and "csi-snapshot-controller-operator" not in line
+        ):
+            log_names.append(line.split()[0])
+
+    log_lines = []
+    for log in log_names:
+        sublog_lines = run_oc_command(
+            f"logs {log} --since-time={start_time}",
+            "openshift-cluster-storage-operator",
+        )
+        for l in sublog_lines:
+            log_lines.extend(l.split("\n"))
+
+    if status.lower() == "start":
+        pattern = "Creating content for snapshot"
+    elif status.lower() == "end":
+        pattern = "ready to use"
+    else:
+        logger.error(f"the status {status} is invalid.")
+        return None
+
+    time = get_pattern_time(log_lines, snap_name, pattern)
+    if time:
+        return datetime.strptime(time, DATE_TIME_FORMAT)
+    else:
+        return None
+
+
+def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
+    """
+
+    Measure PVC creation time, provided pvc name and time after which the PVC was created
+
+    Args:
+        interface (str) : an interface (RBD or CephFS) to run on
+        snapshot_id (str) : Id of the snapshot which creation time is measured
+        start_time (str): Formatted time from which and on to search the relevant logs
+
+    Returns:
+        (float) snapshot creation time in seconds
+
+    """
+    log_names = get_logfile_names(interface)
+    logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
+
+    st = None
+    et = None
+    time_format = "%H:%M:%S.%f"
+    for sublog in logs:
+        for line in sublog:
+            if (
+                "GRPC call: /csi.v1.Controller/CreateSnapshot" in line
+                and snapshot_id in line
+            ):
+                st = line.split(" ")[1]
+                st = datetime.strptime(st, time_format)
+            elif "GRPC response" in line and snapshot_id in line:
+                et = line.split(" ")[1]
+                et = datetime.strptime(et, time_format)
+    if st is None:
+        logger.error(f"Can not find start time of snapshot {snapshot_id}")
+        raise Exception(f"Can not find start time of snapshot {snapshot_id}")
+
+    if et is None:
+        logger.error(f"Can not find end time of snapshot {snapshot_id}")
+        raise Exception(f"Can not find end time of snapshot {snapshot_id}")
+
+    total_time = (et - st).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
+    return total_time
 
 
 def calculate_operation_time(name, times):

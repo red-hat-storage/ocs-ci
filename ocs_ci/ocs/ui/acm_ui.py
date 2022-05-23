@@ -5,6 +5,7 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
@@ -304,13 +305,14 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     def download_kubeconfig(self, authdir):
         get_kubeconf_secret_cmd = (
-            f"$(oc get secret -o name -n {self.cluster_name} "
+            f"oc get secret -o name -n {self.cluster_name} "
             f"-l {ACM_CLUSTER_DEPLOYMENT_LABEL_KEY}={self.cluster_name} "
-            f"-l {ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY}=kubeconfig)"
+            f"-l {ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY}=kubeconfig"
         )
+        secret_name = run_cmd(get_kubeconf_secret_cmd)
         extract_cmd = (
             f"oc extract -n {self.cluster_name} "
-            f"{get_kubeconf_secret_cmd} "
+            f"{secret_name} "
             f"--to={authdir} --confirm"
         )
         run_cmd(extract_cmd)
@@ -521,6 +523,14 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # Skip Automation for now
         self.click_next_button()
         # We are at Review page
+        self.do_click(
+            locator=self.acm_page_nav["cc_deployment_yaml_toggle_button"], timeout=120
+        )
+        # Edit pod network if required
+        if self.cluster_conf.ENV_DATA.get("cluster_network_cidr"):
+            self.do_click(locator=self.acm_page_nav["cc_install_config_tab"])
+            time.sleep(2)
+            self.add_different_pod_network()
         # Click on create
         self.do_click(locator=self.acm_page_nav["cc_create_button"])
         self.deployment_start_time = time.time()
@@ -544,6 +554,51 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
                 )
             self.deployment_status = "Creating"
             return
+
+    def add_different_pod_network(self):
+        """
+        Edit online cluster yaml to add network info
+
+        """
+
+        def _reset():
+            for device in actions.w3c_actions.devices:
+                device.clear_actions()
+
+        self.driver.execute_script(
+            "return document.querySelector('div.yamlEditorContainer')"
+        )
+        actions = ActionChains(self.driver)
+        yaml_first_line = "apiVersion: v1"
+        for _ in range(0, 3):
+            actions.send_keys(Keys.TAB).perform()
+            time.sleep(1)
+            _reset()
+        for _ in range(len(yaml_first_line)):
+            actions.send_keys(Keys.ARROW_RIGHT).perform()
+            time.sleep(1)
+            # Ugly code required,Otherwise every key sent will be in a
+            # queue upon perform() all the keys in the queue will
+            # be sent to yaml editor
+            _reset()
+        actions.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        _reset()
+
+        cluster_network = (
+            f"networking:\n  clusterNetwork:\n  - cidr: "
+            f"{self.cluster_conf.ENV_DATA['cluster_network_cidr']}\n"
+            f"  hostPrefix: 23\n"
+        )
+        actions.send_keys(cluster_network).perform()
+        _reset()
+        for _ in range(0, 2):
+            actions.send_keys(Keys.BACK_SPACE).perform()
+            _reset()
+        service_network = (
+            f"serviceNetwork:\n  - {self.cluster_conf.ENV_DATA['service_network_cidr']}"
+        )
+        actions.send_keys(service_network).perform()
 
     def fill_network_info(self):
         """

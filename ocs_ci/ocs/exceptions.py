@@ -480,6 +480,10 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class RDRDeploymentException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 
@@ -501,4 +505,12 @@ class UnknownCloneTypeException(Exception):
 
 
 class CephToolBoxNotFoundException(Exception):
+    pass
+
+
+class UnsupportedWorkloadError(Exception):
+    pass
+
+
+class RebootEventNotFoundException(Exception):
     pass

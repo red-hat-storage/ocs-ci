@@ -39,6 +39,8 @@ from ocs_ci.ocs.node import (
     get_encrypted_osd_devices,
     verify_worker_nodes_security_groups,
 )
+from ocs_ci.ocs.version import get_ocp_version
+from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
 from ocs_ci.helpers.helpers import get_secret_names
 from ocs_ci.utility import (
     localstorage,
@@ -471,6 +473,9 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
     assert utils.ceph_health_check(namespace, health_check_tries, health_check_delay)
+    # Let's wait for storage system after ceph health is OK to prevent fails on
+    # Progressing': 'True' state.
+    verify_storage_system()
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -512,6 +517,7 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
+    verify_storage_system()
 
 
 def basic_verification(ocs_registry_image=None):
@@ -524,7 +530,6 @@ def basic_verification(ocs_registry_image=None):
 
     """
     verify_ocs_csv(ocs_registry_image)
-    verify_storage_system()
     verify_storage_cluster()
     verify_noobaa_endpoint_count()
     verify_storage_cluster_images()
@@ -1093,7 +1098,8 @@ def verify_managed_service_resources():
     4. Verify that noobaa-operator replicas is set to 0
     5. Verify managed ocs secrets
     6. If cluster is Provider, verify resources specific to provider clusters
-    7. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
+    7. Verify that version of Prometheus is 4.10
+    8. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1158,6 +1164,13 @@ def verify_managed_service_resources():
         verify_provider_resources()
     else:
         verify_consumer_storagecluster(sc_data)
+    ocp_version = get_semantic_version(get_ocp_version(), only_major_minor=True)
+    if ocp_version < VERSION_4_11:
+        prometheus_csv = csv.get_csvs_start_with_prefix(
+            constants.OSE_PROMETHEUS_OPERATOR, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        prometheus_version = prometheus_csv[0]["spec"]["version"]
+        assert prometheus_version.startswith("4.10.")
 
 
 def verify_provider_resources():
@@ -1299,7 +1312,7 @@ def verify_consumer_storagecluster(sc_data):
     Verify that Storagecluster is has:
     1. externalStorage: enable: true
     2. storageProviderEndpoint: IP:31659
-    3. TODO: onboardingTicket
+    3. onboardingTicket is present
     4. TODO: requestedCapacity
     5. catsrc existence
 
@@ -1315,6 +1328,11 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
+    log.info(
+        f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
+    )
+    assert len(ticket) > 500
     catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")

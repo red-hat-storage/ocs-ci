@@ -683,7 +683,7 @@ RBD_SIDECAR_PATCH_CMD = (
     ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
     '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
-RBD_SIDECAR_COUNT = 16
+RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -1682,11 +1682,13 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
-ACM_HUB_DOWNSTREAM_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
-ACM_HUB_DOWNSTREAM_ICSP_YAML = os.path.join(
+ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
+ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
 )
-ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
+ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
@@ -1711,3 +1713,6 @@ VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
 SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
 SPACE = " "
+
+# Longevity constants
+STAGE_0_NAMESPACE = "ever-running-project"

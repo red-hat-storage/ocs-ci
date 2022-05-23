@@ -11,7 +11,13 @@ from ocs_ci.ocs.exceptions import (
     InvalidStatusCode,
     UnexpectedBehaviour,
 )
-from ocs_ci.framework.testlib import MCGTest, tier1, tier2, tier3, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    MCGTest,
+    tier1,
+    tier2,
+    tier3,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.resources.bucket_policy import (
     NoobaaAccount,
     HttpResponseParser,
@@ -31,6 +37,9 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_bucket_website,
     s3_get_bucket_versioning,
     s3_put_bucket_versioning,
+    list_multipart_upload,
+    list_uploaded_parts,
+    complete_multipart_upload,
 )
 from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import (
@@ -38,7 +47,7 @@ from ocs_ci.ocs.constants import (
     bucket_version_action_list,
     object_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 
@@ -1046,3 +1055,62 @@ class TestS3BucketPolicy(MCGTest):
             assert s3_get_object(
                 user, s3_bucket[0].name, "index.html"
             ), f"Failed: Get Object by user {user.email_id}"
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-3920")
+    @skipif_ocs_version("<4.10")
+    @bugzilla("2054540")
+    def test_multipart_with_policy(self, mcg_obj, bucket_factory):
+        """
+        Test Multipart upload with bucket policy set on the bucket
+        """
+        bucket = bucket_factory(interface="OC")[0].name
+        obc_obj = OBC(bucket)
+        part_body = "Random data-" + str(uuid.uuid4().hex)
+        object_key = "MpuObjKey"
+
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj.obc_account,
+            actions_list=[
+                "ListBucketMultipartUploads",
+                "ListMultipartUploadParts",
+                "PutObject",
+            ],
+            resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
+            effect="Allow",
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Creates and gets policy
+        logger.info(f"Creating policy on bucket: {obc_obj.bucket_name}")
+        put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+
+        logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
+
+        logger.info(f"Initiating MP Upload on Bucket: {bucket} with Key {object_key}")
+        upload_id = create_multipart_upload(obc_obj, bucket, object_key)
+        logger.info(
+            f"Listing the MP Upload : {list_multipart_upload(obc_obj, bucket)['Uploads']}"
+        )
+
+        # Uploading individual part with no body to the Bucket
+        logger.info(f"Uploading to the bucket: {bucket}")
+        part_etag = obc_obj.s3_client.upload_part(
+            Bucket=bucket,
+            Key=object_key,
+            Body=part_body,
+            UploadId=upload_id,
+            PartNumber=1,
+        )["ETag"]
+
+        # Listing the Uploaded part
+        logger.info(
+            f"Listing the individual part: {list_uploaded_parts(obc_obj, bucket, object_key, upload_id)['Parts']}"
+        )
+        uploaded_part = [{"ETag": part_etag, "PartNumber": 1}]
+
+        # Completing the Multipart Upload
+        logger.info(f"Completing the MP Upload with on bucket: {bucket}")
+        complete_multipart_upload(obc_obj, bucket, object_key, upload_id, uploaded_part)
