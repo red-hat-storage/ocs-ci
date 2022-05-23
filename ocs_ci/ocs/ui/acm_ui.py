@@ -5,11 +5,8 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
-<<<<<<< HEAD
 from selenium.webdriver.common.action_chains import ActionChains
-=======
 from ocs_ci.deployment import vmware
->>>>>>> 68877c1d (Implement teardown for ACM deployed OCP clusters)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI

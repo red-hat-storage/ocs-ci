@@ -480,11 +480,11 @@ class ACMClusterDeployException(Exception):
     pass
 
 
-<<<<<<< HEAD
 class RDRDeploymentException(Exception):
-=======
+    pass
+
+
 class ACMClusterDestroyException(Exception):
->>>>>>> 68877c1d (Implement teardown for ACM deployed OCP clusters)
     pass
 
 
