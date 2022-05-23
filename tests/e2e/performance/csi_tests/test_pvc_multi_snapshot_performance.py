@@ -21,9 +21,7 @@ from ocs_ci.framework.testlib import (
     performance,
 )
 
-from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -32,6 +30,8 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources import ocs
+from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers.performance_lib import run_oc_command
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         super(TestPvcMultiSnapshotPerformance, self).setup()
 
         self.total_creation_time = 0
+        self.total_csi_creation_time = 0
         self.total_creation_speed = 0
 
         # Getting the total Storage capacity
@@ -201,7 +202,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(f"Can not delete project {self.nss_name}")
             raise CommandFailed(f"{self.nss_name} was not created")
 
-        # After deleteing all data from the cluster, we need to wait until it will re-balnce
+        # After deleting all data from the cluster, we need to wait until it will re-balance
         ceph_health_check(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
         )
@@ -245,32 +246,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(err_msg)
             raise Exception(err_msg)
         return results
-
-    def get_log_names(self):
-        """
-        Finding the name of snapshot logging file
-        the start time is in the 'csi-snapshot-controller' pod, and
-        the end time is in the provisioner pod (csi-snapshotter container)
-
-        """
-        self.log_names = {"start": [], "end": []}
-        log.info("Looking for logs pod name")
-
-        # Getting csi log name for snapshot start creation messages
-        results = self.get_csi_pod(namespace="openshift-cluster-storage-operator")
-        for line in results:
-            if "csi-snapshot-controller" in line and "operator" not in line:
-                self.log_names["start"].append(line.split()[0])
-
-        # Getting csi log name for snapshot end creation messages
-        results = self.get_csi_pod(namespace="openshift-storage")
-        for line in results:
-            if "prov" in line and self.fs_type in line:
-                self.log_names["end"].append(line.split()[0])
-
-        log.info(
-            f"The CSI logs for the test are : {json.dumps(self.log_names, indent=4)}"
-        )
 
     def build_fio_command(self):
         """
@@ -340,7 +315,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info(f"Taking snapshot number {snap_num}")
         # Getting UTC time before test starting for log retrieve
-        UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         snap_name = f"pvc-snap-{snap_num}-"
         snap_name += self.pvc_obj.name.split("-")[-1]
         self.snap_templ["metadata"]["name"] = snap_name
@@ -361,6 +336,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         timeout = 720
         sleep_time = 10
         snap_con_name = None
+        snap_uid = None
         while timeout > 0:
             res = run_oc_command(
                 f"get volumesnapshot {snap_name} -o yaml", namespace=self.nss_name
@@ -373,6 +349,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                     if res["status"]["readyToUse"]:
                         log.info(f"{snap_name} Created and ready to use")
                         snap_con_name = res["status"]["boundVolumeSnapshotContentName"]
+                        snap_uid = res["metadata"]["uid"]
                         break
                     else:
                         log.info(
@@ -392,92 +369,17 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                 log.error(err_msg)
                 raise Exception(err_msg)
         if snap_con_name:
-            return self.get_creation_time(snap_name, snap_con_name, UTC_datetime)
+            creation_time = performance_lib.measure_total_snapshot_creation_time(
+                snap_name, start_time
+            )
+            csi_creation_time = performance_lib.measure_csi_snapshot_creation_time(
+                self.interface, snap_uid, start_time
+            )
+            return (creation_time, csi_creation_time)
         else:
             err_msg = "Snapshot was not created on time"
             log.error(err_msg)
             raise TimeoutError(err_msg)
-
-    def read_logs(self, kind, namespace, start_time):
-        """
-        Reading the csi-driver logs, since we use different logs for the start time
-        for end time (creation snapshot), we call this function twice.
-
-        Args:
-            kind (str): the kind of logs to read 'start' or 'end'
-            namespace (str): in which namespace the pod exists
-            start_time (time): the start time of the specific test,
-               so we dont need to read the full log
-
-        Returns:
-            list : the contant of all read logs(s) - can be more then one log
-
-        """
-        logs = []
-        # The pod with the logs for 'start' creation time have only one container
-        container = ""
-        if kind == "end":
-            # The pod with the logs for 'end' creation time have more then one container
-            container = "-c csi-snapshotter"
-        for l in self.log_names[kind]:
-            logs.append(
-                run_oc_command(
-                    f"logs {l} {container} --since-time={start_time}",
-                    namespace=namespace,
-                )
-            )
-        return logs
-
-    def get_creation_time(self, snap_name, content_name, start_time):
-        """
-        Calculate the creation time of the snapshot.
-        find the start / end time in the logs, and calculate the total time.
-
-        Args:
-            snap_name (str): the snapshot name that create
-            content_name (str): the content name of the snapshot, the end time
-             lodged on the content name and not on the snap name.
-            start_time (time): time of test starting so, retrieving log will be short as possible
-
-        Returns:
-            int: creation time in seconds
-
-        Raises:
-            General exception : can not found start/end of creation time
-
-        """
-
-        # Start and End snapshot creation time
-        times = {"start": None, "end": None}
-        logs_info = {
-            "start": {
-                "ns": "openshift-cluster-storage-operator",
-                "log_line": "Creating content for snapshot",
-            },
-            "end": {"ns": "openshift-storage", "log_line": "readyToUse true"},
-        }
-
-        for op in ["start", "end"]:
-            logs = self.read_logs(op, logs_info[op]["ns"], start_time)
-            for sublog in logs:
-                for line in sublog:
-                    if (snap_name in line or content_name in line) and logs_info[op][
-                        "log_line"
-                    ] in line:
-                        times[op] = line.split(" ")[1]
-                        times[op] = datetime.datetime.strptime(times[op], time_format)
-            if times[op] is None:
-                err_msg = f"Can not find {op} time of {snap_name}"
-                log.error(err_msg)
-                raise Exception(err_msg)
-
-        results = (times["end"] - times["start"]).total_seconds()
-        log.debug(
-            f"Start creation time is : {times['start']}, End creation time is : {times['end']}"
-            f" and Total creation time is {results}"
-        )
-
-        return results
 
     def run(self):
         """
@@ -489,18 +391,24 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info(f"Starting test number {test_num}")
 
             # Running IO on the POD - (re)-write data on the PVC
-            self.pod_obj.exec_cmd_on_pod(self.fio_cmd, out_yaml_format=False)
+            self.pod_obj.exec_cmd_on_pod(
+                self.fio_cmd, out_yaml_format=False, timeout=3600
+            )
 
             # Taking Snapshot of the PVC
-            ct = self.create_snapshot(test_num)
+            ct, sci_ct = self.create_snapshot(test_num)
             speed = self.filesize / ct
             self.total_creation_time += ct
+            self.total_csi_creation_time += sci_ct
             self.total_creation_speed += speed
 
-            results.append({"Snap Num": test_num, "time": ct, "speed": speed})
+            results.append(
+                {"Snap Num": test_num, "time": ct, "csi_time": sci_ct, "speed": speed}
+            )
             log.info(
                 f"Results for snapshot number {test_num} are : "
-                f"Creation time is {ct} , Creation speed {speed}"
+                f"Creation time is {ct} , Creation speed {speed}, "
+                f"Csi creation time is {sci_ct}"
             )
 
         log.debug(f"All results are : {json.dumps(results, indent=3)}")
@@ -650,7 +558,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             f"Content of snapshot yaml file {json.dumps(self.snap_templ, indent=4)}"
         )
 
-        self.get_log_names()
         self.build_fio_command()
         self.start_time = self.get_time()
 
@@ -665,6 +572,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         full_results.add_key(
             "avg_creation_time",
             f"{float(self.total_creation_time / self.num_of_snaps):.2f}",
+        )
+        full_results.add_key(
+            "avg_csi_creation_time",
+            f"{float(self.total_csi_creation_time / self.num_of_snaps):.2f}",
         )
         full_results.add_key(
             "avg_creation_speed",
