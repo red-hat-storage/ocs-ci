@@ -3,7 +3,6 @@ Test to run the maximum supportable snapshots
 """
 
 # Builtin modules
-import datetime
 import logging
 import tempfile
 import time
