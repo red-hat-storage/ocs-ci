@@ -76,7 +76,7 @@ class TestS3PrefixList:
 
             try:
                 listed_objects = list_objects_from_bucket(
-                    podobj=awscli_pod_session,
+                    pod_obj=awscli_pod_session,
                     s3_obj=s3_obj,
                     target=bucket_name,
                     prefix=full_prefix,
