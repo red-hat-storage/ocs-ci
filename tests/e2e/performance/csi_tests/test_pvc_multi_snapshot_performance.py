@@ -304,7 +304,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
     def create_snapshot(self, snap_num):
         """
-        Creating snapshot of volume, and measure the creation time
+        Creating snapshot of volume
+        measure the total snapshot creation time
+        and the CSI creation time
 
         Args:
             snap_num (int) the number of snapshot to create
@@ -435,9 +437,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
            size is depend on storage capacity, but not less then 1 GiB
            it will use ~75% capacity of the Storage, Min storage capacity 1 TiB
         2. Fill the PVC with 80% of data
-        3. Take a snapshot of the PVC and measure the time of creation.
+        3. Take a snapshot of the PVC and measure the total and CSI times of creation.
         4. re-write the data on the PVC
-        5. Take a snapshot of the PVC and measure the time of creation.
+        5. Take a snapshot of the PVC and measure the total and the CSI times of creation.
         6. repeat steps 4-5 the numbers of snapshot we want to take : 512
            this will be run by outside script for low memory consumption
         7. print all information.
@@ -457,7 +459,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         if self.dev_mode:
             self.num_of_snaps = 2
 
-        log.info(f"Going to Create {self.num_of_snaps} {interface_type} snapshots")
+        log.info(f"Going to create {self.num_of_snaps} {interface_type} snapshots")
 
         # since we do not want to use more then 65%, we add 35% to the needed
         # capacity, and minimum PVC size is 1 GiB
@@ -498,7 +500,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             fs_name=self.sc_name,
         )
         log.info(f"The new SC is : {self.sc_obj.name}")
-        log.debug(f"All Sc data is {json.dumps(self.sc_obj.data, indent=3)}")
+        log.debug(f"All SC data is {json.dumps(self.sc_obj.data, indent=3)}")
 
         # Create new VolumeSnapshotClass
         self.snap_class = self.create_snapshotclass(self.interface)
@@ -590,12 +592,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             res_link = full_results.results_link()
             log.info(f"The Result can be found at : {res_link}")
 
-            # Create text file with results of all subtest (4 - according to the parameters)
+            # Create text file with results of all subtests (2 - according to the parameters)
             self.write_result_to_file(res_link)
 
     def test_pvc_multiple_snapshot_performance_results(self):
         """
-        This is not a test - it only check that previous test completed and finish
+        This is not a test - it only checks that previous tests were completed and finished
         as expected with reporting the full results (links in the ES) of previous 2 tests
         """
         self.number_of_tests = 2
