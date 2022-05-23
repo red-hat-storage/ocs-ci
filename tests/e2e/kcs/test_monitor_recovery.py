@@ -26,6 +26,11 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_deployments_having_label,
     get_mds_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_rbdfsplugin_provisioner_pods,
+    get_rgw_pods,
+    get_noobaa_pods,
+    get_plugin_pods,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
@@ -102,8 +107,7 @@ class TestMonitorRecovery(E2ETest):
     ):
         """
         Verifies Monitor recovery procedure as per:
-        https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.9/
-        html-single/troubleshooting_openshift_container_storage/index
+        https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.8/html/troubleshooting_openshift_container_storage/restoring-the-monitor-pods-in-openshift-container-storage_rhocs
 
         """
         # Initialize mon recovery class
@@ -171,6 +175,8 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
         remove_ceph_warn()
+        logger.info("Recovering mcg by deleting the pods")
+        recover_mcg()
 
         self.sanity_helpers.health_check(tries=10)
 
@@ -446,11 +452,6 @@ class MonitorRecovery(object):
             logger.info(f"Reverting {dep}")
             revert_patch = f"replace --force -f {dep}"
             self.ocp_obj.exec_oc_cmd(revert_patch)
-        logger.info("Sleeping and waiting for all pods up and running..")
-        time.sleep(120)
-        assert pod.wait_for_pods_to_be_running(
-            timeout=600
-        ), "Pods did not reach running state"
 
     def backup_deployments(self):
         """
@@ -691,16 +692,53 @@ def corrupt_ceph_monitors():
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
 
+def recover_mcg():
+    """
+    Recovery procedure for noobaa by re-spinning the pods after mon recovery
+
+    """
+    logger.info("Re-spinning noobaa pods")
+    for noobaa_pod in get_noobaa_pods():
+        noobaa_pod.delete()
+    for noobaa_pod in get_noobaa_pods():
+        wait_for_resource_state(resource=noobaa_pod, state=constants.STATUS_RUNNING)
+    if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+        logger.info("Re-spinning RGW pods")
+        for rgw_pod in get_rgw_pods():
+            rgw_pod.delete()
+        for rgw_pod in get_rgw_pods():
+            wait_for_resource_state(resource=rgw_pod, state=constants.STATUS_RUNNING)
+
+
 def remove_ceph_warn():
     """
-    Archives all ceph crashes and mute warnings
+    Archives all ceph crashes and removes warnings by re-spinning client and mon pods
 
     """
     toolbox = pod.get_ceph_tools_pod()
     toolbox.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-    toolbox.exec_ceph_cmd(
-        ceph_cmd="ceph config set mon auth_allow_insecure_global_id_reclaim false"
-    )
+    csi_pods = []
+    interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+    for interface in interfaces:
+        plugin_pods = get_plugin_pods(interface)
+        csi_pods += plugin_pods
+
+    cephfs_provisioner_pods = get_cephfsplugin_provisioner_pods()
+    rbd_provisioner_pods = get_rbdfsplugin_provisioner_pods()
+
+    csi_pods += cephfs_provisioner_pods
+    csi_pods += rbd_provisioner_pods
+    for csi_pod in csi_pods:
+        csi_pod.delete()
+    for mds_pod in get_mds_pods():
+        mds_pod.delete()
+    for mds_pod in get_mds_pods():
+        wait_for_resource_state(resource=mds_pod, state=constants.STATUS_RUNNING)
+    for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        mon.delete()
+    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for mon in mon_pods:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
 
 
 def ceph_fs_recovery():
