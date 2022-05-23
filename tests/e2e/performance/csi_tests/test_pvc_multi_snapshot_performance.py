@@ -317,7 +317,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info(f"Taking snapshot number {snap_num}")
         # Getting UTC time before test starting for log retrieve
-        start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_time = self.get_time("csi")
         snap_name = f"pvc-snap-{snap_num}-"
         snap_name += self.pvc_obj.name.split("-")[-1]
         self.snap_templ["metadata"]["name"] = snap_name
