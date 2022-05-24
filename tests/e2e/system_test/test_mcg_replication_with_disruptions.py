@@ -141,36 +141,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info("Bi directional bucket replication working as expected")
 
-        # write some object to any of the bucket, followed by immediate cluster restart
-        logger.info("Checking replication when there is a cluster reboot!!")
-        written_random_objects = write_random_test_objects_to_bucket(
-            awscli_pod_session,
-            target_bucket_name,
-            test_directory_setup.origin_dir,
-            mcg_obj=mcg_obj_session,
-            amount=1,
-            pattern="third-write-",
-        )
-        logger.info(f"Written objects: {written_random_objects}")
-
-        node_list = get_worker_nodes()
-        node_objs = get_node_objs(node_list)
-        nodes.restart_nodes(node_objs, timeout=500)
-        retry(
-            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
-            delay=15,
-        )(ocp.wait_for_cluster_connectivity(tries=400))
-        wait_for_pods_to_be_running(
-            namespace=config.ENV_DATA["cluster_namespace"], timeout=600
-        )
-        logger.info("Nodes rebooted successfully!!")
-
-        compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
-        )
-        logger.info("Objects sync works even when the cluster is rebooted")
-
         # delete all the s3-compatible namespace buckets objects and then recover it from other namespace bucket on
         # write
         logger.info(
@@ -203,7 +173,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             test_directory_setup.origin_dir,
             mcg_obj=mcg_obj_session,
             amount=1,
-            pattern="fourth-write-",
+            pattern="third-write-",
         )
         logger.info(f"Written objects: {written_random_objects}")
 
@@ -224,7 +194,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             test_directory_setup.origin_dir,
             mcg_obj=mcg_obj_session,
             amount=1,
-            pattern="fifth-write-",
+            pattern="fourth-write-",
         )
         logger.info(f"Written objects: {written_random_objects}")
 
@@ -241,3 +211,33 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Object sync works after the RGW pod restarted!!")
+
+        # write some object to any of the bucket, followed by immediate cluster restart
+        logger.info("Checking replication when there is a cluster reboot!!")
+        written_random_objects = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            target_bucket_name,
+            test_directory_setup.origin_dir,
+            mcg_obj=mcg_obj_session,
+            amount=1,
+            pattern="fifth-write-",
+        )
+        logger.info(f"Written objects: {written_random_objects}")
+
+        node_list = get_worker_nodes()
+        node_objs = get_node_objs(node_list)
+        nodes.restart_nodes(node_objs, timeout=500)
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(ocp.wait_for_cluster_connectivity(tries=400))
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"], timeout=600
+        )
+        logger.info("Nodes rebooted successfully!!")
+
+        compare_bucket_object_list(
+            mcg_obj_session, source_bucket_name, target_bucket_name
+        )
+        logger.info("Objects sync works even when the cluster is rebooted")
