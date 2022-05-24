@@ -142,6 +142,8 @@ BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
+CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
+CATSRC = "catsrc"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 
 # Provisioners
@@ -501,6 +503,10 @@ GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
 CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
+CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls

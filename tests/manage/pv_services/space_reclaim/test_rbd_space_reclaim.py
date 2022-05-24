@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.ocs import constants
@@ -114,6 +116,8 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Verify Succeeded result of ReclaimSpaceJob
         self.reclaim_space_job(reclaim_space_job)
+
+        time.sleep(120)
 
         # Verify space is reclaimed by checking the used size of the RBD pool
         used_after_reclaiming_space = fetch_used_size(
