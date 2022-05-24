@@ -104,107 +104,112 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info("Cleanup the test environment")
 
-        # Getting the name of the PCV's backed PV
-        try:
-            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
-        except KeyError:
-            log.error(
-                f"Cannot found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
-            )
-
-        # Getting the list of all snapshots
-        try:
-            snapshot_list = self.snapshot.get(all_namespaces=True)["items"]
-        except Exception as err:
-            log.error(f"Cannot get the list of snapshots : {err}")
-            snapshot_list = []
-
-        # Deleting al snapshots from the cluster
-        log.info(f"Trying to delete all ({len(snapshot_list)}) Snapshots")
-        log.debug(
-            f"The list of all snapshots is : {json.dumps(snapshot_list, indent=3)}"
-        )
-        for vs in snapshot_list:
-            snap_name = vs["metadata"]["name"]
-            log.info(f"Try to delete {snap_name}")
+        if self.full_teardown:
+            # Getting the name of the PCV's backed PV
             try:
-                self.snapshot.delete(resource_name=snap_name)
+                pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
+            except KeyError:
+                log.error(
+                    f"Cannot found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
+                )
+
+            # Getting the list of all snapshots
+            try:
+                snapshot_list = self.snapshot.get(all_namespaces=True)["items"]
             except Exception as err:
-                log.error(f"Cannot delete {snap_name} : {err}")
+                log.error(f"Cannot get the list of snapshots : {err}")
+                snapshot_list = []
 
-        # Deleting the pod which wrote data to the pvc
-        log.info(f"Deleting the test POD : {self.pod_obj.name}")
-        try:
-            self.pod_obj.delete()
-            log.info("Wait until the pod is deleted.")
-            self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
-        except Exception as ex:
-            log.error(f"Cannot delete the test pod : {ex}")
-
-        # Deleting the PVC which used in the test.
-        try:
-            log.info(f"Delete the PVC : {self.pvc_obj.name}")
-            self.pvc_obj.delete()
-            log.info("Wait until the pvc is deleted.")
-            self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
-        except Exception as ex:
-            log.error(f"Cannot delete the test pvc : {ex}")
-
-        # Delete the backend PV of the PVC
-        log.info(f"Try to delete the backend PV : {pv}")
-        try:
-            run_oc_command(f"delete pv {pv}")
-        except Exception as ex:
-            err_msg = f"cannot delete PV {pv} - [{ex}]"
-            log.error(err_msg)
-
-        # Deleting the StorageClass used in the test
-        log.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
-        try:
-            self.sc_obj.delete()
-            log.info("Wait until the SC is deleted.")
-            self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
-        except Exception as ex:
-            log.error(f"Can not delete the test sc : {ex}")
-
-        # Deleting the VolumeSnapshotClass used in the test
-        log.info(f"Deleting the test Snapshot Class : {self.snap_class.name}")
-        try:
-            self.snap_class.delete()
-            log.info("Wait until the VSC is deleted.")
-            self.snap_class.ocp.wait_for_delete(resource_name=self.snap_class.name)
-        except Exception as ex:
-            log.error(f"Can not delete the test vsc : {ex}")
-
-        # Deleting the Data pool
-        log.info(f"Deleting the test storage pool : {self.sc_name}")
-        self.delete_ceph_pool(self.sc_name)
-        # Verify deletion by checking the backend CEPH pools using the toolbox
-        results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
-        log.debug(f"Existing pools are : {results}")
-        if self.sc_name in results.split():
-            log.warning("The pool did not deleted by CSI, forcing delete it manually")
-            self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                f"ceph osd pool delete {self.sc_name} {self.sc_name} "
-                "--yes-i-really-really-mean-it"
+            # Deleting al snapshots from the cluster
+            log.info(f"Trying to delete all ({len(snapshot_list)}) Snapshots")
+            log.debug(
+                f"The list of all snapshots is : {json.dumps(snapshot_list, indent=3)}"
             )
-        else:
-            log.info(f"The pool {self.sc_name} was deleted successfully")
+            for vs in snapshot_list:
+                snap_name = vs["metadata"]["name"]
+                log.info(f"Try to delete {snap_name}")
+                try:
+                    self.snapshot.delete(resource_name=snap_name)
+                except Exception as err:
+                    log.error(f"Cannot delete {snap_name} : {err}")
 
-        # Deleting the namespace used by the test
-        log.info(f"Deleting the test namespace : {self.nss_name}")
-        switch_to_default_rook_cluster_project()
-        try:
-            self.proj.delete(resource_name=self.nss_name)
-            self.proj.wait_for_delete(resource_name=self.nss_name, timeout=60, sleep=10)
-        except CommandFailed:
-            log.error(f"Can not delete project {self.nss_name}")
-            raise CommandFailed(f"{self.nss_name} was not created")
+            # Deleting the pod which wrote data to the pvc
+            log.info(f"Deleting the test POD : {self.pod_obj.name}")
+            try:
+                self.pod_obj.delete()
+                log.info("Wait until the pod is deleted.")
+                self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
+            except Exception as ex:
+                log.error(f"Cannot delete the test pod : {ex}")
 
-        # After deleting all data from the cluster, we need to wait until it will re-balance
-        ceph_health_check(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
-        )
+            # Deleting the PVC which used in the test.
+            try:
+                log.info(f"Delete the PVC : {self.pvc_obj.name}")
+                self.pvc_obj.delete()
+                log.info("Wait until the pvc is deleted.")
+                self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
+            except Exception as ex:
+                log.error(f"Cannot delete the test pvc : {ex}")
+
+            # Delete the backend PV of the PVC
+            log.info(f"Try to delete the backend PV : {pv}")
+            try:
+                run_oc_command(f"delete pv {pv}")
+            except Exception as ex:
+                err_msg = f"cannot delete PV {pv} - [{ex}]"
+                log.error(err_msg)
+
+            # Deleting the StorageClass used in the test
+            log.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
+            try:
+                self.sc_obj.delete()
+                log.info("Wait until the SC is deleted.")
+                self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
+            except Exception as ex:
+                log.error(f"Can not delete the test sc : {ex}")
+
+            # Deleting the VolumeSnapshotClass used in the test
+            log.info(f"Deleting the test Snapshot Class : {self.snap_class.name}")
+            try:
+                self.snap_class.delete()
+                log.info("Wait until the VSC is deleted.")
+                self.snap_class.ocp.wait_for_delete(resource_name=self.snap_class.name)
+            except Exception as ex:
+                log.error(f"Can not delete the test vsc : {ex}")
+
+            # Deleting the Data pool
+            log.info(f"Deleting the test storage pool : {self.sc_name}")
+            self.delete_ceph_pool(self.sc_name)
+            # Verify deletion by checking the backend CEPH pools using the toolbox
+            results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
+            log.debug(f"Existing pools are : {results}")
+            if self.sc_name in results.split():
+                log.warning(
+                    "The pool did not deleted by CSI, forcing delete it manually"
+                )
+                self.ceph_cluster.toolbox.exec_cmd_on_pod(
+                    f"ceph osd pool delete {self.sc_name} {self.sc_name} "
+                    "--yes-i-really-really-mean-it"
+                )
+            else:
+                log.info(f"The pool {self.sc_name} was deleted successfully")
+
+            # Deleting the namespace used by the test
+            log.info(f"Deleting the test namespace : {self.nss_name}")
+            switch_to_default_rook_cluster_project()
+            try:
+                self.proj.delete(resource_name=self.nss_name)
+                self.proj.wait_for_delete(
+                    resource_name=self.nss_name, timeout=60, sleep=10
+                )
+            except CommandFailed:
+                log.error(f"Can not delete project {self.nss_name}")
+                raise CommandFailed(f"{self.nss_name} was not created")
+
+            # After deleting all data from the cluster, we need to wait until it will re-balance
+            ceph_health_check(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
+            )
 
         super(TestPvcMultiSnapshotPerformance, self).teardown()
 
@@ -454,6 +459,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         log.info(f"Logs file path name is : {self.full_log_path}")
         log.info(f"Reslut path is : {self.results_path}")
 
+        self.full_teardown = True
         self.num_of_snaps = snap_number
         if self.dev_mode:
             self.num_of_snaps = 2
@@ -599,6 +605,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         This is not a test - it only checks that previous tests were completed and finished
         as expected with reporting the full results (links in the ES) of previous 2 tests
         """
+
+        self.full_teardown = False
         self.number_of_tests = 2
         results_path = get_full_test_logs_path(
             cname=self, fname="test_pvc_multiple_snapshot_performance"
