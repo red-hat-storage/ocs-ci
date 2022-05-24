@@ -152,6 +152,7 @@ VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "lvmcluster"
+STORAGECLASSCLAIM = "StorageClassClaim"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

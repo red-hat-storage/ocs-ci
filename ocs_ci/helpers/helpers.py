@@ -3909,3 +3909,39 @@ def get_noobaa_db_used_space():
         f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
     )
     return df_out[-4]
+
+
+def create_storage_class_claim(
+    interface_type,
+    storage_class_claim_name=None,
+):
+    """
+    Create a storage class claim
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+        storage_class_claim_name (str): The name of storage class claim to create
+
+    Returns:
+        OCS: An OCS instance for the storage class claim
+    """
+    template_yaml = os.path.join(
+        constants.TEMPLATE_DIR, "storageclassclaim", "storageclassclaim.yaml"
+    )
+    sc_claim_data = templating.load_yaml(template_yaml)
+
+    if interface_type == constants.CEPHBLOCKPOOL:
+        type = "blockpool"
+    elif interface_type == constants.CEPHFILESYSTEM:
+        type = "sharedfilesystem"
+
+    sc_claim_data["spec"]["type"] = type
+    sc_claim_data["metadata"]["name"] = (
+        storage_class_claim_name
+        if storage_class_claim_name
+        else create_unique_resource_name(
+            f"test-{interface_type}", constants.STORAGECLASSCLAIM.lower()
+        )
+    )
+    return create_resource(**sc_claim_data)
