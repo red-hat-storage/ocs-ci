@@ -18,7 +18,7 @@ class TestObjectExpiration(MCGTest):
 
     """
 
-    @skipif_ocs_version("4.10")
+    @skipif_ocs_version("<4.10")
     @bugzilla("2034661")
     @pytest.mark.polarion_id("OCS-3929")
     @tier1
@@ -58,7 +58,7 @@ class TestObjectExpiration(MCGTest):
         ), "Failed: Put Object"
 
         logger.info("Sleeping for 600 seconds")
-        sleep(600)
+        sleep(300)
 
         logger.info(f"Getting {object_key} from bucket: {bucket} after 600 seconds")
         assert s3_get_object(
