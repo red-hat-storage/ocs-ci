@@ -142,8 +142,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(f"Cannot delete the test pod : {ex}")
 
         # Deleting the PVC which used in the test.
-        log.info(f"Delete the PVC : {self.pvc_obj.name}")
         try:
+            log.info(f"Delete the PVC : {self.pvc_obj.name}")
             self.pvc_obj.delete()
             log.info("Wait until the pvc is deleted.")
             self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
