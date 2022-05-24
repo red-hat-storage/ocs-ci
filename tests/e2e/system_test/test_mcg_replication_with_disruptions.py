@@ -233,7 +233,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         wait_for_pods_to_be_running(
-            namespace=config.ENV_DATA["cluster_namespace"], timeout=600
+            namespace=config.ENV_DATA["cluster_namespace"], timeout=800
         )
         logger.info("Nodes rebooted successfully!!")
 
