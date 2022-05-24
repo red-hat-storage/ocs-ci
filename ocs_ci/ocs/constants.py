@@ -1754,3 +1754,7 @@ SPACE = " "
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+
+
+FILE_CREATE_DELETE = os.path.join(TEMPLATE_WORKLOAD_DIR, "files_create_delete.sh")
+FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "fsync.c")
