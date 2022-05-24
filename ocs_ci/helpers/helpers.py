@@ -3752,8 +3752,8 @@ def create_reclaim_space_cronjob(
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
     """
-    reclaim_space_cronjob_name = (
-        reclaim_space_job_name or f"reclaimspacecronjob-{pvc_name}-{uuid4().hex}"
+    reclaim_space_cronjob_name = reclaim_space_job_name or create_unique_resource_name(
+        pvc_name, f"{constants.RECLAIMSPACECRONJOB}-{schedule}"
     )
     job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML)
     job_data["metadata"]["name"] = reclaim_space_cronjob_name

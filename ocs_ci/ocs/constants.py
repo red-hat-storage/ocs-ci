@@ -142,9 +142,7 @@ BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
-CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
-CATSRC = "catsrc"
-VOLUME_REPLICATION = "VolumeReplication"
+RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

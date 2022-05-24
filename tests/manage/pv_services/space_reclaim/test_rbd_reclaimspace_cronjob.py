@@ -36,7 +36,7 @@ class TestRbdSpaceReclaim(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             replica=self.pool_replica,
-            new_rbd_pool=True,
+            new_rbd_pool=False,
         )
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
@@ -72,11 +72,11 @@ class TestRbdSpaceReclaim(ManageTest):
         schedule = ["hourly", "midnight", "weekly"]
         # Fetch the used size of pool
         cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        log.info("Cephblock pool name {cbp_name}")
+        log.info(f"Cephblock pool name {cbp_name}")
         used_size_before_io = fetch_used_size(cbp_name)
         log.info(f"Used size before IO is {used_size_before_io}")
 
-        # Create three 4 GB file
+        # Create four 4 GB file
         for filename in [fio_filename1, fio_filename2, fio_filename3, fio_filename4]:
             pod_obj.run_io(
                 storage_type="fs",
@@ -107,9 +107,9 @@ class TestRbdSpaceReclaim(ManageTest):
                     raise
                 log.info(f"Verified: File {file_path} deleted.")
 
-            # Create ReclaimSpaceCronJob
-            for type in schedule:
-                reclaim_space_job = pvc_obj.create_reclaim_space_cronjob(schedule=type)
+        # Create ReclaimSpaceCronJob
+        for type in schedule:
+            reclaim_space_job = pvc_obj.create_reclaim_space_cronjob(schedule=type)
 
             # Wait for the Succeeded result of ReclaimSpaceJob
             try:
