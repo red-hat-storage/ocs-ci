@@ -10,6 +10,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,16 @@ def configure_allowed_domains_in_proxy():
 
     """
     # configure proxy on INT_SVC_INSTANCE - allow access to required sites
+    # import get_ocp_version here to avoid circular import
+    from ocs_ci.utility.utils import get_ocp_version
+
+    if get_semantic_version(get_ocp_version(), True) < VERSION_4_11:
+        int_svc_user = constants.EC2_USER
+    else:
+        int_svc_user = "core"
     private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
     ssh_int_svc = Connection(
-        config.DEPLOYMENT.get("int_svc_instance"), "ec2-user", private_key
+        config.DEPLOYMENT.get("int_svc_instance"), int_svc_user, private_key
     )
     # as we are inserting the two lines before first line one by one,
     # we have to launch the sed commands in reverse order
