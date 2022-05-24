@@ -57,10 +57,10 @@ class TestObjectExpiration(MCGTest):
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key, data=obj_data
         ), "Failed: Put Object"
 
-        logger.info("Sleeping for 600 seconds")
+        logger.info("Sleeping for 300 seconds")
         sleep(300)
 
-        logger.info(f"Getting {object_key} from bucket: {bucket} after 600 seconds")
+        logger.info(f"Getting {object_key} from bucket: {bucket} after 300 seconds")
         assert s3_get_object(
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key
         ), "Failed: Get Object"
