@@ -60,6 +60,7 @@ class TestAcceptanceManagedService(ManageTest):
         logger.info(f"oded123456{data_process_dict}")
         for expected_test in expected_tests:
             if data_process_dict.get(expected_test) is not True:
-                failure_tests.append(data_process_dict)
+                failure_tests.append(f"{expected_test}_failed")
                 logger.info(data_process_dict)
+        logger.info(failure_tests)
         assert len(failure_tests) == 0, f"{data_process_dict}"
