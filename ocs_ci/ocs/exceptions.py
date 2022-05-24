@@ -268,6 +268,10 @@ class ExternalClusterRGWEndPointPortMissing(Exception):
     pass
 
 
+class ExternalClusterCephfsMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 

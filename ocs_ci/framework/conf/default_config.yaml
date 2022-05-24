@@ -217,6 +217,9 @@ ENV_DATA:
   rosa_cli_version: '1.2.2'
   appliance_mode: true
 
+  # used in external mode deployment
+  restricted-auth-permission: false
+
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
