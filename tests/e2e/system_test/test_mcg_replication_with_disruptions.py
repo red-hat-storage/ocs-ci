@@ -161,7 +161,9 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             tries=60,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
-        wait_for_pods_to_be_running(namespace=config.ENV_DATA["cluster_namespace"])
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"], timeout=600
+        )
         logger.info("Nodes rebooted successfully!!")
 
         compare_bucket_object_list(
