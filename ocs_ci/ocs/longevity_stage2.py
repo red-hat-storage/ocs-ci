@@ -572,7 +572,7 @@ def stage2(
                 measure=measure,
             )
             multi_obc_lifecycle_factory(
-                num_of_obcs=num_of_obcs, bulk=bulk, measure=measure
+                num_of_obcs=num_of_obcs, bulk=bulk, measure=False
             )
 
             # Delay between Sequential and Bulk Operations
