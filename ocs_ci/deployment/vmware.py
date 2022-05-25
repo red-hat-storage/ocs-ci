@@ -431,7 +431,8 @@ class VSPHEREUPI(VSPHEREBASE):
             generate_terraform_vars_and_update_machine_conf()
 
             # Add shutdown_wait_timeout to VM's
-            add_shutdown_wait_timeout()
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_4:
+                add_shutdown_wait_timeout()
 
             # sync guest time with host
             vm_file = (
@@ -1116,13 +1117,21 @@ def change_mem_and_cpu():
         with open(constants.VSPHERE_MAIN, "r") as fd:
             obj = hcl2.load(fd)
             if worker_num_cpus:
-                obj["module"]["compute"]["num_cpu"] = worker_num_cpus
+                for each in obj["module"]:
+                    if "compute" in each.keys():
+                        each["compute"]["num_cpu"] = worker_num_cpus
             if master_num_cpus:
-                obj["module"]["control_plane"]["num_cpu"] = master_num_cpus
+                for each in obj["module"]:
+                    if "control_plane" in each.keys():
+                        each["control_plane"]["num_cpu"] = master_num_cpus
             if worker_memory:
-                obj["module"]["compute"]["memory"] = worker_memory
+                for each in obj["module"]:
+                    if "compute" in each.keys():
+                        each["compute"]["memory"] = worker_memory
             if master_memory:
-                obj["module"]["control_plane"]["memory"] = master_memory
+                for each in obj["module"]:
+                    if "control_plane" in each.keys():
+                        each["control_plane"]["memory"] = master_memory
         # Dump data to json file since hcl module
         # doesn't support dumping of data in HCL format
         dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
