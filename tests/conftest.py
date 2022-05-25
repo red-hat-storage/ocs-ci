@@ -3919,7 +3919,7 @@ def pvc_clone_factory(request):
         )
         storageclass = storageclass or pvc_obj.backed_sc
         access_mode = access_mode or pvc_obj.get_pvc_access_mode
-        volume_mode = volume_mode or getattr(pvc_obj, "volume_mode", None)
+        volume_mode = volume_mode or pvc_obj.get_pvc_vol_mode
 
         # Create clone
         clone_pvc_obj = pvc.create_pvc_clone(
