@@ -115,7 +115,7 @@ class OCPDeployWithACM(Deployment):
 
         super().deploy_cluster(log_cli_level=log_cli_level)
 
-    def destroy_cluster(self):
+    def destroy_cluster(self, log_cli_level=None):
         """
         This function specifically handles teardown of OCP clusters which
         are deployed through ACM

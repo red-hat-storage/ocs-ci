@@ -66,7 +66,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self):
+    def navigate_clusters_page(self, timeout=30):
         """
         Navigate to ACM Clusters Page
 
@@ -75,7 +75,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -368,32 +368,43 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         )
         # Click on destroy button
         self.do_click(self.acm_page_nav["cc_destroy_button"], timeout=300)
+        loc = format_locator(
+                self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                self.cluster_name
+        )
         if not self.check_element_presence(
-            locator=self.acm_page_nav["cc_cluster_being_destroyed_heading"], timeout=600
+            locator=(By.XPATH, loc[0]),
+            timeout=600
         ):
             raise ACMClusterDeployException(
                 "Something went wrong with destroy action "
                 f"for the cluster {self.cluster_name}"
             )
         self.destroy_status = "Destroying"
-        self.destr_start_time = time.time()
+        self.destroy_start_time = time.time()
 
     def get_destroy_status(self):
         """
         Return the current status of destroy operation
 
         """
-        self.navigate_clusters_page()
+        self.navigate_clusters_page(timeout=300)
+        time.sleep(10)
         locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
-        if not self.check_element_presence(locator, timeout=300):
+        if not self.check_element_presence((locator[1], locator[0]), timeout=300):
             # Cluster deletion has happened
             self.destroy_status = "Done"
         else:
-            self.do_click(locator)
+            self.do_click(locator=locator, timeout=300)
+            loc = format_locator(
+                    self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                    self.cluster_name
+            )
             if not self.check_element_presence(
-                locator=self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                locator=(By.XPATH, loc[0]),
                 timeout=300,
             ):
+                log.error("Cluster destroy status msg missing")
                 self.destroy_status = "Failed"
             else:
                 elapsed_time = int(time.time() - self.destroy_start_time)
