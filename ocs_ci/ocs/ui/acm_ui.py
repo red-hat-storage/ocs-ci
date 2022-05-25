@@ -369,13 +369,9 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         # Click on destroy button
         self.do_click(self.acm_page_nav["cc_destroy_button"], timeout=300)
         loc = format_locator(
-                self.acm_page_nav["cc_cluster_being_destroyed_heading"],
-                self.cluster_name
+            self.acm_page_nav["cc_cluster_being_destroyed_heading"], self.cluster_name
         )
-        if not self.check_element_presence(
-            locator=(By.XPATH, loc[0]),
-            timeout=600
-        ):
+        if not self.check_element_presence(locator=(By.XPATH, loc[0]), timeout=600):
             raise ACMClusterDeployException(
                 "Something went wrong with destroy action "
                 f"for the cluster {self.cluster_name}"
@@ -397,8 +393,8 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         else:
             self.do_click(locator=locator, timeout=300)
             loc = format_locator(
-                    self.acm_page_nav["cc_cluster_being_destroyed_heading"],
-                    self.cluster_name
+                self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                self.cluster_name,
             )
             if not self.check_element_presence(
                 locator=(By.XPATH, loc[0]),

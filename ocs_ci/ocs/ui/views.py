@@ -577,7 +577,7 @@ acm_configuration = {
     # Destroy in progress text = '<cluster-name> is being destroyed'
     "cc_cluster_being_destroyed_heading": (
         "//h4[normalize-space()='{} is being destroyed']",
-        By.XPATH
+        By.XPATH,
     ),
     "cc_destroy_cluster_back_to_clusters_button": (
         "//button[normalize-space()='Back to clusters']",
