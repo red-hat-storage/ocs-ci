@@ -144,6 +144,7 @@ BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
+VOLUME_REPLICATION = "VolumeReplication"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -987,9 +988,19 @@ RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
-NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
-NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
-EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
+OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
+CEPH_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "ocs-storagecluster", "cephobjectstoreuser"
+)
+CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "ocs-storagecluster", "cephobjectstoreuser"
+)
+NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "noobaa", "ceph-objectstore-user"
+)
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "noobaa", "ceph-objectstore-user"
+)
 OCS_SECRET = "ocs-secret"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
@@ -1195,6 +1206,10 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
+# Routes
+RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
+
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
@@ -1362,7 +1377,7 @@ HAPROXY_SERVICE = "/etc/systemd/system/haproxy.service"
 CHRONY_CONF = "/etc/chrony.conf"
 
 # NTP server
-RH_NTP_CLOCK = "clock.redhat.com"
+RH_NTP_CLOCK = "clock1.rdu2.redhat.com"
 
 # Disruptions pod names
 OSD = "osd"

@@ -112,7 +112,6 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  overwrite_must_gather_image: true
   ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
   odf_live_must_gather_image: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
   default_ocs_must_gather_latest_tag: 'latest-4.11'
@@ -212,7 +211,7 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.0'
+  rosa_cli_version: '1.2.2'
 
 # This section is related to upgrade
 UPGRADE:
