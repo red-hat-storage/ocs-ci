@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 @skipif_ocs_version("<4.10")
 # We have to ignore leftovers since environment_checker runs before the
-# bucket_factory_session teardown, due to it being class-scoped.
-# Thus, it falslely recognizes leftovers that are deleted in a later stage
+# bucket_factory_session teardown, due to it being session-scoped.
+# Thus, it falsely recognizes leftovers that are deleted in a later stage
 @ignore_leftovers
 class TestAdmissionWebhooks(MCGTest):
     @pytest.mark.parametrize(
