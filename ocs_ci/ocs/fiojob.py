@@ -26,7 +26,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import get_cluster_id, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation
 
 
@@ -312,7 +312,11 @@ def get_pool_name(fixture_name):
     Return ceph pool name based on fixture name suffix.
     """
     if fixture_name.endswith("rbd"):
-        ceph_pool_name = "ocs-storagecluster-cephblockpool"
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            cluster_id = get_cluster_id(config.ENV_DATA["cluster_path"])
+            ceph_pool_name = f"cephblockpool-storageconsumer-{cluster_id}"
+        else:
+            ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
         ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
     else:
