@@ -10,7 +10,6 @@ from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     write_random_test_objects_to_bucket,
-    s3_delete_object,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -146,22 +145,13 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         logger.info(
             "checking replication when one of the bucket's objects are deleted!!"
         )
-        rgw_objects = [
-            obj.key
-            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(target_bucket_name)
-        ]
         try:
-            for obj in rgw_objects:
-                s3_delete_object(
-                    mcg_obj_session, bucketname=target_bucket_name, object_key=obj
-                )
-        except Exception as e:
+            mcg_obj_session.s3_resource.Bucket(
+                target_bucket_name
+            ).objects.all().delete()
+        except CommandFailed as e:
             logger.error(f"[Error] while deleting objects: {e}")
-        obj_after_deletion = [
-            obj.key
-            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(target_bucket_name)
-        ]
-        if len(obj_after_deletion) != 0:
+        if len(mcg_obj_session.s3_list_all_objects_in_bucket(target_bucket_name)) != 0:
             assert (
                 False
             ), f"[Error] Unexpectedly objects were not deleted from {target_bucket_name}"
