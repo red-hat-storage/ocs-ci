@@ -233,13 +233,17 @@ def ocs_install_verification(
         f"{storage_cluster_name}-ceph-rbd",
     }
     skip_storage_classes = set()
-    if disable_cephfs:
+    if disable_cephfs or (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    ):
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-cephfs",
             }
         )
-    if disable_blockpools:
+    if disable_blockpools or (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    ):
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-ceph-rbd",
