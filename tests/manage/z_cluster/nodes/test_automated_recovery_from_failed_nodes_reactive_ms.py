@@ -179,22 +179,32 @@ def check_automated_recovery_from_drain_node(nodes):
 
     new_osd_pods = wait_for_osd_pods_having_ids(osd_ids=old_osd_pod_ids)
     new_osd_pod_names = [p.name for p in new_osd_pods]
-    log.info(f"Verify the new osd pods {new_osd_pod_names} go into a Pending state")
+
+    wnodes = get_worker_nodes()
+    if len(wnodes) <= 3:
+        expected_pods_status = constants.STATUS_PENDING
+    else:
+        expected_pods_status = constants.STATUS_RUNNING
+
+    log.info(
+        f"Verify the new osd pods {new_osd_pod_names} go into a {expected_pods_status} state"
+    )
     res = wait_for_pods_to_be_in_statuses(
-        [constants.STATUS_PENDING],
+        [expected_pods_status],
         new_osd_pod_names,
         raise_pod_not_found_error=True,
     )
-    assert res, "Not all the node osd pods are in a Pending state"
+    assert res, f"Not all the node osd pods are in a {expected_pods_status} state"
 
     log.info(f"Wait for the node: {osd_node_name} to be scheduled")
     schedule_nodes([osd_node_name])
     log.info(f"Successfully scheduled the node {osd_node_name}")
 
-    assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids)
-    log.info(
-        f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
-    )
+    if len(wnodes) <= 3:
+        assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids)
+        log.info(
+            f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
+        )
 
 
 FAILURE_TYPE_FUNC_CALL_DICT = {
