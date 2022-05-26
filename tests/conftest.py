@@ -2339,6 +2339,24 @@ def nodes():
 
 
 @pytest.fixture()
+def nodes_multicluster():
+    """
+    Return a list of instances of the relevant platform nodes class
+    (e.g. AWSNodes, VMWareNodes) to be later used in the test
+    for nodes related operations, like nodes restart,
+    detach/attach volume, etc. Useful in multicluster scenarios.
+
+    """
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes_multicluster = []
+    for cluster in range(config.nclusters):
+        config.switch_ctx(cluster)
+        nodes = factory.get_nodes_platform()
+        nodes_multicluster.append(nodes)
+    return nodes_multicluster
+
+
+@pytest.fixture()
 def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
     return uploaded_objects_fixture(
         request, mcg_obj, awscli_pod, verify_rgw_restart_count
@@ -3434,31 +3452,42 @@ def node_drain_teardown(request):
 
 
 @pytest.fixture(scope="function")
-def node_restart_teardown(request, nodes):
+def node_restart_teardown(request, nodes_multicluster):
     """
     Make sure all nodes are up and in 'Ready' state and if not,
     try to make them 'Ready' by restarting the nodes.
 
     """
+    cluster_node_objs = []
+    for index in range(config.nclusters):
+        config.switch_ctx(index)
+        cluster_node_objs.append(get_node_objs())
 
     def finalizer():
-        # Start the powered off nodes
-        nodes.restart_nodes_by_stop_and_start_teardown()
-        try:
-            node.wait_for_nodes_status(status=constants.NODE_READY)
-        except ResourceWrongStatusException:
+        for index in range(config.nclusters):
+            config.switch_ctx(index)
+            # Start the powered off nodes
+            try:
+                nodes_multicluster[index].restart_nodes_by_stop_and_start_teardown()
+            except CommandFailed:
+                nodes_multicluster[index].start_nodes(cluster_node_objs[index])
+                ocp.wait_for_cluster_connectivity()
+
             # Restart the nodes if in NotReady state
-            not_ready_nodes = [
-                n
-                for n in node.get_node_objs()
-                if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
-            ]
-            if not_ready_nodes:
-                log.info(
-                    f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-                )
-                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
+            try:
                 node.wait_for_nodes_status(status=constants.NODE_READY)
+            except ResourceWrongStatusException:
+                not_ready_nodes = [
+                    n
+                    for n in node.get_node_objs()
+                    if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+                ]
+                if not_ready_nodes:
+                    log.info(
+                        f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+                    )
+                    nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
+                    node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)
 
@@ -5745,9 +5774,7 @@ def rdr_workload(request):
         workload.delete_workload(force=True)
 
     request.addfinalizer(teardown)
-
     workload.deploy_workload()
-
     return workload
 
 
