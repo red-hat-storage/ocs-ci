@@ -28,6 +28,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.dr.dr_workload import BusyBox
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -5372,3 +5373,20 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def rdr_workload(request):
+    """
+    Setup Busybox workload for RDR setup
+    """
+    workload = BusyBox()
+
+    def teardown():
+        workload.delete_workload()
+
+    request.addfinalizer(teardown)
+
+    workload.deploy_workload()
+
+    return workload
