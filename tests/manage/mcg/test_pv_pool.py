@@ -1,12 +1,18 @@
+import json
 import logging
 
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, tier3
+from ocs_ci.framework.pytest_customization.marks import tier2, tier3, bugzilla
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
+)
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    Pod,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -135,3 +141,70 @@ class TestPvPool:
             backingstore_dict["spec"]["pvPool"]["numVolumes"] == pv_backingstore.vol_num
         ), "Scale out PV Pool failed. "
         logger.info("Scale out was successful")
+
+    @pytest.mark.polarion_id("OCS-3932")
+    @tier2
+    @bugzilla("2064599")
+    def test_modify_resource(self, backingstore_factory):
+        """
+        Test to modify the CPU and Memory resource limits for BS and see if its reflecting
+        """
+        pv_backingstore = backingstore_factory(
+            "OC",
+            {
+                "pv": [
+                    (1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, "ocs-storagecluster-ceph-rbd")
+                ]
+            },
+        )[0]
+
+        pv_bs_name = pv_backingstore.name
+        pv_pod_label = f"pool={pv_bs_name}"
+        pv_pod_info = get_pods_having_label(
+            label=pv_pod_label, namespace=config.ENV_DATA["cluster_namespace"]
+        )[0]
+        pv_pod_obj = Pod(**pv_pod_info)
+        pv_pod_name = pv_pod_obj.name
+        logger.info(f"Pod created for PV Backingstore {pv_bs_name}: {pv_pod_name}")
+        new_cpu = "500m"
+        new_mem = "500Mi"
+        new_resource_patch = {
+            "spec": {
+                "pvPool": {
+                    "resources": {
+                        "limits": {
+                            "cpu": f"{new_cpu}",
+                            "memory": f"{new_mem}",
+                        },
+                        "requests": {
+                            "cpu": f"{new_cpu}",
+                            "memory": f"{new_mem}",
+                        },
+                    }
+                }
+            }
+        }
+        try:
+            OCP(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind="backingstore",
+                resource_name=pv_bs_name,
+            ).patch(params=json.dumps(new_resource_patch), format_type="merge")
+        except CommandFailed as e:
+            logger.error(f"[ERROR] Failed to patch: {e}")
+        else:
+            logger.info("Patched new resource limits")
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pv_pod_name]
+        )
+        out = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="pod").get(
+            resource_name=pv_pod_name
+        )
+        resource_dict = out["spec"]["containers"][0]["resources"]
+        assert (
+            resource_dict["limits"]["cpu"] == new_cpu
+            and resource_dict["limits"]["memory"] == new_mem
+            and resource_dict["requests"]["cpu"] == new_cpu
+            and resource_dict["requests"]["memory"] == new_mem
+        ), "New resource modification in Backingstore is not reflected in PV Backingstore Pod!!"
+        logger.info("Resource modification reflected in the PV Backingstore Pod!!")
