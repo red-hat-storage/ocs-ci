@@ -94,6 +94,7 @@ class FioPodScale(object):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
+        max_pvc_size=105,
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -106,6 +107,7 @@ class FioPodScale(object):
             start_io (bool): Binary value to start IO default it's True
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -132,6 +134,7 @@ class FioPodScale(object):
                 access_mode=constants.ACCESS_MODE_RWO,
                 sc_name=rbd_sc_obj,
                 pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
             )
         )
         cephfs_pvc_dict_list.extend(
@@ -140,6 +143,7 @@ class FioPodScale(object):
                 access_mode=constants.ACCESS_MODE_RWX,
                 sc_name=cephfs_sc_obj,
                 pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
             )
         )
 
@@ -234,6 +238,7 @@ class FioPodScale(object):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
+        max_pvc_size=105,
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes
@@ -248,6 +253,7 @@ class FioPodScale(object):
             start_io (bool): Binary value to start IO default it's True
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
 
         """
 
@@ -326,6 +332,7 @@ class FioPodScale(object):
                     start_io=start_io,
                     io_runtime=io_runtime,
                     pvc_size=pvc_size,
+                    max_pvc_size=max_pvc_size,
                 )
                 logger.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
@@ -1082,7 +1089,7 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
 
 
 def construct_pvc_creation_yaml_bulk_for_kube_job(
-    no_of_pvc, access_mode, sc_name, pvc_size=None
+    no_of_pvc, access_mode, sc_name, pvc_size=None, max_pvc_size=105
 ):
     """
     Function to construct pvc.yaml to create bulk of pvc's using kube_job
@@ -1093,6 +1100,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         sc_name (str): SC name for pvc creation
         pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
                 If None, random size pvc will be created
+        max_pvc_size (int): The max size of the pvc. It should be greater or equal to 10
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -1101,10 +1109,18 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
+    if max_pvc_size < 10:
+        raise ValueError(
+            f"The max pvc size is {max_pvc_size}, and it should be greater or equal to 10"
+        )
     pvc_dict_list = list()
     for i in range(no_of_pvc):
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
-        size = f"{random.randrange(5, 105, 5)}Gi" if pvc_size is None else pvc_size
+        size = (
+            f"{random.randrange(5, max_pvc_size, 5)}Gi"
+            if pvc_size is None
+            else pvc_size
+        )
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = pvc_name
         del pvc_data["metadata"]["namespace"]
@@ -1301,8 +1317,13 @@ def check_all_pod_reached_running_state_in_kube_job(
             if while_iteration_count == 10 and dc_pod:
                 ocp_obj = OCP()
                 for i in pod_not_running_list:
-                    cmd = f"delete pod {i} -n {namespace}"
-                    ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+                    try:
+                        cmd = f"delete pod {i} -n {namespace}"
+                        ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+                    except CommandFailed as e:
+                        logger.warning(
+                            f"Failed to delete the pod {i} due to the error {str(e)}"
+                        )
 
             # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.

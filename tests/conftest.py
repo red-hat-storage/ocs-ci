@@ -5299,14 +5299,14 @@ def set_live_must_gather_images(pytestconfig):
         ] = defaults.MUST_GATHER_UPSTREAM_TAG
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 def create_resources_using_kube_job(request):
     """
     Create resources using k8s fixture. This fixture makes use of the FioPodScale class
     to create the expected number of POD+PVC
     """
 
-    fioscale = None
+    instances = []
 
     def factory(
         scale_pvc=1500,
@@ -5314,23 +5314,27 @@ def create_resources_using_kube_job(request):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
+        max_pvc_size=30,
     ):
         # Scale FIO pods in the cluster
         fioscale = FioPodScale(
             kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
         )
+        instances.append(fioscale)
         kube_pod_obj_list, kube_pvc_obj_list = fioscale.create_scale_pods(
             scale_count=scale_pvc,
             pvc_per_pod_count=pvc_per_pod_count,
             start_io=start_io,
             io_runtime=io_runtime,
             pvc_size=pvc_size,
+            max_pvc_size=max_pvc_size,
         )
         return kube_pod_obj_list, kube_pvc_obj_list
 
     def finalizer():
-        if fioscale:
-            fioscale.cleanup()
+        log.info("Cleaning the fioscale instances")
+        for instance in instances:
+            instance.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
