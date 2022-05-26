@@ -414,7 +414,9 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         post destroy ops are mostly specific to the platform
 
         """
-        log.warn("Platform specific class has to implement post_destroy_ops")
+        raise NotImplementedError(
+            "Platform specific class has to implement post_destroy_ops"
+        )
 
 
 class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
@@ -754,7 +756,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     def post_destroy_ops(self):
         """
         Post destroy ops includes
-        1. deleting DNS entries
+        1. Deleting DNS entries
         2. Freeing the ips assigned
 
         """

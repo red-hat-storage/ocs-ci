@@ -117,8 +117,7 @@ class OCPDeployWithACM(Deployment):
 
     def destroy_cluster(self, log_cli_level=None):
         """
-        This function specifically handles teardown of OCP clusters which
-        are deployed through ACM
+        Teardown OCP clusters deployed through ACM
 
         """
         self.ui_driver = acm.login_to_acm()
@@ -141,10 +140,9 @@ class OCPDeployWithACM(Deployment):
         self.post_destroy_ops(cluster_list)
 
     def wait_for_all_cluster_async_destroy(self, destroy_cluster_list):
-        # We will sayd done only when all the clusters are in 'Done' state or
-        # 'Failed' state
-        success_list = list()
-        failed_list = list()
+        # Wait until all the clusters are in 'Done' or 'Failed state
+        destroyed_clusters = list()
+        failed_clusters = list()
         done_waiting = False
         while not done_waiting:
             done_waiting = True
@@ -154,24 +152,25 @@ class OCPDeployWithACM(Deployment):
                     done_waiting = False
         for cluster in destroy_cluster_list:
             if cluster.destroy_status == "Done":
-                success_list.append(cluster)
+                destroyed_clusters.append(cluster)
             else:
-                failed_list.append(cluster)
+                failed_clusters.append(cluster)
 
-        if success_list:
-            logger.info("Destroy 'success' for the following clusters")
-            logger.info(f"{[c.cluster_name for c in success_list]}")
-        if failed_list:
-            logger.info("Destroy 'Failed' for the following clusters")
-            logger.error(f"{[c.cluster_name for c in failed_list]}")
-            raise ACMClusterDestroyException("one or more Cluster Destroy failed ")
+        if destroyed_clusters:
+            logger.info(
+                f"Destroyed clusters: {[c.cluster_name for c in destroyed_clusters]}"
+            )
+        if failed_clusters:
+            raise ACMClusterDestroyException(
+                f"Failed to destroy clusters:{[c.cluster_name for c in failed_clusters]} "
+            )
 
     def post_destroy_ops(self, cluster_list):
         """
         Post destroy ops mainly includes ip clean up and dns cleanup
 
         Args:
-            cluster_list (ACMOCPClusterDeploy): list of platform specific instances
+            cluster_list (list[ACMOCPClusterDeploy]): list of platform specific instances
 
         """
         for cluster in cluster_list:
