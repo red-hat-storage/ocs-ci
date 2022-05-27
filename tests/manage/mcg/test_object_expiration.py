@@ -44,7 +44,7 @@ class TestObjectExpiration(MCGTest):
         logger.info(f"Rule to be set for object expiration: {expire_rule}")
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
-        mcg_obj.s3_client.put_bucket_lifecycle(
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=expire_rule
         )
 
