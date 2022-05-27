@@ -1,4 +1,5 @@
 import logging
+import random
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.framework.testlib import bugzilla
@@ -7,7 +8,6 @@ from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
-
 
 log = logging.getLogger(__name__)
 
@@ -21,9 +21,7 @@ class TestKernelCrash(E2ETest):
 
     pvc_size = 1
 
-    def test_node_kernel_crash_ceph_fsync(
-        self, pvc_factory, teardown_factory, random=None
-    ):
+    def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
         """
         Create PVCs and pods
         """
@@ -31,6 +29,7 @@ class TestKernelCrash(E2ETest):
         original_dir = "/var/lib/www/html/"
         result_dir = "mydir"
         worker_nodes_list = get_worker_nodes()
+        print(worker_nodes_list)
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
@@ -80,25 +79,24 @@ class TestKernelCrash(E2ETest):
         commands = ["mkdir" + " " + original_dir + result_dir, "apt-get update"]
         for cmd in commands:
             pod_obj.exec_cmd_on_pod(command=f"{cmd}")
-
-        pod_obj.exec_sh_cmd_on_pod(command=f"apt-get install gcc -y")
-        pod_obj.exec_sh_cmd_on_pod(command=f"gcc fsync.c -o fsync")
+        pod_obj.exec_sh_cmd_on_pod(command=f"apt-get install python -y")
         log.info("Starting creation and deletion of files on volume")
 
-        executor = ThreadPoolExecutor(max_workers=3)
-        thread1 = executor.submit(
-            pod_obj.exec_sh_cmd_on_pod, command=f"nohup bash files_create_delete.sh"
-        )
-        thread2 = executor.submit(pod_obj.exec_sh_cmd_on_pod, command=f"./fsync")
-        thread1.result()
-        thread2.result()
+        # Create and delete files on mount point
+        executor = ThreadPoolExecutor(max_workers=2)
 
+        executor.submit(
+            pod_obj.exec_sh_cmd_on_pod, command=f"nohup python Files_create_delete.py"
+        )
+        executor.submit(pod_obj.exec_sh_cmd_on_pod, command=f"python fsync.py")
+
+        # Check Node gets Panic or not
         try:
             node.wait_for_nodes_status(
-                node=selected_node, status=constants.NODE_NOT_READY, timeout=3600
+                selected_node, status=constants.NODE_NOT_READY, timeout=120
             )
         except ResourceWrongStatusException as ex:
-            log.info(f"Node in NotReady status found, hence TC is failed. ")
+            log.error(f"Node in NotReady status found, hence TC is failed. ")
             raise ex
         else:
             log.info(f"Node in Ready status found, hence TC is Passed. ")
