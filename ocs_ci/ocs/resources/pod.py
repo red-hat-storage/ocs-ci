@@ -135,6 +135,8 @@ class Pod(OCS):
         Raises:
             Exception: In case of exception from FIO
         """
+        if helpers.storagecluster_independent_check:
+            timeout = 1800
         logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
             result = self.fio_thread.result(timeout)

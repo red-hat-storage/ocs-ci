@@ -187,4 +187,3 @@ class SanityExternalCluster(Sanity):
         self.pod_objs = list()
         self.obc_objs = list()
         self.ceph_cluster = CephClusterExternal()
-        self.ceph_cluster_external = CephClusterExternal()

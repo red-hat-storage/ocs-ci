@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 
 from ocs_ci.framework.testlib import (
@@ -71,6 +72,7 @@ class TestNodesRestart(ManageTest):
         """
         ocp_nodes = get_node_objs()
         nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
+        time.sleep(300)
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
