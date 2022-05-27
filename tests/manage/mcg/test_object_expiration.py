@@ -4,7 +4,7 @@ from time import sleep
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla
+from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
@@ -21,7 +21,7 @@ class TestObjectExpiration(MCGTest):
     @skipif_ocs_version("<4.10")
     @bugzilla("2034661")
     @pytest.mark.polarion_id("OCS-3929")
-    @tier2
+    @tier1
     def test_object_expiration(self, mcg_obj, bucket_factory):
         """
         Test object is not deleted in minutes when object is set to expire in a day
