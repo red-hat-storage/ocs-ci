@@ -4,7 +4,7 @@ from time import sleep
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla
+from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
@@ -21,13 +21,14 @@ class TestObjectExpiration(MCGTest):
     @skipif_ocs_version("<4.10")
     @bugzilla("2034661")
     @pytest.mark.polarion_id("OCS-3929")
-    @tier1
+    @tier2
     def test_object_expiration(self, mcg_obj, bucket_factory):
         """
         Test object is not deleted in minutes when object is set to expire in a day
 
         """
-        bucket = bucket_factory(interface="OC")[0].name
+        # Creating S3 bucket
+        bucket = bucket_factory()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
         expire_rule = {
@@ -43,7 +44,7 @@ class TestObjectExpiration(MCGTest):
         logger.info(f"Rule to be set for object expiration: {expire_rule}")
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
-        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+        mcg_obj.s3_client.put_bucket_lifecycle(
             Bucket=bucket, LifecycleConfiguration=expire_rule
         )
 
@@ -57,10 +58,10 @@ class TestObjectExpiration(MCGTest):
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key, data=obj_data
         ), "Failed: Put Object"
 
-        logger.info("Sleeping for 300 seconds")
-        sleep(300)
+        logger.info("Sleeping for 90 seconds")
+        sleep(90)
 
-        logger.info(f"Getting {object_key} from bucket: {bucket} after 300 seconds")
+        logger.info(f"Getting {object_key} from bucket: {bucket} after 90 seconds")
         assert s3_get_object(
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key
         ), "Failed: Get Object"
