@@ -25,13 +25,14 @@ class TestNSFSSystem(MCGTest):
     """"""
 
     @pytest.mark.polarion_id("")
-    def test_nsfs_system(
-        self, nsfs_bucket_factory, awscli_pod_session, test_directory_setup, nsfs_obj
+    def test_nsfs(
+        self, nsfs_bucket_factory, awscli_pod_session, test_directory_setup,         snapshot_factory,
+        noobaa_db_backup_and_recovery,
     ):
         """"""
         nsfs_obj_new = NSFS(
             method="OC",
-            pvc_size=25,
+            pvc_size=20,
         )
         nsfs_bucket_factory(nsfs_obj_new)
         nsfs_obj_existing = NSFS(
@@ -40,26 +41,27 @@ class TestNSFSSystem(MCGTest):
             mount_existing_dir=True,
         )
         nsfs_bucket_factory(nsfs_obj_existing)
-
-        random_object_round_trip_verification(
-            io_pod=awscli_pod_session,
-            bucket_name=nsfs_obj.bucket_name,
-            upload_dir=test_directory_setup.origin_dir,
-            download_dir=test_directory_setup.result_dir,
-            amount=10,
-            pattern="nsfs-test-obj-",
-            s3_creds=nsfs_obj.s3_creds,
-            result_pod=nsfs_obj.interface_pod,
-            result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-        )
-        compare_directory(
-            awscli_pod=awscli_pod_session,
-            original_dir=test_directory_setup.origin_dir,
-            result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-            amount=10,
-            pattern="nsfs-obj-",
-            result_pod=nsfs_obj.interface_pod,
-        )
+        nsfs_objs = [nsfs_obj_new, nsfs_obj_existing]
+        for nsfs_obj in nsfs_objs:
+            random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=nsfs_obj.bucket_name,
+                upload_dir=test_directory_setup.origin_dir,
+                download_dir=test_directory_setup.result_dir,
+                amount=10,
+                pattern="nsfs-test-obj-",
+                s3_creds=nsfs_obj.s3_creds,
+                result_pod=nsfs_obj.interface_pod,
+                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            )
+            compare_directory(
+                awscli_pod=awscli_pod_session,
+                original_dir=test_directory_setup.origin_dir,
+                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                amount=10,
+                pattern="nsfs-obj-",
+                result_pod=nsfs_obj.interface_pod,
+            )
 
         pods_to_respin = [
             pod.Pod(
@@ -73,7 +75,21 @@ class TestNSFSSystem(MCGTest):
         ]
         for pods in pods_to_respin:
             pods.delete()
-            logger.info(f"Validating integrity of object post {pods.name} resping")
+            logger.info(f"Validating integrity of object post {pods.name} re-spinning")
+            for nsfs_obj in nsfs_objs:
+                compare_directory(
+                    awscli_pod=awscli_pod_session,
+                    original_dir=test_directory_setup.origin_dir,
+                    result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                    amount=10,
+                    pattern="nsfs-obj-",
+                    result_pod=nsfs_obj.interface_pod,
+                )
+        # TODO: Partial cluster down and validate
+        # TODO: Different S3 ops on nsfs buckets
+
+        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        for nsfs_obj in nsfs_objs:
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=test_directory_setup.origin_dir,
@@ -82,15 +98,3 @@ class TestNSFSSystem(MCGTest):
                 pattern="nsfs-obj-",
                 result_pod=nsfs_obj.interface_pod,
             )
-        # TODO: Partial cluster down and validate
-        # TODO: Different S3 ops on nsfs buckets
-
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
-        compare_directory(
-            awscli_pod=awscli_pod_session,
-            original_dir=test_directory_setup.origin_dir,
-            result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-            amount=10,
-            pattern="nsfs-obj-",
-            result_pod=nsfs_obj.interface_pod,
-        )
