@@ -261,15 +261,21 @@ class FioPodScale(object):
         scale_count_dict = constants.SCALE_PVC_ROUND_UP_VALUE
         if scale_count in scale_count_dict:
             scale_pvc_count = scale_count_dict[scale_count]
+        else:
+            raise ValueError(
+                f"The scale count value has to match the following values: "
+                f"{[*constants.SCALE_PVC_ROUND_UP_VALUE]}"
+            )
 
         # Minimal scale creation count should be 750, code is optimized to
         # scale PVC's not more than 750 count.
         # Used max_pvc_count+10 in certain places to round up the value.
         # i.e. while attaching 20 PVCs to single pod with 750 PVCs last pod
         # will left out with 10 PVCs so to avoid the problem scaling 10 more.
-        min_pvc_count = 760
-        if scale_pvc_count < min_pvc_count:
-            raise UnexpectedBehaviour("Minimal scale PVC creation count should be 760")
+        if scale_pvc_count > 760:
+            min_pvc_count = 760
+        else:
+            min_pvc_count = scale_pvc_count
 
         self.ms_name = list()
 

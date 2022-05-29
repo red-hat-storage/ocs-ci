@@ -5309,12 +5309,12 @@ def create_resources_using_kube_job(request):
     instances = []
 
     def factory(
-        scale_pvc=1500,
+        scale_pvc=200,
         pvc_per_pod_count=20,
         start_io=True,
         io_runtime=None,
         pvc_size=None,
-        max_pvc_size=30,
+        max_pvc_size=50,
     ):
         # Scale FIO pods in the cluster
         fioscale = FioPodScale(
