@@ -126,7 +126,7 @@ class TestPVCClonePerformance(PASTest):
         """
         Cleanup the test environment
         """
-        logger.info("Starting the test environment celanup")
+        logger.info("Starting the test environment cleanup")
 
         # Delete The test POD
         try:
@@ -152,15 +152,15 @@ class TestPVCClonePerformance(PASTest):
             pass
 
         # Delete the backend PV of the PVC
-        logger.info(f"Try to delete the backend PV : {pv}")
         try:
+            logger.info(f"Try to delete the backend PV : {pv}")
             performance_lib.run_oc_command(f"delete pv {pv}")
         except Exception as ex:
             err_msg = f"cannot delete PV {pv} - [{ex}]"
             logger.error(err_msg)
 
-        logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
         try:
+            logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
             self.sc_obj.delete()
             logger.info("Wait until the SC is deleted.")
             self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
