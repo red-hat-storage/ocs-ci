@@ -21,7 +21,11 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.cosbench import Cosbench
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    get_mon_db_size_in_kb,
+    get_noobaa_db_used_space,
+)
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
 from ocs_ci.ocs.resources.pod import delete_pods
@@ -37,6 +41,22 @@ from ocs_ci.ocs.longevity_helpers import (
 )
 from ocs_ci.utility.deployment_openshift_logging import install_logging
 from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    get_mon_pods,
+    pod_resource_utilization_raw_output_from_adm_top,
+)
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    get_osd_utilization,
+    get_percent_used_capacity,
+)
+from ocs_ci.ocs.node import (
+    get_node_resource_utilization_from_adm_top,
+    get_node_resource_utilization_from_oc_describe,
+    check_for_zombie_process_on_node,
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +77,7 @@ class Longevity(object):
         Initializer function
         """
         lcl = locals()
+        self.ceph_obj = CephCluster()
         self.tmp_path = pathlib.Path(ocsci_log_path())
         self.pvc_size = None
         self.pvc_count = None
@@ -522,6 +543,73 @@ class Longevity(object):
 
         return obc_bound_list
 
+    def cluster_sanity_check(
+        self,
+        cluster_health=True,
+        db_usage=True,
+        resource_utilization=True,
+        disk_utilization=True,
+    ):
+        """
+        Cluster sanity checks
+
+        Args:
+            cluster_health (bool): Checks the cluster health if set to True
+            db_usage (bool): Get the mon and noobaa db usage if set to True
+            resource_utilization (bool): Get the Memory, CPU utilization of nodes and pods if set to True
+            disk_utilization (bool): Get the osd and total cluster disk utilization if set to True
+
+        """
+        # Check if there are Zombie process on the nodes
+        check_for_zombie_process_on_node()
+
+        if cluster_health:
+            # Cluster health
+            self.ceph_obj.cluster_health_check()
+            log.info("Checking storage pods status")
+            # Validate storage pods are running
+            wait_for_pods_to_be_running(timeout=600)
+
+        if db_usage:
+            # Check mon db usage
+            mon_pods = get_mon_pods()
+            for mon_pod in mon_pods:
+                # Get mon db size
+                get_mon_db_size_in_kb(mon_pod)
+
+            # Check Noobaa db usage
+            get_noobaa_db_used_space()
+
+        if resource_utilization:
+            # Get the cpu and memory of each nodes from adm top
+            get_node_resource_utilization_from_adm_top(
+                node_type="master", print_table=True
+            )
+            get_node_resource_utilization_from_adm_top(
+                node_type="worker", print_table=True
+            )
+
+            # Get the cpu and memory from describe of nodes
+            get_node_resource_utilization_from_oc_describe(
+                node_type="master", print_table=True
+            )
+            get_node_resource_utilization_from_oc_describe(
+                node_type="worker", print_table=True
+            )
+
+            # Get the resource utilization of the pods in openshift-storage namespace
+            pod_resource_utilization_raw_output_from_adm_top()
+
+        if disk_utilization:
+            # Get OSD utilization
+            osd_filled_dict = get_osd_utilization()
+            log.info(f"OSD Utilization: {osd_filled_dict}")
+            # Get the percentage of the total used capacity in the cluster
+            total_used_capacity = get_percent_used_capacity()
+            log.info(
+                f"The percentage of the total used capacity in the cluster: {total_used_capacity}"
+            )
+
     def stage_0(
         self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True
     ):
@@ -855,6 +943,9 @@ def start_app_workload(
         if not support_check:
             raise UnsupportedWorkloadError("Found Unsupported app workloads list")
         log.info("APP Workloads support check is Successful")
+        log.info("Cluster sanity checks before starting cycle execution")
+        long = Longevity()
+        long.cluster_sanity_check()
         cycle_count = 1
         end_time = datetime.now() + timedelta(minutes=run_time)
         while datetime.now() < end_time:
@@ -912,6 +1003,9 @@ def start_app_workload(
             log.info(
                 f"##############[COMPLETED CYCLE:{cycle_count}]####################"
             )
+            log.info(f"Cluster sanity checks after cycle execution:{cycle_count}")
+            long = Longevity()
+            long.cluster_sanity_check()
             cycle_count += 1
             log.info(
                 f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT CYCLE]###########"

@@ -538,3 +538,7 @@ class ROSAProdAdminLoginFailedException(Exception):
 
 class Md5CheckFailed(Exception):
     pass
+
+
+class ZombieProcessFoundException(Exception):
+    pass

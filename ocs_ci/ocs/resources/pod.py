@@ -2633,3 +2633,18 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
         if len(osd_pods) == len(osd_ids):
             logger.info(f"Found all the osd pods with the ids: {osd_ids}")
             return osd_pods
+
+
+def pod_resource_utilization_raw_output_from_adm_top(
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Gets the pod's memory utilization using adm top command.
+
+    """
+    obj = ocp.OCP()
+    resource_utilization_all_pods = obj.exec_oc_cmd(
+        command=f"adm top pods -n {namespace}", out_yaml_format=False
+    )
+    logging.info("Command RAW output of adm top pods")
+    logging.info(f"{resource_utilization_all_pods}")
