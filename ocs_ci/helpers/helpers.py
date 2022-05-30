@@ -3865,7 +3865,7 @@ def get_noobaa_db_used_space():
         noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
-        command=f"df -h /var/lib/pgsql/", out_yaml_format=False
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
     )
     df_out = cmd_out.split()
     logger.info(
