@@ -188,6 +188,10 @@ class Vault(KMS):
                     f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
                 )
 
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = (
+                f"{constants.VAULT_HCP_NAMESPACE}/{self.vault_namespace}"
+            )
         if not self.vault_namespace_exists(self.vault_namespace):
             self.create_namespace(self.vault_namespace)
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
@@ -573,7 +577,10 @@ class Vault(KMS):
 
         """
         if self.vault_deploy_mode == "external":
-            vault_conf = load_auth_config()["vault"]
+            if config.ENV_DATA.get("use_vault_namespace"):
+                vault_conf = load_auth_config()["vault_namespace"]
+            else:
+                vault_conf = load_auth_config()["vault"]
             return vault_conf
 
     def get_vault_connection_info(self, resource_name=None):
