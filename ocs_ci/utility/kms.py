@@ -188,12 +188,13 @@ class Vault(KMS):
                     f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
                 )
 
+        if not self.vault_namespace_exists(self.vault_namespace):
+            self.create_namespace(self.vault_namespace)
+
         if config.ENV_DATA.get("vault_hcp"):
             self.vault_namespace = (
                 f"{constants.VAULT_HCP_NAMESPACE}/{self.vault_namespace}"
             )
-        if not self.vault_namespace_exists(self.vault_namespace):
-            self.create_namespace(self.vault_namespace)
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
     def vault_namespace_exists(self, vault_namespace):
@@ -207,7 +208,10 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault namespace lookup {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace lookup -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace lookup {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
@@ -247,7 +251,10 @@ class Vault(KMS):
             VaultOperationError: If namespace is not created successfully
 
         """
-        cmd = f"vault namespace create {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace create -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace create {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -578,7 +585,7 @@ class Vault(KMS):
         """
         if self.vault_deploy_mode == "external":
             if config.ENV_DATA.get("use_vault_namespace"):
-                vault_conf = load_auth_config()["vault_namespace"]
+                vault_conf = load_auth_config()["vault_hcp"]
             else:
                 vault_conf = load_auth_config()["vault"]
             return vault_conf
