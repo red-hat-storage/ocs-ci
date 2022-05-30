@@ -2646,5 +2646,5 @@ def pod_resource_utilization_raw_output_from_adm_top(
     resource_utilization_all_pods = obj.exec_oc_cmd(
         command=f"adm top pods -n {namespace}", out_yaml_format=False
     )
-    logging.info("Command RAW output of adm top pods")
-    logging.info(f"{resource_utilization_all_pods}")
+    logger.info("Command RAW output of adm top pods")
+    logger.info(f"{resource_utilization_all_pods}")
