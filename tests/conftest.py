@@ -5306,23 +5306,41 @@ def create_resources_using_kube_job(request):
     to create the expected number of POD+PVC
     """
 
-    instances = []
+    fioscale_instances = []
 
     def factory(
-        scale_pvc=200,
-        pvc_per_pod_count=20,
+        scale_count=None,
+        pvc_per_pod_count=10,
         start_io=True,
         io_runtime=None,
         pvc_size=None,
-        max_pvc_size=50,
+        max_pvc_size=40,
     ):
+        """
+        Create a factory for creating resources using k8s fixture.
+
+        Args:
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
+            pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+            Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
+
+        Returns:
+            tuple: tuple of the kube job pod list, kube job pvc list
+
+        """
         # Scale FIO pods in the cluster
+        scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
         fioscale = FioPodScale(
             kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
         )
-        instances.append(fioscale)
+        fioscale_instances.append(fioscale)
         kube_pod_obj_list, kube_pvc_obj_list = fioscale.create_scale_pods(
-            scale_count=scale_pvc,
+            scale_count=scale_count,
             pvc_per_pod_count=pvc_per_pod_count,
             start_io=start_io,
             io_runtime=io_runtime,
@@ -5333,7 +5351,7 @@ def create_resources_using_kube_job(request):
 
     def finalizer():
         log.info("Cleaning the fioscale instances")
-        for instance in instances:
+        for instance in fioscale_instances:
             instance.cleanup()
 
     request.addfinalizer(finalizer)

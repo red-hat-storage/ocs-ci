@@ -247,7 +247,8 @@ class FioPodScale(object):
         many time to reach the desired count.
 
         Args:
-            scale_count (int): No of PVCs to be Scaled
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
             pvc_per_pod_count (int): Number of PVCs to be attached to single POD
             Example, If 20 then 20 PVCs will be attached to single POD
             start_io (bool): Binary value to start IO default it's True
@@ -1106,7 +1107,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         sc_name (str): SC name for pvc creation
         pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
                 If None, random size pvc will be created
-        max_pvc_size (int): The max size of the pvc. It should be greater or equal to 10
+        max_pvc_size (int): The max size of the pvc. It should be greater than 10
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -1115,9 +1116,9 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
-    if max_pvc_size < 10:
+    if max_pvc_size <= 10:
         raise ValueError(
-            f"The max pvc size is {max_pvc_size}, and it should be greater or equal to 10"
+            f"The max pvc size is {max_pvc_size}, and it should be greater than 10"
         )
     pvc_dict_list = list()
     for i in range(no_of_pvc):
