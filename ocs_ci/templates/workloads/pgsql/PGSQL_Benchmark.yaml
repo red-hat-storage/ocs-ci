@@ -15,7 +15,7 @@ spec:
       cmd_flags: ''
       init_cmd_flags: ''
       scaling_factor: 100
-      samples: 30
+      samples: 45
       databases:
         - host: postgres-0.postgres # assuming that postgres was deployed in same namespace as benchmark-operator i.e. benchmark-operator
           user: test # Following the values from the configmap
