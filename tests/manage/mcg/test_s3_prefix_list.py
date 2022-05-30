@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @bugzilla("2068110")
 @pytest.mark.polarion_id("OCS-3925")
 @tier2
-@skipif_ocs_version("<4.11")
+@skipif_ocs_version("<4.10")
 class TestS3PrefixList:
 
     """
@@ -36,7 +36,6 @@ class TestS3PrefixList:
         """
         Test s3 prefix uploads and list operations
         """
-
         bucket = bucket_factory()[0]
         bucket_name = bucket.name
         file_dir = test_directory_setup.origin_dir
