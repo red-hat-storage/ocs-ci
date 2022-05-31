@@ -59,36 +59,6 @@ class TestPvcMultiClonePerformance(PASTest):
                 "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
             }
 
-    def teardown(self):
-        """
-        Cleaning up the environment :
-            Delete all clones and the pvc itself
-
-        """
-        log.info("Cleanup the test environment")
-
-        if self.full_teardown:
-            # Deleting the PVC which used in the test.
-            try:
-                log.info(f"Delete the PVC : {self.pvc_obj.name}")
-                self.pvc_obj.delete()
-                log.info("Wait until the pvc is deleted.")
-                self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
-            except Exception as ex:
-                log.error(f"Cannot delete the test pvc : {ex}")
-
-            # Delete all the clones
-            for clone_obj in self.cloned_obj_list:
-                try:
-                    log.info(f"Delete the cloned PVC : {clone_obj.name}")
-                    clone_obj.delete()
-                    log.info("Wait until the pvc is deleted.")
-                    clone_obj.ocp.wait_for_delete(resource_name=clone_obj.name)
-                except Exception as ex:
-                    log.error(f"Cannot delete the test pvc : {ex}")
-
-        super(TestPvcMultiClonePerformance, self).teardown()
-
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
@@ -133,7 +103,7 @@ class TestPvcMultiClonePerformance(PASTest):
             StorageNotSufficientException: in case of not enough capacity on the cluster
 
         """
-        num_of_clones = 512
+        num_of_clones = 450
         self.full_teardown = True
 
         # Getting the total Storage capacity
