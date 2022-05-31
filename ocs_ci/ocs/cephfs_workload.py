@@ -76,8 +76,7 @@ class LogReaderWriterParallel(object):
 
         Raise:
             NotFoundError: When given volume is not found in given spec
-            UnexpectedBehaviour: When an unexpected problem with starting the workload occurred, or when
-            an unexpected problem with linking the deployment with the PVC occurred.
+            UnexpectedBehaviour: When an unexpected problem with starting the workload occurred
 
         """
 
@@ -101,15 +100,12 @@ class LogReaderWriterParallel(object):
                 "logwriter-cephfs-volume",
                 self.pvc_dict["metadata"]["name"],
             )
-        except exceptions.NotFoundError as ex:
-            raise ex
-        except Exception as ex:
-            error_msg = (
+        except (exceptions.NotFoundError, KeyError) as ex:
+            logger.warning(
                 "Failed to link the deployment with the pvc. We may need to check if the "
                 "LOGWRITER_CEPHFS_REPRODUCER still matches the code of this test"
             )
-            logger.exception(error_msg)
-            raise exceptions.UnexpectedBehaviour(error_msg) from ex
+            raise ex
 
         # prepare k8s yaml file for deployment
         self.workload_file = ObjectConfFile(
@@ -150,7 +146,6 @@ class LogReaderWriterParallel(object):
 
         Raise:
             NotFoundError: When the given volume is not found in given spec
-            UnexpectedBehaviour: When an unexpected problem with linking the deployment with the PVC occurred
             Exception: When the data verification job failed
 
         """
@@ -177,15 +172,13 @@ class LogReaderWriterParallel(object):
                 "logwriter-cephfs-volume",
                 self.pvc_dict["metadata"]["name"],
             )
-        except exceptions.NotFoundError as ex:
-            raise ex
-        except Exception as ex:
-            error_msg = (
+        except (exceptions.NotFoundError, KeyError) as ex:
+            logger.warning(
                 "Failed to link the deployment with the pvc. We may need to check if the "
                 "LOGWRITER_CEPHFS_REPRODUCER still matches the code of this test"
             )
-            logger.exception(error_msg)
-            raise exceptions.UnexpectedBehaviour(error_msg) from ex
+            raise ex
+
         # prepare k8s yaml file for the job
         job_file = ObjectConfFile("log_reader", [job_dict], self.project, self.tmp_path)
         # deploy the job, starting the log reader pods
