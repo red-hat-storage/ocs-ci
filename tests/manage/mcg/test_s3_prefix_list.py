@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
     copy_objects,
@@ -32,6 +31,7 @@ class TestS3PrefixList:
         awscli_pod_session,
         bucket_factory,
         test_directory_setup,
+        mcg_obj_session,
     ):
         """
         Test s3 prefix uploads and list operations
@@ -39,50 +39,44 @@ class TestS3PrefixList:
         bucket = bucket_factory()[0]
         bucket_name = bucket.name
         file_dir = test_directory_setup.origin_dir
-        s3_obj = MCG(bucket_name)
-        prefix = "mrbts"
-        err_msg = "Error during pagination: The same next token was received twice"
-        pref_str = [
+        s3_obj = mcg_obj_session
+        # list of tuples consisting the combination of prefixes
+        prefix_strings = [
             ("99", "990", "20220510"),
             ("11", "111", "20220511"),
             ("aa", "aa0", "20220512"),
             ("bb", "bbb", "20220513"),
         ]
-        object_files = write_random_objects_in_pod(
+        object_written = write_random_objects_in_pod(
             awscli_pod_session, pattern="test-", file_dir=file_dir, amount=1
         )
-        object = [obj for obj in object_files][0]
+        object = object_written[0]
         src_obj = f"{file_dir}/{object}"
 
-        for pref in pref_str:
-            first_prefix_path = (
-                f"s3://{bucket_name}/{prefix}/{pref[2]}/{pref[0]}/{object}"
-            )
-            second_prefix_path = (
-                f"s3://{bucket_name}/{prefix}/{pref[2]}/{pref[1]}/{object}"
-            )
-
-            copy_objects(
-                awscli_pod_session, src_obj, target=first_prefix_path, s3_obj=s3_obj
-            )
-            logger.info(f"uploaded first prefix: {first_prefix_path}")
-            copy_objects(
-                awscli_pod_session, src_obj, target=second_prefix_path, s3_obj=s3_obj
-            )
-            logger.info(f"uploaded second prefix: {second_prefix_path}")
-
-            full_prefix = f"{prefix}/{pref[2]}/"
-
+        for pref in prefix_strings:
+            for prefix_index in range(2):
+                copy_objects(
+                    awscli_pod_session,
+                    src_obj,
+                    target=f"s3://{bucket_name}/test/{pref[2]}/{pref[prefix_index]}/{object}",
+                    s3_obj=s3_obj,
+                )
+                logger.info(
+                    f"uploaded prefix: s3://{bucket_name}/test/{pref[2]}/{pref[prefix_index]}/{object}"
+                )
             try:
                 listed_objects = list_objects_from_bucket(
                     pod_obj=awscli_pod_session,
                     s3_obj=s3_obj,
                     target=bucket_name,
-                    prefix=full_prefix,
+                    prefix=f"test/{pref[2]}/",
                 )
                 logger.info(f"listed objects: {listed_objects}")
             except CommandFailed as err:
-                if err_msg in err.args[0]:
+                if (
+                    "Error during pagination: The same next token was received twice"
+                    in err.args[0]
+                ):
                     assert (
                         False
                     ), f"Object list with prefix failed with error {err.args[0]}"
