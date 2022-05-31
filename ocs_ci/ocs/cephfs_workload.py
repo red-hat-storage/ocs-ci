@@ -77,7 +77,8 @@ class LogReaderWriterParallel(object):
         Raise:
             NotFoundError: When given volume is not found in given spec
             UnexpectedBehaviour: When an unexpected problem with starting the workload occurred, or when
-                an unexpected problem with linking the deployment with the PVC occurred.
+            an unexpected problem with linking the deployment with the PVC occurred.
+
         """
 
         # get deployment dict for the reproducer logwriter workload
