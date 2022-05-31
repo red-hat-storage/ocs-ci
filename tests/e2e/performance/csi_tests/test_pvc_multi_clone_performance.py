@@ -23,7 +23,6 @@ from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.helpers import performance_lib
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.helpers.performance_lib import run_oc_command
 
 log = logging.getLogger(__name__)
 
