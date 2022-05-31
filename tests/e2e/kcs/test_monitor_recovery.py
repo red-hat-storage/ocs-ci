@@ -17,7 +17,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.framework.testlib import E2ETest, config
-from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -67,10 +66,9 @@ class TestMonitorRecovery(E2ETest):
         """
         self.filename = "sample_file.txt"
         self.object_key = "obj-key"
-        self.object_data = "Random string data"
-        self.dd_cmd = f"dd if=/dev/urandom of=/mnt/{self.filename} bs=4M count=3"
+        self.object_data = "string data"
+        self.dd_cmd = f"dd if=/dev/urandom of=/mnt/{self.filename} bs=5M count=1"
 
-        self.sanity_helpers = Sanity()
         # Create project, pvc, dc pods
         self.dc_pods = []
         self.dc_pods.append(
@@ -506,7 +504,7 @@ class MonitorRecovery(object):
 
         """
         mon_k = get_ceph_caps(["rook-ceph-mons-keyring"])
-        if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+        if config.ENV_DATA["platform"] == constants.ON_PREM_PLATFORMS:
             rgw_k = get_ceph_caps(
                 ["rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a-keyring"]
             )
@@ -536,8 +534,6 @@ class MonitorRecovery(object):
             "fs_provisinor": fs_provisinor_k,
             "rbd_provisinor": rbd_provisinor_k,
         }
-        mon_a = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)[0]
-        logger.info(f"Working on monitor: {mon_a.name}")
 
         for secret, caps in keyring_caps.items():
             if caps:
@@ -702,7 +698,7 @@ def recover_mcg():
         noobaa_pod.delete()
     for noobaa_pod in get_noobaa_pods():
         wait_for_resource_state(resource=noobaa_pod, state=constants.STATUS_RUNNING)
-    if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+    if config.ENV_DATA["platform"] == constants.ON_PREM_PLATFORMS:
         logger.info("Re-spinning RGW pods")
         for rgw_pod in get_rgw_pods():
             rgw_pod.delete()
