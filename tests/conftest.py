@@ -5300,10 +5300,10 @@ def set_live_must_gather_images(pytestconfig):
 
 
 @pytest.fixture(scope="function")
-def create_resources_using_kube_job(request):
+def create_scale_pods_and_pvcs_using_kube_job(request):
     """
-    Create resources using k8s fixture. This fixture makes use of the FioPodScale class
-    to create the expected number of POD+PVC
+    Create scale pods and PVCs using a kube job fixture. This fixture makes use of the
+    FioPodScale class to create the expected number of PODs+PVCs
     """
 
     fioscale_instances = []

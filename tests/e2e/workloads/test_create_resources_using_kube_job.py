@@ -9,12 +9,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_aws_i3,
-    skipif_bm,
     skipif_external_mode,
-    skipif_ibm_cloud,
-    skipif_ibm_power,
-    skipif_lso,
     ipi_deployment_required,
     managed_service_required,
 )
@@ -24,24 +19,21 @@ log = logging.getLogger(__name__)
 
 @tier1
 @ignore_leftovers
-class TestCreateResourcesUsingKubeJob(ManageTest):
+class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
     """
-    Test create resources using the kube job
+    Test create scale pods and PVCs using a kube job
     """
 
-    @skipif_aws_i3
-    @skipif_bm
-    @skipif_lso
-    @skipif_ibm_cloud
-    @skipif_ibm_power
     @skipif_external_mode
     @ipi_deployment_required
-    def test_create_resources_using_kube_job(self, create_resources_using_kube_job):
+    def test_create_scale_pods_and_pvcs_using_kube_job(
+        self, create_scale_pods_and_pvcs_using_kube_job
+    ):
         """
-        Test create resources using the kube job
+        Test create scale pods and PVCs using a kube job
         """
         log.info("Start creating resources using kube job...")
-        create_resources_using_kube_job()
+        create_scale_pods_and_pvcs_using_kube_job()
         time_to_wait_for_io_running = 120
         log.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
@@ -52,13 +44,15 @@ class TestCreateResourcesUsingKubeJob(ManageTest):
         log.info("The resources created successfully using the kube job")
 
     @managed_service_required
-    def test_create_resources_using_kube_job_ms(self, create_resources_using_kube_job):
+    def test_create_scale_pods_and_pvcs_using_kube_job_ms(
+        self, create_scale_pods_and_pvcs_using_kube_job
+    ):
         """
-        Test create resources using the kube job with managed service
+        Test create scale pods and PVCs using a kube job with managed service
         """
         config.switch_to_consumer()
         log.info("Start creating resources using kube job...")
-        create_resources_using_kube_job()
+        create_scale_pods_and_pvcs_using_kube_job()
         ceph_health_check()
 
         log.info("Switch to the provider")
