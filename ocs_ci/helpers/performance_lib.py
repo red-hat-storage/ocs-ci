@@ -241,7 +241,7 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
                 st = string_to_time(line.split(" ")[1])
             elif "provision" in line and pvc_name in line and "succeeded" in line:
                 et = string_to_time(line.split(" ")[1])
-
+    del logs
     if st is None:
         logger.error(f"Cannot find start time of {pvc_name}")
         raise Exception(f"Cannot find start time of {pvc_name}")
@@ -295,7 +295,7 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
                 st = string_to_time(line.split(" ")[1])
             if f"Req-ID: {pv_name} GRPC response:" in line:
                 et = string_to_time(line.split(" ")[1])
-
+    del logs
     if st is None:
         err_msg = f"Cannot find CSI start time of {pvc_obj.name}"
         logger.error(err_msg)

@@ -15,6 +15,15 @@ spec:
      volumeMounts:
        - name: mypvc
          mountPath: /mnt
+     securityContext:
+       allowPrivilegeEscalation: false
+       runAsNonRoot: true
+       capabilities:
+         drop:
+           - ALL
+       seccompProfile:
+         type: RuntimeDefault
+
   volumes:
    - name: mypvc
      persistentVolumeClaim:
