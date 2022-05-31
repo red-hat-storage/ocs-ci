@@ -103,7 +103,7 @@ class TestPvcMultiClonePerformance(PASTest):
             StorageNotSufficientException: in case of not enough capacity on the cluster
 
         """
-        num_of_clones = 450
+        num_of_clones = 512
         self.full_teardown = True
 
         # Getting the total Storage capacity
