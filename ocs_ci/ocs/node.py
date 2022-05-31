@@ -2319,3 +2319,31 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         if all(nodes_racks_or_zones):
             log.info("All the nodes racks or zones exist!")
             break
+
+
+def wait_for_new_worker_node_ipi(machineset, old_wnodes, timeout=900):
+    """
+    Wait for the new worker node to be ready
+
+    Args:
+        machineset (str): The machineset name
+        old_wnodes (list): The old worker nodes
+        timeout (int): Time to wait for the new worker node to be ready.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The new worker node object
+
+    Raise:
+        ResourceWrongStatusException: In case the new spun machine fails to reach Ready state
+            or replica count didn't match. Or in case one or more nodes haven't reached
+            the desired state.
+
+    """
+    machine.wait_for_new_node_to_be_ready(machineset, timeout=timeout)
+    new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
+    new_wnode = get_node_objs(new_wnode_names)[0]
+    log.info(f"Successfully created a new node {new_wnode.name}")
+
+    wait_for_nodes_status([new_wnode.name])
+    log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
+    return new_wnode
