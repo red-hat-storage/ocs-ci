@@ -114,13 +114,13 @@ class TestMonitorRecovery(E2ETest):
         # Initialize mon recovery class
         mon_recovery = MonitorRecovery()
 
+        logger.info("Corrupting ceph monitors by deleting store.db")
+        corrupt_ceph_monitors()
+
         logger.info("Backing up all the deployments")
         mon_recovery.backup_deployments()
         mons_revert = mon_recovery.mon_deployments_to_revert()
         mds_revert = mon_recovery.mds_deployments_to_revert()
-
-        logger.info("Corrupting ceph monitors by deleting store db")
-        corrupt_ceph_monitors()
 
         logger.info("Starting the monitor recovery procedure")
         logger.info("Scaling down rook and ocs operators")
@@ -157,8 +157,6 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
 
-        logger.info("Sleeping for 150 secs for cluster to stabilize")
-        time.sleep(150)
         logger.info("Recovering CephFS")
         mon_recovery.scale_rook_ocs_operators(replica=0)
         logger.info(
@@ -171,8 +169,6 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.revert_patches(mds_revert)
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
-        logger.info("Sleeping for 150 secs for cluster to stabilize")
-        time.sleep(150)
         logger.info("Recovering mcg by re-spinning the pods")
         recover_mcg()
         remove_global_id_reclaim()
@@ -261,6 +257,9 @@ class MonitorRecovery(object):
         self.dep_ocp.exec_oc_cmd(
             f"scale deployment {defaults.OCS_OPERATOR_NAME} --replicas={replica}"
         )
+        if replica == 1:
+            logger.info("Sleeping for 150 secs for cluster to stabilize")
+            time.sleep(150)
 
     def patch_sleep_on_osds(self):
         """
