@@ -7,6 +7,7 @@ on Openshfit Dedicated Platform.
 
 import logging
 import os
+import tempfile
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -206,6 +207,12 @@ class ROSA(CloudDeploymentBase):
         ):
             update_pull_secret()
         if config.DEPLOYMENT.get("not_ga_wa"):
+            deployer_version = config.DEPLOYMENT["deployer_version"]
+            upgrade_ocs_version = config.DEPLOYMENT["upgrade_ocs_version"]
+            logger.info(
+                f"Starting update to next version of deployer: {deployer_version}"
+            )
+            logger.info("Update catalogsource")
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
             catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
             catalog_source_data["spec"]["image"] = config.DEPLOYMENT[
@@ -224,10 +231,18 @@ class ROSA(CloudDeploymentBase):
             )
             # Wait for catalog source is ready
             catalog_source.wait_for_state("READY")
-            deployer_version = config.DEPLOYMENT["deployer_version"]
-            upgrade_ocs_version = config.DEPLOYMENT["upgrade_ocs_version"]
+            logger.info("Edit annotation on the deployer CSV")
             run_cmd(
-                f'oc annotate csv --overwrite ocs-osd-deployer.v{deployer_version} operatorframework.io/properties=\'{{{"properties":[{{{"type":"olm.package","value":{{{"packageName":"ocs-osd-deployer","version":"{deployer_version}"}}}}}},{{{"type":"olm.gvk","value":{{{"group":"ocs.openshift.io","kind":"ManagedOCS","version":"v1alpha1"}}}}}},{{{"type":"olm.package.required","value":{{{"packageName":"ose-prometheus-operator","versionRange":"4.10.0"}}}}}},{{{"type":"olm.package.required","value":{{{"packageName":"odf-operator","versionRange":"{upgrade_ocs_version}"}}}}}}]}}}\''
+                f"oc annotate csv --overwrite ocs-osd-deployer.v{deployer_version} "
+                'operatorframework.io/properties=\'{"properties":[{"type":"olm.package",'
+                '"value":{"packageName":"ocs-osd-deployer","version":'
+                f'"{deployer_version}"'
+                '}},{"type":"olm.gvk","value":{"group":"ocs.openshift.io","kind":'
+                '"ManagedOCS","version":"v1alpha1"}},{"type":"olm.package.required",'
+                '"value":{"packageName":"ose-prometheus-operator","versionRange":"4.10.0"}},'
+                '{"type":"olm.package.required","value":{"packageName":"odf-operator",'
+                f'"versionRange":"{upgrade_ocs_version}"'
+                "}}]}'"
             )
 
         if config.ENV_DATA.get("cluster_type") == "consumer":
