@@ -13,6 +13,10 @@ login = {
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
 }
 
+login_4_11 = {
+    "ocp_page": "Overview · Red Hat OpenShift",
+}
+
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "choose_ocs_version": (
@@ -834,6 +838,23 @@ validation_4_10 = {
 }
 
 locators = {
+    "4.11": {
+        "login": {**login, **login_4_11},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+        },
+    },
     "4.10": {
         "login": login,
         "page": {**page_nav, **page_nav_4_10},
