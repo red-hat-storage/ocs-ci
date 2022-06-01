@@ -100,9 +100,12 @@ class TestPostInstallationState(ManageTest):
                 resource_name=consumer_name,
             ).get()
             log.info(f"Verifying capacity of {consumer_name}")
-            assert consumer_yaml["spec"]["capacity"] == "1Ti"
+            assert consumer_yaml["spec"]["capacity"] in {"1Ti", "1Pi"}
             log.info(f"Verifying granted capacity of {consumer_name}")
-            assert consumer_yaml["status"]["grantedCapacity"] == "1Ti"
+            assert (
+                consumer_yaml["status"]["grantedCapacity"]
+                == consumer_yaml["spec"]["capacity"]
+            )
 
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
