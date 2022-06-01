@@ -1,3 +1,5 @@
+import os
+
 import logging
 
 from ocs_ci.deployment.deployment import Deployment
@@ -49,6 +51,16 @@ class OCPDeployWithACM(Deployment):
             return
         if self.multicluster_mode == constants.RDR_MODE:
             self.do_rdr_acm_ocp_deploy()
+        prev = config.cur_index
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            ssl_key = config.DEPLOYMENT.get("ingress_ssl_key")
+            ssl_cert = config.DEPLOYMENT.get("ingress_ssl_cert")
+            for key in [ssl_key, ssl_cert]:
+                if os.path.exists(key):
+                    os.unlink(key)
+            self.post_ocp_deploy()
+        config.switch_ctx(prev)
 
     def do_rdr_acm_ocp_deploy(self):
         """
