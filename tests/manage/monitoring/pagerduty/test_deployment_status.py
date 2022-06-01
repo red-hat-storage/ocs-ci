@@ -21,7 +21,6 @@ log = logging.getLogger(__name__)
 @tier4c
 @managed_service_required
 @runs_on_provider
-@bugzilla("1998056")
 @bugzilla("2033284")
 @pytest.mark.polarion_id("OCS-2766")
 def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
