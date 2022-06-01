@@ -328,7 +328,7 @@ def get_drpolicy_name(namespace):
 
     """
     drpc_name = get_drpc_name(namespace)
-    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPOLICY).get()[
+    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPC).get()[
         "items"
     ][0]
     return drpolicy_obj["spec"]["drPolicyRef"]["name"]
@@ -385,7 +385,7 @@ def get_secondary_cluster_name(namespace):
 
     """
     config.switch_acm_ctx()
-    drpolicy_resource_name = get_drpolicy_name()
+    drpolicy_resource_name = get_drpolicy_name(namespace)
     primary_cluster_name = get_primary_cluster_name(namespace)
     drpolicy_obj = ocp.OCP(
         kind=constants.DRPOLICY,
