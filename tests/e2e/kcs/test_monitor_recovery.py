@@ -1,3 +1,4 @@
+import collections
 import logging
 import base64
 import time
@@ -30,6 +31,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     get_noobaa_pods,
     get_plugin_pods,
+    get_ceph_tools_pod,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
@@ -82,14 +84,15 @@ class TestMonitorRecovery(E2ETest):
                 access_mode=constants.ACCESS_MODE_RWX,
             )
         )
+        self.md5sum = []
         for pod_obj in self.dc_pods:
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
             # Calculate md5sum
-            md5sum = pod.cal_md5sum(pod_obj, self.filename)
-            pod_obj.pvc.md5sum = md5sum
+            self.md5sum.append(pod.cal_md5sum(pod_obj, self.filename))
+        logger.info(f"Md5sum calculated before recovery: {self.md5sum}")
 
-        logger.info("Putting object on an object bucket")
         self.bucket_name = bucket_factory(interface="OC")[0].name
+        logger.info(f"Putting object on: {self.bucket_name}")
         assert bucket_utils.s3_put_object(
             s3_obj=mcg_obj,
             bucketname=self.bucket_name,
@@ -158,41 +161,46 @@ class TestMonitorRecovery(E2ETest):
         time.sleep(150)
         logger.info("Recovering CephFS")
         mon_recovery.scale_rook_ocs_operators(replica=0)
-
         logger.info(
             "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
         )
         mon_recovery.patch_sleep_on_mds()
-
         logger.info("Resetting the fs")
         ceph_fs_recovery()
-
         logger.info("Reverting MDS deployments")
         mon_recovery.revert_patches(mds_revert)
-
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
-        remove_ceph_warn()
-        logger.info("Recovering mcg by deleting the pods")
+        logger.info("Sleeping for 150 secs for cluster to stabilize")
+        time.sleep(150)
+        logger.info("Recovering mcg by re-spinning the pods")
         recover_mcg()
-
-        self.sanity_helpers.health_check(tries=10)
-
-        logger.info("Verifying md5sum of files after recovery")
+        remove_global_id_reclaim()
         for pod_obj in self.dc_pods:
-            current_md5sum = pod.cal_md5sum(pod_obj, self.filename)
-            assert current_md5sum == pod_obj.pvc.md5sum, "Data corruption found"
-            logger.info(
-                f"Verified: md5sum of {self.filename} on pod {pod_obj.name} "
-                f"matches with the original md5sum"
+            pod_obj.delete(force=True)
+        new_md5_sum = []
+        logger.info("Verifying md5sum of files after recovery")
+        for pod_obj in get_respun_dc_pods(self.dc_pods):
+            pod_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod_obj.name,
+                timeout=600,
+                sleep=10,
             )
-
+            new_md5_sum.append(pod.cal_md5sum(pod_obj, self.filename))
+        logger.info(f"Md5sum calculated after recovery: {new_md5_sum}")
+        if collections.Counter(new_md5_sum) == collections.Counter(self.md5sum):
+            logger.info(
+                f"Verified: md5sum of {self.filename} on pods matches with the original md5sum"
+            )
+        else:
+            assert False, f"Data corruption found {new_md5_sum} and {self.md5sum}"
         logger.info("Getting object after recovery")
         assert bucket_utils.s3_get_object(
             s3_obj=mcg_obj,
             bucketname=self.bucket_name,
             object_key=self.object_key,
-        ), "Failed: PutObject"
+        ), "Failed: GetObject"
 
         # New pvc, dc pods, obcs
         new_dc_pods = [
@@ -205,7 +213,6 @@ class TestMonitorRecovery(E2ETest):
         ]
         for pod_obj in new_dc_pods:
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-
         logger.info("Creating new bucket and write object")
         new_bucket = bucket_factory(interface="OC")[0].name
         assert bucket_utils.s3_put_object(
@@ -214,6 +221,9 @@ class TestMonitorRecovery(E2ETest):
             object_key=self.object_key,
             data=self.object_data,
         ), "Failed: PutObject"
+        logger.info("Archiving the ceph crash warnings")
+        tool_pod = get_ceph_tools_pod()
+        tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
 
 
 class MonitorRecovery(object):
@@ -697,22 +707,24 @@ def recover_mcg():
     for noobaa_pod in get_noobaa_pods():
         noobaa_pod.delete()
     for noobaa_pod in get_noobaa_pods():
-        wait_for_resource_state(resource=noobaa_pod, state=constants.STATUS_RUNNING)
+        wait_for_resource_state(
+            resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
+        )
     if config.ENV_DATA["platform"] == constants.ON_PREM_PLATFORMS:
         logger.info("Re-spinning RGW pods")
         for rgw_pod in get_rgw_pods():
             rgw_pod.delete()
         for rgw_pod in get_rgw_pods():
-            wait_for_resource_state(resource=rgw_pod, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=rgw_pod, state=constants.STATUS_RUNNING, timeout=600
+            )
 
 
-def remove_ceph_warn():
+def remove_global_id_reclaim():
     """
-    Archives all ceph crashes and removes warnings by re-spinning client and mon pods
+    Removes global id warning by re-spinning client and mon pods
 
     """
-    toolbox = pod.get_ceph_tools_pod()
-    toolbox.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
     csi_pods = []
     interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
     for interface in interfaces:
@@ -755,6 +767,32 @@ def ceph_fs_recovery():
         toolbox.exec_cmd_on_pod(
             f"ceph fs reset {defaults.CEPHFILESYSTEM_NAME}  --yes-i-really-mean-it"
         )
+
+
+def get_respun_dc_pods(pod_list):
+    """
+    Fetches info about the respun pods in the cluster
+
+    Args:
+        pod_list (list): list of previous pod objects
+
+    Returns:
+        list : list of respun pod objects
+
+    """
+    new_pods = []
+    for pod_obj in pod_list:
+        pod_label = pod_obj.labels.get("deploymentconfig")
+        label_selector = f"deploymentconfig={pod_label}"
+
+        pods_data = pod.get_pods_having_label(label_selector, pod_obj.namespace)
+        for pod_data in pods_data:
+            pod_name = pod_data.get("metadata").get("name")
+            if "-deploy" not in pod_name and pod_name not in pod_obj.name:
+                new_pods.append(pod.get_pod_obj(pod_name, pod_obj.namespace))
+    logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
+    logger.info(f"Respun pods: {[pod_obj.name for pod_obj in new_pods]}")
+    return new_pods
 
 
 def get_ceph_caps(secret_resource):
