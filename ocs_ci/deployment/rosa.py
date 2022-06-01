@@ -11,13 +11,19 @@ import os
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import openshift_dedicated as ocm, rosa
+from ocs_ci.utility import openshift_dedicated as ocm, rosa, templating
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    get_ocp_version,
+    run_cmd,
+    TimeoutSampler,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 
 logger = logging.getLogger(name=__file__)
 
@@ -195,8 +201,35 @@ class ROSA(CloudDeploymentBase):
                 timeout=600,
             )
 
-        if config.DEPLOYMENT.get("pullsecret_workaround"):
+        if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
+            "not_ga_wa"
+        ):
             update_pull_secret()
+        if config.DEPLOYMENT.get("not_ga_wa"):
+            disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+            catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+            catalog_source_data["spec"]["image"] = config.DEPLOYMENT[
+                "ocs_registry_image"
+            ]
+            catalog_source_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="catalog_source_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                catalog_source_data, catalog_source_manifest.name
+            )
+            run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
+            catalog_source = CatalogSource(
+                resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+            )
+            # Wait for catalog source is ready
+            catalog_source.wait_for_state("READY")
+            deployer_version = config.DEPLOYMENT["deployer_version"]
+            upgrade_ocs_version = config.DEPLOYMENT["upgrade_ocs_version"]
+            run_cmd(
+                f'oc annotate csv --overwrite ocs-osd-deployer.v{deployer_version} operatorframework.io/properties=\'{{{"properties":[{{{"type":"olm.package","value":{{{"packageName":"ocs-osd-deployer","version":"{deployer_version}"}}}}}},{{{"type":"olm.gvk","value":{{{"group":"ocs.openshift.io","kind":"ManagedOCS","version":"v1alpha1"}}}}}},{{{"type":"olm.package.required","value":{{{"packageName":"ose-prometheus-operator","versionRange":"4.10.0"}}}}}},{{{"type":"olm.package.required","value":{{{"packageName":"odf-operator","versionRange":"{upgrade_ocs_version}"}}}}}}]}}}\''
+            )
+
         if config.ENV_DATA.get("cluster_type") == "consumer":
             patch_consumer_toolbox()
 
