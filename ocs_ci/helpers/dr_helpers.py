@@ -328,9 +328,9 @@ def get_drpolicy_name(namespace):
 
     """
     drpc_name = get_drpc_name(namespace)
-    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPC).get()[
-        "items"
-    ][0]
+    drpolicy_obj = ocp.OCP(resource_name=drpc_name, kind=constants.DRPC).get()["items"][
+        0
+    ]
     return drpolicy_obj["spec"]["drPolicyRef"]["name"]
 
 
