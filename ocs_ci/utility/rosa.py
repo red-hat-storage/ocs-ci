@@ -260,13 +260,12 @@ def install_odf_addon(cluster):
 
     """
     addon_name = config.ENV_DATA["addon_name"]
-    size = config.ENV_DATA["size"]
     cluster_type = config.ENV_DATA.get("cluster_type", "")
     provider_name = config.ENV_DATA.get("provider_name", "")
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
-    cmd = f"rosa install addon --cluster={cluster} --size {size} {addon_name}" f" --yes"
+    cmd = f"rosa install addon --cluster={cluster} {addon_name} --yes"
     if notification_email_0:
         cmd = cmd + f" --notification-email-0 {notification_email_0}"
     if notification_email_1:
@@ -275,6 +274,8 @@ def install_odf_addon(cluster):
         cmd = cmd + f" --notification-email-2 {notification_email_2}"
 
     if cluster_type.lower() == "provider":
+        size = config.ENV_DATA.get("size", "")
+        cmd += f" --size {size}"
         public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
         if not public_key:
             raise ConfigurationError(
@@ -288,9 +289,8 @@ def install_odf_addon(cluster):
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
     if cluster_type.lower() == "consumer" and provider_name:
-        unit = config.ENV_DATA.get("unit", "Ti")
         storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
-        cmd += f' --unit "{unit}" --storage-provider-endpoint "{storage_provider_endpoint}"'
+        cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
         onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
         if not onboarding_ticket:
             onboarding_ticket = generate_onboarding_token()
@@ -303,7 +303,7 @@ def install_odf_addon(cluster):
     for addon_info in utils.TimeoutSampler(
         7200, 30, get_addon_info, cluster, addon_name
     ):
-        logger.info(f"Current addon installation info: " f"{addon_info}")
+        logger.info(f"Current addon installation info: {addon_info}")
         if "ready" in addon_info:
             logger.info(f"Addon {addon_name} was installed")
             break
