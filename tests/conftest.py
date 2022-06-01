@@ -5111,14 +5111,9 @@ def switch_to_provider_for_test(request):
         and current_cluster.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
     ):
-        for cluster in config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
-                provider_cluster = cluster
-                log.debug("Switching to the provider cluster context")
-                # TODO: Use 'switch_to_provider' function introduced in PR 5541
-                config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
-                switched_to_provider = True
-                break
+        log.debug("Switching to the provider cluster context")
+        config.switch_to_provider()
+        switched_to_provider = True
 
     def finalizer():
         """
