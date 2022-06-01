@@ -144,6 +144,7 @@ BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
+VOLUME_REPLICATION = "VolumeReplication"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -681,7 +682,7 @@ RBD_SIDECAR_PATCH_CMD = (
     ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
     '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
-RBD_SIDECAR_COUNT = 16
+RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -985,9 +986,19 @@ RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
-NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
-NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
-EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
+OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
+CEPH_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "ocs-storagecluster", "cephobjectstoreuser"
+)
+CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "ocs-storagecluster", "cephobjectstoreuser"
+)
+NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "noobaa", "ceph-objectstore-user"
+)
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "noobaa", "ceph-objectstore-user"
+)
 OCS_SECRET = "ocs-secret"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
@@ -1193,6 +1204,10 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
+# Routes
+RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
+
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
@@ -1360,7 +1375,7 @@ HAPROXY_SERVICE = "/etc/systemd/system/haproxy.service"
 CHRONY_CONF = "/etc/chrony.conf"
 
 # NTP server
-RH_NTP_CLOCK = "clock.redhat.com"
+RH_NTP_CLOCK = "clock1.rdu2.redhat.com"
 
 # Disruptions pod names
 OSD = "osd"
@@ -1680,11 +1695,13 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
-ACM_HUB_DOWNSTREAM_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
-ACM_HUB_DOWNSTREAM_ICSP_YAML = os.path.join(
+ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
+ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
 )
-ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
+ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
@@ -1702,6 +1719,7 @@ ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "registry.ci.openshift.org/ocp/release"
 ACM_VSPHERE_NETWORK = "VM Network"
 ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
+ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 # Concatenated CA file for vcenter

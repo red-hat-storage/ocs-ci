@@ -3,7 +3,9 @@ import time
 import logging
 import os
 import re
+import tempfile
 from uuid import uuid4
+import yaml
 
 import requests
 import json
@@ -24,6 +26,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
+from ocs_ci.utility import templating
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 
@@ -890,3 +893,41 @@ class PASTest(BaseTest):
 
         self.results_path = os.path.join("/", *self.results_path, func_name)
         self.results_file = os.path.join(self.results_path, "all_results.txt")
+
+    def create_fio_pod_yaml(self, pvc_size=1, filesize=0):
+        """
+        This function create a new performance pod yaml file, which will trigger
+        the FIO command on starting and getting into Compleat state when finish
+
+        If the filesize argument is not provided, The FIO will fillup 70% of the
+        PVC which will attached to the pod.
+
+        Args:
+            pvc_size (int/float): the size of the pvc_which will attach to the pod (in GiB)
+            file_size (str): the filesize to write into (e.g 100Mi, 30Gi)
+
+        """
+        if filesize == 0:
+            file_size = f"{int(pvc_size * 1024 * 0.7)}M"
+        else:
+            file_size = filesize
+
+        # Creating the FIO command line parameters string
+        command = (
+            "--name=fio-fillup --filename=/mnt/test_file --rw=write --bs=1m"
+            f" --direct=1 --numjobs=1 --time_based=0 --runtime=36000 --size={file_size}"
+            " --ioengine=libaio --end_fsync=1 --output-format=json"
+        )
+        # Load the default POD yaml file and update it to run the FIO immediately
+        pod_data = templating.load_yaml(constants.PERF_POD_YAML)
+        pod_data["spec"]["containers"][0]["command"] = ["/usr/bin/fio"]
+        pod_data["spec"]["containers"][0]["args"] = command.split(" ")
+        pod_data["spec"]["containers"][0]["stdin"] = False
+        pod_data["spec"]["containers"][0]["tty"] = False
+        # FIO need to run only once
+        pod_data["spec"]["restartPolicy"] = "Never"
+
+        # Generate new POD yaml file
+        self.pod_yaml_file = tempfile.NamedTemporaryFile(prefix="PerfPod")
+        with open(self.pod_yaml_file.name, "w") as temp:
+            yaml.dump(pod_data, temp)

@@ -1,5 +1,6 @@
+# Create this only on ACM
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  name: openshift-dr-system-operatorgroup
+  name: openshift-dr-system
   namespace: openshift-dr-system

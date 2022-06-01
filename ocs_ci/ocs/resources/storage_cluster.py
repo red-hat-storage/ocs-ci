@@ -118,6 +118,12 @@ def ocs_install_verification(
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
+    provider_cluster = (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+    consumer_cluster = (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
     ocs_version = version.get_semantic_ocs_version_from_config()
     external = config.DEPLOYMENT["external_mode"] or (
         managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
@@ -164,7 +170,7 @@ def ocs_install_verification(
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
 
-    if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
+    if provider_cluster:
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 3,
@@ -173,7 +179,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    elif consumer_cluster:
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -233,13 +239,13 @@ def ocs_install_verification(
         f"{storage_cluster_name}-ceph-rbd",
     }
     skip_storage_classes = set()
-    if disable_cephfs:
+    if disable_cephfs or provider_cluster:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-cephfs",
             }
         )
-    if disable_blockpools:
+    if disable_blockpools or provider_cluster:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-ceph-rbd",
@@ -281,7 +287,7 @@ def ocs_install_verification(
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
-    if not managed_service or config.ENV_DATA["cluster_type"].lower() != "provider":
+    if not provider_cluster:
         assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
@@ -294,14 +300,14 @@ def ocs_install_verification(
             resource_name=(constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
         )
     else:
-        if not disable_blockpools:
+        if not disable_blockpools and not provider_cluster:
             sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
-        if not disable_cephfs:
+        if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
-    if not disable_blockpools:
-        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    if not disable_blockpools and not provider_cluster:
+        if consumer_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -319,8 +325,8 @@ def ocs_install_verification(
                 sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
                 == constants.RBD_PROVISIONER_SECRET
             )
-    if not disable_cephfs:
-        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    if not disable_cephfs and not provider_cluster:
+        if consumer_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -707,7 +713,7 @@ def osd_encryption_verification():
             raise ValueError("OSD is not encrypted")
 
     # skip OCS 4.8 as the fix for luks header info is still not available on it
-    if ocs_version > version.VERSION_4_6 and ocs_version != version.VERSION_4_8:
+    if ocs_version > version.VERSION_4_6:
         log.info("Verify luks header label for encrypted devices")
         worker_nodes = get_osd_running_nodes()
         failures = 0
@@ -1312,7 +1318,7 @@ def verify_consumer_storagecluster(sc_data):
     Verify that Storagecluster is has:
     1. externalStorage: enable: true
     2. storageProviderEndpoint: IP:31659
-    3. TODO: onboardingTicket
+    3. onboardingTicket is present
     4. TODO: requestedCapacity
     5. catsrc existence
 
@@ -1328,6 +1334,11 @@ def verify_consumer_storagecluster(sc_data):
         "\\d+(\\.\\d+){3}:31659",
         sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
     )
+    ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
+    log.info(
+        f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
+    )
+    assert len(ticket) > 500
     catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
