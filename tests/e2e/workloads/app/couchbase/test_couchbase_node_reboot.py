@@ -88,7 +88,6 @@ class TestCouchBaseNodeReboot(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [self.cb.result]
-
         retry((CommandFailed), tries=60, delay=15)(
             bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
         )
