@@ -4,3 +4,4 @@ DEPLOYMENT:
 UPGRADE:
   upgrade_ocs_version: "4.11.0"
   deployer_version: "2.0.1"
+  ocs_channel: "stable-4.11"

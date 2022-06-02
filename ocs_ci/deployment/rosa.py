@@ -207,8 +207,8 @@ class ROSA(CloudDeploymentBase):
         ):
             update_pull_secret()
         if config.DEPLOYMENT.get("not_ga_wa"):
-            deployer_version = config.DEPLOYMENT["deployer_version"]
-            upgrade_ocs_version = config.DEPLOYMENT["upgrade_ocs_version"]
+            deployer_version = config.UPGRADE["deployer_version"]
+            upgrade_ocs_version = config.UPGRADE["upgrade_ocs_version"]
             logger.info(
                 f"Starting update to next version of deployer: {deployer_version}"
             )
@@ -244,6 +244,45 @@ class ROSA(CloudDeploymentBase):
                 f'"versionRange":"{upgrade_ocs_version}"'
                 "}}]}'"
             )
+            ocs_channel = config.UPGRADE["ocs_channel"]
+            odf_operator_update = f"odf-operator.v{deployer_version}"
+            patch_changes = [
+                f'[{{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}}]',
+                f'[{{{"op": "replace", "path": "/spec/sourceNamespace", "value" : "{constants.MARKETPLACE_NAMESPACE}"}}}]',
+                f'[{"op": "replace", "path": "/spec/startingCSV", "value" : ""}]',
+            ]
+            logger.info("Edit subscription")
+            oc = ocp.OCP(
+                kind=constants.SUBSCRIPTION,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            subscriptions = oc.get()["items"]
+            for subscription in subscriptions:
+                odf_operator_sub = (
+                    subscription.get("metadata").get("name")
+                    if subscription.get("metadata")
+                    .get("name")
+                    .startswith(constants.ODF_SUBSCRIPTION)
+                    else ""
+                )
+                break
+            for change in patch_changes:
+                oc.patch(
+                    resource_name=odf_operator_sub, params=change, format_type="json"
+                )
+            logger.info("Edit operators")
+            oc = ocp.OCP(
+                kind="operator", namespace=config.ENV_DATA["cluster_namespace"]
+            )
+            operators = [
+                "ocs-operator",
+                "ocs-operator",
+                "mcg-operator",
+                "odf-csi-addons-operator",
+            ]
+            for operator in operators:
+                for change in patch_changes:
+                    oc.patch(resource_name=operator, params=change, format_type="json")
 
         if config.ENV_DATA.get("cluster_type") == "consumer":
             patch_consumer_toolbox()
