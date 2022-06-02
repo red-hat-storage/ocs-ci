@@ -5314,7 +5314,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
-        max_pvc_size=40,
+        max_pvc_size=30,
     ):
         """
         Create a factory for creating resources using k8s fixture.
