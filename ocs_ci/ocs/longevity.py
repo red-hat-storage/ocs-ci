@@ -1,6 +1,8 @@
 import time
+from pathlib import Path
 import logging
 import pathlib
+import os
 
 from datetime import datetime, timedelta
 
@@ -25,6 +27,7 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     get_mon_db_size_in_kb,
     get_noobaa_db_used_space,
+    get_current_test_name,
 )
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
@@ -79,6 +82,11 @@ class Longevity(object):
         lcl = locals()
         self.ceph_obj = CephCluster()
         self.tmp_path = pathlib.Path(ocsci_log_path())
+        self.cluster_sanity_check_dir = os.path.join(
+            self.tmp_path,
+            get_current_test_name(),
+            "cluster_sanity_outputs",
+        )
         self.pvc_size = None
         self.pvc_count = None
         self.pod_count = None
@@ -560,6 +568,8 @@ class Longevity(object):
             disk_utilization (bool): Get the osd and total cluster disk utilization if set to True
 
         """
+        log.info("Starting Cluster Sanity checks....")
+        cluster_sanity_check_dict = {}
         # Check if there are Zombie process on the nodes
         check_for_zombie_process_on_node()
 
@@ -571,44 +581,110 @@ class Longevity(object):
             wait_for_pods_to_be_running(timeout=600)
 
         if db_usage:
+            mon_db_usage_list = []
+            noobaa_db_usage_list = []
+            cluster_sanity_check_dict["db_usage"] = {}
             # Check mon db usage
             mon_pods = get_mon_pods()
             for mon_pod in mon_pods:
                 # Get mon db size
-                get_mon_db_size_in_kb(mon_pod)
+                mon_db_usage_list.append(
+                    f" {mon_pod.name} DB usage: {get_mon_db_size_in_kb(mon_pod)} in KB"
+                )
+                cluster_sanity_check_dict["db_usage"][
+                    "mon_db_usage"
+                ] = mon_db_usage_list
 
             # Check Noobaa db usage
-            get_noobaa_db_used_space()
+            noobaa_db_usage_list.append(
+                f" Noobaa DB usage: {get_noobaa_db_used_space()}"
+            )
+            cluster_sanity_check_dict["db_usage"][
+                "noobaa_db_usage"
+            ] = noobaa_db_usage_list
 
         if resource_utilization:
+            adm_top_nodes_res_util_list = []
+            oc_describe_res_util_list = []
+            cluster_sanity_check_dict["resource_utilization"] = {}
             # Get the cpu and memory of each nodes from adm top
-            get_node_resource_utilization_from_adm_top(
+            master_top_dict_out = get_node_resource_utilization_from_adm_top(
                 node_type="master", print_table=True
             )
-            get_node_resource_utilization_from_adm_top(
+            adm_top_nodes_res_util_list.append(master_top_dict_out)
+            worker_top_dict_out = get_node_resource_utilization_from_adm_top(
                 node_type="worker", print_table=True
             )
-
+            adm_top_nodes_res_util_list.append(worker_top_dict_out)
+            cluster_sanity_check_dict["resource_utilization"][
+                "adm_top_nodes_res_util"
+            ] = adm_top_nodes_res_util_list
             # Get the cpu and memory from describe of nodes
-            get_node_resource_utilization_from_oc_describe(
+            master_describe_dict_out = get_node_resource_utilization_from_oc_describe(
                 node_type="master", print_table=True
             )
-            get_node_resource_utilization_from_oc_describe(
+            oc_describe_res_util_list.append(master_describe_dict_out)
+            worker_describe_dict_out = get_node_resource_utilization_from_oc_describe(
                 node_type="worker", print_table=True
             )
+            oc_describe_res_util_list.append(worker_describe_dict_out)
+            cluster_sanity_check_dict["resource_utilization"][
+                "oc_describe_nodes_res_util"
+            ] = oc_describe_res_util_list
 
             # Get the resource utilization of the pods in openshift-storage namespace
-            pod_resource_utilization_raw_output_from_adm_top()
+            pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+            cluster_sanity_check_dict["resource_utilization"][
+                "adm_top_pods_res_util"
+            ] = pod_raw_adm_out
 
         if disk_utilization:
+            osd_disk_utilization_list = []
+            cluster_sanity_check_dict["disk_utilization"] = {}
             # Get OSD utilization
             osd_filled_dict = get_osd_utilization()
+            osd_disk_utilization_list.append(f"OSD disk utilization: {osd_filled_dict}")
             log.info(f"OSD Utilization: {osd_filled_dict}")
+            cluster_sanity_check_dict["disk_utilization"][
+                "osd_disk_utilization"
+            ] = osd_filled_dict
             # Get the percentage of the total used capacity in the cluster
             total_used_capacity = get_percent_used_capacity()
             log.info(
                 f"The percentage of the total used capacity in the cluster: {total_used_capacity}"
             )
+            cluster_sanity_check_dict["disk_utilization"][
+                "cluster_total_used_capacity"
+            ] = total_used_capacity
+
+        log.info("Completed Cluster Sanity Checks")
+
+        return cluster_sanity_check_dict
+
+    def collect_cluster_sanity_checks_outputs(self, dir_name=None):
+        """
+        Collect cluster sanity checks outputs and store the outputs in ocs-ci log directory
+
+        Args:
+            dir_name (str):  By default the cluster sanity checks outputs are stored in
+            ocs-ci-log_path/cluster_sanity_outputs directory.
+            when dir_name input is provided, a new directory with that name gets created under
+            ocs-ci-log_path/cluster_sanity_outputs/<dir_name> and the outputs gets collected inside it
+
+        """
+        destination_dir = (
+            f"{self.cluster_sanity_check_dir}/{dir_name}"
+            if dir_name
+            else self.cluster_sanity_check_dir
+        )
+        if not os.path.isdir(destination_dir):
+            Path(destination_dir).mkdir(parents=True, exist_ok=True)
+        cluster_sanity_out_dict = self.cluster_sanity_check()
+        for key1 in cluster_sanity_out_dict:
+            fopen = open(f"{destination_dir}/{key1}", "w")
+            for key2, value in cluster_sanity_out_dict[key1].items():
+                fopen.write("%s:%s\n" % (key2, value))
+            fopen.close()
 
     def stage_0(
         self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True
@@ -943,9 +1019,9 @@ def start_app_workload(
         if not support_check:
             raise UnsupportedWorkloadError("Found Unsupported app workloads list")
         log.info("APP Workloads support check is Successful")
-        log.info("Cluster sanity checks before starting cycle execution")
+        log.info("Cluster sanity checks at the beginning of the stage")
         long = Longevity()
-        long.cluster_sanity_check()
+        long.collect_cluster_sanity_checks_outputs(dir_name="Beginning_of_the_stage")
         cycle_count = 1
         end_time = datetime.now() + timedelta(minutes=run_time)
         while datetime.now() < end_time:
@@ -1000,12 +1076,10 @@ def start_app_workload(
                 cleanup()
             threads.clear()
             workloads.clear()
+            long.collect_cluster_sanity_checks_outputs(dir_name=f"cycle-{cycle_count}")
             log.info(
                 f"##############[COMPLETED CYCLE:{cycle_count}]####################"
             )
-            log.info(f"Cluster sanity checks after cycle execution:{cycle_count}")
-            long = Longevity()
-            long.cluster_sanity_check()
             cycle_count += 1
             log.info(
                 f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT CYCLE]###########"
@@ -1047,7 +1121,9 @@ def start_ocp_workload(workloads_list, run_in_bg=True):
     if not support_check:
         raise UnsupportedWorkloadError("Found Unsupported ocp workloads list")
     log.info("OCP Workloads support check is Successful")
-
+    log.info("Cluster sanity checks at the beginning of the stage")
+    long = Longevity()
+    long.collect_cluster_sanity_checks_outputs(dir_name="Beginning_of_the_stage")
     for workload in workloads_list:
         if workload == "monitoring":
             if not check_if_monitoring_stack_exists():

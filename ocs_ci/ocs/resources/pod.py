@@ -2648,3 +2648,4 @@ def pod_resource_utilization_raw_output_from_adm_top(
     )
     logger.info("Command RAW output of adm top pods")
     logger.info(f"{resource_utilization_all_pods}")
+    return resource_utilization_all_pods
