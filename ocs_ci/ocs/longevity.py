@@ -525,10 +525,10 @@ class Longevity(object):
             fetched from the kube job obc yaml dict
 
         Returns:
-        obc_bound_list (list): List of all OBCs which is in Bound state.
+            obc_bound_list (list): List of all OBCs which is in Bound state.
 
         Raises:
-        AssertionError: If not all OBC reached to Bound state
+            AssertionError: If not all OBC reached to Bound state
 
         """
         log.info("validate that all the OBCs in the kube job list reached BOUND state")
@@ -566,6 +566,9 @@ class Longevity(object):
             db_usage (bool): Get the mon and noobaa db usage if set to True
             resource_utilization (bool): Get the Memory, CPU utilization of nodes and pods if set to True
             disk_utilization (bool): Get the osd and total cluster disk utilization if set to True
+
+        Returns:
+            cluster_sanity_check_dict (dict): Returns cluster sanity checks outputs in a nested dictionary
 
         """
         log.info("Starting Cluster Sanity checks....")
