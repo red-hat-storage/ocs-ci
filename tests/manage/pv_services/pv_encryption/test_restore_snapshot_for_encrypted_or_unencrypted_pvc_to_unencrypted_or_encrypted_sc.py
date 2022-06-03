@@ -58,27 +58,10 @@ else:
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-class TestEncryptedPvcSnapshotRestore(ManageTest):
+class TestPvcSnapshotRestore(ManageTest):
     """
-    Test we can not restore an encrypted snapshot to an un-encrypted PVC
-
-    Steps:
-        1:- Create project
-        2:- Create an encryption enabled storageclass for RBD
-        3:- Create a storageclass for RBD without encryption
-        4:- Create ceph-csi-kms-token in the tenant namespace
-        5:- Create PVC with encrypted storageclass and Pods
-        6:- Verify if the key is created in Vault
-        7:- Verify whether encrypted device is present inside the pod
-        8:- Find initial md5sum
-        9:- Run IO
-        10:- Wait for IO completion
-        11:- Verify md5sum has changed after IO
-        12:- Create snapshot for the PVC
-        13:- Verify snapshots are ready and verify if encryption key is created in vault
-        14:- Restoring snapshots to create new PVCs using unencrypted storageclass
-        15:- Confirm that the restored PVCs are in Pending status and validate error log
-        16:- Deletion of Pods, PVCs and Snapshots
+    Test we can not restore an encrypted snapshot to an un-encrypted PVC and
+    an unencrypted snapshot to an encrypted PVC
 
     """
 
@@ -90,12 +73,16 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
         use_vault_namespace,
         pv_encryption_kms_setup_factory,
         project_factory,
-        pod_factory,
         storageclass_factory,
-        multi_pvc_factory,
     ):
         """
         Setup csi-kms-connection-details configmap
+
+        Steps:
+            1:- Create project
+            2:- Create an encryption enabled storageclass for RBD
+            3:- Create a storageclass for RBD without encryption
+            4:- Create ceph-csi-kms-token in the tenant namespace
 
         """
 
@@ -123,9 +110,40 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             self.kms.vault_path_token = self.kms.generate_vault_token()
             self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
+    def test_encrypted_pvc_snapshot_restore_to_unencrypted_pvc(
+        self,
+        kms_provider,
+        snapshot_factory,
+        snapshot_restore_factory,
+        pod_factory,
+        multi_pvc_factory,
+    ):
+        """
+        Test to restore snapshots of encrypted RBD Block VolumeMode PVCs to an un-encrypted PVC
+
+
+        Steps:
+            1:- Create PVC with encrypted storageclass and Pods
+            2:- Verify if the key is created in Vault
+            3:- Verify whether encrypted device is present inside the pod
+            4:- Find initial md5sum
+            5:- Run IO
+            6:- Wait for IO completion
+            7:- Verify md5sum has changed after IO
+            8:- Create snapshot for the encrypted PVC
+            9:- Verify snapshots are ready and verify if encryption key is created in vault
+            10:- Restoring snapshots to create new PVCs using unencrypted storageclass
+            11:- Confirm that the restored PVCs are in Pending status and validate error log
+            12:- Deletion of Pods, PVCs and Snapshots
+
+        """
+
+        log.info(
+            "Check for encrypted device, find initial md5sum value and run IO on all pods"
+        )
         # Create PVC and Pods
         self.pvc_size = 2
-        self.pvc_objs = multi_pvc_factory(
+        self.pvc_objs_with_encryption = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.proj_obj,
             storageclass=self.sc_obj_with_encryption,
@@ -139,8 +157,8 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             wait_each=False,
         )
 
-        self.pod_objs = create_pods(
-            self.pvc_objs,
+        self.pod_objs_with_encrypted_pvc = create_pods(
+            self.pvc_objs_with_encryption,
             pod_factory,
             constants.CEPHBLOCKPOOL,
             pods_for_rwx=1,
@@ -149,7 +167,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
 
         # Verify if the key is created in Vault
         self.vol_handles = []
-        for pvc_obj in self.pvc_objs:
+        for pvc_obj in self.pvc_objs_with_encryption:
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
@@ -163,21 +181,9 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
                         f"Vault: Key not found for {pvc_obj.name}"
                     )
 
-    def test_encrypted_pvc_snapshot_restore(
-        self,
-        kms_provider,
-        snapshot_factory,
-        snapshot_restore_factory,
-    ):
-        """
-        Test to restore snapshots of encrypted RBD Block VolumeMode PVCs to an un-encrypted PVC
-
-        """
-
-        log.info(
-            "Check for encrypted device, find initial md5sum value and run IO on all pods"
-        )
-        for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
+        for vol_handle, pod_obj in zip(
+            self.vol_handles, self.pod_objs_with_encrypted_pvc
+        ):
 
             # Verify whether encrypted device is present inside the pod
             if pod_obj.exec_sh_cmd_on_pod(
@@ -206,7 +212,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
         log.info("IO started on all pods")
 
         # Wait for IO completion
-        for pod_obj in self.pod_objs:
+        for pod_obj in self.pod_objs_with_encrypted_pvc:
             pod_obj.get_fio_results()
         log.info("IO completed on all pods")
 
@@ -214,7 +220,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
 
         # Verify md5sum has changed after IO.
         log.info("Verify md5sum has changed after IO and create snapshot from all PVCs")
-        for pod_obj in self.pod_objs:
+        for pod_obj in self.pod_objs_with_encrypted_pvc:
             md5sum_after_io = cal_md5sum(
                 pod_obj=pod_obj,
                 file_name=pod_obj.get_storage_path(storage_type="block"),
@@ -224,7 +230,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
                 pod_obj.md5sum_before_io != md5sum_after_io
             ), f"md5sum has not changed after IO on pod {pod_obj.name}"
 
-            # Create snapshot
+            # Create snapshot for the encrypted PVC
             log.info(f"Creating snapshot of PVC {pod_obj.pvc.name}")
             snap_obj = snapshot_factory(pod_obj.pvc, wait=False)
             snap_obj.md5sum = md5sum_after_io
@@ -253,7 +259,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
                     )
             snap_handles.append(snap_handle)
 
-        # Restoring snapshots to create new PVCs
+        # Restoring snapshots to create new PVCs using unencrypted storageclass
         log.info("Creating new PVCs from snapshots")
         restore_pvcs = []
         for snap_obj in snap_objs:
@@ -295,14 +301,188 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
 
         # Deletion of Pods, PVCs and Snapshots
         log.info(f"Deleting pod")
-        for pod_obj in self.pod_objs:
+        for pod_obj in self.pod_objs_with_encrypted_pvc:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(
                 pod_obj.name, 180
             ), f"Pod {pod_obj.name} is not deleted"
 
         log.info("Deleting PVC")
-        for pvc_obj in self.pvc_objs:
+        for pvc_obj in self.pvc_objs_with_encryption:
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(
+                resource_name=pvc_obj.name
+            ), f"PVC {pvc_obj.name} is not deleted"
+            log.info(f"Verified: PVC {pvc_obj.name} is deleted.")
+
+        log.info("Deleting restored PVCs")
+        for restore_pvc_obj in restore_pvcs:
+            pv_obj = restore_pvc_obj.backed_pv_obj
+            restore_pvc_obj.delete()
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+
+        log.info("Deleting the snapshots")
+        for snap_obj in snap_objs:
+            snapcontent_obj = get_snapshot_content_obj(snap_obj=snap_obj)
+            snap_obj.delete()
+            snapcontent_obj.ocp.wait_for_delete(resource_name=snapcontent_obj.name)
+
+    def test_unencrypted_pvc_snapshot_restore_to_encrypted_pvc(
+        self,
+        snapshot_factory,
+        snapshot_restore_factory,
+        pod_factory,
+        multi_pvc_factory,
+    ):
+        """
+        Test to restore snapshots of unencrypted RBD Block VolumeMode PVCs to an encrypted PVC
+
+        Steps:
+            1:- Create PVC with unencrypted storageclass and Pods
+            2:- Find initial md5sum
+            3:- Run IO
+            4:- Wait for IO completion
+            5:- Verify md5sum has changed after IO
+            6:- Create snapshot for the PVC
+            7:- Verify snapshots are ready
+            8:- Restoring snapshots to create new PVCs using encrypted storageclass
+            9:- Confirm that the restored PVCs are in Pending status and validate error log
+            10:- Deletion of Pods, PVCs and Snapshots
+
+        """
+
+        log.info(
+            "Check for unencrypted device, find initial md5sum value and run IO on all pods"
+        )
+
+        # Create PVC with unencrypted storageclass and Pods
+        self.pvc_size = 2
+        self.pvc_objs_without_encryption = multi_pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=self.proj_obj,
+            storageclass=self.sc_obj_without_encryption,
+            size=self.pvc_size,
+            access_modes=[
+                f"{constants.ACCESS_MODE_RWX}-Block",
+                f"{constants.ACCESS_MODE_RWO}-Block",
+            ],
+            status=constants.STATUS_BOUND,
+            num_of_pvc=1,
+            wait_each=False,
+        )
+        self.pod_objs_without_encrypted_pvc = create_pods(
+            self.pvc_objs_without_encryption,
+            pod_factory,
+            constants.CEPHBLOCKPOOL,
+            pods_for_rwx=1,
+            status=constants.STATUS_RUNNING,
+        )
+
+        for pod_obj in self.pod_objs_without_encrypted_pvc:
+            # Find initial md5sum
+            pod_obj.md5sum_before_io = cal_md5sum(
+                pod_obj=pod_obj,
+                file_name=pod_obj.get_storage_path(storage_type="block"),
+                block=True,
+            )
+
+            # Run IO
+            pod_obj.run_io(
+                storage_type="block",
+                size=f"{self.pvc_size - 1}G",
+                io_direction="write",
+                runtime=60,
+            )
+            log.info("IO started on all pods")
+
+            # Wait for IO completion
+            pod_obj.get_fio_results()
+            log.info("IO completed on all pods")
+
+        snap_objs, snap_handles = ([] for i in range(2))
+
+        # Verify md5sum has changed after IO.
+        log.info("Verify md5sum has changed after IO and create snapshot from all PVCs")
+        for pod_obj in self.pod_objs_without_encrypted_pvc:
+            md5sum_after_io = cal_md5sum(
+                pod_obj=pod_obj,
+                file_name=pod_obj.get_storage_path(storage_type="block"),
+                block=True,
+            )
+            assert (
+                pod_obj.md5sum_before_io != md5sum_after_io
+            ), f"md5sum has not changed after IO on pod {pod_obj.name}"
+
+            # Create snapshot
+            log.info(f"Creating snapshot of PVC {pod_obj.pvc.name}")
+            snap_obj = snapshot_factory(pod_obj.pvc, wait=False)
+            snap_obj.md5sum = md5sum_after_io
+            snap_objs.append(snap_obj)
+            log.info("Snapshots created")
+
+        # Verify snapshots are ready
+        log.info("Verify snapshots are ready")
+        for snap_obj in snap_objs:
+            snap_obj.ocp.wait_for_resource(
+                condition="true",
+                resource_name=snap_obj.name,
+                column=constants.STATUS_READYTOUSE,
+                timeout=180,
+            )
+            snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
+            snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
+            snap_handles.append(snap_handle)
+
+        # Restoring snapshots to create new PVCs
+        log.info("Creating new PVCs from snapshots")
+        restore_pvcs = []
+        for snap_obj in snap_objs:
+            # for storageclass in sc_objs:
+            log.info(f"Creating a PVC from snapshot {snap_obj.name}")
+            restore_pvc_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj,
+                storageclass=self.sc_obj_with_encryption.name,
+                size=f"{self.pvc_size}Gi",
+                volume_mode=snap_obj.parent_volume_mode,
+                access_mode=snap_obj.parent_access_mode,
+                status="",
+            )
+            restore_pvcs.append(restore_pvc_obj)
+
+            log.info(
+                f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}."
+                f"Used the storage class {self.sc_obj_with_encryption}"
+            )
+            restore_pvc_obj.md5sum = snap_obj.md5sum
+            failure_str = "cannot create encrypted volume from unencrypted volume"
+            # Confirm that the restored PVCs are in Pending status
+            for restore_pvc_obj in restore_pvcs:
+                helpers.wait_for_resource_state(
+                    resource=restore_pvc_obj,
+                    state=constants.STATUS_PENDING,
+                    timeout=200,
+                )
+                restore_pvc_obj.reload()
+                if failure_str in restore_pvc_obj.describe():
+                    log.info(
+                        f"cannot create encrypted volume from unencrypted volume {snap_obj.name}"
+                    )
+                else:
+                    log.warning(
+                        f"Able to create encrypted volume from unencrypted volume {snap_obj.name}"
+                    )
+        log.info("Verified: Restored PVCs are in Pending state.")
+
+        # Deletion of Pods, PVCs and Snapshots
+        log.info(f"Deleting pod")
+        for pod_obj in self.pod_objs_without_encrypted_pvc:
+            pod_obj.delete()
+            pod_obj.ocp.wait_for_delete(
+                pod_obj.name, 180
+            ), f"Pod {pod_obj.name} is not deleted"
+
+        log.info("Deleting PVC")
+        for pvc_obj in self.pvc_objs_without_encryption:
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(
                 resource_name=pvc_obj.name
