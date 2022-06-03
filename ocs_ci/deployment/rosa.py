@@ -4,7 +4,6 @@ This module contains platform specific methods and classes for deployment
 on Openshfit Dedicated Platform.
 """
 
-
 import logging
 import os
 
@@ -59,7 +58,16 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+        if (
+            config.ENV_DATA["appliance_mode"]
+            and config.ENV_DATA.get("cluster_type", "") == "provider"
+        ):
+            rosa.appliance_mode_cluster(
+                self.cluster_name, self.ocp_version, self.region
+            )
+        else:
+            rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
