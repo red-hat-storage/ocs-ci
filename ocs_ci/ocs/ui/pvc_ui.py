@@ -1,5 +1,4 @@
 import logging
-import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
@@ -19,6 +18,7 @@ class PvcUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         ocp_version = get_ocp_version()
+        driver.implicitly_wait(10)
         self.pvc_loc = locators[ocp_version]["pvc"]
 
     def create_pvc_ui(
@@ -69,7 +69,6 @@ class PvcUI(PageNavigator):
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
-        time.sleep(1)
 
     def verify_pvc_ui(
         self, pvc_size, access_mode, vol_mode, sc_name, pvc_name, project_name
@@ -96,7 +95,6 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
-        time.sleep(1)
         logger.info(f"Go to PVC {pvc_name} Page")
         self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
@@ -232,7 +230,6 @@ class PvcUI(PageNavigator):
 
         logger.info("Confirm PVC Deletion")
         self.do_click(self.pvc_loc["confirm_pvc_deletion"], enable_screenshot=True)
-        time.sleep(1)
 
     def pvc_clone_ui(
         self,
@@ -263,7 +260,6 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
-        time.sleep(1)
         logger.info(f"Go to PVC {pvc_name} page")
         self.do_click(get_element_type(pvc_name))
 

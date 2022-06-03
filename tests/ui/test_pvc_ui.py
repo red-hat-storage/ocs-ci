@@ -247,6 +247,12 @@ class TestPvcUserInterface(object):
 
         pvc_ui_obj = PvcUI(setup_ui_class)
 
+        if config.DEPLOYMENT["external_mode"]:
+            if sc_name == constants.CEPHFILESYSTEM_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif sc_name == constants.CEPHBLOCKPOOL_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+
         # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")
         pvc_ui_obj.create_pvc_ui(
