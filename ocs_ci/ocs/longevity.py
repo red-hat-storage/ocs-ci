@@ -686,7 +686,7 @@ class Longevity(object):
         for key1 in cluster_sanity_out_dict:
             fopen = open(f"{destination_dir}/{key1}", "w")
             for key2, value in cluster_sanity_out_dict[key1].items():
-                fopen.write("%s:%s\n" % (key2, value))
+                fopen.write(f"{key2} : {value}\n")
             fopen.close()
 
     def stage_0(
