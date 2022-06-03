@@ -2961,12 +2961,15 @@ def couchbase_factory_fixture(request):
         # Create couchbase workers
         couchbase.create_cb_cluster(replicas=3, sc_name=sc_name)
         couchbase.create_data_buckets()
+        # adding wait for the buckets created to be reconciled with the couchbase cluster
+        time.sleep(10)
         # Run couchbase workload
         couchbase.run_workload(
             replicas=replicas,
             run_in_bg=run_in_bg,
             num_items=num_items,
             num_threads=num_threads,
+            timeout=2100,
         )
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)

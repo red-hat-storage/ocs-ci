@@ -1,7 +1,6 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
-import time
 import logging
 import tempfile
 import re
@@ -93,7 +92,6 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
-            time.sleep(15)
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
