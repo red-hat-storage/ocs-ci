@@ -2,6 +2,9 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
+  # MS-provider cluster via rosa _addons
+  # or via rosa_service i.e appliance mode
+  appliance_mode: True
   cluster_type: 'provider'
   multi_availability_zones: True
   worker_replicas: 3
@@ -9,7 +12,7 @@ ENV_DATA:
   worker_instance_type: 'm5.4xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-provider"
-  region: 'us-east-2'
+  region: 'us-east-1'
 DEPLOYMENT:
   force_download_ocm_cli: True
   ocm_cli_version: '0.1.60'
