@@ -9,7 +9,7 @@ import pytest
 import statistics
 
 from ocs_ci.framework.testlib import performance
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import PerfResult
@@ -67,6 +67,7 @@ class TestPodStartTime(PASTest):
         # Initialize some lists used in the test.
         self.pod_result_list = []
         self.start_time_dict_list = []
+        self.csi_time_dict_list = []
         self.pvc_list = []
 
         # The maximum acceptable attach time in sec.
@@ -100,6 +101,7 @@ class TestPodStartTime(PASTest):
         for i in range(self.samples_num):
 
             # Creating PVC to attache POD to it
+            csi_start_time = self.get_time("csi")
             log.info(f"{self.msg_prefix} Start creating PVC number {i + 1}.")
             pvc_obj = helpers.create_pvc(
                 sc_name=self.sc_obj.name, size=self.pvc_size, namespace=self.namespace
@@ -128,6 +130,11 @@ class TestPodStartTime(PASTest):
 
             # Get the POD start time including the attache time
             self.start_time_dict_list.append(helpers.pod_start_time(pod_obj))
+            self.csi_time_dict_list.append(
+                performance_lib.pod_csi_time(
+                    self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace
+                )
+            )
 
     def init_full_results(self, full_results):
         """
@@ -169,14 +176,14 @@ class TestPodStartTime(PASTest):
         pvc_size,
     ):
         """
-        Test to log pod start times for all the sampled pods
+        Test to log pod total and csi start times for all the sampled pods
         """
 
         self.interface = interface
         self.samples_num = samples_num
         self.pvc_size = pvc_size
         self.sc_obj = storageclass_factory(self.interface)
-        self.msg_prefix = f"Interface: {self.interface}, PVC size: {self.pvc_size}."
+        self.msg_prefix = f"Interface: {self.interface}, PVC size: {self.pvc_size} GB."
 
         if self.interface == constants.CEPHBLOCKPOOL:
             self.sc = "RBD"
@@ -203,7 +210,8 @@ class TestPodStartTime(PASTest):
         time_measures = [t["performance"] for t in self.start_time_dict_list]
         for index, start_time in enumerate(time_measures):
             log.info(
-                f"{self.msg_prefix} pod number {index} start time: {start_time} seconds"
+                f"{self.msg_prefix} pod number {index+1} start time: {start_time} seconds, "
+                f"csi start time is {self.csi_time_dict_list[index]}"
             )
             if start_time > self.acceptable_time:
                 raise ex.PerformanceException(
@@ -211,6 +219,7 @@ class TestPodStartTime(PASTest):
                     f"which is greater than {self.acceptable_time} seconds"
                 )
         self.full_results.all_results["attach_time"] = time_measures
+        self.full_results.all_results["attach_csi_time"] = self.csi_time_dict_list
 
         # Calculating the attache average time, and the STD between all samples.
         average = statistics.mean(time_measures)
@@ -219,6 +228,13 @@ class TestPodStartTime(PASTest):
         )
         self.full_results.add_key("attach_time_average", average)
 
+        csi_average = statistics.mean(self.csi_time_dict_list)
+        log.info(
+            f"{self.msg_prefix} The average csi time for the sampled {len(self.csi_time_dict_list)} pods"
+            f" is {csi_average} seconds."
+        )
+        self.full_results.add_key("attach_csi_time_average", csi_average)
+
         st_deviation = statistics.stdev(time_measures)
         st_deviation_percent = st_deviation / average * 100.0
         log.info(
@@ -226,6 +242,16 @@ class TestPodStartTime(PASTest):
             f" is {st_deviation_percent}"
         )
         self.full_results.add_key("attach_time_stdev_percent", st_deviation_percent)
+
+        cai_st_deviation = statistics.stdev(self.csi_time_dict_list)
+        csi_st_deviation_percent = cai_st_deviation / csi_average * 100.0
+        log.info(
+            f"{self.msg_prefix} The standard deviation percent for csi start time of the sampled "
+            f"{len(time_measures)} pods is {csi_st_deviation_percent}"
+        )
+        self.full_results.add_key(
+            "attach_time_csi_stdev_percent", csi_st_deviation_percent
+        )
 
         # Getting the test end time
         self.test_end_time = self.get_time()
