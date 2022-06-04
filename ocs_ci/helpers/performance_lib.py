@@ -758,7 +758,9 @@ def wait_for_resource_bulk_status(
     raise Exception(err_msg)
 
 
-def pod_csi_time(interface, pv_name, start_time, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def pod_csi_time(
+    interface, pv_name, start_time, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
@@ -776,7 +778,7 @@ def pod_csi_time(interface, pv_name, start_time, namespace=constants.OPENSHIFT_S
 
     """
     volume_handle = None
-    for line in run_oc_command(f'describe pv {pv_name}', namespace=namespace):
+    for line in run_oc_command(f"describe pv {pv_name}", namespace=namespace):
         if "VolumeHandle:" in line:
             volume_handle = line.split()[1]
             break
