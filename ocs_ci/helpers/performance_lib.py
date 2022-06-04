@@ -811,12 +811,10 @@ def pod_csi_time(interface, pv_name, start_time, namespace=constants.OPENSHIFT_S
     node_publish_et = None
     for sublog in logs:
         for line in sublog:
-            if ("GRPC response:" in line
-                and f"ID: {node_stage_id}" in line):
-                    node_stage_et = string_to_time(line.split(" ")[1])
-            if ("GRPC response:" in line
-                and f"ID: {node_publish_id}" in line):
-                    node_publish_et = string_to_time(line.split(" ")[1])
+            if "GRPC response:" in line and f"ID: {node_stage_id}" in line:
+                node_stage_et = string_to_time(line.split(" ")[1])
+            if "GRPC response:" in line and f"ID: {node_publish_id}" in line:
+                node_publish_et = string_to_time(line.split(" ")[1])
 
     if node_stage_et is None:
         raise Exception("Cannot find node stage GRPC response")
@@ -845,4 +843,3 @@ def pod_csi_time(interface, pv_name, start_time, namespace=constants.OPENSHIFT_S
     logger.info(f"Total csi pod attach time is {total_time} seconds")
 
     return total_time
-
