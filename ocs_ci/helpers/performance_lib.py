@@ -157,7 +157,7 @@ def get_logfile_names(interface, provisioning=True):
     Args:
         interface (str) : an interface (RBD or CephFS) to run on
         provisioning (bool): if True, look for the provisioner log pods
-        
+
     Returns:
         log names (list) : names of the log files relevant for searching in
 
