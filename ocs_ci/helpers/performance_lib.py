@@ -153,16 +153,11 @@ def string_to_time(time_string):
 def get_logfile_names(interface, provisioning=True):
     """
     Finds names for log files pods in which logs for pvc creation are located
-    If provisioning is True, this will be
-        For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
-        For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
-    If provisioning is False, this will be
-        For CephFS: pods that have csi-cephfsplugin but not with "csi-cephfsplugin-provisioner" prefix
-        For RBD: pods that have "csi-rbdplugin" but not "csi-rbdplugin-provisioner" prefix
 
     Args:
         interface (str) : an interface (RBD or CephFS) to run on
-
+        provisioning (bool): if True, look for the provisioner log pods
+        
     Returns:
         log names (list) : names of the log files relevant for searching in
 
