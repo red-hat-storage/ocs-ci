@@ -156,9 +156,10 @@ def get_logfile_names(interface, provisioning=True):
     If provisioning is True, this will be
         For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
         For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
-     If provisioning is False, this will be
+    If provisioning is False, this will be
         For CephFS: pods that have csi-cephfsplugin but not with "csi-cephfsplugin-provisioner" prefix
         For RBD: pods that have "csi-rbdplugin" but not "csi-rbdplugin-provisioner" prefix
+
     Args:
         interface (str) : an interface (RBD or CephFS) to run on
 
