@@ -26,6 +26,7 @@ from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -308,7 +309,21 @@ class CephCluster(object):
             config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
             and not config.COMPONENTS["disable_noobaa"]
         ):
-            self.wait_for_noobaa_health_ok()
+            # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
+            if (
+                version.get_semantic_ocp_version_from_config() == version.VERSION_4_10
+                and version.get_semantic_ocs_version_from_config()
+                == version.VERSION_4_9
+                and config.DEPLOYMENT.get("live_deployment")
+                and version.get_semantic_version(
+                    config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
+                )
+                == version.VERSION_4_10
+            ):
+                logger.info("skipping noobaa health check due to bug 2075422")
+                return
+            else:
+                self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
