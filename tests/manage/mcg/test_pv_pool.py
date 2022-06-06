@@ -14,10 +14,14 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     wait_for_pods_to_be_running,
 )
+from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.bucket_utils import (
+    copy_random_individual_objects,
+)
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -145,19 +149,32 @@ class TestPvPool:
     @pytest.mark.polarion_id("OCS-3932")
     @tier2
     @bugzilla("2064599")
-    def test_modify_resource(self, backingstore_factory):
+    def test_modify_resource(
+        self,
+        awscli_pod_session,
+        backingstore_factory,
+        bucket_factory,
+        test_directory_setup,
+        mcg_obj_session,
+    ):
         """
         Test to modify the CPU and Memory resource limits for BS and see if its reflecting
         """
-        pv_backingstore = backingstore_factory(
-            "OC",
-            {
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
                 "pv": [
-                    (1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, "ocs-storagecluster-ceph-rbd")
+                    (
+                        1,
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                        "ocs-storagecluster-ceph-rbd",
+                    )
                 ]
             },
-        )[0]
-
+        }
+        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        bucket_name = bucket.name
+        pv_backingstore = bucket.bucketclass.backingstores[0]
         pv_bs_name = pv_backingstore.name
         pv_pod_label = f"pool={pv_bs_name}"
         pv_pod_info = get_pods_having_label(
@@ -208,3 +225,13 @@ class TestPvPool:
             and resource_dict["requests"]["memory"] == new_mem
         ), "New resource modification in Backingstore is not reflected in PV Backingstore Pod!!"
         logger.info("Resource modification reflected in the PV Backingstore Pod!!")
+
+        # push some data to the bucket
+        file_dir = test_directory_setup.origin_dir
+        copy_random_individual_objects(
+            podobj=awscli_pod_session,
+            file_dir=file_dir,
+            target=f"s3://{bucket_name}",
+            amount=1,
+            s3_obj=OBC(bucket_name),
+        )
