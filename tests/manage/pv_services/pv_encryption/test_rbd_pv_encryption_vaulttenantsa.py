@@ -6,6 +6,8 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocs_version,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     kms_config_required,
     skipif_managed_service,
 )
@@ -26,6 +28,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.9")
 @kms_config_required
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 @pytest.mark.parametrize(
     argnames=["kv_version", "use_auth_path", "use_vault_namespace"],
     argvalues=[
