@@ -167,7 +167,7 @@ def get_logfile_names(interface, provisioning=True):
     pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
 
     if "Error in command" in pods:
-        raise Exception("Can not get csi controller pod")
+        raise Exception("Cannot get csi controller pod")
 
     provisioning_name = interface_data[interface]["prov"]
     csi_name = interface_data[interface]["csi_cnt"]
@@ -243,12 +243,12 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
                 et = string_to_time(line.split(" ")[1])
 
     if st is None:
-        logger.error(f"Can not find start time of {pvc_name}")
-        raise Exception(f"Can not find start time of {pvc_name}")
+        logger.error(f"Cannot find start time of {pvc_name}")
+        raise Exception(f"Cannot find start time of {pvc_name}")
 
     if et is None:
-        logger.error(f"Can not find end time of {pvc_name}")
-        raise Exception(f"Can not find end time of {pvc_name}")
+        logger.error(f"Cannot find end time of {pvc_name}")
+        raise Exception(f"Cannot find end time of {pvc_name}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
@@ -297,12 +297,12 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
                 et = string_to_time(line.split(" ")[1])
 
     if st is None:
-        err_msg = f"Can not find CSI start time of {pvc_obj.name}"
+        err_msg = f"Cannot find CSI start time of {pvc_obj.name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
     if et is None:
-        err_msg = f"Can not find CSI end time of {pvc_obj.name}"
+        err_msg = f"Cannot find CSI end time of {pvc_obj.name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
@@ -362,12 +362,12 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
                     single_et = string_to_time(line.split(" ")[1])
 
         if single_st is None:
-            err_msg = f"Can not find CSI start time of {pvc.name}"
+            err_msg = f"Cannot find CSI start time of {pvc.name}"
             logger.error(err_msg)
             raise Exception(err_msg)
 
         if single_et is None:
-            err_msg = f"Can not find CSI end time of {pvc.name}"
+            err_msg = f"Cannot find CSI end time of {pvc.name}"
             logger.error(err_msg)
             raise Exception(err_msg)
 
@@ -427,11 +427,11 @@ def measure_total_snapshot_creation_time(snap_name, start_time):
         return total.total_seconds()
 
     if start is None:
-        err_msg = f"Can not find start creation time of snapshot {snap_name}"
+        err_msg = f"Cannot find start creation time of snapshot {snap_name}"
         logger.error(err_msg)
         raise Exception(err_msg)
     if end is None:
-        err_msg = f"Can not find end creation time of snapshot {snap_name}"
+        err_msg = f"Cannot find end creation time of snapshot {snap_name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
@@ -486,7 +486,7 @@ def get_snapshot_time(snap_name, status, start_time):
     pods = run_oc_command(cmd="get pod", namespace="openshift-cluster-storage-operator")
 
     if "Error in command" in pods:
-        raise Exception("Can not get csi controller pod")
+        raise Exception("Cannot get csi controller pod")
 
     log_names = []
     for line in pods:
@@ -552,12 +552,12 @@ def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
                 et = line.split(" ")[1]
                 et = datetime.strptime(et, time_format)
     if st is None:
-        logger.error(f"Can not find start time of snapshot {snapshot_id}")
-        raise Exception(f"Can not find start time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find start time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find start time of snapshot {snapshot_id}")
 
     if et is None:
-        logger.error(f"Can not find end time of snapshot {snapshot_id}")
-        raise Exception(f"Can not find end time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find end time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find end time of snapshot {snapshot_id}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
@@ -779,7 +779,8 @@ def pod_csi_time(
             volume_handle = line.split()[1]
             break
     if volume_handle is None:
-        raise Exception("Can not get volume handle")
+        logger.error("Cannot get volume handle")
+        raise Exception("Cannot get volume handle")
 
     log_names = get_logfile_names(interface, provisioning=False)
     logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
@@ -797,9 +798,11 @@ def pod_csi_time(
                 node_publish_id = line.split()[5]
 
     if node_stage_st is None:
+        logger.error("Cannot find node stage GRPC call")
         raise Exception("Cannot find node stage GRPC call")
 
     if node_publish_st is None:
+        logger.error("Cannot find node publish GRPC call")
         raise Exception("Cannot find node publish GRPC call")
 
     logger.info(f"Node stage GRPC call start time is: {node_stage_st}")
@@ -815,9 +818,11 @@ def pod_csi_time(
                 node_publish_et = string_to_time(line.split(" ")[1])
 
     if node_stage_et is None:
+        logger.error("Cannot find node stage GRPC response")
         raise Exception("Cannot find node stage GRPC response")
 
     if node_publish_et is None:
+        logger.error("Cannot find node publish GRPC response")
         raise Exception("Cannot find node publish GRPC response")
 
     logger.info(f"Node stage GRPC response time is: {node_stage_et}")
