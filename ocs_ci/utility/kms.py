@@ -736,7 +736,11 @@ class Vault(KMS):
         # Unset namespace from environment
         # else delete will look for namespace within namespace
         os.environ.pop("VAULT_NAMESPACE")
-        cmd = f"vault namespace delete {self.vault_namespace}/"
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = self.vault_namespace.replace("admin/", "")
+            cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
+        else:
+            cmd = f"vault namespace delete {self.vault_namespace}/"
         subprocess.check_output(shlex.split(cmd))
         if self.vault_namespace_exists(self.vault_namespace):
             raise KMSResourceCleaneupError(
