@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     system_test,
 )
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.framework.testlib import E2ETest, config
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -32,6 +33,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_plugin_pods,
     get_ceph_tools_pod,
+    wait_for_storage_pods,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
@@ -71,6 +73,7 @@ class TestMonitorRecovery(E2ETest):
         self.object_data = "string data"
         self.dd_cmd = f"dd if=/dev/urandom of=/mnt/{self.filename} bs=5M count=1"
 
+        self.sanity_helpers = Sanity()
         # Create project, pvc, dc pods
         self.dc_pods = []
         self.dc_pods.append(
@@ -119,8 +122,7 @@ class TestMonitorRecovery(E2ETest):
 
         logger.info("Backing up all the deployments")
         mon_recovery.backup_deployments()
-        dep_revert = mon_recovery.deployments_to_revert()
-        mds_revert = mon_recovery.mds_deployments_to_revert()
+        dep_revert, mds_revert = mon_recovery.deployments_to_revert()
 
         logger.info("Starting the monitor recovery procedure")
         logger.info("Scaling down rook and ocs operators")
@@ -217,9 +219,11 @@ class TestMonitorRecovery(E2ETest):
             object_key=self.object_key,
             data=self.object_data,
         ), "Failed: PutObject"
+        wait_for_storage_pods()
         logger.info("Archiving the ceph crash warnings")
         tool_pod = get_ceph_tools_pod()
         tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
+        self.sanity_helpers.health_check(tries=10)
 
 
 class MonitorRecovery(object):
@@ -482,7 +486,7 @@ class MonitorRecovery(object):
         Gets mon, osd and mgr deployments to revert
 
         Returns:
-            list: list of deployment paths to be reverted
+            tuple: deployment paths to be reverted
 
         """
         to_revert_patches = (
@@ -499,13 +503,22 @@ class MonitorRecovery(object):
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )
         )
-        logger.info(to_revert_patches)
+        to_revert_mds = get_deployments_having_label(
+            label=constants.MDS_APP_LABEL,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
         to_revert_patches_path = []
+        to_revert_mds_path = []
         for dep in to_revert_patches:
             to_revert_patches_path.append(
                 join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
             )
-        return to_revert_patches_path
+        for dep in to_revert_mds:
+            logger.info(dep)
+            to_revert_mds_path.append(
+                join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
+            )
+        return to_revert_patches_path, to_revert_mds_path
 
     def get_ceph_keyrings(self):
         """
@@ -513,7 +526,7 @@ class MonitorRecovery(object):
 
         """
         mon_k = get_ceph_caps(["rook-ceph-mons-keyring"])
-        if config.ENV_DATA["platform"] == constants.ON_PREM_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
             rgw_k = get_ceph_caps(
                 ["rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a-keyring"]
             )
@@ -549,26 +562,6 @@ class MonitorRecovery(object):
                 with open(f"{self.keyring_dir}/{secret}.keyring", "w") as fd:
                     fd.write(caps)
                     self.keyring_files.append(f"{self.keyring_dir}/{secret}.keyring")
-
-    def mds_deployments_to_revert(self):
-        """
-        Gets only mds deployments to revert it
-
-        Returns:
-            list: list of deployment paths to be reverted
-
-        """
-        to_revert_mds = get_deployments_having_label(
-            label=constants.MDS_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
-        to_revert_mds_path = []
-        for dep in to_revert_mds:
-            logger.info(dep)
-            to_revert_mds_path.append(
-                join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
-            )
-        return to_revert_mds_path
 
     def patch_sleep_on_mds(self):
         """
@@ -676,10 +669,8 @@ def corrupt_ceph_monitors():
     for mon in mon_pods:
         logger.info(f"Corrupting monitor: {mon.name}")
         mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-        logger.info(
-            _exec_cmd_on_pod(
-                cmd=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db", pod_obj=mon
-            )
+        _exec_cmd_on_pod(
+            cmd=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db", pod_obj=mon
         )
         try:
             wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
@@ -709,7 +700,7 @@ def recover_mcg():
         wait_for_resource_state(
             resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
         )
-    if config.ENV_DATA["platform"] == constants.ON_PREM_PLATFORMS:
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         logger.info("Re-spinning RGW pods")
         for rgw_pod in get_rgw_pods():
             rgw_pod.delete()
