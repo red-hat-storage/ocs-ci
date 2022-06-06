@@ -461,7 +461,9 @@ class OCP(object):
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             kubeconfig = os.getenv("KUBECONFIG")
             if not kubeconfig or not os.path.exists(kubeconfig):

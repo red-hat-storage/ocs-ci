@@ -3,7 +3,6 @@ Test to run the maximum supportable snapshots
 """
 
 # Builtin modules
-import datetime
 import logging
 import tempfile
 import time
@@ -21,9 +20,7 @@ from ocs_ci.framework.testlib import (
     performance,
 )
 
-from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
@@ -32,6 +29,8 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources import ocs
+from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers.performance_lib import run_oc_command
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +61,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         super(TestPvcMultiSnapshotPerformance, self).setup()
 
         self.total_creation_time = 0
+        self.total_csi_creation_time = 0
         self.total_creation_speed = 0
 
         # Getting the total Storage capacity
@@ -104,107 +104,112 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info("Cleanup the test environment")
 
-        # Getting the name of the PCV's backed PV
-        try:
-            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
-        except KeyError:
-            log.error(
-                f"Cannot found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
-            )
-
-        # Getting the list of all snapshots
-        try:
-            snapshot_list = self.snapshot.get(all_namespaces=True)["items"]
-        except Exception as err:
-            log.error(f"Cannot get the list of snapshots : {err}")
-            snapshot_list = []
-
-        # Deleting al snapshots from the cluster
-        log.info(f"Trying to delete all ({len(snapshot_list)}) Snapshots")
-        log.debug(
-            f"The list of all snapshots is : {json.dumps(snapshot_list, indent=3)}"
-        )
-        for vs in snapshot_list:
-            snap_name = vs["metadata"]["name"]
-            log.info(f"Try to delete {snap_name}")
+        if self.full_teardown:
+            # Getting the name of the PCV's backed PV
             try:
-                self.snapshot.delete(resource_name=snap_name)
+                pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
+            except KeyError:
+                log.error(
+                    f"Cannot found key in the PVC object {json.dumps(self.pvc_obj.get('spec').get('spec'), indent=3)}"
+                )
+
+            # Getting the list of all snapshots
+            try:
+                snapshot_list = self.snapshot.get(all_namespaces=True)["items"]
             except Exception as err:
-                log.error(f"Cannot delete {snap_name} : {err}")
+                log.error(f"Cannot get the list of snapshots : {err}")
+                snapshot_list = []
 
-        # Deleting the pod which wrote data to the pvc
-        log.info(f"Deleting the test POD : {self.pod_obj.name}")
-        try:
-            self.pod_obj.delete()
-            log.info("Wait until the pod is deleted.")
-            self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
-        except Exception as ex:
-            log.error(f"Cannot delete the test pod : {ex}")
-
-        # Deleting the PVC which used in the test.
-        log.info(f"Delete the PVC : {self.pvc_obj.name}")
-        try:
-            self.pvc_obj.delete()
-            log.info("Wait until the pvc is deleted.")
-            self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
-        except Exception as ex:
-            log.error(f"Cannot delete the test pvc : {ex}")
-
-        # Delete the backend PV of the PVC
-        log.info(f"Try to delete the backend PV : {pv}")
-        try:
-            run_oc_command(f"delete pv {pv}")
-        except Exception as ex:
-            err_msg = f"cannot delete PV {pv} - [{ex}]"
-            log.error(err_msg)
-
-        # Deleting the StorageClass used in the test
-        log.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
-        try:
-            self.sc_obj.delete()
-            log.info("Wait until the SC is deleted.")
-            self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
-        except Exception as ex:
-            log.error(f"Can not delete the test sc : {ex}")
-
-        # Deleting the VolumeSnapshotClass used in the test
-        log.info(f"Deleting the test Snapshot Class : {self.snap_class.name}")
-        try:
-            self.snap_class.delete()
-            log.info("Wait until the VSC is deleted.")
-            self.snap_class.ocp.wait_for_delete(resource_name=self.snap_class.name)
-        except Exception as ex:
-            log.error(f"Can not delete the test vsc : {ex}")
-
-        # Deleting the Data pool
-        log.info(f"Deleting the test storage pool : {self.sc_name}")
-        self.delete_ceph_pool(self.sc_name)
-        # Verify deletion by checking the backend CEPH pools using the toolbox
-        results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
-        log.debug(f"Existing pools are : {results}")
-        if self.sc_name in results.split():
-            log.warning("The pool did not deleted by CSI, forcing delete it manually")
-            self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                f"ceph osd pool delete {self.sc_name} {self.sc_name} "
-                "--yes-i-really-really-mean-it"
+            # Deleting al snapshots from the cluster
+            log.info(f"Trying to delete all ({len(snapshot_list)}) Snapshots")
+            log.debug(
+                f"The list of all snapshots is : {json.dumps(snapshot_list, indent=3)}"
             )
-        else:
-            log.info(f"The pool {self.sc_name} was deleted successfully")
+            for vs in snapshot_list:
+                snap_name = vs["metadata"]["name"]
+                log.info(f"Try to delete {snap_name}")
+                try:
+                    self.snapshot.delete(resource_name=snap_name)
+                except Exception as err:
+                    log.error(f"Cannot delete {snap_name} : {err}")
 
-        # Deleting the namespace used by the test
-        log.info(f"Deleting the test namespace : {self.nss_name}")
-        switch_to_default_rook_cluster_project()
-        try:
-            self.proj.delete(resource_name=self.nss_name)
-            self.proj.wait_for_delete(resource_name=self.nss_name, timeout=60, sleep=10)
-        except CommandFailed:
-            log.error(f"Can not delete project {self.nss_name}")
-            raise CommandFailed(f"{self.nss_name} was not created")
+            # Deleting the pod which wrote data to the pvc
+            log.info(f"Deleting the test POD : {self.pod_obj.name}")
+            try:
+                self.pod_obj.delete()
+                log.info("Wait until the pod is deleted.")
+                self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
+            except Exception as ex:
+                log.error(f"Cannot delete the test pod : {ex}")
 
-        # After deleteing all data from the cluster, we need to wait until it will re-balnce
-        ceph_health_check(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
-        )
+            # Deleting the PVC which used in the test.
+            try:
+                log.info(f"Delete the PVC : {self.pvc_obj.name}")
+                self.pvc_obj.delete()
+                log.info("Wait until the pvc is deleted.")
+                self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
+            except Exception as ex:
+                log.error(f"Cannot delete the test pvc : {ex}")
+
+            # Delete the backend PV of the PVC
+            log.info(f"Try to delete the backend PV : {pv}")
+            try:
+                run_oc_command(f"delete pv {pv}")
+            except Exception as ex:
+                err_msg = f"cannot delete PV {pv} - [{ex}]"
+                log.error(err_msg)
+
+            # Deleting the StorageClass used in the test
+            log.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
+            try:
+                self.sc_obj.delete()
+                log.info("Wait until the SC is deleted.")
+                self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
+            except Exception as ex:
+                log.error(f"Can not delete the test sc : {ex}")
+
+            # Deleting the VolumeSnapshotClass used in the test
+            log.info(f"Deleting the test Snapshot Class : {self.snap_class.name}")
+            try:
+                self.snap_class.delete()
+                log.info("Wait until the VSC is deleted.")
+                self.snap_class.ocp.wait_for_delete(resource_name=self.snap_class.name)
+            except Exception as ex:
+                log.error(f"Can not delete the test vsc : {ex}")
+
+            # Deleting the Data pool
+            log.info(f"Deleting the test storage pool : {self.sc_name}")
+            self.delete_ceph_pool(self.sc_name)
+            # Verify deletion by checking the backend CEPH pools using the toolbox
+            results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
+            log.debug(f"Existing pools are : {results}")
+            if self.sc_name in results.split():
+                log.warning(
+                    "The pool did not deleted by CSI, forcing delete it manually"
+                )
+                self.ceph_cluster.toolbox.exec_cmd_on_pod(
+                    f"ceph osd pool delete {self.sc_name} {self.sc_name} "
+                    "--yes-i-really-really-mean-it"
+                )
+            else:
+                log.info(f"The pool {self.sc_name} was deleted successfully")
+
+            # Deleting the namespace used by the test
+            log.info(f"Deleting the test namespace : {self.nss_name}")
+            switch_to_default_rook_cluster_project()
+            try:
+                self.proj.delete(resource_name=self.nss_name)
+                self.proj.wait_for_delete(
+                    resource_name=self.nss_name, timeout=60, sleep=10
+                )
+            except CommandFailed:
+                log.error(f"Can not delete project {self.nss_name}")
+                raise CommandFailed(f"{self.nss_name} was not created")
+
+            # After deleting all data from the cluster, we need to wait until it will re-balance
+            ceph_health_check(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
+            )
 
         super(TestPvcMultiSnapshotPerformance, self).teardown()
 
@@ -245,32 +250,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.error(err_msg)
             raise Exception(err_msg)
         return results
-
-    def get_log_names(self):
-        """
-        Finding the name of snapshot logging file
-        the start time is in the 'csi-snapshot-controller' pod, and
-        the end time is in the provisioner pod (csi-snapshotter container)
-
-        """
-        self.log_names = {"start": [], "end": []}
-        log.info("Looking for logs pod name")
-
-        # Getting csi log name for snapshot start creation messages
-        results = self.get_csi_pod(namespace="openshift-cluster-storage-operator")
-        for line in results:
-            if "csi-snapshot-controller" in line and "operator" not in line:
-                self.log_names["start"].append(line.split()[0])
-
-        # Getting csi log name for snapshot end creation messages
-        results = self.get_csi_pod(namespace="openshift-storage")
-        for line in results:
-            if "prov" in line and self.fs_type in line:
-                self.log_names["end"].append(line.split()[0])
-
-        log.info(
-            f"The CSI logs for the test are : {json.dumps(self.log_names, indent=4)}"
-        )
 
     def build_fio_command(self):
         """
@@ -329,7 +308,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
     def create_snapshot(self, snap_num):
         """
-        Creating snapshot of volume, and measure the creation time
+        Creating snapshot of volume
+        measure the total snapshot creation time
+        and the CSI creation time
 
         Args:
             snap_num (int) the number of snapshot to create
@@ -340,7 +321,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         log.info(f"Taking snapshot number {snap_num}")
         # Getting UTC time before test starting for log retrieve
-        UTC_datetime = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        start_time = self.get_time("csi")
         snap_name = f"pvc-snap-{snap_num}-"
         snap_name += self.pvc_obj.name.split("-")[-1]
         self.snap_templ["metadata"]["name"] = snap_name
@@ -361,6 +342,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         timeout = 720
         sleep_time = 10
         snap_con_name = None
+        snap_uid = None
         while timeout > 0:
             res = run_oc_command(
                 f"get volumesnapshot {snap_name} -o yaml", namespace=self.nss_name
@@ -373,6 +355,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                     if res["status"]["readyToUse"]:
                         log.info(f"{snap_name} Created and ready to use")
                         snap_con_name = res["status"]["boundVolumeSnapshotContentName"]
+                        snap_uid = res["metadata"]["uid"]
                         break
                     else:
                         log.info(
@@ -392,92 +375,17 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                 log.error(err_msg)
                 raise Exception(err_msg)
         if snap_con_name:
-            return self.get_creation_time(snap_name, snap_con_name, UTC_datetime)
+            creation_time = performance_lib.measure_total_snapshot_creation_time(
+                snap_name, start_time
+            )
+            csi_creation_time = performance_lib.measure_csi_snapshot_creation_time(
+                self.interface, snap_uid, start_time
+            )
+            return (creation_time, csi_creation_time)
         else:
             err_msg = "Snapshot was not created on time"
             log.error(err_msg)
             raise TimeoutError(err_msg)
-
-    def read_logs(self, kind, namespace, start_time):
-        """
-        Reading the csi-driver logs, since we use different logs for the start time
-        for end time (creation snapshot), we call this function twice.
-
-        Args:
-            kind (str): the kind of logs to read 'start' or 'end'
-            namespace (str): in which namespace the pod exists
-            start_time (time): the start time of the specific test,
-               so we dont need to read the full log
-
-        Returns:
-            list : the contant of all read logs(s) - can be more then one log
-
-        """
-        logs = []
-        # The pod with the logs for 'start' creation time have only one container
-        container = ""
-        if kind == "end":
-            # The pod with the logs for 'end' creation time have more then one container
-            container = "-c csi-snapshotter"
-        for l in self.log_names[kind]:
-            logs.append(
-                run_oc_command(
-                    f"logs {l} {container} --since-time={start_time}",
-                    namespace=namespace,
-                )
-            )
-        return logs
-
-    def get_creation_time(self, snap_name, content_name, start_time):
-        """
-        Calculate the creation time of the snapshot.
-        find the start / end time in the logs, and calculate the total time.
-
-        Args:
-            snap_name (str): the snapshot name that create
-            content_name (str): the content name of the snapshot, the end time
-             lodged on the content name and not on the snap name.
-            start_time (time): time of test starting so, retrieving log will be short as possible
-
-        Returns:
-            int: creation time in seconds
-
-        Raises:
-            General exception : can not found start/end of creation time
-
-        """
-
-        # Start and End snapshot creation time
-        times = {"start": None, "end": None}
-        logs_info = {
-            "start": {
-                "ns": "openshift-cluster-storage-operator",
-                "log_line": "Creating content for snapshot",
-            },
-            "end": {"ns": "openshift-storage", "log_line": "readyToUse true"},
-        }
-
-        for op in ["start", "end"]:
-            logs = self.read_logs(op, logs_info[op]["ns"], start_time)
-            for sublog in logs:
-                for line in sublog:
-                    if (snap_name in line or content_name in line) and logs_info[op][
-                        "log_line"
-                    ] in line:
-                        times[op] = line.split(" ")[1]
-                        times[op] = datetime.datetime.strptime(times[op], time_format)
-            if times[op] is None:
-                err_msg = f"Can not find {op} time of {snap_name}"
-                log.error(err_msg)
-                raise Exception(err_msg)
-
-        results = (times["end"] - times["start"]).total_seconds()
-        log.debug(
-            f"Start creation time is : {times['start']}, End creation time is : {times['end']}"
-            f" and Total creation time is {results}"
-        )
-
-        return results
 
     def run(self):
         """
@@ -489,18 +397,24 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info(f"Starting test number {test_num}")
 
             # Running IO on the POD - (re)-write data on the PVC
-            self.pod_obj.exec_cmd_on_pod(self.fio_cmd, out_yaml_format=False)
+            self.pod_obj.exec_cmd_on_pod(
+                self.fio_cmd, out_yaml_format=False, timeout=3600
+            )
 
             # Taking Snapshot of the PVC
-            ct = self.create_snapshot(test_num)
+            ct, sci_ct = self.create_snapshot(test_num)
             speed = self.filesize / ct
             self.total_creation_time += ct
+            self.total_csi_creation_time += sci_ct
             self.total_creation_speed += speed
 
-            results.append({"Snap Num": test_num, "time": ct, "speed": speed})
+            results.append(
+                {"Snap Num": test_num, "time": ct, "csi_time": sci_ct, "speed": speed}
+            )
             log.info(
                 f"Results for snapshot number {test_num} are : "
-                f"Creation time is {ct} , Creation speed {speed}"
+                f"Creation time is {ct} , Creation speed {speed}, "
+                f"Csi creation time is {sci_ct}"
             )
 
         log.debug(f"All results are : {json.dumps(results, indent=3)}")
@@ -527,9 +441,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
            size is depend on storage capacity, but not less then 1 GiB
            it will use ~75% capacity of the Storage, Min storage capacity 1 TiB
         2. Fill the PVC with 80% of data
-        3. Take a snapshot of the PVC and measure the time of creation.
+        3. Take a snapshot of the PVC and measure the total and CSI times of creation.
         4. re-write the data on the PVC
-        5. Take a snapshot of the PVC and measure the time of creation.
+        5. Take a snapshot of the PVC and measure the total and the CSI times of creation.
         6. repeat steps 4-5 the numbers of snapshot we want to take : 512
            this will be run by outside script for low memory consumption
         7. print all information.
@@ -545,11 +459,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         log.info(f"Logs file path name is : {self.full_log_path}")
         log.info(f"Reslut path is : {self.results_path}")
 
+        self.full_teardown = True
         self.num_of_snaps = snap_number
         if self.dev_mode:
             self.num_of_snaps = 2
 
-        log.info(f"Going to Create {self.num_of_snaps} {interface_type} snapshots")
+        log.info(f"Going to create {self.num_of_snaps} {interface_type} snapshots")
 
         # since we do not want to use more then 65%, we add 35% to the needed
         # capacity, and minimum PVC size is 1 GiB
@@ -590,7 +505,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             fs_name=self.sc_name,
         )
         log.info(f"The new SC is : {self.sc_obj.name}")
-        log.debug(f"All Sc data is {json.dumps(self.sc_obj.data, indent=3)}")
+        log.debug(f"All SC data is {json.dumps(self.sc_obj.data, indent=3)}")
 
         # Create new VolumeSnapshotClass
         self.snap_class = self.create_snapshotclass(self.interface)
@@ -650,7 +565,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             f"Content of snapshot yaml file {json.dumps(self.snap_templ, indent=4)}"
         )
 
-        self.get_log_names()
         self.build_fio_command()
         self.start_time = self.get_time()
 
@@ -667,6 +581,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             f"{float(self.total_creation_time / self.num_of_snaps):.2f}",
         )
         full_results.add_key(
+            "avg_csi_creation_time",
+            f"{float(self.total_csi_creation_time / self.num_of_snaps):.2f}",
+        )
+        full_results.add_key(
             "avg_creation_speed",
             f"{float(self.total_creation_speed / self.num_of_snaps):.2f}",
         )
@@ -679,14 +597,16 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             res_link = full_results.results_link()
             log.info(f"The Result can be found at : {res_link}")
 
-            # Create text file with results of all subtest (4 - according to the parameters)
+            # Create text file with results of all subtests (2 - according to the parameters)
             self.write_result_to_file(res_link)
 
     def test_pvc_multiple_snapshot_performance_results(self):
         """
-        This is not a test - it only check that previous test completed and finish
+        This is not a test - it only checks that previous tests were completed and finished
         as expected with reporting the full results (links in the ES) of previous 2 tests
         """
+
+        self.full_teardown = False
         self.number_of_tests = 2
         results_path = get_full_test_logs_path(
             cname=self, fname="test_pvc_multiple_snapshot_performance"

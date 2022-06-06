@@ -22,6 +22,7 @@ from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.helpers import performance_lib
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +83,6 @@ class TestPvcMultiClonePerformance(PASTest):
     def test_pvc_multiple_clone_performance(
         self,
         interface_iterate,
-        teardown_factory,
         storageclass_factory,
         pvc_factory,
         pod_factory,
@@ -92,16 +92,18 @@ class TestPvcMultiClonePerformance(PASTest):
            PVC size is calculated in the test and depends on the storage capacity, but not less then 1 GiB
            it will use ~75% capacity of the Storage, Min storage capacity 1 TiB
         2. Fill the PVC with 70% of data
-        3. Take a clone of the PVC and measure time and speed of creation by reading start creation and end creation
-            times from relevant logs
-        4. Repeat the previous step number of times (maximal num_of_clones is 512)
-        5. Print all measured statistics for all the clones.
+        3. Take a clone of the PVC and measure Total time and speed of creation of each clone
+            by reading start creation and end creation times from relevant logs
+        4. Measure CSI time for creation of each clone
+        5. Repeat the previous steps number of times (maximal num_of_clones is 512)
+        6. Print and push to the ES all the measured statistics for all the clones.
 
         Raises:
             StorageNotSufficientException: in case of not enough capacity on the cluster
 
         """
         num_of_clones = 512
+        self.full_teardown = True
 
         # Getting the total Storage capacity
         ceph_cluster = CephCluster()
@@ -168,14 +170,22 @@ class TestPvcMultiClonePerformance(PASTest):
 
         # Running the test
         results = []
+        self.cloned_obj_list = []
         for test_num in range(1, int(self.params["clonenum"]) + 1):
             log.info(f"Starting test number {test_num}")
-            ct = self.create_clone(test_num, clone_yaml)
+            cloned_obj, ct, csi_ct = self.create_clone(test_num, clone_yaml)
+            log.info(
+                f"Cloned object with name {cloned_obj.name} and backed pv {cloned_obj.backed_pv} created"
+            )
+            self.cloned_obj_list.append(cloned_obj)
             speed = self.params["datasize"] / ct
-            results.append({"Clone Num": test_num, "time": ct, "speed": speed})
+            results.append(
+                {"Clone Num": test_num, "time": ct, "speed": speed, "csi time": csi_ct}
+            )
             log.info(
                 f"Results for clone number {test_num} are : "
                 f"Creation time is {ct} secs, Creation speed {speed} MB/sec"
+                f"Csi creation time is {csi_ct} secs"
             )
 
         for r in results:
@@ -185,6 +195,9 @@ class TestPvcMultiClonePerformance(PASTest):
             log.info(
                 f"Clone number {r['Clone Num']} creation speed is {r['speed']} MB/sec."
             )
+            log.info(
+                f"Clone number {r['Clone Num']} csi creation time is {r['csi time']} secs."
+            )
 
         creation_time_list = [r["time"] for r in results]
         average_creation_time = statistics.mean(creation_time_list)
@@ -193,6 +206,10 @@ class TestPvcMultiClonePerformance(PASTest):
         creation_speed_list = [r["speed"] for r in results]
         average_creation_speed = statistics.mean(creation_speed_list)
         log.info(f"Average creation speed is  {average_creation_time} MB/sec.")
+
+        csi_creation_time_list = [r["csi time"] for r in results]
+        average_csi_creation_time = statistics.mean(csi_creation_time_list)
+        log.info(f"Average csi creation time is  {average_csi_creation_time} secs.")
 
         self.results_path = get_full_test_logs_path(cname=self)
         # Produce ES report
@@ -217,6 +234,10 @@ class TestPvcMultiClonePerformance(PASTest):
         full_results.add_key("multi_clone_creation_speed", creation_speed_list)
         full_results.add_key(
             "multi_clone_creation_speed_average", average_creation_speed
+        )
+        full_results.add_key("multi_clone_csi_creation_time", csi_creation_time_list)
+        full_results.add_key(
+            "multi_clone_csi_creation_time_average", average_csi_creation_time
         )
 
         # Write the test results into the ES server
@@ -286,7 +307,9 @@ class TestPvcMultiClonePerformance(PASTest):
             clone_yaml : a template of clone yaml
 
         Returns:
+            obj: The created clone object
             int: the creation time of the clone (in secs.)
+            int: the csi creation time of the clone (in secs.)
 
         """
         log.info(f"Creating clone number {clone_num} for interface {self.interface}")
@@ -300,6 +323,7 @@ class TestPvcMultiClonePerformance(PASTest):
         with open(tmpfile, "w") as f:
             yaml.dump(clone_yaml, f, default_flow_style=False)
         start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        csi_start_time = self.get_time("csi")
         log.info(f"Clone yaml file is {clone_yaml}")
         res = performance_lib.run_oc_command(
             f"create -f {tmpfile}", self.params["nspace"]
@@ -311,10 +335,20 @@ class TestPvcMultiClonePerformance(PASTest):
         create_time = performance_lib.measure_pvc_creation_time(
             self.interface, clone_name, start_time
         )
-
         log.info(f"Creation time of clone {clone_name} is {create_time} secs.")
 
-        return create_time
+        cloned_pvc_obj = get_pvc_objs(
+            pvc_names=[clone_name], namespace=self.params["nspace"]
+        )[0]
+        log.info(
+            f"Cloned object with name {cloned_pvc_obj.name} found."
+        )  # remove before push
+
+        csi_create_time = performance_lib.csi_pvc_time_measure(
+            self.interface, cloned_pvc_obj, "create", csi_start_time
+        )
+
+        return (cloned_pvc_obj, create_time, csi_create_time)
 
     def wait_for_clone_creation(self, clone_name, timeout=600):
         """
@@ -355,6 +389,7 @@ class TestPvcMultiClonePerformance(PASTest):
         """
 
         self.number_of_tests = 2
+        self.full_teardown = False
         self.results_path = get_full_test_logs_path(
             cname=self, fname="test_pvc_multiple_clone_performance"
         )

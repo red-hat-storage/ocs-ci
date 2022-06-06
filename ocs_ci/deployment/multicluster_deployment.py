@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ACMClusterDeployException
+from ocs_ci.ocs.exceptions import ACMClusterDeployException, ACMClusterDestroyException
 from ocs_ci.ocs.ui import acm_ui
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.ocs.acm import acm
@@ -33,6 +33,7 @@ class OCPDeployWithACM(Deployment):
         # all the cluster deployments to finish
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.ui_driver = None
+        self.factory = acm_ui.ACMOCPDeploymentFactory()
 
     def do_deploy_ocp(self, log_cli_level="INFO"):
         """
@@ -54,7 +55,6 @@ class OCPDeployWithACM(Deployment):
         Specific to regional DR OCP cluster deployments
 
         """
-        factory = acm_ui.ACMOCPDeploymentFactory()
         self.ui_driver = acm.login_to_acm()
 
         if self.deploy_sync_mode == "async":
@@ -64,7 +64,9 @@ class OCPDeployWithACM(Deployment):
                 logger.info(f"{c.ENV_DATA['platform']}")
                 logger.info(f"{c.ENV_DATA['deployment_type']}")
             for cluster_conf in rdr_clusters:
-                deployer = factory.get_platform_instance(self.ui_driver, cluster_conf)
+                deployer = self.factory.get_platform_instance(
+                    self.ui_driver, cluster_conf
+                )
                 deployer.create_cluster_prereq()
                 deployer.create_cluster()
                 self.deployment_cluster_list.append(deployer)
@@ -112,3 +114,64 @@ class OCPDeployWithACM(Deployment):
         """
 
         super().deploy_cluster(log_cli_level=log_cli_level)
+
+    def destroy_cluster(self, log_cli_level=None):
+        """
+        Teardown OCP clusters deployed through ACM
+
+        """
+        self.ui_driver = acm.login_to_acm()
+        cluster_list = list()
+
+        rdr_clusters = get_non_acm_cluster_config()
+        logger.info("Following ACM deployed OCP clusters will be destroyed")
+        for cluster in rdr_clusters:
+            logger.info(
+                f"[{cluster.ENV_DATA['cluster_name']}"
+                f"{cluster.ENV_DATA['platform']}_"
+                f"{cluster.ENV_DATA['deployment_type']}]"
+            )
+        for cluster_conf in rdr_clusters:
+            destroyer = self.factory.get_platform_instance(self.ui_driver, cluster_conf)
+            destroyer.destroy_cluster()
+            cluster_list.append(destroyer)
+
+        self.wait_for_all_cluster_async_destroy(cluster_list)
+        self.post_destroy_ops(cluster_list)
+
+    def wait_for_all_cluster_async_destroy(self, destroy_cluster_list):
+        # Wait until all the clusters are in 'Done' or 'Failed state
+        destroyed_clusters = list()
+        failed_clusters = list()
+        done_waiting = False
+        while not done_waiting:
+            done_waiting = True
+            for cluster in destroy_cluster_list:
+                if cluster.destroy_status not in ["Done", "Failed"]:
+                    cluster.get_destroy_status()
+                    done_waiting = False
+        for cluster in destroy_cluster_list:
+            if cluster.destroy_status == "Done":
+                destroyed_clusters.append(cluster)
+            else:
+                failed_clusters.append(cluster)
+
+        if destroyed_clusters:
+            logger.info(
+                f"Destroyed clusters: {[c.cluster_name for c in destroyed_clusters]}"
+            )
+        if failed_clusters:
+            raise ACMClusterDestroyException(
+                f"Failed to destroy clusters:{[c.cluster_name for c in failed_clusters]} "
+            )
+
+    def post_destroy_ops(self, cluster_list):
+        """
+        Post destroy ops mainly includes ip clean up and dns cleanup
+
+        Args:
+            cluster_list (list[ACMOCPClusterDeploy]): list of platform specific instances
+
+        """
+        for cluster in cluster_list:
+            cluster.post_destroy_ops()
