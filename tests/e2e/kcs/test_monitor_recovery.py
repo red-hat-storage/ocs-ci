@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
-@skipif_ocs_version("<4.8")
+@skipif_ocs_version("<4.6")
 @skipif_openshift_dedicated
 @skipif_external_mode
 class TestMonitorRecovery(E2ETest):
@@ -119,7 +119,7 @@ class TestMonitorRecovery(E2ETest):
 
         logger.info("Backing up all the deployments")
         mon_recovery.backup_deployments()
-        mons_revert = mon_recovery.mon_deployments_to_revert()
+        dep_revert = mon_recovery.deployments_to_revert()
         mds_revert = mon_recovery.mds_deployments_to_revert()
 
         logger.info("Starting the monitor recovery procedure")
@@ -152,7 +152,7 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.monitor_rebuild(mon_map_cmd)
 
         logger.info("Reverting mon, osd and mgr deployments")
-        mon_recovery.revert_patches(mons_revert)
+        mon_recovery.revert_patches(dep_revert)
 
         logger.info("Scaling back rook and ocs operators")
         mon_recovery.scale_rook_ocs_operators(replica=1)
@@ -176,7 +176,7 @@ class TestMonitorRecovery(E2ETest):
             pod_obj.delete(force=True)
         new_md5_sum = []
         logger.info("Verifying md5sum of files after recovery")
-        for pod_obj in get_respun_dc_pods(self.dc_pods):
+        for pod_obj in get_spun_dc_pods(self.dc_pods):
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=pod_obj.name,
@@ -477,9 +477,9 @@ class MonitorRecovery(object):
             deployment_yaml = join(self.backup_dir, deployment + ".yaml")
             templating.dump_data_to_temp_yaml(deployment_get, deployment_yaml)
 
-    def mon_deployments_to_revert(self):
+    def deployments_to_revert(self):
         """
-        Gets only mon deployments to revert it
+        Gets mon, osd and mgr deployments to revert
 
         Returns:
             list: list of deployment paths to be reverted
@@ -768,9 +768,9 @@ def ceph_fs_recovery():
         )
 
 
-def get_respun_dc_pods(pod_list):
+def get_spun_dc_pods(pod_list):
     """
-    Fetches info about the respun pods in the cluster
+    Fetches info about the re-spun dc pods
 
     Args:
         pod_list (list): list of previous pod objects
@@ -790,7 +790,7 @@ def get_respun_dc_pods(pod_list):
             if "-deploy" not in pod_name and pod_name not in pod_obj.name:
                 new_pods.append(pod.get_pod_obj(pod_name, pod_obj.namespace))
     logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
-    logger.info(f"Respun pods: {[pod_obj.name for pod_obj in new_pods]}")
+    logger.info(f"Re-spun pods: {[pod_obj.name for pod_obj in new_pods]}")
     return new_pods
 
 
