@@ -23,15 +23,18 @@ class TestKernelCrash(E2ETest):
 
     def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
         """
-        Create PVCs and pods
+        1. Create 1GiB PVC
+        2. Attach PVC to an application pod
+        3. Copy files Files_create_delete.py and fsync.py to pod
+        4. Execute parallel Files_create_delete.py and fsync.py
+        5. Check Node gets Panic or not
         """
 
         original_dir = "/var/lib/www/html/"
         result_dir = "mydir"
         worker_nodes_list = get_worker_nodes()
-        print(worker_nodes_list)
 
-        # Create a RWX PVC
+        # Create a Cephfs PVC
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             access_mode=constants.ACCESS_MODE_RWX,
