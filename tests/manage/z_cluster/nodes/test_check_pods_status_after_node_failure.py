@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_ibm_cloud,
     skipif_external_mode,
+    skipif_ms_consumers_with_no_provider,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
@@ -31,7 +32,7 @@ from ocs_ci.ocs.resources.pod import (
     get_mon_pod_id,
     check_pods_after_node_replacement,
 )
-from ocs_ci.ocs.cluster import is_managed_service_cluster
+from ocs_ci.ocs.cluster import is_managed_service_cluster, ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 @ignore_leftovers
 @tier4a
 @skipif_external_mode
+@skipif_ms_consumers_with_no_provider
 @pytest.mark.polarion_id("OCS-2552")
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
@@ -118,7 +120,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
 
     @skipif_ibm_cloud
     def test_check_pods_status_after_node_failure(
-        self, switch_to_provider_for_test, nodes, node_restart_teardown
+        self, nodes, node_restart_teardown, switch_to_provider_for_test_factory
     ):
         """
         Test check pods status after a node failure event.
@@ -126,6 +128,8 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         state after a node failure event.
 
         """
+        switch_to_provider_for_test_factory()
+
         ocs_nodes = get_ocs_nodes()
         if not ocs_nodes:
             pytest.skip("We don't have ocs nodes in the cluster")
@@ -205,6 +209,9 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
             wait_for_node_count_to_reach_status(node_count=len(wnodes), timeout=900)
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
+
+            log.info("Checking that the Ceph health is OK...")
+            assert ceph_health_check(), "Ceph health is not OK"
         else:
             log.info(f"Starting the node '{node_name}' again...")
             nodes.start_nodes(nodes=[ocs_node])
@@ -212,5 +219,5 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
             log.info("Waiting for all the pods to be running")
             wait_for_pods_to_be_running(timeout=600)
 
-        log.info("Checking that the cluster health is OK...")
-        self.sanity_helpers.health_check(tries=40)
+            log.info("Checking that the cluster health is OK...")
+            self.sanity_helpers.health_check(tries=40)

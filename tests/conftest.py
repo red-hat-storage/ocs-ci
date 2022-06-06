@@ -5396,5 +5396,36 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         for instance in fioscale_instances:
             instance.cleanup()
 
+
+@pytest.fixture(scope="function")
+def switch_to_provider_for_test_factory(request):
+    """
+    Switch to provider cluster in case we use multi cluster and Managed service. If we don't use
+    multi cluster and Managed Services, the test will run as usual.
+
+    """
+    orig_index = None
+
+    def factory():
+        nonlocal orig_index
+
+        if (
+            config.multicluster
+            and config.ENV_DATA.get("platform", "").lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+        ):
+            log.info("Switching to the provider cluster context")
+            config.switch_to_provider()
+            orig_index = config.cur_index
+
+    def finalizer():
+        """
+        Switch to the original cluster context(if needed)
+
+        """
+        if orig_index is not None:
+            log.info("Switching back to the original cluster context")
+            config.switch_ctx(orig_index)
+
     request.addfinalizer(finalizer)
     return factory
