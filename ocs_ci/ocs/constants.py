@@ -1755,6 +1755,5 @@ SPACE = " "
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
 
-
 FILE_CREATE_DELETE = os.path.join(TEMPLATE_WORKLOAD_DIR, "Files_create_delete.py")
 FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "fsync.py")
