@@ -1,8 +1,7 @@
 import logging
 
 from ocs_ci.framework.testlib import E2ETest
-
-from ocs_ci.ocs.longevity import stage_4
+from ocs_ci.ocs.longevity import Longevity
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class TestLongevityStage4(E2ETest):
         pod_factory,
         multi_pvc_clone_factory,
         multi_snapshot_factory,
-        multi_snapshot_restore_factory,
+        snapshot_restore_factory,
         teardown_factory,
     ):
         """
@@ -32,12 +31,13 @@ class TestLongevityStage4(E2ETest):
         5. PVC, POD deletion
 
         """
-        stage_4(
+        long = Longevity()
+        long.stage_4(
             project_factory,
             multi_pvc_factory,
             pod_factory,
             multi_pvc_clone_factory,
             multi_snapshot_factory,
-            multi_snapshot_restore_factory,
+            snapshot_restore_factory,
             teardown_factory,
         )
