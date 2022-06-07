@@ -1331,6 +1331,8 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
+    80: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    240: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
@@ -1339,6 +1341,8 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 SCALE_PVC_ROUND_UP_VALUE = {
+    80: 80,
+    240: 240,
     1500: 1520,
     3000: 3040,
     4500: 4560,
