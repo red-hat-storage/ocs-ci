@@ -51,7 +51,7 @@ setup(
         "elasticsearch==7.14.0",
         "numpy==1.21.0",
         "python-ipmi==0.4.2",
-        "scipy==1.6.0",
+        "scipy==1.8.1",
         "PrettyTable==0.7.2",
         "azure-common==1.1.25",
         "azure-mgmt-compute==12.0.0",
