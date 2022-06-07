@@ -272,16 +272,17 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']} --dest-skip-tls"
     )
-    oc_mirror_result = exec_cmd(cmd, timeout=7200)
+    exec_cmd(cmd, timeout=7200)
 
-    for line in oc_mirror_result.stdout.decode("utf-8").splitlines():
-        if "Wrote ICSP manifests to" in line:
-            break
-    else:
+    # look for manifests directory with Image mapping, CatalogSource and ICSP
+    # manifests
+    mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
+    if not mirroring_manifests_dir:
         raise NotFoundError(
-            "Manifests directory not printed to stdout of 'oc mirror ...' command."
+            "Manifests directory created by 'oc mirror ...' command not found."
         )
-    mirroring_manifests_dir = line.replace("Wrote ICSP manifests to ", "")
+    mirroring_manifests_dir.sort(reverse=True)
+    mirroring_manifests_dir = mirroring_manifests_dir[0]
     logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
     if icsp:
