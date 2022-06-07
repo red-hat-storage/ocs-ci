@@ -213,11 +213,11 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_name", "access_mode", "clone_access_mode"],
         argvalues=[
-            pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                constants.ACCESS_MODE_RWO,
-                constants.ACCESS_MODE_RWO,
-            ),
+            # pytest.param(
+            #     "ocs-storagecluster-ceph-rbd",
+            #     constants.ACCESS_MODE_RWO,
+            #     constants.ACCESS_MODE_RWO,
+            # ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
                 constants.ACCESS_MODE_RWX,

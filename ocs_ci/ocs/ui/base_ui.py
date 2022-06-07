@@ -10,6 +10,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     NoSuchElementException,
+    StaleElementReferenceException
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -318,15 +319,38 @@ class BaseUI:
 
         """
         try:
-            wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
+            ignored_exceptions = (NoSuchElementException, StaleElementReferenceException)
+            wait = WebDriverWait(self.driver, timeout=timeout, ignored_exceptions=ignored_exceptions, poll_frequency=1)
             wait.until(ec.presence_of_element_located(locator))
             return True
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
             self.take_screenshot()
             return False
         except TimeoutException:
-            logger.error("Timedout while waiting for element")
+            logger.error(f"Timedout while waiting for element with {locator}")
+            self.take_screenshot()
+            return False
+
+    def check_staleness_of_element(self, locator, timeout=5):
+        """
+        Check if an web element is present on the web console or not.
+
+
+        Args:
+             locator (tuple): (GUI element needs to operate on (str), type (By))
+             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+        Returns:
+            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
+
+        """
+        try:
+            ignored_exceptions = StaleElementReferenceException
+            wait = WebDriverWait(self.driver, timeout=timeout, ignored_exceptions=ignored_exceptions)
+            wait.until(ec.e(locator))
+            return True
+        except StaleElementReferenceException:
+            logger.error(f"Expected element with locator {locator} is stale")
             self.take_screenshot()
             return False
 
@@ -640,7 +664,6 @@ class PageNavigator(BaseUI):
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
         if self.ocp_version_full >= version.VERSION_4_10:
-            self.driver.implicitly_wait(10)
             default_projects_is_checked = self.driver.find_element_by_xpath(
                 "//span[@class='pf-c-switch__toggle']"
             )
@@ -771,7 +794,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
@@ -833,6 +856,7 @@ def login_ui(console_url=None):
 
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
+    driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console(driver)

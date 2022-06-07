@@ -1,5 +1,7 @@
 import logging
 
+from selenium.common.exceptions import StaleElementReferenceException
+
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators, generic_locators
@@ -18,7 +20,7 @@ class PvcUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         ocp_version = get_ocp_version()
-        driver.implicitly_wait(10)
+        self.driver.implicitly_wait(5)
         self.pvc_loc = locators[ocp_version]["pvc"]
 
     def create_pvc_ui(
@@ -59,7 +61,7 @@ class PvcUI(PageNavigator):
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
         if (
-            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
+            (sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS or sc_name !=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
             and access_mode == "ReadWriteOnce"
         ):
             logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
@@ -95,7 +97,22 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
-        logger.info(f"Go to PVC {pvc_name} Page")
+        # for i in range(10):
+        #     try:
+        #         element_check = self.check_staleness_of_element(locator=get_element_type(pvc_name))
+        #         if element_check:
+        #             self.refresh_page()
+        #             logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
+        #             self.do_click(get_element_type(pvc_name), enable_screenshot=True)
+        #     except:
+        #         raise StaleElementReferenceException
+        if pvc_name == f"{pvc_name}-clone":
+            self.driver.refresh()
+
+            logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
+            self.do_click(get_element_type(pvc_name), enable_screenshot=True)
+
+        logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
         self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
         logger.info("Checking status of Pvc")
@@ -112,7 +129,7 @@ class PvcUI(PageNavigator):
         logger.info(f"Verifying access mode : {pvc_access_mode_new}")
 
         if (
-            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
+            (sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS or sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
             and access_mode == "ReadWriteOnce"
         ):
             pvc_new_vol_mode = f"{vol_mode}"
