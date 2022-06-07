@@ -720,7 +720,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating snapshot: {filename}")
+    logger.info(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
