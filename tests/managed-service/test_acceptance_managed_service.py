@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, managed_service_required
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
@@ -15,7 +15,6 @@ class TestAcceptanceMS(ManageTest):
 
     """
 
-    @managed_service_required
     def test_acceptance_managed_service(
         self, pvc_factory, pod_factory, teardown_factory
     ):
@@ -68,14 +67,23 @@ class TestAcceptanceMS(ManageTest):
                 status=constants.STATUS_BOUND,
             )
             pvc_objs.append(pvc_obj)
+            if mode[2] == constants.VOLUME_MODE_BLOCK:
+                pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                storage_type = constants.WORKLOAD_STORAGE_TYPE_BLOCK
+                raw_block_pv = True
+            else:
+                pod_dict_path = constants.NGINX_POD_YAML
+                storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
+                raw_block_pv = False
             pod_obj = pod_factory(
                 interface=mode[0],
                 pvc=pvc_obj,
                 status=constants.STATUS_RUNNING,
-                pod_dict_path=constants.NGINX_POD_YAML,
+                pod_dict_path=pod_dict_path,
+                raw_block_pv=raw_block_pv,
             )
             pod_obj.run_io(
-                storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
+                storage_type=storage_type,
                 size="1GB",
                 verify=True,
             )
