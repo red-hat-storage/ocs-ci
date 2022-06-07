@@ -7,8 +7,10 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label, Pod
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import exec_cmd, run_cmd
 
 
 logger = logging.getLogger(__name__)
@@ -166,3 +168,85 @@ def patch_consumer_toolbox(ceph_admin_key=None):
     )[0]
     new_tools_pod = Pod(**new_tools_pod_info)
     helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
+
+
+def update_non_ga_version():
+    """
+    Update pull secret, catalog source, subscription and operators to consume
+    ODF and deployer versions provided in configuration.
+
+    """
+    deployer_version = config.UPGRADE["deployer_version"]
+    upgrade_ocs_version = config.UPGRADE["upgrade_ocs_version"]
+    logger.info(f"Starting update to next version of deployer: {deployer_version}")
+    logger.info("Update catalogsource")
+    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+    catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    catalog_source_data["spec"]["image"] = config.DEPLOYMENT["ocs_registry_image"]
+    catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="catalog_source_manifest", delete=False
+    )
+    templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
+    run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
+    catalog_source = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")
+    logger.info("Edit annotation on the deployer CSV")
+    run_cmd(
+        f"oc annotate csv --overwrite ocs-osd-deployer.v{deployer_version} "
+        'operatorframework.io/properties=\'{"properties":[{"type":"olm.package",'
+        '"value":{"packageName":"ocs-osd-deployer","version":'
+        f'"{deployer_version}"'
+        '}},{"type":"olm.gvk","value":{"group":"ocs.openshift.io","kind":'
+        '"ManagedOCS","version":"v1alpha1"}},{"type":"olm.package.required",'
+        '"value":{"packageName":"ose-prometheus-operator","versionRange":"4.10.0"}},'
+        '{"type":"olm.package.required","value":{"packageName":"odf-operator",'
+        f'"versionRange":"{upgrade_ocs_version}"'
+        "}}]}'"
+    )
+    ocs_channel = config.UPGRADE["ocs_channel"]
+    odf_operator_u = f"odf-operator.v{deployer_version}"
+    mplace = constants.MARKETPLACE_NAMESPACE
+    patch_changes = [
+        f'[{{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}}]',
+        f'[{{{"op": "replace", "path": "/spec/sourceNamespace", "value" : "{mplace}"}}}]',
+        f'[{{{"op": "replace", "path": "/spec/startingCSV", "value" : "{odf_operator_u}"}}}]',
+    ]
+
+    if config.ENV_DATA.get("cluster_type").lower() == "provider":
+        logger.info("Edit subscription")
+        oc = ocp.OCP(
+            kind=constants.SUBSCRIPTION,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        subscriptions = oc.get()["items"]
+        for subscription in subscriptions:
+            odf_operator_sub = (
+                subscription.get("metadata").get("name")
+                if subscription.get("metadata")
+                .get("name")
+                .startswith(constants.ODF_SUBSCRIPTION)
+                else ""
+            )
+            break
+        for change in patch_changes:
+            oc.patch(
+                resource_name=odf_operator_sub,
+                params=change,
+                format_type="json",
+            )
+    if config.ENV_DATA.get("cluster_type").lower() == "consumer":
+        logger.info("Edit operators")
+        oc = ocp.OCP(kind="operator", namespace=config.ENV_DATA["cluster_namespace"])
+        operators = [
+            "ocs-operator",
+            "ocs-operator",
+            "mcg-operator",
+            "odf-csi-addons-operator",
+        ]
+        for operator in operators:
+            for change in patch_changes:
+                oc.patch(resource_name=operator, params=change, format_type="json")
