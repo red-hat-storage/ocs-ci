@@ -134,8 +134,7 @@ to the pytest.
   ```bash
   [DEFAULT]
   bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
-  bugzilla_username = kerberos@redhat.com
-  bugzilla_password = yourPassword
+  bugzilla_api_key = <API_KEY>
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--collect-logs-on-success-run` - Collect must gather logs at the end of the
