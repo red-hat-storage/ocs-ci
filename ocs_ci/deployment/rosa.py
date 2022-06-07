@@ -20,7 +20,11 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
+from ocs_ci.ocs.managedservice import (
+    update_non_ga_version,
+    update_pull_secret,
+    patch_consumer_toolbox,
+)
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
