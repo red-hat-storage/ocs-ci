@@ -304,6 +304,16 @@ def wait_for_vr_deletion(namespace, timeout=300):
 
 
 def wait_for_workload_resource_creation(pvc_count, pod_count, namespace, timeout=120):
+    """
+    Wait for workload resources such as PVCs and Pods to be created
+
+    Args:
+        pvc_count (int): Expected number of PVCs
+        pod_count (int): Expected number of Pods
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource creation
+
+    """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
     ocp.OCP(kind=constants.PVC, namespace=namespace).wait_for_resource(
         condition=constants.STATUS_BOUND, resource_count=pvc_count, timeout=timeout
@@ -317,6 +327,14 @@ def wait_for_workload_resource_creation(pvc_count, pod_count, namespace, timeout
 
 
 def wait_for_workload_resource_deletion(namespace, timeout=120):
+    """
+    Wait for workload resources to be deleted
+
+    Args:
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
     logger.info("Waiting for all pods to be deleted")
     all_pods = get_all_pods(namespace=namespace)
     for pod_obj in all_pods:
