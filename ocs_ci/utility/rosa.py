@@ -64,7 +64,7 @@ def create_cluster(cluster_name, version, region):
         rosa_ocp_version = get_latest_rosa_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
-    create_account_roles(version)
+    create_account_roles()
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -285,12 +285,11 @@ def validate_ocp_version(version):
         return False
 
 
-def create_account_roles(version, prefix="ManagedOpenShift"):
+def create_account_roles(prefix="ManagedOpenShift"):
     """
     Create the required account-wide roles and policies, including Operator policies.
 
     Args:
-        version (str): cluster version
         prefix (str): role prefix
 
     """
