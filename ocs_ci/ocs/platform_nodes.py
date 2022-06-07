@@ -14,6 +14,7 @@ from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
+    comment_sensitive_var,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -34,6 +35,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import version as version_module
 from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
@@ -49,7 +51,6 @@ from ocs_ci.utility.utils import (
     delete_file,
     AZInfo,
     download_file_from_git_repo,
-    get_running_ocp_version,
     set_aws_region,
     run_cmd,
     get_module_ip,
@@ -1528,10 +1529,11 @@ class VSPHEREUPINode(VMWareNodes):
         terraform_binary_path = os.path.join(bin_dir, terraform_filename)
         config.ENV_DATA["terraform_installer"] = terraform_binary_path
 
-        # get OCP version
-        ocp_version = get_running_ocp_version()
         self.folder_structure = False
-        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_5
+        ):
             set_aws_region()
             self.folder_structure = True
             config.ENV_DATA["folder_structure"] = True
@@ -1662,6 +1664,13 @@ class VSPHEREUPINode(VMWareNodes):
         clone_openshift_installer()
         self._update_terraform()
         self._update_machine_conf()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_11
+        ):
+            comment_sensitive_var()
 
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)

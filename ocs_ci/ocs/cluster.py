@@ -903,18 +903,20 @@ class CephCluster(object):
         if pool_name == "ocs-storagecluster-cephblockpool":
             return
 
+        # To make the deletion time faster, delete the created pool brutally
+        patch = (
+            f"cephblockpool {pool_name} --type=merge -p "
+            '\'{"metadata":{"finalizers":null}}\''
+        )
         # Delete the RBD pool
         try:
-            self.RBD.delete(resource_name=pool_name)
+            self.RBD.delete(resource_name=pool_name, wait=False)
         except Exception:
             logger.warning(f"BlockPoool {pool_name} couldnt delete")
             logger.info("Try to force delete it")
-            patch = (
-                f"cephblockpool {pool_name} --type=merge -p "
-                '\'{"metadata":{"finalizers":null}}\''
-            )
-            self.RBD.exec_oc_cmd(f"patch {patch}")
-        self.RBD.wait_for_delete(resource_name=pool_name)
+        # Wait for 30 seconds before brutally delete the bool.
+        time.sleep(30)
+        self.RBD.exec_oc_cmd(f"patch {patch}")
 
 
 class CephHealthMonitor(threading.Thread):

@@ -568,6 +568,21 @@ acm_configuration = {
     ),
     "cc_yaml_editor": ("//div[@class='yamlEditorContainer']", By.CSS_SELECTOR),
     "cc_install_config_tab": ("//a[normalize-space()='install-config']", By.XPATH),
+    # Action button name format: '<cluster-name>-actions'
+    "cc_delete_cluster_action_dropdown": ("//button[@id='{}']", By.XPATH),
+    "cc_destroy_cluster": ("//a[normalize-space()='Destroy cluster']", By.XPATH),
+    "cc_destroy_cluster_confirm_textbox": ("//input[@id='confirm']", By.XPATH),
+    "cc_destroy_button": ("//button[normalize-space()='Destroy']", By.XPATH),
+    "cc_cluster_destroying": ("//button[normalize-space()='Destroying']", By.XPATH),
+    # Destroy in progress text = '<cluster-name> is being destroyed'
+    "cc_cluster_being_destroyed_heading": (
+        "//h4[normalize-space()='{} is being destroyed']",
+        By.XPATH,
+    ),
+    "cc_destroy_cluster_back_to_clusters_button": (
+        "//button[normalize-space()='Back to clusters']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
