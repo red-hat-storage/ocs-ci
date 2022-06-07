@@ -767,7 +767,7 @@ def login_ui(console_url=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
@@ -788,6 +788,7 @@ def login_ui(console_url=None):
                     f"Configuring not authenticated proxy ('{client_proxy.geturl()}') for browser"
                 )
                 chrome_options.add_argument(f"--proxy-server={client_proxy.geturl()}")
+                "hi"
             elif not headless:
                 # authenticated proxy, not headless mode
                 # create Chrome extension with proxy settings
