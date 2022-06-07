@@ -19,7 +19,11 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.framework.testlib import E2ETest, config
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    ResourceNotFoundError,
+)
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import (
@@ -655,6 +659,17 @@ def update_mon_initial_delay():
     logger.info("Sleeping for mons to get initialized")
     time.sleep(60)
     logger.info("Validating whether all mons reached running state")
+    validate_mon_pods()
+
+
+@retry(
+    (ResourceWrongStatusException, ResourceNotFoundError), tries=10, delay=5, backoff=1
+)
+def validate_mon_pods():
+    """
+    Checks mon pods are running with retries
+
+    """
     mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     for mon in mon_pods:
         wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
