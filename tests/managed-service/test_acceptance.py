@@ -105,6 +105,9 @@ class TestAcceptanceMS(ManageTest):
     def clone_pvc(self, teardown_factory):
         """
         Clone PVC
+
+        Args:
+            teardown_factory: teardown fixture
         """
         for pvc_obj in self.pvc_objs:
             logger.info(
@@ -180,5 +183,5 @@ class TestAcceptanceMS(ManageTest):
                     f"Checking again."
                 )
         logger.info(
-            f"Verified: Modified size {pvc_size_new}G is reflected " f"on all pods."
+            f"Verified: Modified size {pvc_size_new}G is reflected on all pods."
         )
