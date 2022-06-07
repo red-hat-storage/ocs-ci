@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 @system_test
 @ignore_leftovers
+@pytest.mark.last
 @pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
 @skipif_ocs_version("<4.6")
