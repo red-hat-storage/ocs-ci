@@ -59,7 +59,7 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         if (
-            config.ENV_DATA["appliance_mode"]
+            config.ENV_DATA.get("appliance_mode", False)
             and config.ENV_DATA.get("cluster_type", "") == "provider"
         ):
             rosa.appliance_mode_cluster(
