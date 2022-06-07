@@ -754,16 +754,16 @@ def wait_for_resource_bulk_status(
     raise Exception(err_msg)
 
 
-def pod_csi_time(
+def pod_attach_csi_time(
     interface, pv_name, start_time, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
 ):
     """
-    Get the starting/ending creation time of a PVC based on provisioner logs
+    Get the pod start/attach csi time of a pod based on csi-rbdplugin container in csi-rbdplugin pods
 
     Args:
         interface (str): The interface backed the PVC
         pv_name (str): Name of the PV
-        start_time (time): the starttime of the test to reduce log size reading
+        start_time (time): the start time of the test to reduce log size reading
         namespace (str): the tests namespace
 
     Return:

@@ -131,7 +131,7 @@ class TestPodStartTime(PASTest):
             # Get the POD start time including the attache time
             self.start_time_dict_list.append(helpers.pod_start_time(pod_obj))
             self.csi_time_dict_list.append(
-                performance_lib.pod_csi_time(
+                performance_lib.pod_attach_csi_time(
                     self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace
                 )
             )
