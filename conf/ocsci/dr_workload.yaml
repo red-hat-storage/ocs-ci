@@ -3,3 +3,4 @@ ENV_DATA:
   dr_workload_repo_branch: "master"
   dr_workload_pod_count: 1
   dr_workload_pvc_count: 1
+  # preferred_primary_cluster: PLACEHOLDER
