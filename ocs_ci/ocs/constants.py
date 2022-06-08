@@ -505,6 +505,10 @@ CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
 )
 
+OC_MIRROR_IMAGESET_CONFIG = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
 
@@ -1289,6 +1293,20 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
+    "4.11": [
+        "cluster-logging",
+        "elasticsearch-operator",
+        "mcg-operator",
+        "ocs-operator",
+        "odf-csi-addons-operator",
+        "odf-lvm-operator",
+        "odf-multicluster-orchestrator",
+        "odf-operator",
+    ]
+}
+
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
