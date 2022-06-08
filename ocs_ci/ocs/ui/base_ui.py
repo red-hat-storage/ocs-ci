@@ -364,7 +364,10 @@ class PageNavigator(BaseUI):
             else:
                 self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-            self.storage_class = "managed-premium_sc"
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
 
     def navigate_overview_page(self):
         """
