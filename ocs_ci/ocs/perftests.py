@@ -974,7 +974,7 @@ class PASTest(BaseTest):
             log.info(f"Try to delete the backend PV : {pv}")
             performance_lib.run_oc_command(f"delete pv {pv}")
         except Exception as ex:
-            err_msg = f"cannot delete PV {pv} - [{ex}]"
+            err_msg = f"cannot delete PV [{ex}]"
             log.error(err_msg)
 
     def create_testing_pod_and_wait_for_completion(self, **kwargs):
