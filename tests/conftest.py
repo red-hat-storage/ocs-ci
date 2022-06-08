@@ -5414,9 +5414,9 @@ def switch_to_provider_for_test_factory(request):
             and config.ENV_DATA.get("platform", "").lower()
             in constants.MANAGED_SERVICE_PLATFORMS
         ):
+            orig_index = config.cur_index
             log.info("Switching to the provider cluster context")
             config.switch_to_provider()
-            orig_index = config.cur_index
 
     def finalizer():
         """
