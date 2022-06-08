@@ -1,5 +1,5 @@
 """
-This module contains helpers function related to Managed Service ROSA
+This module contains helpers class related to Managed Service ROSA
 Clusters in production environment
 """
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ROSAProdEnvCluster(object):
     """
-    A base class for Managed Service ROSA Cluster in Production Environment
+    A helper class for Managed Service ROSA Cluster in Production Environment
     """
 
     def __init__(self, cluster):
@@ -40,19 +40,9 @@ class ROSAProdEnvCluster(object):
         base_path = os.path.dirname(abs_path)
         os.makedirs(base_path, exist_ok=True)
 
-        # login to cluster using admin account
-        self._login()
-
-    def _login(self):
+    def create_admin_and_login(self):
         """
-        Login to cluster
-        """
-        self.create_admin()
-        self.wait_for_cluster_admin_login_successful()
-
-    def create_admin(self):
-        """
-        creates admin account for cluster
+        creates admin account for cluster and login
         """
         logger.info(f"creating admin account to cluster {self.cluster}")
         cmd = f"rosa create admin --cluster={self.cluster}"
@@ -67,16 +57,23 @@ class ROSAProdEnvCluster(object):
                 break
         logger.info("It may take up to a minute for the account to become active")
         time.sleep(10)
+        self.wait_for_cluster_admin_login_successful()
 
-    def cluster_admin_login(self):
+    def cluster_admin_login(self, skip_tls_verify=False):
         """
         Login to production cluster
+
+        Args:
+            skip_tls_verify (bool): True to bypass the certificate check
+               and use insecure connections
 
         Returns:
             str: output of oc login command
 
         """
         cmd = config.ENV_DATA["ms_prod_oc_login"]
+        if skip_tls_verify:
+            cmd = f"{cmd} --insecure-skip-tls-verify"
         out = exec_cmd(cmd, ignore_error=True)
         out_str = str(out.stdout, "UTF-8")
         return out_str
@@ -89,9 +86,39 @@ class ROSAProdEnvCluster(object):
             ROSAProdAdminLoginFailedException: in case of admin failed to log in cluster
 
         """
-        for sample in TimeoutSampler(600, 10, self.cluster_admin_login):
+        for sample in TimeoutSampler(
+            600, 10, self.cluster_admin_login, skip_tls_verify=True
+        ):
             if "Login successful" in sample:
                 logger.info(sample)
                 return
-            logger.warning(f"Login failed")
+            logger.warning("Login failed")
         raise ROSAProdAdminLoginFailedException
+
+    def generate_kubeconfig_file(self, path=None, skip_tls_verify=False):
+        """
+        creates kubeconfig file for the cluster
+
+        Args:
+            path (str): Path to create kubeconfig file
+            skip_tls_verify (bool): True to bypass the certificate check
+               and use insecure connections
+
+        """
+        path = path or self.kubeconfig_path
+        cmd = f"{config.ENV_DATA['ms_prod_oc_login']} --kubeconfig {path}"
+        if skip_tls_verify:
+            cmd = f"{cmd} --insecure-skip-tls-verify"
+        exec_cmd(cmd)
+
+    def generate_kubeadmin_password_file(self, path=None):
+        """
+        creates kubeadmin password file for cluster
+
+        Args:
+            path (str): Path to create kubeadmin password file
+
+        """
+        path = path or self.kubeadmin_password_path
+        with open(path, "w+") as fd:
+            fd.write(config.ENV_DATA["ms_prod_cluster_admin_password"])
