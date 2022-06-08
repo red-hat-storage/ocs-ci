@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.framework.testlib import ManageTest, acceptance
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
@@ -15,6 +15,7 @@ class TestAcceptanceMS(ManageTest):
 
     """
 
+    @acceptance
     def test_acceptance(self, pvc_factory, pod_factory, teardown_factory):
         """
         Acceptance test
