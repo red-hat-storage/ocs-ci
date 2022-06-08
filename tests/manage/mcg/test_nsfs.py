@@ -1,6 +1,5 @@
 import logging
 
-from botocore.exceptions import ClientError
 import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier3
@@ -9,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
 )
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.utility.retry import retry
@@ -61,7 +61,7 @@ class TestNSFSObjectIntegrity(MCGTest):
 
         """
         nsfs_bucket_factory(nsfs_obj)
-        retry(ClientError, tries=4, delay=10)(random_object_round_trip_verification)(
+        retry(CommandFailed, tries=4, delay=10)(random_object_round_trip_verification)(
             io_pod=awscli_pod_session,
             bucket_name=nsfs_obj.bucket_name,
             upload_dir=test_directory_setup.origin_dir,
@@ -102,7 +102,7 @@ class TestNSFSObjectIntegrity(MCGTest):
         """
         nsfs_bucket_factory(nsfs_obj)
         try:
-            retry(ClientError, tries=4, delay=10)(
+            retry(CommandFailed, tries=4, delay=10)(
                 random_object_round_trip_verification
             )(
                 io_pod=awscli_pod_session,
