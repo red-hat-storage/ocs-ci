@@ -3836,6 +3836,7 @@ def get_cephfs_subvolumegroup():
     return subvolume_group_name
 
 
+<<<<<<< HEAD
 def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     """
     Creates a serviceaccount token secret
@@ -3911,7 +3912,7 @@ def get_noobaa_db_used_space():
     return df_out[-4]
 
 
-def create_storage_class_claim(
+def create_storageclass_claim(
     interface_type,
     storage_class_claim_name=None,
     namespace=None,
