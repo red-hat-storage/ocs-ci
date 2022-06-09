@@ -3837,6 +3837,7 @@ def get_cephfs_subvolumegroup():
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     """
     Creates a serviceaccount token secret
@@ -3912,22 +3913,22 @@ def get_noobaa_db_used_space():
     return df_out[-4]
 
 
-def create_storageclass_claim(
+def create_storageclassclaim(
     interface_type,
     storage_class_claim_name=None,
     namespace=None,
 ):
     """
-    Create a storage class claim
+    Create a storageclassclaim
 
     Args:
         interface_type (str): The type of the interface
             (e.g. CephBlockPool, CephFileSystem)
-        storage_class_claim_name (str): The name of storage class claim to create
+        storage_class_claim_name (str): The name of storageclassclaim to create
         namespace(str): The namespace in which the storageclassclaim should be created
 
     Returns:
-        OCS: An OCS instance for the storage class claim
+        OCS: An OCS instance for the storageclassclaim
     """
     template_yaml = os.path.join(
         constants.TEMPLATE_DIR, "storageclassclaim", "storageclassclaim.yaml"
