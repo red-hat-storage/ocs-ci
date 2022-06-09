@@ -36,6 +36,22 @@ mirror_openshift:
   password: "PASSWORD"
 ```
 
+#### vSphere UPI
+For vSphere UPI deployments, RHCOS templates must be present on Cluster in Datacenter
+
+Till OCP version 4.9, download RHCOS templates from [here](https://raw.githubusercontent.com/openshift/installer/release-4.9/data/data/rhcos.json)
+e.g: From above url, form the exact download path using baseURI + vmware (in images section )
+
+[link](https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.9/49.84.202110081407-0/x86_64/rhcos-49.84.202110081407-0-vmware.x86_64.ova) to download OCP 4.9 RHCOS template
+
+From OCP 4.10 version, download RHCOS templates from [here](https://github.com/openshift/installer/blob/release-4.10/data/data/coreos/rhcos.json)
+
+e.g: [link](https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.10/410.84.202205191234-0/x86_64/rhcos-410.84.202205191234-0-vmware.x86_64.ova) to download OCP 4.10 RHCOS template
+
+For GA'ed version, download RHCOS templates from [here](https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.10/4.10.3/)
+
+Follow this [procedure](https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-17BEDA21-43F6-41F4-8FB2-E01D275FE9B4.html) to deploy ova/ovf template in vCenter.
+
 #### vSphere IPI
 Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
 system trust before installing an OCP cluster
