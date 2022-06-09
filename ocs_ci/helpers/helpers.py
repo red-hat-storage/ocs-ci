@@ -34,7 +34,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pod, pvc, storageclassclaim
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
@@ -3948,7 +3948,9 @@ def create_storageclassclaim(
             f"test-{interface_type}", constants.STORAGECLASSCLAIM.lower()
         )
     )
-
     if namespace:
         sc_claim_data["metadata"]["namespace"] = namespace
-    return create_resource(**sc_claim_data)
+
+    sc_claim_obj = storageclassclaim.StorageClassClaim(**sc_claim_data)
+    created_sc_claim = sc_claim_obj.create(do_reload=True)
+    return created_sc_claim
