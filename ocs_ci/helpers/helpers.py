@@ -3914,6 +3914,7 @@ def get_noobaa_db_used_space():
 def create_storage_class_claim(
     interface_type,
     storage_class_claim_name=None,
+    namespace=None,
 ):
     """
     Create a storage class claim
@@ -3922,6 +3923,7 @@ def create_storage_class_claim(
         interface_type (str): The type of the interface
             (e.g. CephBlockPool, CephFileSystem)
         storage_class_claim_name (str): The name of storage class claim to create
+        namespace(str): The namespace in which the storageclassclaim should be created
 
     Returns:
         OCS: An OCS instance for the storage class claim
@@ -3944,4 +3946,7 @@ def create_storage_class_claim(
             f"test-{interface_type}", constants.STORAGECLASSCLAIM.lower()
         )
     )
+
+    if namespace:
+        sc_claim_data["metadata"]["namespace"] = namespace
     return create_resource(**sc_claim_data)
