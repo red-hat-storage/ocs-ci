@@ -830,6 +830,8 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
+    # Validate proceeding to the login console before taking any action:
+    proceed_to_login_console(driver)
     if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
         "import_clusters_to_acm"
     ):
@@ -877,3 +879,26 @@ def close_browser(driver):
     logger.info("Close browser")
     take_screenshot(driver)
     driver.close()
+
+
+def proceed_to_login_console(driver: WebDriver):
+    """
+    Proceed to the login console, if needed to confirm this action in a page that appears before.
+    This is required to be as a solo function, because the driver initializes in the login_ui function.
+    Function needs to be called just before login
+
+    Args:
+        driver (Selenium WebDriver)
+
+    Returns:
+        None
+
+    """
+    login_loc = locators[get_ocp_version()]["login"]
+    if driver.title == login_loc["pre_login_page_title"]:
+        proceed_btn = driver.find_element(
+            by=login_loc["proceed_to_login_btn"][1],
+            value=login_loc["proceed_to_login_btn"][0],
+        )
+        proceed_btn.click()
+        WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
