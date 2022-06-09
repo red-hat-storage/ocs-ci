@@ -432,7 +432,10 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "awsS3": {
             "targetBucket": uls_name,
             "region": region,
-            "secret": {"name": cld_mgr.aws_client.secret.name},
+            "secret": {
+                "name": cld_mgr.aws_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -454,7 +457,8 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         f"backingstore create aws-s3 {backingstore_name} "
         f"--access-key {cld_mgr.aws_client.access_key} "
         f"--secret-key {cld_mgr.aws_client.secret_key} "
-        f"--target-bucket {uls_name} --region {region}"
+        f"--target-bucket {uls_name} --region {region}",
+        use_yes=True,
     )
 
 
@@ -475,7 +479,10 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
             "targetBucket": uls_name,
-            "secret": {"name": cld_mgr.gcp_client.secret.name},
+            "secret": {
+                "name": cld_mgr.gcp_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -498,7 +505,8 @@ def cli_create_google_backingstore(
     mcg_obj.exec_mcg_cmd(
         f"backingstore create google-cloud-storage {backingstore_name} "
         f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
@@ -519,7 +527,10 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
             "targetBlobContainer": uls_name,
-            "secret": {"name": cld_mgr.azure_client.secret.name},
+            "secret": {
+                "name": cld_mgr.azure_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -542,7 +553,8 @@ def cli_create_azure_backingstore(
         f"backingstore create azure-blob {backingstore_name} "
         f"--account-key {cld_mgr.azure_client.credential} "
         f"--account-name {cld_mgr.azure_client.account_name} "
-        f"--target-blob-container {uls_name}"
+        f"--target-blob-container {uls_name}",
+        use_yes=True,
     )
 
 
@@ -568,7 +580,10 @@ def oc_create_ibmcos_backingstore(cld_mgr, backingstore_name, uls_name, region):
             "endpoint": constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
                 cld_mgr.ibmcos_client.region.lower()
             ),
-            "secret": {"name": cld_mgr.ibmcos_client.secret.name},
+            "secret": {
+                "name": cld_mgr.ibmcos_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -596,7 +611,8 @@ def cli_create_ibmcos_backingstore(
                 cld_mgr.ibmcos_client.region.lower()
             )
         } """
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
