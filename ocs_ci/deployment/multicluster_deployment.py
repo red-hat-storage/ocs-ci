@@ -59,6 +59,7 @@ class OCPDeployWithACM(Deployment):
             for key in [ssl_key, ssl_cert]:
                 if os.path.exists(key):
                     os.unlink(key)
+            logger.info("Running post ocp deploy ops")
             self.post_ocp_deploy()
         config.switch_ctx(prev)
 
