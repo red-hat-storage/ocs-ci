@@ -1,8 +1,9 @@
 import logging
 import random
+
+from time import sleep
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import E2ETest, tier1
-from ocs_ci.framework.testlib import bugzilla
+from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
@@ -14,12 +15,25 @@ log = logging.getLogger(__name__)
 
 @tier1
 @bugzilla("2075068")
+@polarion_id("OCS-3947")
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash
     """
 
     pvc_size = 1
+
+    def creates_files(self, pod_obj):
+        while True:
+            for i in range(1, 125):
+                pod_obj.exec_cmd_on_pod(
+                    f"dd if=/dev/zero of=/var/lib/www/html/mydir/emp bs=1MB count=1"
+                )
+
+    def remove_files(self, pod_obj):
+        while True:
+            for i in range(1, 125):
+                pod_obj.exec_cmd_on_pod(f"rm /var/lib/www/html/mydir/emp")
 
     def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
         """
@@ -46,7 +60,6 @@ class TestKernelCrash(E2ETest):
         helpers.wait_for_resource_state(
             resource=pvc_obj, state=constants.STATUS_BOUND, timeout=240
         )
-        pvc_obj.reload()
         log.info("Verified: CephFS PVC are Bound")
 
         # Set interface argument for reference
@@ -69,14 +82,15 @@ class TestKernelCrash(E2ETest):
             resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
         )
         pod_obj.reload()
+        teardown_factory(pod_obj)
+
         assert pod.verify_node_name(
             pod_obj, selected_node
         ), "Pod is running on a different node than the selected node"
 
-        files = [constants.FILE_CREATE_DELETE, constants.FSYNC]
-        for file in files:
-            cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
-            helpers.run_cmd(cmd=cmd)
+        file = constants.FSYNC
+        cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
+        helpers.run_cmd(cmd=cmd)
         log.info("Files copied successfully ")
 
         commands = ["mkdir" + " " + original_dir + result_dir, "apt-get update"]
@@ -86,12 +100,12 @@ class TestKernelCrash(E2ETest):
         log.info("Starting creation and deletion of files on volume")
 
         # Create and delete files on mount point
-        executor = ThreadPoolExecutor(max_workers=2)
+        executor = ThreadPoolExecutor(max_workers=3)
 
-        executor.submit(
-            pod_obj.exec_sh_cmd_on_pod, command=f"nohup python Files_create_delete.py"
-        )
-        executor.submit(pod_obj.exec_sh_cmd_on_pod, command=f"python fsync.py")
+        executor.submit(self.creates_files, pod_obj)
+        sleep(3)
+        log.info("Started deletion of files on volume")
+        executor.submit(self.remove_files, pod_obj)
 
         # Check Node gets Panic or not
         try:
@@ -103,5 +117,3 @@ class TestKernelCrash(E2ETest):
             raise ex
         else:
             log.info(f"Node in Ready status found, hence TC is Passed. ")
-
-        teardown_factory(pod_obj)
