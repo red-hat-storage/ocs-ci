@@ -27,4 +27,5 @@ class TestNoobaaKMS(MCGTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
         )[0]
         operator_logs = pod.get_pod_logs(pod_name=operator_pod["metadata"]["name"])
-        assert "found root secret in external KMS successfully" in operator_logs
+        assert "setKMSConditionStatus Init" in operator_logs
+        assert "setKMSConditionStatus Sync" in operator_logs
