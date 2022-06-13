@@ -78,6 +78,8 @@ setup(
         "mysql-connector-python==8.0.27",
         "pytest-repeat",
         "pexpect>=4.8.0",
+        # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
+        "protobuf==3.20.1",
     ],
     entry_points={
         "console_scripts": [

@@ -484,6 +484,10 @@ class RDRDeploymentException(Exception):
     pass
 
 
+class ACMClusterDestroyException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 

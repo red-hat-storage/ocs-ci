@@ -773,7 +773,9 @@ def login_ui(console_url=None):
 
         # use proxy server, if required
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
             # there is a big difference between configuring not authenticated

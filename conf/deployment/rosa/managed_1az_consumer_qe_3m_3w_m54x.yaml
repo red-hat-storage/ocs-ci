@@ -9,7 +9,7 @@ ENV_DATA:
   worker_instance_type: 'm5.4xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-consumer-qe"
-  region: 'us-east-2'
+  region: 'us-east-1'
   #The requested capacity of the storage cluster to be deployed.
   size: '1'
   #Selected storage unit for the requested capacity in Ti or Gi
