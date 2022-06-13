@@ -31,4 +31,6 @@ class TestLongevityStage2(E2ETest):
 
         # Num of OBCs is set as 0 owing to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2090968. As soon as the
         # issue gets resolved we will set it back to default.
-        stage2(multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_obcs=0)
+        stage2(
+            multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_obcs=0
+        )
