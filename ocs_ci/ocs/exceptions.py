@@ -240,6 +240,10 @@ class RDMDiskNotFound(Exception):
     pass
 
 
+class PassThroughEnabledDeviceNotFound(Exception):
+    pass
+
+
 class ExternalClusterDetailsException(Exception):
     pass
 
