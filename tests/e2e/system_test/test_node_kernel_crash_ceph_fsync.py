@@ -106,6 +106,7 @@ class TestKernelCrash(E2ETest):
         sleep(3)
         log.info("Started deletion of files on volume")
         executor.submit(self.remove_files, pod_obj)
+        executor.submit(pod_obj.exec_sh_cmd_on_pod, command=f"python fsync.py")
 
         # Check Node gets Panic or not
         try:
