@@ -12,7 +12,9 @@ def record_factory(*args, **kwargs):
     """
     record = current_factory(*args, **kwargs)
     # Customize the log format for cluster context:
-    record.clusterctx = f"- C[{config.cur_index}]" if config.nclusters > 1 else ""
+    record.clusterctx = (
+        f"- C[{config.current_cluster_name()}]" if config.nclusters > 1 else ""
+    )
 
     return record
 
