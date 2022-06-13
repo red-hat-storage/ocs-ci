@@ -57,6 +57,7 @@ class FioPodScale(object):
         self._set_dc_deployment()
         self.namespace_list = list()
         self.kube_job_pvc_list, self.kube_job_pod_list = ([], [])
+        self.is_cleanup = False
 
     @property
     def kind(self):
@@ -417,6 +418,8 @@ class FioPodScale(object):
         if self.ms_name:
             for name in self.ms_name:
                 machine.delete_custom_machineset(name)
+
+        self.is_cleanup = True
 
 
 def delete_objs_parallel(obj_list, namespace, kind):
