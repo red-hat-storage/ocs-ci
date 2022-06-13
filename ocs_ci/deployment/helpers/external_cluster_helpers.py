@@ -317,7 +317,10 @@ def get_rgw_endpoint():
     rgw_endpoint = None
     for each in config.EXTERNAL_MODE["external_cluster_node_roles"].values():
         if "rgw" in each["role"]:
-            rgw_endpoint = each["ip_address"]
+            if config.EXTERNAL_MODE.get("use_fqdn_rgw_endpoint"):
+                rgw_endpoint = each["hostname"]
+            else:
+                rgw_endpoint = each["ip_address"]
             return rgw_endpoint
     if not rgw_endpoint:
         raise ExternalClusterRGWEndPointMissing
