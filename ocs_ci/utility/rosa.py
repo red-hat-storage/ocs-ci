@@ -120,14 +120,12 @@ def create_cluster(cluster_name, version, region):
         json.dump(cluster_info, f)
 
 
-def appliance_mode_cluster(cluster_name, ocp_version, region):
+def appliance_mode_cluster(cluster_name):
     """
     Create appliance mode provider cluster
 
     Args:
         cluster_name (str): Cluster name
-        ocp_version (str): cluster version
-        region (str): Cluster region
 
     """
     addon_name = config.ENV_DATA.get("addon_name", "")
