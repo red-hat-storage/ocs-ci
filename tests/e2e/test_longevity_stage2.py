@@ -28,4 +28,7 @@ class TestLongevityStage2(E2ETest):
         2. Bulk create/delete operations without waiting for the individual PVC/POD/OBC to reach its desired state.
 
         """
-        stage2(multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory)
+
+        # Num of OBCs is set as 0 owing to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2090968. As soon as the
+        # issue gets resolved we will set it back to default.
+        stage2(multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_obcs=0)
