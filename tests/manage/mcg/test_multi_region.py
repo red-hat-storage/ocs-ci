@@ -18,6 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class TestMultiRegion(MCGTest):
         mcg_bucket_path = f"s3://{bucket_name}"
 
         # Upload test objects to the NooBucket
-        sync_object_directory(
+        retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
             awscli_pod_session, local_testobjs_dir_path, mcg_bucket_path, mcg_obj
         )
 
@@ -120,7 +121,7 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(
+        retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
             awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj
         )
 
@@ -151,7 +152,7 @@ class TestMultiRegion(MCGTest):
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(
+        retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
             awscli_pod_session, mcg_bucket_path, local_temp_path, mcg_obj
         )
 
