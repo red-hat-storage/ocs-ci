@@ -90,11 +90,11 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     ceph_total_stored, max_avail = get_ceph_storage_stats(ceph_pool_name)
     # ... to compute PVC size (values in bytes)
     total = max_avail + ceph_total_stored  # Bytes
-    max_avail_gi = max_avail / 2 ** 30  # GiB
+    max_avail_gi = max_avail / 2**30  # GiB
     logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
-    pvc_size = round(to_utilize / 2 ** 30)  # GiB
+    pvc_size = round(to_utilize / 2**30)  # GiB
     logger.info(
         f"to reach {target/2**30} Gi of total cluster utilization, "
         f"which is {target_percentage*100}% of the total capacity, "
@@ -139,7 +139,7 @@ def get_timeout(fio_min_mbps, pvc_size):
     # based on min. fio write speed of the enviroment ...
     logger.info("Assuming %.2f MB/s is a minimal write speed of fio.", fio_min_mbps)
     # ... we compute max. time we are going to wait for fio to write all data
-    min_time_to_write_gb = 1 / (fio_min_mbps / 2 ** 10)
+    min_time_to_write_gb = 1 / (fio_min_mbps / 2**10)
     write_timeout = pvc_size * min_time_to_write_gb  # seconds
     logger.info(
         f"fixture will wait {write_timeout} seconds for the Job "
@@ -288,6 +288,38 @@ def delete_fio_data(fio_job_file, delete_check_func):
         raise Exception(error_msg)
 
 
+def get_sc_name(fixture_name):
+    """
+    Return storage class name based on fixture name suffix.
+    """
+    if fixture_name.endswith("rbd"):
+        if config.DEPLOYMENT.get("external_mode"):
+            storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        else:
+            storage_class_name = constants.DEFAULT_STORAGECLASS_RBD
+    elif fixture_name.endswith("cephfs"):
+        if config.DEPLOYMENT.get("external_mode"):
+            storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        else:
+            storage_class_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+    else:
+        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    return storage_class_name
+
+
+def get_pool_name(fixture_name):
+    """
+    Return ceph pool name based on fixture name suffix.
+    """
+    if fixture_name.endswith("rbd"):
+        ceph_pool_name = "ocs-storagecluster-cephblockpool"
+    elif fixture_name.endswith("cephfs"):
+        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+    else:
+        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    return ceph_pool_name
+
+
 def workload_fio_storageutilization(
     fixture_name,
     project,
@@ -359,15 +391,8 @@ def workload_fio_storageutilization(
     if target_size is not None and target_percentage is not None:
         raise ValueError(val_err_msg + ", not both.")
 
-    # TODO: move out storage class names
-    if fixture_name.endswith("rbd"):
-        storage_class_name = "ocs-storagecluster-ceph-rbd"
-        ceph_pool_name = "ocs-storagecluster-cephblockpool"
-    elif fixture_name.endswith("cephfs"):
-        storage_class_name = "ocs-storagecluster-cephfs"
-        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
-    else:
-        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+    storage_class_name = get_sc_name(fixture_name)
+    ceph_pool_name = get_pool_name(fixture_name)
 
     # make sure we communicate what is going to happen
     logger.info(
@@ -445,7 +470,7 @@ def workload_fio_storageutilization(
         # assume 4% fs overhead, and double to it make it safe
         fs_overhead = 0.08
         # size of file created by fio in MiB
-        fio_size = int((pvc_size * (1 - fs_overhead)) * 2 ** 10)
+        fio_size = int((pvc_size * (1 - fs_overhead)) * 2**10)
         fio_conf += f"size={fio_size}M\n"
     # Otherwise, we are tryting to write as much data as possible and fill the
     # persistent volume entirely.
@@ -509,7 +534,7 @@ def workload_fio_storageutilization(
         Check whether data created by the Job were actually deleted.
         """
         _, max_avail = get_ceph_storage_stats(ceph_pool_name)
-        reclaimed_size = round((max_avail - max_avail_before_delete) / 2 ** 30)
+        reclaimed_size = round((max_avail - max_avail_before_delete) / 2**30)
         logger.info(
             "%d Gi of %d Gi (PVC size) seems already reclaimed",
             reclaimed_size,
@@ -560,6 +585,6 @@ def workload_fio_storageutilization(
         if not keep_fio_data:
             delete_fio_data(fio_job_file, is_storage_reclaimed)
         else:
-            logging.info("The fio data will be deleted during project teardown")
+            logger.info("The fio data will be deleted during project teardown")
 
     return measured_op

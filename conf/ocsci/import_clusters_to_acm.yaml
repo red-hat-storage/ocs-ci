@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  skip_ocs_deployment: true
+  import_clusters_to_acm: true

@@ -24,14 +24,14 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     tier3,
-    tier4,
-    tier4b,
+    tier4a,
     ManageTest,
     aws_based_platform_required,
     ignore_leftovers,
     ipi_deployment_required,
     skipif_bm,
     bugzilla,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -111,6 +111,7 @@ class TestNodesMaintenance(ManageTest):
             pytest.skip(str(e))
 
     @tier1
+    @skipif_managed_service
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -158,14 +159,12 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=90)
 
-    @tier4
-    @tier4b
+    @tier4a
     @skipif_bm
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1293")),
         ],
     )
     def test_node_maintenance_restart_activate(
@@ -178,10 +177,10 @@ class TestNodesMaintenance(ManageTest):
         rgw_bucket_factory,
     ):
         """
-        OCS-1292/OCS-1293:
-        - Maintenance (mark as unscheduable and drain) 1 worker/master node
+        OCS-1292:
+        - Maintenance (mark as unscheduable and drain) 1 worker node
         - Restart the node
-        - Mark the node as scheduable
+        - Mark the node as schedulable
         - Check cluster and Ceph health
         - Check cluster functionality by creating and deleting resources
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
@@ -312,8 +311,7 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
-    @tier4
-    @tier4b
+    @tier4a
     @aws_based_platform_required
     @ipi_deployment_required
     @pytest.mark.parametrize(
@@ -442,7 +440,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @pytest.mark.polarion_id("OCS-2524")
-    @tier4b
+    @tier4a
     def test_pdb_check_simultaneous_node_drains(
         self,
         pvc_factory,

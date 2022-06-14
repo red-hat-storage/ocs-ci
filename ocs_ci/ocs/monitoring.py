@@ -230,17 +230,17 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
     degraded = True
     for i in health_conditions:
         if {("type", "Available"), ("status", "True")}.issubset(set(i.items())):
-            logging.info("Prometheus cluster available value is set true")
+            logger.info("Prometheus cluster available value is set true")
             available = True
         if {("status", "False"), ("type", "Degraded")}.issubset(set(i.items())):
-            logging.info("Prometheus cluster degraded value is set false")
+            logger.info("Prometheus cluster degraded value is set false")
             degraded = False
 
     if available and not degraded:
-        logging.info("Prometheus health cluster is OK")
+        logger.info("Prometheus health cluster is OK")
         return True
 
-    logging.error(f"Prometheus cluster is degraded {health_conditions}")
+    logger.error(f"Prometheus cluster is degraded {health_conditions}")
     return False
 
 
@@ -261,3 +261,24 @@ def check_ceph_metrics_available():
         current_platform=config.ENV_DATA["platform"].lower(),
     )
     return list_of_metrics_without_results == []
+
+
+def check_if_monitoring_stack_exists():
+    """
+    Check if monitoring is configured on the cluster with ODF backed PVCs
+
+    Returns:
+        bool: True if monitoring is configured on the cluster, false otherwise
+
+    """
+    logger.info("Checking if monitoring stack exists on the cluster")
+    # Validate the pvc are created and bound
+    logger.info("Verify pvc are created")
+    pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
+    pvc_names = [pvc["metadata"]["name"] for pvc in pvc_list["items"]]
+    if pvc_names:
+        logger.info("Monitoring stack already exists on the cluster")
+        return True
+    else:
+        logger.info("Monitoring stack is not configured on the cluster")
+        return False

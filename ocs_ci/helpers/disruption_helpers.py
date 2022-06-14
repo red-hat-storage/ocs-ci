@@ -1,4 +1,5 @@
 import logging
+import os
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -9,7 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
-POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+CEPH_PODS = ["mds", "mon", "mgr", "osd"]
 
 
 class Disruptions:
@@ -22,9 +23,48 @@ class Disruptions:
     resource_count = 0
     selector = None
     daemon_pid = None
+    cluster_kubeconfig = ""
 
-    def set_resource(self, resource, leader_type="provisioner"):
+    def kubeconfig_parameter(self):
+        """
+        Returns the '--kubeconfig <value>' parameter for the oc command
+
+        Returns:
+            str: The '--kubeconfig <value>' parameter for oc command if the attribute 'cluster_kubeconfig' is not empty.
+                Empty string if the the attribute 'cluster_kubeconfig' is empty.
+        """
+        kubeconfig_parameter = (
+            f"--kubeconfig {self.cluster_kubeconfig} "
+            if self.cluster_kubeconfig
+            else ""
+        )
+        return kubeconfig_parameter
+
+    def set_resource(self, resource, leader_type="provisioner", cluster_index=None):
         self.resource = resource
+        if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
+            resource in CEPH_PODS
+        ):
+            # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
+            # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
+            # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
+            provider_kubeconfig = os.path.join(
+                config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
+                config.clusters[config.get_provider_index()].RUN.get(
+                    "kubeconfig_location"
+                ),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig
+        elif config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS:
+            # cluster_index is used to identify the the cluster in which the pod is residing. If cluster_index is not
+            # passed, assume that the context is already changed to the cluster where the pod is residing.
+            cluster_index = (
+                cluster_index if cluster_index is not None else config.cur_index
+            )
+            self.cluster_kubeconfig = os.path.join(
+                config.clusters[cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[cluster_index].RUN.get("kubeconfig_location"),
+            )
         resource_count = 0
         if self.resource == "mgr":
             self.resource_obj = pod.get_mgr_pods()
@@ -67,8 +107,18 @@ class Disruptions:
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
+        pod_ocp = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if self.cluster_kubeconfig:
+            # Setting 'cluster_kubeconfig' attribute to use as the value of the
+            # parameter '--kubeconfig' in the 'oc' commands.
+            self.resource_obj[
+                resource_id
+            ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
+            pod_ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
-        assert POD.wait_for_resource(
+        assert pod_ocp.wait_for_resource(
             condition="Running",
             selector=self.selector,
             resource_count=self.resource_count,
@@ -89,7 +139,7 @@ class Disruptions:
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -130,7 +180,7 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc debug node/{node_name} -- chroot /host  "
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -143,28 +193,41 @@ class Disruptions:
         log.info(f"Killed ceph-{self.resource} daemon on node {node_name}")
 
         if check_new_pid:
-            awk_print = "'{print $1}'"
-            pid_cmd = (
-                f"oc debug node/{node_name} -- chroot /host ps ax | grep"
-                f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
-            )
-            try:
-                for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
-                    ret, pid, err = pid_proc.async_communicate()
+            self.check_new_pid(node_name=node_name)
 
-                    # Consider scenario where more than one self.resource pod
-                    # is running on one node. eg:More than one osd on same node
-                    pids = pid.strip().split()
-                    pids = [pid.strip() for pid in pids]
-                    if len(pids) != len(self.pids):
-                        continue
-                    new_pid = [pid for pid in pids if pid not in self.pids]
-                    assert len(new_pid) == 1, "Found more than one new pid."
-                    new_pid = new_pid[0]
-                    if new_pid.isdigit() and (new_pid != self.daemon_pid):
-                        log.info(f"New pid of ceph-{self.resource} is {new_pid}")
-                        break
-            except TimeoutExpiredError:
-                raise TimeoutExpiredError(
-                    f"Waiting for pid of ceph-{self.resource} in {node_name}"
-                )
+    def check_new_pid(self, node_name=None):
+        """
+        Check if the pid of the daemon has changed from the initially selected pid(daemon_pid attribute)
+
+        Args:
+            node_name (str): Name of node in which the resource daemon is running
+
+        """
+        node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
+            "nodeName"
+        )
+        awk_print = "'{print $1}'"
+        pid_cmd = (
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
+            f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
+        )
+        try:
+            for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
+                ret, pid, err = pid_proc.async_communicate()
+
+                # Consider scenario where more than one self.resource pod
+                # is running on one node. eg:More than one osd on same node
+                pids = pid.strip().split()
+                pids = [pid.strip() for pid in pids]
+                if len(pids) != len(self.pids):
+                    continue
+                new_pid = [pid for pid in pids if pid not in self.pids]
+                assert len(new_pid) == 1, "Found more than one new pid."
+                new_pid = new_pid[0]
+                if new_pid.isdigit() and (new_pid != self.daemon_pid):
+                    log.info(f"New pid of ceph-{self.resource} is {new_pid}")
+                    break
+        except TimeoutExpiredError:
+            raise TimeoutExpiredError(
+                f"Waiting for pid of ceph-{self.resource} in {node_name}"
+            )

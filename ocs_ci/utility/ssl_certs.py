@@ -11,7 +11,11 @@ from OpenSSL import crypto
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.utility.utils import download_file, exec_cmd
+from ocs_ci.utility.utils import (
+    download_file,
+    exec_cmd,
+    wait_for_machineconfigpool_status,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -266,6 +270,7 @@ def configure_custom_ingress_cert():
         '--type=merge -p \'{"spec":{"defaultCertificate": {"name": "ocs-cert"}}}\''
     )
     exec_cmd(cmd)
+    wait_for_machineconfigpool_status("all", timeout=1800)
 
 
 def init_arg_parser():

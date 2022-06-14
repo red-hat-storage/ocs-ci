@@ -114,7 +114,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         drain_nodes([drain_node])
 
-        logging.info("Wait for 3 mon pods to be on running state")
+        logger.info("Wait for 3 mon pods to be on running state")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         assert pod.wait_for_resource(
             condition="Running",
@@ -126,7 +126,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         schedule_nodes([drain_node])
 
-        logging.info("Wait for 3 osd pods to be on running state")
+        logger.info("Wait for 3 osd pods to be on running state")
         assert pod.wait_for_resource(
             condition="Running",
             selector=constants.OSD_APP_LABEL,

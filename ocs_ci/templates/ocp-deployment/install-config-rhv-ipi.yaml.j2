@@ -13,6 +13,7 @@ compute:
       osDisk:
         sizeGB: 120
       vmType: server
+      affinityGroupsNames: {{ worker_affinity_groups_names | default([]) }}
   replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   architecture: amd64
@@ -27,6 +28,7 @@ controlPlane:
       osDisk:
         sizeGB: 120
       vmType: server
+      affinityGroupsNames: {{ master_affinity_groups_names | default([]) }}
   replicas: {{ master_replicas | default(3) }}
 metadata:
   creationTimestamp: null
@@ -51,6 +53,7 @@ platform:
     ovirt_network_name: {{ ovirt_network_name }}
     ovirt_storage_domain_id: {{ ovirt_storage_domain_id }}
     vnicProfileID: {{ vnic_profile_id }}
+    affinityGroups: {{ affinity_groups | default([]) }}
 publish: External
 pullSecret: ''
 sshKey: |

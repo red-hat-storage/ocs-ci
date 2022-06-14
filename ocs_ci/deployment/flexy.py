@@ -6,7 +6,6 @@ import binascii
 import json
 import logging
 import os
-import time
 import yaml
 
 import io
@@ -567,8 +566,6 @@ class FlexyBase(object):
             )
             logger.info("Creating NTP chrony")
             exec_cmd(ntp_cmd)
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status("all")
 
     def deploy(self, log_level=""):

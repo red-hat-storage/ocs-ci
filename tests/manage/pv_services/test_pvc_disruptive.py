@@ -378,7 +378,7 @@ class TestPVCDisruption(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
-        logging.info("Verified: All new pods are Running.")
+        logger.info("Verified: All new pods are Running.")
 
         # Run IO on each of the new pods
         for pod_obj in pod_objs:

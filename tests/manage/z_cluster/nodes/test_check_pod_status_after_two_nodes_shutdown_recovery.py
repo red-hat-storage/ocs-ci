@@ -4,7 +4,7 @@ import time
 
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier4c,
+    tier4b,
     ignore_leftovers,
     skipif_ibm_cloud,
 )
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@tier4c
+@tier4b
 class TestOCSWorkerNodeShutdown(ManageTest):
     """
     Test case validate both the MDS pods rbd and cephfs plugin Provisioner

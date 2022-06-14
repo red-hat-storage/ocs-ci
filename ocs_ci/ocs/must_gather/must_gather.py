@@ -3,14 +3,19 @@ import logging
 import shutil
 import tempfile
 import re
+import tarfile
 from pathlib import Path
 
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 from ocs_ci.utility import version
-from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
+from ocs_ci.ocs.constants import (
+    OPENSHIFT_STORAGE_NAMESPACE,
+    MANAGED_SERVICE_PLATFORMS,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +63,12 @@ class MustGather(object):
         ocs_version = float(
             f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         )
-        if self.type_log == "OTHERS" and storagecluster_independent_check():
+        if (
+            self.type_log == "OTHERS"
+            and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
+        ):
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_MANAGED_SERVICES"]
+        elif self.type_log == "OTHERS" and storagecluster_independent_check():
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
@@ -75,10 +85,15 @@ class MustGather(object):
         Validate the file is not empty
 
         """
+        if self.type_log != "OTHERS":
+            return
         for path, subdirs, files in os.walk(self.root):
             for file in files:
                 file_path = os.path.join(path, file)
-                if Path(file_path).stat().st_size == 0:
+                if (
+                    Path(file_path).stat().st_size == 0
+                    and "noobaa-db-pg-0-init.log" not in file_path
+                ):
                     logger.error(f"log file {file} empty!")
                     self.empty_files.append(file)
 
@@ -88,13 +103,10 @@ class MustGather(object):
 
         """
         self.search_file_path()
-        self.verify_noobaa_diagnostics()
         self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
-            elif Path(file_path).stat().st_size == 0:
-                self.empty_files.append(file)
             elif re.search(r"\.yaml$", file):
                 with open(file_path, "r") as f:
                     if "kind" not in f.read().lower():
@@ -130,7 +142,7 @@ class MustGather(object):
             return
         pod_objs = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
         pod_names = []
-        logging.info("Get pod names on openshift-storage project")
+        logger.info("Get pod names on openshift-storage project")
         for pod in pod_objs:
             pattern = self.check_pod_name_pattern(pod.name)
             if pattern is False:
@@ -142,7 +154,7 @@ class MustGather(object):
                 break
 
         pod_files = []
-        logging.info("Get pod names on openshift-storage/pods directory")
+        logger.info("Get pod names on openshift-storage/pods directory")
         for pod_file in os.listdir(pod_path):
             pattern = self.check_pod_name_pattern(pod_file)
             if pattern is False:
@@ -212,6 +224,11 @@ class MustGather(object):
                 for file in files:
                     if re.search(r"noobaa_diagnostics_.*.tar.gz", file):
                         flag = True
+                        logger.info(f"Extract noobaa_diagnostics dir {file}")
+                        path_noobaa_diag = os.path.join(path, file)
+                        files_noobaa_diag = tarfile.open(path_noobaa_diag)
+                        files_noobaa_diag.extractall(path)
+                        break
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
@@ -221,6 +238,8 @@ class MustGather(object):
         Validate must-gather
 
         """
+        if config.ENV_DATA["platform"] not in MANAGED_SERVICE_PLATFORMS:
+            self.verify_noobaa_diagnostics()
         self.validate_file_size()
         self.validate_expected_files()
         self.print_invalid_files()

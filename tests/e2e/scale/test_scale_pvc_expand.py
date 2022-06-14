@@ -58,7 +58,7 @@ class TestPVCExpand(E2ETest):
         """
 
         # Create pvcs and scale pods
-        logging.info("Create pvcs and scale pods")
+        log.info("Create pvcs and scale pods")
         resize_pvc.create_scale_pods(
             scale_count=1500,
             pvc_per_pod_count=20,
@@ -68,7 +68,7 @@ class TestPVCExpand(E2ETest):
         )
 
         # Expand PVC to new size
-        logging.info(f"Starting expanding PVC size to {pvc_new_size}Gi")
+        log.info(f"Starting expanding PVC size to {pvc_new_size}Gi")
         resize_pvc.pvc_expansion(
             pvc_new_size=pvc_new_size,
             wait_time=45,

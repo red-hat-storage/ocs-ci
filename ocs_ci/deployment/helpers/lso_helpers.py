@@ -6,7 +6,6 @@ LSO ( local storage operator ) deployment.
 import json
 import logging
 import tempfile
-import time
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
@@ -20,6 +19,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     run_cmd,
     wait_for_machineconfigpool_status,
+    wipe_all_disk_partitions_for_node,
 )
 
 
@@ -88,8 +88,6 @@ def setup_local_storage(storageclass):
         )
         run_cmd(f"oc create -f {optional_operators_yaml.name}")
         logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status("all")
 
     logger.info("Retrieving local-storage-operator data from yaml")
@@ -385,9 +383,13 @@ def add_disk_for_vsphere_platform():
             )
 
         if lso_type == constants.DIRECTPATH:
-            raise NotImplementedError(
-                "LSO Deployment for VMDirectPath is not implemented"
-            )
+            logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")
+            vsphere_base.add_pci_devices()
+
+            # wipe partition table on newly added PCI devices
+            compute_nodes = get_compute_node_names()
+            for compute_node in compute_nodes:
+                wipe_all_disk_partitions_for_node(compute_node)
 
 
 def add_disk_for_rhv_platform():

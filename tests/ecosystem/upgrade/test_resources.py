@@ -116,7 +116,7 @@ def test_pod_log_after_upgrade():
     pod_objs = get_osd_pods() + get_mon_pods() + get_mgr_pods()
     pod_names = [osd_pod_obj.name for osd_pod_obj in pod_objs]
     expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
-    logging.info(
+    log.info(
         f"Check that the log '{expected_log_after_upgrade}' "
         f"appears after the osd/mon/mg pod is initialized"
     )
@@ -126,9 +126,7 @@ def test_pod_log_after_upgrade():
             f"The expected log after upgrade '{expected_log_after_upgrade}' does not exist"
             f" on pod {pod_name}"
         )
-    logging.info(
-        f"The log '{expected_log_after_upgrade}' appears in all relevant pods."
-    )
+    log.info(f"The log '{expected_log_after_upgrade}' appears in all relevant pods.")
 
 
 @post_upgrade

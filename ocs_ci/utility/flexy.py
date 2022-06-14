@@ -10,6 +10,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def load_cluster_info():
         config.ENV_DATA["cluster_path"], "cluster_info.json"
     )
     if os.path.exists(cluster_info_file):
-        logging.info(f"File {cluster_info_file} exists, loading relevant info.")
+        logger.info(f"File {cluster_info_file} exists, loading relevant info.")
         with open(cluster_info_file) as f:
             cluster_info = json.load(f)
 
@@ -33,7 +34,7 @@ def load_cluster_info():
             and cluster_info.get("MIRROR_REGISTRY_LOGIN_USER")
             and cluster_info.get("MIRROR_REGISTRY_LOGIN_PASSWORD")
         ):
-            logging.info("Loading configuration for disconnected cluster")
+            logger.info("Loading configuration for disconnected cluster")
             config.DEPLOYMENT["disconnected"] = True
             config.DEPLOYMENT["mirror_registry"] = cluster_info.get("MIRROR_REGISTRY")
             config.DEPLOYMENT["mirror_registry_user"] = cluster_info.get(
@@ -50,14 +51,14 @@ def load_cluster_info():
         config.ENV_DATA["cluster_path"], "cluster_info.yaml"
     )
     if os.path.exists(cluster_info_file):
-        logging.info(f"File {cluster_info_file} exists, loading relevant info.")
+        logger.info(f"File {cluster_info_file} exists, loading relevant info.")
         with open(cluster_info_file) as f:
             cluster_info = yaml.safe_load(f)
 
         # configure proxy for client access, if required
         if cluster_info.get("INSTALLER", {}).get("CLIENT_PROXY"):
             client_proxy = cluster_info.get("INSTALLER", {}).get("CLIENT_PROXY")
-            logging.info(f"Configuring client proxy: {client_proxy}")
+            logger.info(f"Configuring client proxy: {client_proxy}")
             config.ENV_DATA["client_http_proxy"] = config.ENV_DATA.get(
                 "client_http_proxy", client_proxy
             )
@@ -72,9 +73,16 @@ def configure_allowed_domains_in_proxy():
 
     """
     # configure proxy on INT_SVC_INSTANCE - allow access to required sites
+    # import get_ocp_version here to avoid circular import
+    from ocs_ci.utility.utils import get_ocp_version
+
+    if get_semantic_version(get_ocp_version(), True) < VERSION_4_11:
+        int_svc_user = constants.EC2_USER
+    else:
+        int_svc_user = "core"
     private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
     ssh_int_svc = Connection(
-        config.DEPLOYMENT.get("int_svc_instance"), "ec2-user", private_key
+        config.DEPLOYMENT.get("int_svc_instance"), int_svc_user, private_key
     )
     # as we are inserting the two lines before first line one by one,
     # we have to launch the sed commands in reverse order

@@ -19,11 +19,11 @@ class TestCouchBaseNodeDrain(E2ETest):
     """
 
     @pytest.fixture()
-    def cb_setup(self, couchbase_new_factory_fixture, node_drain_teardown):
+    def cb_setup(self, couchbase_factory_fixture, node_drain_teardown):
         """
         Creates couchbase workload
         """
-        self.cb = couchbase_new_factory_fixture(
+        self.cb = couchbase_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
 

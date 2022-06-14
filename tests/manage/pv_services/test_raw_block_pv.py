@@ -117,21 +117,21 @@ class TestRawBlockPV(ManageTest):
 
         with ThreadPoolExecutor() as p:
             for pod in pvc_mb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
                     size=f"{random.randint(10,200)}M",
                 )
             for pod in pvc_gb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
                     size=f"{random.randint(1,5)}G",
                 )
             for pod in pvc_tb_pods:
-                logging.info(f"running io on pod {pod.name}")
+                log.info(f"running io on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,

@@ -43,7 +43,7 @@ from datetime import datetime
 
 import pytest
 
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import tier1, skipif_managed_service
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 
@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_workload_rbd(workload_storageutilization_50p_rbd):
     """
     Purpose of this test is to make the workload fixture executed, and
@@ -123,6 +124,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_workload_rbd_in_some_other_way(workload_storageutilization_50p_rbd):
     """
     This test case is using the same workload fixture as the previous one.
@@ -134,6 +136,7 @@ def test_workload_rbd_in_some_other_way(workload_storageutilization_50p_rbd):
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_workload_cephfs(workload_storageutilization_50p_cephfs):
     """
     Purpose of this test is to make another workload fixture executed as well.
@@ -142,6 +145,7 @@ def test_workload_cephfs(workload_storageutilization_50p_cephfs):
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_workload_rbd_cephfs(
     workload_storageutilization_50p_rbd, workload_storageutilization_50p_cephfs
 ):
@@ -155,6 +159,7 @@ def test_workload_rbd_cephfs(
 
 
 @pytest.mark.libtest
+@skipif_managed_service
 def test_workload_rbd_cephfs_minimal(
     workload_storageutilization_05p_rbd, workload_storageutilization_05p_cephfs
 ):
@@ -172,6 +177,7 @@ def test_workload_rbd_cephfs_minimal(
 
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
+@skipif_managed_service
 def test_workload_rbd_cephfs_10g(
     workload_storageutilization_10g_rbd, workload_storageutilization_10g_cephfs
 ):

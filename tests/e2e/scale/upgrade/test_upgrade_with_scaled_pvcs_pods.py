@@ -70,7 +70,7 @@ def test_scale_pvcs_pods_pre_upgrade():
             )
         )
 
-    logging.info(
+    log.info(
         f"Running PODs count {len(pod_running_list)} & "
         f"Bound PVCs count {len(pvc_bound_list)} "
         f"in namespace {fioscale.namespace}"
@@ -136,7 +136,7 @@ def test_scale_pvcs_pods_post_upgrade():
             f"PVCs not in Bound state {pvc_not_bound_list}"
         )
     else:
-        logging.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
+        log.info(f"All the expected {len(pvc_bound_list)} PVCs are in Bound state")
 
     if not len(pod_running_list) == len(pod_scale_list):
         raise UnexpectedBehaviour(
@@ -144,9 +144,7 @@ def test_scale_pvcs_pods_post_upgrade():
             f"PODs not in Running state {pod_not_running_list}"
         )
     else:
-        logging.info(
-            f"All the expected {len(pod_running_list)} PODs are in Running state"
-        )
+        log.info(f"All the expected {len(pod_running_list)} PODs are in Running state")
 
     # Check ceph health status
     utils.ceph_health_check()

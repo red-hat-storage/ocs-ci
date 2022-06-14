@@ -21,6 +21,7 @@ from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    CephToolBoxNotFoundException,
     CommandFailed,
     NotAllPodsHaveSameImagesError,
     NonUpgradedImagesFoundError,
@@ -571,23 +572,32 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod():
+def get_ceph_tools_pod(skip_creating_pod=False):
     """
     Get the Ceph tools pod
 
+    Args:
+        skip_creating_pod (bool): True if user doesn't want to create new tool box
+            if it doesn't exist
+
     Returns:
         Pod object: The Ceph tools pod object
+
+    Raises:
+        ToolBoxNotFoundException: In case of tool box not found
+
     """
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
     ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
-    if not ct_pod_items:
+    if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
         ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
 
-    assert ct_pod_items, "No Ceph tools pod found"
+    if not ct_pod_items:
+        raise CephToolBoxNotFoundException
 
     # In the case of node failure, the CT pod will be recreated with the old
     # one in status Terminated. Therefore, need to filter out the Terminated pod
@@ -798,10 +808,10 @@ def get_fio_rw_iops(pod_obj):
         pod_obj (Pod): The object of the pod
     """
     fio_result = pod_obj.get_fio_results()
-    logging.info(f"FIO output: {fio_result}")
-    logging.info("IOPs after FIO:")
-    logging.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
-    logging.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
+    logger.info(f"FIO output: {fio_result}")
+    logger.info("IOPs after FIO:")
+    logger.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
+    logger.info(f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}")
 
 
 def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
@@ -1420,19 +1430,25 @@ def wait_for_storage_pods(timeout=200):
 
     """
     all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    # Ignoring pods with "app=rook-ceph-detect-version" app label
 
+    # Ignoring detect version pods
+    labels_to_ignore = [
+        constants.ROOK_CEPH_DETECT_VERSION_LABEL,
+        constants.CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL,
+        constants.CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL,
+    ]
     all_pod_obj = [
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
-        not in pod.get_labels().values()
+        and all(
+            label[4:] not in pod.get_labels().values() for label in labels_to_ignore
+        )
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
-        if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
+        if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
@@ -1574,10 +1590,10 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
                 pod.status() in status_options for pod in new_osd_pods
             ]
             if any(new_osd_pods_come_up):
-                logging.info("One or more of the new osd pods has started to come up")
+                logger.info("One or more of the new osd pods has started to come up")
                 break
     except TimeoutExpiredError:
-        logging.warning("None of the new osd pods reached the desired status")
+        logger.warning("None of the new osd pods reached the desired status")
 
 
 def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
@@ -1598,7 +1614,7 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             and "rook-ceph-drain-canary" not in p.name
         ):
             restart_dict[p.name] = int(ocp_pod_obj.get_resource(p.name, "RESTARTS"))
-    logging.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
+    logger.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
     return restart_dict
 
 
@@ -1644,7 +1660,7 @@ def check_pods_in_running_state(
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if status not in "Running":
-                logging.error(
+                logger.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
                 )
                 ret_val = False
@@ -1706,11 +1722,11 @@ def wait_for_pods_to_be_running(
         ):
             # Check if all the pods in running state
             if pods_running:
-                logging.info("All the pods reached status running!")
+                logger.info("All the pods reached status running!")
                 return True
 
     except TimeoutExpiredError:
-        logging.warning(
+        logger.warning(
             f"Not all the pods reached status running " f"after {timeout} seconds"
         )
         return False
@@ -1769,7 +1785,7 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         ):
             if osd_removal_pod_names:
                 osd_removal_pod_name = osd_removal_pod_names[0]
-                logging.info(f"Found pod {osd_removal_pod_name}")
+                logger.info(f"Found pod {osd_removal_pod_name}")
                 return osd_removal_pod_name
 
     except TimeoutExpiredError:
@@ -2049,7 +2065,13 @@ def check_pods_after_node_replacement():
         logger.info(
             f"waiting another {timeout} seconds for all the pods to be running..."
         )
-        are_pods_running = wait_for_pods_to_be_running(timeout=timeout, sleep=30)
+
+        expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+        are_pods_running = wait_for_pods_to_be_in_statuses(
+            expected_statuses=expected_statuses,
+            timeout=timeout,
+            sleep=30,
+        )
         if are_pods_running:
             logger.info("All the pods are running")
             return True
@@ -2183,7 +2205,7 @@ def wait_for_change_in_pods_statuses(
                     )
                     return True
     except TimeoutExpiredError:
-        logging.info(f"The status of the pods did not change after {timeout} seconds")
+        logger.info(f"The status of the pods did not change after {timeout} seconds")
         return False
 
 
@@ -2263,3 +2285,130 @@ def get_crashcollector_pods(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     crashcollectors = get_pods_having_label(crashcollector_label, namespace)
     return [Pod(**crashcollector) for crashcollector in crashcollectors]
+
+
+def check_pods_in_statuses(
+    expected_statuses,
+    pod_names=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    raise_pod_not_found_error=False,
+):
+    """
+    checks whether the pods in a given namespace are in the expected statuses or not
+
+    Args:
+        expected_statuses (list): The expected statuses of the pods
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            check the pod objects of the rest of the pod names. The default value is False
+
+    Returns:
+        Boolean: True, if the pods are in the expected statuses. False, otherwise
+
+    """
+    if pod_names:
+        list_of_pods = get_pod_objs(
+            pod_names=pod_names,
+            raise_pod_not_found_error=raise_pod_not_found_error,
+            namespace=namespace,
+        )
+    else:
+        list_of_pods = get_all_pods(namespace)
+
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    for p in list_of_pods:
+        try:
+            status = ocp_pod_obj.get_resource(p.name, "STATUS")
+        except CommandFailed as e:
+            logger.info(f"Can't get the pod status due to the error: {str(e)}")
+            status = ""
+
+        if status not in expected_statuses:
+            logger.warning(
+                f"The pod {p.name} is in {status} state, and not in the expected statuses {expected_statuses}"
+            )
+            return False
+
+    logger.info(f"All the pods reached the expected statuses {expected_statuses}")
+    return True
+
+
+def wait_for_pods_to_be_in_statuses(
+    expected_statuses,
+    pod_names=None,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    raise_pod_not_found_error=False,
+    timeout=180,
+    sleep=10,
+):
+    """
+    Wait for the pods in a given namespace to be in the expected statuses
+
+    Args:
+        expected_statuses (list): The expected statuses of the pods
+        pod_names (list): List of the pod names to check.
+            If not provided, it will check all the pods in the given namespace
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
+            in the pod names are not found. If False, it ignores the case of pod not found and
+            check the pod objects of the rest of the pod names. The default value is False
+        timeout (int): time to wait for the pods to be in the expected statuses
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        Boolean: True, if all pods are in the expected statuses. False, otherwise
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_pods_in_statuses,
+        expected_statuses=expected_statuses,
+        pod_names=pod_names,
+        namespace=namespace,
+        raise_pod_not_found_error=raise_pod_not_found_error,
+    )
+    return sample.wait_for_func_status(result=True)
+
+
+def get_pod_ip(pod_obj):
+    """
+    Get the pod ip
+
+    Args:
+        pod_obj (Pod): The pod object
+
+    Returns:
+        str: The pod ip
+
+    """
+    return pod_obj.get().get("status").get("podIP")
+
+
+def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
+    """
+    Wait for the osd pods having specific ids
+
+    Args:
+        osd_ids (list): The list of the osd ids
+        timeout (int): Time to wait for the osd pods having the specified ids
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        list: The osd pods having the specified ids
+
+    Raise:
+        TimeoutExpiredError: In case it didn't find all the osd pods with the specified ids
+
+    """
+    for osd_pods in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_osd_pods_having_ids,
+        osd_ids=osd_ids,
+    ):
+        if len(osd_pods) == len(osd_ids):
+            logger.info(f"Found all the osd pods with the ids: {osd_ids}")
+            return osd_pods

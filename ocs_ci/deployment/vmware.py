@@ -20,7 +20,11 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    RDMDiskNotFound,
+    PassThroughEnabledDeviceNotFound,
+)
 from ocs_ci.ocs.node import (
     get_node_ips,
     get_typed_worker_nodes,
@@ -29,6 +33,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -109,6 +114,10 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
+        config.ENV_DATA[
+            "ocp_version_object"
+        ] = version.get_semantic_ocp_version_from_config()
+        config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
 
@@ -291,6 +300,33 @@ class VSPHEREBASE(Deployment):
         """
         self.vsphere.add_rdm_disk(vm, device_name)
 
+    def add_pci_devices(self):
+        """
+        Attach PCI devices to compute nodes
+
+        Raises:
+            PassThroughEnabledDeviceNotFound: In case there is no passthrough enabled device
+                not found on host
+
+        """
+        logger.info("Adding PCI devices to all compute nodes")
+        compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in compute_vms:
+            passthrough_enabled_device = self.vsphere.get_passthrough_enabled_devices(
+                vm
+            )[0]
+            if not passthrough_enabled_device:
+                raise PassThroughEnabledDeviceNotFound
+
+            # power off the VM before adding PCI device
+            self.vsphere.poweroff_vms([vm])
+
+            # add PCI device
+            self.vsphere.add_pci_device(vm, passthrough_enabled_device)
+
+            # power on the VM
+            self.vsphere.poweron_vms([vm])
+
     def post_destroy_checks(self):
         """
         Post destroy checks on cluster
@@ -379,7 +415,9 @@ class VSPHEREUPI(VSPHEREBASE):
             # Download terraform ignition provider
             # ignition provider dependancy from OCP 4.6
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-                get_terraform_ignition_provider(self.terraform_data_dir)
+                get_terraform_ignition_provider(
+                    self.terraform_data_dir, version=get_ignition_provider_version()
+                )
 
             # Initialize Terraform
             self.terraform_work_dir = constants.VSPHERE_DIR
@@ -415,6 +453,10 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # git clone repo from openshift installer
             clone_openshift_installer()
+
+            # comment sensitive variable as current terraform version doesn't support
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                comment_sensitive_var()
 
             # generate terraform variable file
             generate_terraform_vars_and_update_machine_conf()
@@ -716,6 +758,11 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+            comment_sensitive_var()
+
         rename_files = [constants.VSPHERE_MAIN, constants.VM_MAIN]
         for each_file in rename_files:
             if os.path.exists(f"{each_file}.backup") and os.path.exists(
@@ -733,6 +780,21 @@ class VSPHEREUPI(VSPHEREBASE):
         logger.debug(f"changing state from {str_to_modify} to {target_str}")
         replace_content_in_file(terraform_tfstate, str_to_modify, target_str)
 
+        # remove csi users in case of external deployment
+        if config.DEPLOYMENT["external_mode"]:
+            logger.debug("deleting csi users")
+            # In some cases where deployment of external cluster is failed, external tool box doesn't exist
+            try:
+                toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+            except exceptions.CephToolBoxNotFoundException:
+                logger.warning(
+                    "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
+                )
+
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
@@ -741,10 +803,14 @@ class VSPHEREUPI(VSPHEREBASE):
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
             terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+                terraform_provider_ignition_file = "terraform-provider-ignition_v2.1.2"
+            else:
+                terraform_provider_ignition_file = "terraform-provider-ignition"
             terraform_ignition_provider_path = os.path.join(
                 terraform_data_dir,
                 terraform_plugins_path,
-                "terraform-provider-ignition",
+                terraform_provider_ignition_file,
             )
 
             # check the upgrade history of cluster and checkout to the
@@ -772,7 +838,9 @@ class VSPHEREUPI(VSPHEREBASE):
             if not (
                 os.path.exists(terraform_ignition_provider_path) or is_cluster_upgraded
             ):
-                get_terraform_ignition_provider(terraform_data_dir)
+                get_terraform_ignition_provider(
+                    terraform_data_dir, version=get_ignition_provider_version()
+                )
             terraform.initialize()
         else:
             terraform.initialize(upgrade=True)
@@ -1477,3 +1545,29 @@ def delete_dns_records():
     for record in record_sets:
         if record["Name"] in records_to_delete:
             aws.delete_record(record, hosted_zone_id)
+
+
+def get_ignition_provider_version():
+    """
+    Gets the ignition provider version based on OCP version
+
+    Returns:
+        str: ignition provider version
+
+    """
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+        return "v2.1.2"
+    else:
+        return "v2.1.0"
+
+
+def comment_sensitive_var():
+    """
+    Comment out sensitive var in vm/variables.tf
+    """
+    str_to_modify = "sensitive = true"
+    target_str = "//sensitive = true"
+    logger.debug(
+        f"commenting out {str_to_modify} in {constants.VM_VAR} as current terraform version doesn't support"
+    )
+    replace_content_in_file(constants.VM_VAR, str_to_modify, target_str)

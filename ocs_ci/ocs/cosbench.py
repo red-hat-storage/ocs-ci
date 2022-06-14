@@ -4,10 +4,11 @@ import os
 import re
 from tempfile import mkdtemp, NamedTemporaryFile
 from xml.etree import ElementTree
+from datetime import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -141,7 +142,7 @@ class Cosbench(object):
               <work type="init" workers="1" config="" />
             </workstage>
             <workstage name="prepare-objects">
-              <work type="prepare" workers="4" config="" />
+              <work type="prepare" workers="16" config="" />
             </workstage>
           </workflow>
         </workload>
@@ -153,6 +154,11 @@ class Cosbench(object):
             start_container if start_container else self.init_container
         )
         self.init_object = start_object if start_object else self.init_object
+        init_container_config = self.generate_container_stage_config(
+            self.range_selector,
+            self.init_container,
+            containers,
+        )
         init_config = self.generate_stage_config(
             self.range_selector,
             self.init_container,
@@ -162,7 +168,7 @@ class Cosbench(object):
         )
         for stage in xml_root.iter("work"):
             if stage.get("type") == "init":
-                stage.set("config", f"cprefix={prefix};{init_config}")
+                stage.set("config", f"cprefix={prefix};{init_container_config}")
             elif stage.get("type") == "prepare":
                 stage.set(
                     "config",
@@ -272,6 +278,7 @@ class Cosbench(object):
         timeout=300,
         extend_objects=None,
         validate=True,
+        result=True,
     ):
         """
         Creates and runs main Cosbench workload.
@@ -294,6 +301,7 @@ class Cosbench(object):
             validate (bool): Validates whether each stage is completed
             extend_objects (int): Extends the total number of objects to prevent overlap.
                                   Use only for Write and Delete operations.
+            result (bool): Get performance results when running workload is completed.
 
         Returns:
             Tuple[str, str]: Workload xml and its name
@@ -376,6 +384,16 @@ class Cosbench(object):
         else:
             return self.workload_id, workload_name
 
+        if result:
+            throughput, bandwidth = self.get_performance_result(
+                workload_id=self.workload_id,
+                workload_name=workload_name,
+                size=size,
+            )
+            return throughput, bandwidth
+        else:
+            return self.workload_id, workload_name
+
     @staticmethod
     def generate_stage_config(
         selector, start_container, end_container, start_objects, end_object
@@ -399,6 +417,25 @@ class Cosbench(object):
             f"objects={selector}({str(start_objects)},{str(end_object)})"
         )
         return xml_config
+
+    @staticmethod
+    def generate_container_stage_config(selector, start_container, end_container):
+        """
+        Generates container config which creates buckets in bulk
+
+        Args:
+            selector (str): The way object is accessed/selected. u=uniform, r=range, s=sequential.
+            start_container (int): Start of containers
+            end_container (int): End of containers
+
+        Returns:
+            (str): Container and object configuration
+
+        """
+        container_config = (
+            f"containers={selector}({str(start_container)},{str(end_container)});"
+        )
+        return container_config
 
     def _create_tmp_xml(self, xml_tree, xml_file_prefix):
         """
@@ -580,13 +617,92 @@ class Cosbench(object):
         )
         return f"{self.cosbench_dir}/{archive_file}.csv"
 
-    def cosbench_teardown(self):
+    def cleanup(self):
         """
-        Cosbench teardown
+        Cosbench cleanup
 
         """
+        switch_to_project(constants.COSBENCH_PROJECT)
         logger.info("Deleting Cosbench pod, configmap and namespace")
         self.cosbench_pod.delete()
         self.cosbench_config.delete()
         self.ns_obj.delete_project(self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
+
+    def get_performance_result(self, workload_name, workload_id, size):
+        workload_file = self.get_result_csv(
+            workload_id=workload_id, workload_name=workload_name
+        )
+        throughput_data = {}
+        bandwidth_data = {}
+        with open(workload_file, "r") as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            if header is not None:
+                for row in reader:
+                    throughput_data[row[1]] = row[13]
+                    bandwidth_data[row[1]] = row[14]
+            else:
+                raise UnexpectedBehaviour(
+                    f"Workload csv is incorrect/malformed. Dumping csv {reader}"
+                )
+        # Store throughput data on csv file
+        log_path = f"{self.cosbench_dir}"
+        with open(f"{log_path}/{workload_name}-{size}-throughput.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in throughput_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Throughput data present in {log_path}/{workload_name}-{size}-throughput.csv"
+        )
+
+        # Store bandwidth data on csv file
+        with open(f"{log_path}/{workload_name}-{size}-bandwidth.csv", "a") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in bandwidth_data.items():
+                csv_obj.writerow([k, v])
+        logger.info(
+            f"Bandwidth data present in {log_path}/{workload_name}-{size}-bandwidth.csv"
+        )
+        return throughput_data, bandwidth_data
+
+    def cosbench_full(self):
+        """
+        Run full Cosbench workload
+        """
+        bucket_prefix = "bucket-"
+        buckets = 10
+        objects = 1000
+
+        # Operations to perform and its ratio(%)
+        operations = {"read": 50, "write": 50}
+
+        # Deployment of cosbench
+        self.setup_cosbench()
+
+        # Create initial containers and objects
+        self.run_init_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )
+        # Start measuring time
+        start_time = datetime.now()
+
+        # Run main workload
+        self.run_main_workload(
+            operation_type=operations,
+            prefix=bucket_prefix,
+            containers=buckets,
+            objects=objects,
+            validate=True,
+            timeout=10800,
+        )
+
+        # Calculate the total run time of Cosbench workload
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        logger.info(f"Cosbench workload completed after {diff_time}")
+
+        # Dispose containers and objects
+        self.run_cleanup_workload(
+            prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
+        )

@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier3
+from ocs_ci.framework.testlib import tier3, skipif_managed_service
 from ocs_ci.ocs import metrics
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
+@skipif_managed_service
 def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     """
     Make sure simple problems with MON daemons are reported via OCP Prometheus.
@@ -88,6 +89,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
 
 @tier3
 @pytest.mark.polarion_id("OCS-1307")
+@skipif_managed_service
 def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     """
     Make sure simple problems with OSD daemons are reported via OCP Prometheus.
@@ -157,6 +159,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
 
 @tier3
 @pytest.mark.polarion_id("OCS-2734")
+@skipif_managed_service
 def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd):
     """
     Since ODF 4.9 ceph metrics covering disruptions will be available only

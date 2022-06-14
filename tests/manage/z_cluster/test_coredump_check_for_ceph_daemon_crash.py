@@ -49,10 +49,10 @@ class TestKillCephDaemon(ManageTest):
         """
 
         def finalizer():
-            logging.info("Silence the ceph warnings by “archiving” the crash")
+            log.info("Silence the ceph warnings by “archiving” the crash")
             tool_pod = get_ceph_tools_pod()
             tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
-            logging.info(
+            log.info(
                 "Perform Ceph and cluster health checks after silencing the ceph warnings"
             )
             ceph_health_check()

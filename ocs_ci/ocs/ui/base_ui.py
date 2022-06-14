@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
 )
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -51,7 +52,7 @@ class BaseUI:
 
     """
 
-    def __init__(self, driver):
+    def __init__(self, driver: WebDriver):
         self.driver = driver
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
@@ -322,8 +323,12 @@ class BaseUI:
             wait.until(ec.presence_of_element_located(locator))
             return True
         except NoSuchElementException:
-            self.take_screenshot()
             logger.error("Expected element not found on UI")
+            self.take_screenshot()
+            return False
+        except TimeoutException:
+            logger.error("Timedout while waiting for element")
+            self.take_screenshot()
             return False
 
 
@@ -338,6 +343,7 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.operator_name = (
@@ -358,7 +364,10 @@ class PageNavigator(BaseUI):
             else:
                 self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-            self.storage_class = "managed-premium_sc"
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
 
     def navigate_overview_page(self):
         """
@@ -380,7 +389,11 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_10:
+            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        else:
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
@@ -493,7 +506,7 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(
             locator=self.page_nav["persistentvolumeclaims_page"],
-            enable_screenshot=False,
+            enable_screenshot=True,
         )
 
     def navigate_storageclasses_page(self):
@@ -608,6 +621,49 @@ class PageNavigator(BaseUI):
         self.navigate_to_ocs_operator_page()
         self.do_click(locator=self.page_nav["block_pool_link"])
 
+    def wait_for_namespace_selection(self, project_name):
+        """
+        If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
+        It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
+        namespace drop-down.
+        The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
+
+        Args:
+            project_name (str): Name of the project to be selected
+
+        Returns:
+            bool: True if the project is found, raises NoSuchElementException otherwise with a log message
+        """
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.10"):
+
+            default_projects_is_checked = self.driver.find_element_by_xpath(
+                "//*[@data-test='showSystemSwitch']"
+            )
+
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
+                logger.info("Show default projects")
+                self.do_click(self.validation_loc["show-default-projects"])
+
+        pvc_loc = locators[self.ocp_version]["pvc"]
+        logger.info(f"Wait and select namespace {project_name}")
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=10,
+        )
+        if wait_for_project:
+            logger.info(f"Namespace {project_name} selected")
+            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+        else:
+            raise NoSuchElementException(f"Namespace {project_name} not found on UI")
+
     def verify_current_page_resource_status(self, status_to_check, timeout=30):
         """
         Compares a given status string to the one shown in the resource's UI page
@@ -667,7 +723,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating snapshot: {filename}")
+    logger.info(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
@@ -706,6 +762,9 @@ def login_ui(console_url=None):
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
             chrome_options.add_argument("--allow-insecure-localhost")
+            if config.ENV_DATA.get("import_clusters_to_acm"):
+                # Dev shm should be disabled when sending big amonut characters, like the cert sections of a kubeconfig
+                chrome_options.add_argument("--disable-dev-shm-usage")
             capabilities = chrome_options.to_capabilities()
             capabilities["acceptInsecureCerts"] = True
 
@@ -717,7 +776,9 @@ def login_ui(console_url=None):
 
         # use proxy server, if required
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
             # there is a big difference between configuring not authenticated
@@ -772,11 +833,16 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
-    if config.ENV_DATA["flexy_deployment"]:
+    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
+        "import_clusters_to_acm"
+    ):
         try:
             element = wait.until(
                 ec.element_to_be_clickable(
-                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
                 )
             )
             element.click()

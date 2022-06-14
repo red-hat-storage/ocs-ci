@@ -14,6 +14,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.node import drain_nodes
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
@@ -273,6 +274,7 @@ class AWSUPI(AWSBase):
                 "AWS_REGION": config.ENV_DATA["region"],
                 "rhcos_ami": config.ENV_DATA.get("rhcos_ami"),
                 "route53_domain_name": config.ENV_DATA["base_domain"],
+                "vm_type_bootstrap": config.ENV_DATA["vm_type_bootstrap"],
                 "vm_type_masters": config.ENV_DATA["master_instance_type"],
                 "vm_type_workers": config.ENV_DATA["worker_instance_type"],
                 "num_workers": str(config.ENV_DATA["worker_replicas"]),
@@ -285,6 +287,7 @@ class AWSUPI(AWSBase):
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
+                "INSTALLER_BIN": "openshift-install",
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
@@ -474,12 +477,12 @@ class AWSUPI(AWSBase):
         """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get("num_workers", 3))
-        logging.info(f"Creating {num_workers} RHEL workers")
+        logger.info(f"Creating {num_workers} RHEL workers")
         rhel_version = config.ENV_DATA["rhel_version"]
         rhel_worker_ami = config.ENV_DATA[f"rhel{rhel_version}_worker_ami"]
         for i in range(num_workers):
             self.gather_worker_data(f"no{i}")
-            logging.info(f"Creating {i + 1}/{num_workers} worker")
+            logger.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
@@ -515,7 +518,7 @@ class AWSUPI(AWSBase):
                     {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
                 ],
             )
-            logging.info(self.worker_iam_role)
+            logger.info(self.worker_iam_role)
             self.client.associate_iam_instance_profile(
                 IamInstanceProfile=self.worker_iam_role,
                 InstanceId=inst_id,
@@ -647,11 +650,7 @@ class AWSUPI(AWSBase):
         for node in rhcos_workers:
             cordon = f"oc adm cordon {node}"
             run_cmd(cordon)
-            drain = (
-                f"oc adm drain {node} --force --delete-local-data "
-                f"--ignore-daemonsets"
-            )
-            run_cmd(drain)
+            drain_nodes([node])
             delete = f"oc delete nodes {node}"
             run_cmd(delete)
         if len(self.get_rhcos_workers()):
@@ -698,7 +697,7 @@ class AWSUPI(AWSBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -746,12 +745,12 @@ class AWSUPI(AWSBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)

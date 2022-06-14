@@ -16,10 +16,8 @@ import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
-from subprocess import PIPE, TimeoutExpired, run
+from subprocess import PIPE, run
 from uuid import uuid4
-
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
@@ -688,7 +686,7 @@ def create_multiple_pvcs(
                 volume_mode=volume_mode,
             )
             for _ in range(number_of_pvc)
-        ]
+        ], None
 
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["namespace"] = namespace
@@ -1004,7 +1002,7 @@ def pull_images(image_name):
 
     node_objs = node.get_node_objs(node.get_worker_nodes())
     for node_obj in node_objs:
-        logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
+        logger.info(f'pulling image "{image_name}  " on node {node_obj.name}')
         assert node_obj.ocp.exec_oc_debug_cmd(
             node_obj.name, cmd_list=[f"podman pull {image_name}"]
         )
@@ -1265,138 +1263,6 @@ def set_image_lookup(image_name):
     return status
 
 
-def get_snapshot_time(interface, snap_name, status):
-    """
-    Get the starting/ending creation time of a PVC based on provisioner logs
-
-    The time and date extraction code below has been modified to read
-    the month and day data in the logs.  This fixes an error where negative
-    time values are calculated when test runs cross midnight.  Also, previous
-    calculations would not set the year, and so the calculations were done
-    as if the year were 1900.  This is not a problem except that 1900 was
-    not a leap year and so the next February 29th would throw ValueErrors
-    for the whole day.  To avoid this problem, changes were made to also
-    include the current year.
-
-    Incorrect times will still be given for tests that cross over from
-    December 31 to January 1.
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str / list): Name of the PVC(s) for creation time
-                               the list will be list of pvc objects
-        status (str): the status that we want to get - Start / End
-
-    Returns:
-        datetime object: Time of PVC(s) creation
-
-    """
-
-    def get_pattern_time(log, snapname, pattern):
-        """
-        Get the time of pattern in the log
-
-        Args:
-            log (list): list of all lines in the log file
-            snapname (str): the name of the snapshot
-            pattern (str): the pattern that need to be found in the log (start / bound)
-
-        Returns:
-            str: string of the pattern timestamp in the log, if not found None
-
-        """
-        this_year = str(datetime.datetime.now().year)
-        for line in log:
-            if re.search(snapname, line) and re.search(pattern, line):
-                mon_day = " ".join(line.split(" ")[0:2])
-                return f"{this_year} {mon_day}"
-        return None
-
-    logs = ""
-
-    # the starting and ending time are taken from different logs,
-    # the start creation time is taken from the snapshot controller, while
-    # the end creation time is taken from the csi snapshot driver
-    if status.lower() == "start":
-        pattern = "Creating content for snapshot"
-        # Get the snapshoter-controller pod
-        pod_name = pod.get_csi_snapshoter_pod()
-        logs = pod.get_pod_logs(
-            pod_name, namespace="openshift-cluster-storage-operator"
-        )
-    elif status.lower() == "end":
-        pattern = "readyToUse true"
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-    else:
-        logger.error(f"the status {status} is invalid.")
-        return None
-
-    logs = logs.split("\n")
-
-    stat = None
-    # Extract the time for the one PVC snapshot provisioning
-    if isinstance(snap_name, str):
-        stat = get_pattern_time(logs, snap_name, pattern)
-    # Extract the time for the list of PVCs snapshot provisioning
-    if isinstance(snap_name, list):
-        all_stats = []
-        for snapname in snap_name:
-            all_stats.append(get_pattern_time(logs, snapname.name, pattern))
-        all_stats = sorted(all_stats)
-        if status.lower() == "end":
-            stat = all_stats[-1]  # return the highest time
-        elif status.lower() == "start":
-            stat = all_stats[0]  # return the lowest time
-    if stat:
-        return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-    else:
-        return None
-
-
-def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid=None):
-    """
-    Measure Snapshot creation time based on logs
-
-    Args:
-        snap_name (str): Name of the snapshot for creation time measurement
-
-    Returns:
-        float: Creation time for the snapshot
-
-    """
-    start = get_snapshot_time(interface, snap_name, status="start")
-    end = get_snapshot_time(interface, snap_con_name, status="end")
-    logs = ""
-    if start and end:
-        total = end - start
-        return total.total_seconds()
-    else:
-        # at 4.8 the log messages was changed, so need different parsing
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logger.info(f"Read logs from {log_pod}")
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-        logs = logs.split("\n")
-        pattern = "CSI CreateSnapshot: snapshot-"
-        for line in logs:
-            if (
-                re.search(snap_uid, line)
-                and re.search(pattern, line)
-                and re.search("readyToUse \\[true\\]", line)
-            ):
-                # The creation time log is in nanosecond, so, it need to convert to seconds.
-                results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
-                    10 ** -9
-                )
-                return float(f"{results:.3f}")
-
-        return None
-
-
 def get_provision_time(interface, pvc_name, status="start"):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
@@ -1551,7 +1417,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
 
         if no_data_list:
             # Clear and get CSI logs after 60secs
-            logging.info(f"PVC count without CSI create log data {len(no_data_list)}")
+            logger.info(f"PVC count without CSI create log data {len(no_data_list)}")
             logs.clear()
             time.sleep(wait_time)
             logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
@@ -1559,7 +1425,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
             logs = logs.split("\n")
             loop_counter += 1
             if loop_counter >= 6:
-                logging.info("Waited for more than 6mins still no data")
+                logger.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pvc creation data in CSI logs for {no_data_list}"
                 )
@@ -1627,7 +1493,7 @@ def measure_pv_deletion_time_bulk(
 
         if no_data_list:
             # Clear and get CSI logs after 60secs
-            logging.info(f"PV count without CSI delete log data {len(no_data_list)}")
+            logger.info(f"PV count without CSI delete log data {len(no_data_list)}")
             logs.clear()
             time.sleep(wait_time)
             logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
@@ -1635,7 +1501,7 @@ def measure_pv_deletion_time_bulk(
             logs = logs.split("\n")
             loop_counter += 1
             if loop_counter >= 6:
-                logging.info("Waited for more than 6mins still no data")
+                logger.info("Waited for more than 6mins still no data")
                 raise UnexpectedBehaviour(
                     f"There is no pv deletion data in CSI logs for {no_data_list}"
                 )
@@ -1856,7 +1722,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         ]
         cmd = (
             f"ceph fs subvolume getpath {get_cephfs_name()}"
-            f" csi-vol-{image_uuid} csi"
+            f" csi-vol-{image_uuid} {get_cephfs_subvolumegroup()}"
         )
 
     try:
@@ -2421,23 +2287,23 @@ def memory_leak_analysis(median_dict):
                 list = [i for i in list if i]
                 memory_leak_data.append(list[7])
         else:
-            logging.info(f"worker {worker} memory leak file not found")
+            logger.info(f"worker {worker} memory leak file not found")
             raise UnexpectedBehaviour
         number_of_lines = len(memory_leak_data) - 1
         # Get the start value form median_dict arg for respective worker
         start_value = median_dict[f"{worker}"]
         end_value = memory_leak_data[number_of_lines]
-        logging.info(f"Median value {start_value}")
-        logging.info(f"End value {end_value}")
+        logger.info(f"Median value {start_value}")
+        logger.info(f"End value {end_value}")
         # Convert the values to kb for calculations
         if start_value.__contains__("g"):
-            start_value = float(1024 ** 2 * float(start_value[:-1]))
+            start_value = float(1024**2 * float(start_value[:-1]))
         elif start_value.__contains__("m"):
             start_value = float(1024 * float(start_value[:-1]))
         else:
             start_value = float(start_value)
         if end_value.__contains__("g"):
-            end_value = float(1024 ** 2 * float(end_value[:-1]))
+            end_value = float(1024**2 * float(end_value[:-1]))
         elif end_value.__contains__("m"):
             end_value = float(1024 * float(end_value[:-1]))
         else:
@@ -2445,13 +2311,13 @@ def memory_leak_analysis(median_dict):
         # Calculate the percentage of diff between start and end value
         # Based on value decide TC pass or fail
         diff[worker] = ((end_value - start_value) / start_value) * 100
-        logging.info(f"Percentage diff in start and end value {diff[worker]}")
+        logger.info(f"Percentage diff in start and end value {diff[worker]}")
         if diff[worker] <= 20:
-            logging.info(f"No memory leak in worker {worker} passing the test")
+            logger.info(f"No memory leak in worker {worker} passing the test")
         else:
-            logging.info(f"There is a memory leak in worker {worker}")
-            logging.info(f"Memory median value start of the test {start_value}")
-            logging.info(f"Memory value end of the test {end_value}")
+            logger.info(f"There is a memory leak in worker {worker}")
+            logger.info(f"Memory median value start of the test {start_value}")
+            logger.info(f"Memory value end of the test {end_value}")
             raise UnexpectedBehaviour
 
 
@@ -2477,7 +2343,7 @@ def get_memory_leak_median_value():
                 list = [i for i in list if i]
                 memory_leak_data.append(list[7])
         else:
-            logging.info(f"worker {worker} memory leak file not found")
+            logger.info(f"worker {worker} memory leak file not found")
             raise UnexpectedBehaviour
         median_dict[f"{worker}"] = statistics.median(memory_leak_data)
     return median_dict
@@ -2530,67 +2396,6 @@ def rsync_kubeconf_to_node(node):
         node=master_list[0], cmd_list=[f"ls {node_path}auth"]
     ):
         ocp.rsync(src=file_path, dst=f"{node_path}", node=node, dst_node=True)
-
-
-def create_dummy_osd(deployment):
-    """
-    Replace one of OSD pods with pod that contains all data from original
-    OSD but doesn't run osd daemon. This can be used e.g. for direct acccess
-    to Ceph Placement Groups.
-
-    Args:
-        deployment (str): Name of deployment to use
-
-    Returns:
-        list: first item is dummy deployment object, second item is dummy pod
-            object
-    """
-    oc = OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
-    )
-    osd_data = oc.get(deployment)
-    dummy_deployment = create_unique_resource_name("dummy", "osd")
-    osd_data["metadata"]["name"] = dummy_deployment
-
-    osd_containers = osd_data.get("spec").get("template").get("spec").get("containers")
-    # get osd container spec
-    original_osd_args = osd_containers[0].get("args")
-    osd_data["spec"]["template"]["spec"]["containers"][0]["args"] = []
-    osd_data["spec"]["template"]["spec"]["containers"][0]["command"] = [
-        "/bin/bash",
-        "-c",
-        "sleep infinity",
-    ]
-    osd_file = tempfile.NamedTemporaryFile(
-        mode="w+", prefix=dummy_deployment, delete=False
-    )
-    with open(osd_file.name, "w") as temp:
-        yaml.dump(osd_data, temp)
-    oc.create(osd_file.name)
-
-    # downscale the original deployment and start dummy deployment instead
-    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{deployment}")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
-
-    osd_list = pod.get_osd_pods()
-    dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
-    wait_for_resource_state(
-        resource=dummy_pod, state=constants.STATUS_RUNNING, timeout=60
-    )
-    ceph_init_cmd = "/rook/tini" + " " + " ".join(original_osd_args)
-    try:
-        logger.info("Following command should expire after 7 seconds")
-        dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
-    except TimeoutExpired:
-        logger.info("Killing /rook/tini process")
-        try:
-            dummy_pod.exec_sh_cmd_on_pod(
-                "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
-            )
-        except CommandFailed:
-            pass
-
-    return dummy_deployment, dummy_pod
 
 
 def get_failure_domin():
@@ -2799,7 +2604,7 @@ def collect_performance_stats(dir_name):
     external = config.DEPLOYMENT["external_mode"]
     if external:
         # Skip collecting performance_stats for external mode RHCS cluster
-        logging.info("Skipping status collection for external mode")
+        logger.info("Skipping status collection for external mode")
     else:
         ceph_obj = CephCluster()
 
@@ -3072,7 +2877,7 @@ def wait_for_pv_delete(pv_objs):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
 
-@retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+@retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
 def fetch_used_size(cbp_name, exp_val=None):
     """
     Fetch used size in the pool
@@ -3164,7 +2969,7 @@ def verify_pdb_mon(disruptions_allowed, max_unavailable_mon):
         bool: True if the expected pdb state equal to actual pdb state, False otherwise
 
     """
-    logging.info("Check mon pdb status")
+    logger.info("Check mon pdb status")
     mon_pdb = get_mon_pdb()
     result = True
     if disruptions_allowed != mon_pdb[0]:
@@ -3891,3 +3696,61 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         sleep=5,
     )
     logger.info("All mons are up and running")
+
+
+def create_reclaim_space_job(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+):
+    """
+    Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
+    """
+    reclaim_space_job_name = (
+        reclaim_space_job_name or f"reclaimspacejob-{pvc_name}-{uuid4().hex}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_JOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_job_name
+    job_data["spec"]["target"]["persistentVolumeClaim"] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["retryDeadlineSeconds"] = retry_deadline_seconds
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj
+
+
+def get_cephfs_subvolumegroup():
+    """
+    Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
+
+    Returns:
+        str: The name of cephfilesystemsubvolumegroup
+
+    """
+    if (
+        config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+    ):
+        subvolume_group = ocp.OCP(
+            kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        subvolume_group_obj = subvolume_group.get().get("items")[0]
+        subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
+    else:
+        subvolume_group_name = "csi"
+
+    return subvolume_group_name

@@ -1,12 +1,16 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs import constants, defaults, managedservice, ocp
+from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.testlib import (
+    acceptance,
     managed_service_required,
     ManageTest,
+    ms_provider_required,
     tier1,
+    runs_on_provider,
+    bugzilla,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -17,6 +21,153 @@ class TestPostInstallationState(ManageTest):
     """
     Post-installation tests for ROSA and OSD clusters
     """
+
+    @acceptance
+    @managed_service_required
+    def test_post_installation(self):
+        storage_cluster.ocs_install_verification()
+
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.parametrize(
+        argnames=["resource"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL.lower()],
+                marks=pytest.mark.polarion_id("OCS-3907"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEMSUBVOLUMEGROUP],
+                marks=pytest.mark.polarion_id("OCS-3908"),
+            ),
+        ],
+    )
+    def test_consumers_connected(self, resource):
+        """
+        Test run on provider cluster that at least one consumer is connected
+        and a unique cephblockpool and subvolumegroup are successfully created
+        on the provider cluster for each connected consumer.
+        """
+        consumer_names = managedservice.get_consumer_names()
+        log.info(f"Connected consumer names: {consumer_names}")
+        assert consumer_names, "No consumer clusters are connected"
+        for consumer_name in consumer_names:
+            resource_name = resource + "-" + consumer_name
+            resource_yaml = ocp.OCP(
+                kind=resource,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=resource_name,
+            )
+            assert resource_yaml.get()["status"]["phase"] == "Ready"
+
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.polarion_id("OCS-3909")
+    def test_consumers_ceph_resources(self):
+        """
+        Test that all CephResources of every storageconsumer are in Ready status
+        """
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer_name,
+            )
+            ceph_resources = consumer_yaml.get().get("status")["cephResources"]
+            for resource in ceph_resources:
+                log.info(
+                    f"Verifying Ready status of {resource['name']} resource of {consumer_name}"
+                )
+                assert (
+                    resource["status"] == "Ready"
+                ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
+
+    @acceptance
+    @ms_provider_required
+    @pytest.mark.polarion_id("OCS-3910")
+    def test_consumers_capacity(self):
+        """
+        Test each storageconsumer's capacity and requested capacity.
+        Now only 1Ti value is possible. If more options get added, the test
+        will need to get the value from the consumer cluster's config file
+        """
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer_name,
+            ).get()
+            log.info(f"Verifying capacity of {consumer_name}")
+            assert consumer_yaml["spec"]["capacity"] in {"1Ti", "1Pi"}
+            log.info(f"Verifying granted capacity of {consumer_name}")
+            assert (
+                consumer_yaml["status"]["grantedCapacity"]
+                == consumer_yaml["spec"]["capacity"]
+            )
+
+    @tier1
+    @pytest.mark.polarion_id("OCS-3917")
+    @ms_provider_required
+    def test_provider_server_logs(self):
+        """
+        Test that the logs of ocs-provider-server pod have entries for each consumer
+        """
+        provider_pod = pod.get_pods_having_label(
+            constants.PROVIDER_SERVER_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )[0]
+        provider_logs = pod.get_pod_logs(pod_name=provider_pod["metadata"]["name"])
+        log_lines = provider_logs.split("\n")
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            expected_log = (
+                f'successfully Enabled the StorageConsumer resource "{consumer_name}"'
+            )
+            log_found = False
+            for line in log_lines:
+                if expected_log in line:
+                    log_found = True
+                    log.info(f"'{expected_log}' found in ocs-provider-server logs")
+                    break
+            assert log_found, f"'{expected_log}' not found in ocs-provider-server logs"
+
+    @tier1
+    @pytest.mark.polarion_id("OCS-3918")
+    @ms_provider_required
+    def test_ceph_clients(self):
+        """
+        Test that for every consumer there are  the following cephclients in
+        the provider cluster: rbd provisioner, rbd node, cephfs provisioner,
+        cephfs node, healthchecker.
+        """
+        cephclients = storage_cluster.get_ceph_clients()
+        consumer_names = managedservice.get_consumer_names()
+        for consumer_name in consumer_names:
+            found_clients = []
+            for cephclient in cephclients:
+                if (
+                    cephclient["metadata"]["annotations"][
+                        "ocs.openshift.io.storageconsumer"
+                    ]
+                    == consumer_name
+                ):
+                    found_client = (
+                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
+                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
+                    )
+                    log.info(f"Ceph client {found_client} for {consumer_name} found")
+                    found_clients.append(found_client)
+            for client in {
+                "rbd-provisioner",
+                "rbd-node",
+                "cephfs-provisioner",
+                "cephfs-node",
+                "global-healthchecker",
+            }:
+                assert (
+                    client in found_clients
+                ), f"Ceph client {client} for {consumer_name} not found"
 
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
@@ -39,6 +190,8 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
+    @bugzilla("2073025")
+    @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     @managed_service_required
     def test_connection_time_out(self):

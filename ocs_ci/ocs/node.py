@@ -21,10 +21,11 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions
+from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     verify_new_pvs_available_in_sc,
@@ -32,6 +33,8 @@ from ocs_ci.ocs.resources.pv import (
     get_pv_size,
     get_node_pv_objs,
 )
+from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.utility.rosa import is_odf_addon_installed
 
 
 log = logging.getLogger(__name__)
@@ -203,9 +206,15 @@ def drain_nodes(node_names):
     node_names_str = " ".join(node_names)
     log.info(f"Draining nodes {node_names_str}")
     try:
+        drain_deletion_flag = (
+            "--delete-emptydir-data"
+            if get_semantic_version(get_ocp_version(), only_major_minor=True)
+            >= version.VERSION_4_7
+            else "--delete-local-data"
+        )
         ocp.exec_oc_cmd(
             f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-            f"--delete-local-data",
+            f"{drain_deletion_flag}",
             timeout=1800,
         )
     except TimeoutExpired:
@@ -357,16 +366,14 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
             if is_node_labeled(new_spun_node):
-                logging.info(
+                log.info(
                     f"node {new_spun_node} is already labeled with the OCS storage label"
                 )
             else:
                 node_obj.add_label(
                     resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
                 )
-                logging.info(
-                    f"Successfully labeled {new_spun_node} with OCS storage label"
-                )
+                log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
 
     return new_spun_nodes
 
@@ -417,7 +424,7 @@ def add_new_node_and_label_upi(
             node_obj.add_label(
                 resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
             )
-            logging.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+            log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
 
 
@@ -765,13 +772,30 @@ def get_ocs_nodes(num_of_nodes=None):
             it returns all the ocs nodes.
 
     Returns:
-        list: List of ocs nodes
+        list: List of the ocs nodes
 
     """
-    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    # Import inside the function to avoid circular loop
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster_state
+
+    # If we use managed service or external mode the worker nodes are without the OCS label.
+    # So in that case, we will get the worker nodes without searching for the OCS label.
+    ms_with_odf_addon = is_managed_service_cluster() and is_odf_addon_installed()
+    external_mode_with_ocs = (
+        config.DEPLOYMENT.get("external_mode")
+        and get_storage_cluster_state(constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE)
+        == constants.STATUS_READY
+    )
+    if ms_with_odf_addon or external_mode_with_ocs:
+        ocs_node_names = get_worker_nodes()
+    else:
+        ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+
+    assert ocs_node_names, "Didn't find the ocs nodes"
+
     ocs_nodes = get_node_objs(ocs_node_names)
     num_of_nodes = num_of_nodes or len(ocs_nodes)
-
     return ocs_nodes[:num_of_nodes]
 
 
@@ -1077,7 +1101,7 @@ def label_nodes(nodes, label=constants.OPERATOR_NODE_LABEL):
     node_obj = ocp.OCP(kind="node")
     for new_node_to_label in nodes:
         node_obj.add_label(resource_name=new_node_to_label.name, label=label)
-        logging.info(
+        log.info(
             f"Successfully labeled {new_node_to_label.name} " f"with OCS storage label"
         )
 
@@ -1306,9 +1330,9 @@ def taint_nodes(nodes, taint_label=None):
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
-            logging.info(f"Successfully tainted {node} with taint {taint_label}")
+            log.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
-            logging.info(f"{node} was not tainted - {e}")
+            log.info(f"{node} was not tainted - {e}")
 
 
 def check_taint_on_nodes(taint=None):
@@ -1932,7 +1956,12 @@ def recover_node_to_ready_state(node_obj):
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
 
-    node_status = get_node_status(node_obj)
+    try:
+        node_status = get_node_status(node_obj)
+    except Exception as e:
+        log.info(f"failed to get the node status due to the exception {str(e)}")
+        return False
+
     node_name = node_obj.name
     log.info(f"The status of the node {node_name} is {node_status} ")
 
@@ -1995,3 +2024,326 @@ def add_new_nodes_and_label_after_node_failure_ipi(
     """
     machine.change_current_replica_count_to_ready_replica_count(machineset_name)
     return add_new_node_and_label_it(machineset_name, num_nodes, mark_for_ocs_label)
+
+
+def get_encrypted_osd_devices(node_obj, node):
+    """
+    Get osd encrypted device names of a node
+
+    Args:
+        node_obj: OCP object of kind node
+        node: node name
+
+    Returns:
+        List of encrypted osd device names
+    """
+    luks_devices_out = node_obj.exec_oc_debug_cmd(
+        node=node,
+        cmd_list=[
+            "lsblk -o NAME,TYPE,FSTYPE | grep -E 'disk.*crypto_LUKS' | awk '{print $1}'"
+        ],
+    ).split("\n")
+    luks_devices = [device for device in luks_devices_out if device != ""]
+    return luks_devices
+
+
+def get_osd_ids_per_node():
+    """
+    Get a dictionary of the osd ids per node
+
+    Returns:
+        dict: The dictionary of the osd ids per node
+
+    """
+    osd_node_names = get_osd_running_nodes()
+    return {node_name: get_node_osd_ids(node_name) for node_name in osd_node_names}
+
+
+def get_node_rook_ceph_pod_names(node_name):
+    """
+    Get the rook ceph pod names associated with the node
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: The rook ceph pod names associated with the node
+
+    """
+    rook_ceph_pods = pod.get_pod_objs(pod.get_rook_ceph_pod_names())
+    node_rook_ceph_pods = get_node_pods(node_name, rook_ceph_pods)
+    return [p.name for p in node_rook_ceph_pods]
+
+
+def get_node_internal_ip(node_obj):
+    """
+    Get the node internal ip
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The node internal ip or `None`
+
+    """
+    addresses = node_obj.get().get("status").get("addresses")
+    for address in addresses:
+        if address["type"] == "InternalIP":
+            return address["address"]
+
+    return None
+
+
+def check_node_ip_equal_to_associated_pods_ips(node_obj):
+    """
+    Check that the node ip is equal to the pods ips associated with the node.
+    This function is mainly for the managed service deployment.
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        bool: True, if the node ip is equal to the pods ips associated with the node.
+            False, otherwise.
+
+    """
+    rook_ceph_pod_names = pod.get_rook_ceph_pod_names()
+    rook_ceph_pod_names = [
+        pod_name
+        for pod_name in rook_ceph_pod_names
+        if not pod_name.startswith("rook-ceph-operator")
+    ]
+    rook_ceph_pods = pod.get_pod_objs(rook_ceph_pod_names)
+    node_rook_ceph_pods = get_node_pods(node_obj.name, rook_ceph_pods)
+    node_ip = get_node_internal_ip(node_obj)
+    return all([pod.get_pod_ip(p) == node_ip for p in node_rook_ceph_pods])
+
+
+def verify_worker_nodes_security_groups():
+    """
+    Check the worker nodes security groups set correctly.
+    The function checks that the pods ip are equal to their associated nodes.
+
+    Returns:
+        bool: True, if the worker nodes security groups set correctly. False otherwise
+
+    """
+    wnodes = get_nodes(constants.WORKER_MACHINE)
+    for wnode in wnodes:
+        if not check_node_ip_equal_to_associated_pods_ips(wnode):
+            log.warning(f"The node {wnode.name} security groups is not set correctly")
+            return False
+
+    log.info("All the worker nodes security groups are set correctly")
+    return True
+
+
+def wait_for_osd_ids_come_up_on_node(
+    node_name, expected_osd_ids, timeout=180, sleep=10
+):
+    """
+    Wait for the expected osd ids to come up on a node
+
+    Args:
+        node_name (str): The node name
+        expected_osd_ids (list): The list of the expected osd ids to come up on the node
+        timeout (int): Time to wait for the osd ids to come up on the node
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, the osd ids to come up on the node. False, otherwise
+
+    """
+    try:
+        for osd_ids in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_node_osd_ids,
+            node_name=node_name,
+        ):
+            log.info(f"the current node {node_name} osd ids are: {osd_ids}")
+            if osd_ids == expected_osd_ids:
+                log.info(
+                    f"The node {node_name} has the expected osd ids {expected_osd_ids}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The node {node_name} didn't have the expected osd ids {expected_osd_ids}"
+        )
+
+    return False
+
+
+def wait_for_all_osd_ids_come_up_on_nodes(
+    expected_osd_ids_per_node, timeout=360, sleep=20
+):
+    """
+    Wait for all the expected osd ids to come up on their associated nodes
+
+    Args:
+        expected_osd_ids_per_node (dict): The expected osd ids per node
+        timeout (int): Time to wait for all the expected osd ids to come up on
+            their associated nodes
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, if all the expected osd ids come up on their associated nodes.
+            False, otherwise
+
+    """
+    try:
+        for osd_ids_per_node in TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=get_osd_ids_per_node
+        ):
+            log.info(f"the current osd ids per node: {osd_ids_per_node}")
+            if osd_ids_per_node == expected_osd_ids_per_node:
+                log.info(
+                    f"The osd ids per node reached the expected values: "
+                    f"{expected_osd_ids_per_node}"
+                )
+                return True
+
+    except TimeoutExpiredError:
+        log.warning(
+            f"The osd ids per node didn't reach the expected values: "
+            f"{expected_osd_ids_per_node}"
+        )
+
+    return False
+
+
+def get_other_worker_nodes_in_same_rack_or_zone(
+    failure_domain, node_obj, node_names_to_search=None
+):
+    """
+    Get other worker nodes in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for other
+            worker nodes in the same rack or zone.
+        node_names_to_search (list): The list of node names to search the other worker nodes in
+            the same rack or zone. If not specified, it will search in all the worker nodes.
+
+    Returns:
+        list: The list of the other worker nodes in the same rack or zone of the given node.
+
+    """
+    node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    log.info(f"The node {node_obj.name} rack or zone is {node_rack_or_zone}")
+    wnode_names = node_names_to_search or get_worker_nodes()
+    other_wnode_names = [name for name in wnode_names if name != node_obj.name]
+    other_wnodes = get_node_objs(other_wnode_names)
+
+    other_wnodes_in_same_rack_or_zone = [
+        wnode
+        for wnode in other_wnodes
+        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+    ]
+
+    wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
+    log.info(f"other worker nodes in the same rack or zone are: {wnode_names}")
+    return other_wnodes_in_same_rack_or_zone
+
+
+def get_another_osd_node_in_same_rack_or_zone(
+    failure_domain, node_obj, node_names_to_search=None
+):
+    """
+    Get another osd node in the same rack or zone of a given node.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object to search for another
+            osd node in the same rack or zone.
+        node_names_to_search (list): The list of node names to search for another osd node in the
+            same rack or zone. If not specified, it will search in all the worker nodes.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The osd node in the same rack or zone of the given node.
+            If not found, it returns None.
+
+    """
+    osd_node_names = get_osd_running_nodes()
+    other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
+        failure_domain, node_obj, node_names_to_search
+    )
+
+    osd_node_in_same_rack_or_zone = None
+    for wnode in other_wnodes_in_same_rack_or_zone:
+        if wnode.name in osd_node_names:
+            osd_node_in_same_rack_or_zone = wnode
+            break
+
+    return osd_node_in_same_rack_or_zone
+
+
+def get_nodes_racks_or_zones(failure_domain, node_names):
+    """
+    Get the nodes racks or zones
+
+    failure_domain (str): The failure domain
+    node_names (list): The node names to get their racks or zones
+
+    Return:
+        list: The nodes racks or zones
+
+    """
+    node_objects = get_node_objs(node_names)
+    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+
+
+def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+    """
+    Wait for the nodes racks or zones to appear
+
+    Args:
+        failure_domain (str): The failure domain
+        node_names (list): The node names to get their racks or zones
+        timeout (int): The time to wait for the racks or zones to appear on the nodes
+
+    Raise:
+        TimeoutExpiredError: In case not all the nodes racks or zones appear in the given timeout
+
+    """
+    for nodes_racks_or_zones in TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nodes_racks_or_zones,
+        failure_domain=failure_domain,
+        node_names=node_names,
+    ):
+        log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
+        if all(nodes_racks_or_zones):
+            log.info("All the nodes racks or zones exist!")
+            break
+
+
+def wait_for_new_worker_node_ipi(machineset, old_wnodes, timeout=900):
+    """
+    Wait for the new worker node to be ready
+
+    Args:
+        machineset (str): The machineset name
+        old_wnodes (list): The old worker nodes
+        timeout (int): Time to wait for the new worker node to be ready.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The new worker node object
+
+    Raise:
+        ResourceWrongStatusException: In case the new spun machine fails to reach Ready state
+            or replica count didn't match. Or in case one or more nodes haven't reached
+            the desired state.
+
+    """
+    machine.wait_for_new_node_to_be_ready(machineset, timeout=timeout)
+    new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
+    new_wnode = get_node_objs(new_wnode_names)[0]
+    log.info(f"Successfully created a new node {new_wnode.name}")
+
+    wait_for_nodes_status([new_wnode.name])
+    log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
+    return new_wnode

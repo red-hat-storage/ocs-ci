@@ -43,7 +43,7 @@ def add_capacity_test():
         try:
             result = ui_add_capacity(osd_size)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
             )
             result = storage_cluster.add_capacity(osd_size)
@@ -102,6 +102,7 @@ def add_capacity_test():
 @skipif_bmpsi
 @skipif_external_mode
 @skipif_ibm_power
+@skipif_managed_service
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
@@ -122,6 +123,7 @@ class TestAddCapacity(ManageTest):
 @skipif_bm
 @skipif_external_mode
 @cloud_platform_required
+@skipif_managed_service
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

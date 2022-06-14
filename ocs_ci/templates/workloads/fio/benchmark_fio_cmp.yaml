@@ -31,7 +31,7 @@ spec:
       storageclass: ocs-storagecluster-ceph-rbd-cmp
       storagesize: 12Gi
       cmp_ratio: 75
-      job_timeout: 18000
+      job_timeout: 36000
 #      rook_ceph_drop_caches: True
 #      rook_ceph_drop_cache_pod_ip:
 #######################################

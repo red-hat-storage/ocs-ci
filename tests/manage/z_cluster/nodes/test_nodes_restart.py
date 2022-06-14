@@ -3,8 +3,8 @@ import pytest
 
 
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
+    tier4b,
     ignore_leftovers,
     ManageTest,
     cloud_platform_required,
@@ -24,8 +24,6 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
 @ignore_leftovers
 @skipif_vsphere_ipi
 class TestNodesRestart(ManageTest):
@@ -53,6 +51,7 @@ class TestNodesRestart(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @tier4a
     @pytest.mark.parametrize(
         argnames=["force"],
         argvalues=[
@@ -77,6 +76,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     def test_rolling_nodes_restart(
@@ -94,6 +94,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
@@ -246,6 +247,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["operation"],
         argvalues=[
@@ -354,6 +356,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
+    @tier4b
     @skipif_no_lso
     @bugzilla("1873938")
     @pytest.mark.polarion_id("OCS-2448")

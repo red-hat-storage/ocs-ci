@@ -4,7 +4,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
     skipif_managed_service,
-    tier4,
+    tier2,
     tier4a,
 )
 from ocs_ci.ocs import constants
@@ -14,8 +14,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
+@tier2
 @polarion_id("OCS-1254")
 @bugzilla("1835290")
 @skipif_managed_service
@@ -89,7 +88,6 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
 
 
-@tier4
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service

@@ -219,7 +219,7 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
             print(f"image {image}", file=file_obj)
             # TODO: should len(image_ids) == 1?
             if len(image_ids) > 1:
-                logging.warning(
+                logger.warning(
                     "there are at least 2 different imageIDs for image %s", image
                 )
             for image_id in image_ids:

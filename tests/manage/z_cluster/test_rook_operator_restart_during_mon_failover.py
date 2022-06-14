@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier4a,
+    tier4b,
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
@@ -21,7 +21,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4b
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @bugzilla("1959983")
@@ -86,7 +86,7 @@ class TestDrainNodeMon(ManageTest):
 
         schedule_nodes([node_name])
 
-        logging.info("Wait for all the pods in openshift-storage to be running.")
+        log.info("Wait for all the pods in openshift-storage to be running.")
         assert wait_for_pods_to_be_running(timeout=300)
 
         sample = TimeoutSampler(

@@ -414,7 +414,7 @@ class RHV(object):
                     break
             disk_attachment_service.remove(detach_only)
         else:
-            logging.warning(
+            logger.warning(
                 f"There's no disk attachment of {disk.name} with ID: {disk.id}"
                 f"for {vm.name}"
             )

@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @ui
 @skipif_ocs_version("<4.6")
 @skipif_ui_not_support("pvc")
+@green_squad
 class TestPvcUserInterface(object):
     """
     Test PVC User Interface
@@ -64,7 +66,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         pvc_size,
@@ -78,7 +80,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
 
         # Creating PVC via UI
         pvc_name = create_unique_resource_name("test", "pvc")
@@ -217,7 +219,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         clone_access_mode,
@@ -233,7 +235,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
 
         # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")
@@ -260,8 +262,8 @@ class TestPvcUserInterface(object):
         pvc_ui_obj.pvc_clone_ui(
             project_name=project_name,
             pvc_name=pvc_name,
-            clone_name=clone_pvc_name,
-            clone_access_mode=clone_access_mode,
+            cloned_pvc_access_mode=clone_access_mode,
+            cloned_pvc_name=clone_pvc_name,
         )
 
         teardown_factory(

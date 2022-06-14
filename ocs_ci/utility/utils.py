@@ -1,4 +1,5 @@
 from functools import reduce
+import base64
 import io
 import json
 import logging
@@ -41,6 +42,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedImage,
+    UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
 )
@@ -512,9 +514,8 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
-    index = 0
     for cluster in config.clusters:
-        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -523,7 +524,9 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[index] = exec_cmd(
+                completed_process[
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ] = exec_cmd(
                     cmd,
                     secrets=secrets,
                     timeout=timeout,
@@ -537,7 +540,6 @@ def run_cmd_multicluster(
                     f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
                 )
                 raise
-            index = +1
     config.switch_ctx(restore_ctx_index)
     return completed_process
 
@@ -933,8 +935,13 @@ def get_vault_cli(bind_dir=None, force_download=False):
     zip_file = f"vault_{version}_{system}_amd64.zip"
     vault_cli_filename = "vault"
     vault_binary_path = os.path.join(bin_dir, vault_cli_filename)
-    if os.path.isfile(vault_binary_path) and force_download:
-        delete_file(vault_binary_path)
+    if os.path.isfile(vault_binary_path):
+        vault_ver = re.search(
+            r"Vault\sv*([\d.]+)", run_cmd(f"{vault_binary_path} version")
+        ).group(1)
+        if (Version.coerce(version) > Version.coerce(vault_ver)) or force_download:
+            delete_file(vault_binary_path)
+
     if os.path.isfile(vault_binary_path):
         log.debug(
             f"Vault CLI binary already exists {vault_binary_path}, skipping download."
@@ -1485,7 +1492,7 @@ def move_summary_to_top(soup):
 
     """
     summary = []
-    summary.append(soup.find("h2", text="Summary"))
+    summary.append(soup.find("h2", string="Summary"))
     for tag in summary[0].next_siblings:
         if tag.name == "h2":
             break
@@ -2047,7 +2054,7 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None):
+def clone_repo(url, location, branch="master", to_checkout=None, clone_type="shallow"):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2057,10 +2064,31 @@ def clone_repo(url, location, branch="master", to_checkout=None):
         location (str): path where the repository will be cloned to
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
+        clone_type (str): type of clone (shallow, blobless, treeless and normal)
+            By default, shallow clone will be used. For normal clone use
+            clone_type as "normal".
+
+    Raises:
+        UnknownCloneTypeException: In case of incorrect clone_type is used
+
     """
+    if clone_type == "shallow":
+        if branch != "master":
+            git_params = "--no-single-branch --depth=1"
+        else:
+            git_params = "--depth=1"
+    elif clone_type == "blobless":
+        git_params = "--filter=blob:none"
+    elif clone_type == "treeless":
+        git_params = "--filter=tree:0"
+    elif clone_type == "normal":
+        git_params = ""
+    else:
+        raise UnknownCloneTypeException
+
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {url} {location}")
+        run_cmd(f"git clone {git_params} {url} {location}")
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
@@ -3151,13 +3179,13 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     """
     version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
     terraform_ignition_provider_zip_file = (
-        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
-    )
-    terraform_ignition_provider_dir = (
-        f"terraform-provider-ignition-{version}-linux-amd64"
+        f"terraform-provider-ignition_{version[1:]}_linux_amd64.zip"
     )
     terraform_plugins_path = ".terraform/plugins/linux_amd64/"
-    log.info(f"Downloading terraform ignition proivider version {version}")
+    terraform_ignition_provider = os.path.join(
+        terraform_plugins_path, "terraform-provider-ignition"
+    )
+    log.info(f"Downloading terraform ignition provider version {version}")
     previous_dir = os.getcwd()
     os.chdir(terraform_dir)
     url = (
@@ -3168,18 +3196,24 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # Download and untar
     download_file(url, terraform_ignition_provider_zip_file)
-    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+    run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)
+    if (
+        version_module.get_semantic_ocp_version_from_config()
+        >= version_module.VERSION_4_11
+    ):
+        target_terraform_ignition_provider = terraform_plugins_path
+    else:
+        target_terraform_ignition_provider = terraform_ignition_provider
     move(
-        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
-        terraform_plugins_path,
+        f"terraform-provider-ignition_{version}",
+        target_terraform_ignition_provider,
     )
 
     # delete the downloaded files
     delete_file(terraform_ignition_provider_zip_file)
-    delete_dir(terraform_ignition_provider_dir)
 
     # return to the previous working directory
     os.chdir(previous_dir)
@@ -3262,6 +3296,8 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
         timeout (int): Time in seconds to wait
 
     """
+    log.info("Sleeping for 60 sec to start update machineconfigpool status")
+    time.sleep(60)
     # importing here to avoid dependencies
     from ocs_ci.ocs import ocp
 
@@ -3313,8 +3349,6 @@ def configure_chrony_and_wait_for_machineconfig_status(
         chrony_obj = OCS(**chrony_data)
         chrony_obj.create()
 
-        # sleep here to start update machineconfigpool status
-        time.sleep(60)
         wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
@@ -3580,8 +3614,134 @@ def add_chrony_to_ocp_deployment():
 
 
 def enable_huge_pages():
+    """
+    Applies huge pages
+
+    """
     log.info("Enabling huge pages.")
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE)
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+
+
+def disable_huge_pages():
+    """
+    Removes huge pages
+
+    """
+    log.info("Disabling huge pages.")
+    exec_cmd(f"oc delete -f {constants.HUGE_PAGES_TEMPLATE}")
+    time.sleep(10)
+    log.info("Waiting for machine config to be ready")
+    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+
+
+def encode(message):
+    """
+    Encodes the message in base64
+
+    Args:
+        message (str/list): message to encode
+
+    Returns:
+        str: encoded message in base64
+
+    """
+    message_bytes = message.encode("ascii")
+    encoded_base64_bytes = base64.b64encode(message_bytes)
+    encoded_message = encoded_base64_bytes.decode("ascii")
+    return encoded_message
+
+
+def decode(encoded_message):
+    """
+    Decodes the message in base64
+
+    Args:
+        encoded_message (str): encoded message
+
+    Returns:
+        str: decoded message
+
+    """
+    encoded_message_bytes = encoded_message.encode("ascii")
+    decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
+    decoded_message = decoded_base64_bytes.decode("ascii")
+    return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)

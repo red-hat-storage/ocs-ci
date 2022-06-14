@@ -336,7 +336,7 @@ def create_custom_machineset(
                 ms_obj = OCS(**machineset_yaml)
                 ms_obj.create()
                 if check_machineset_exists(f"{cls_id}-{role}-{aws_zone}"):
-                    logging.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
+                    log.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
                     return f"{cls_id}-{role}-{aws_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
@@ -448,7 +448,7 @@ def create_custom_machineset(
                 ms_obj = OCS(**machineset_yaml)
                 ms_obj.create()
                 if check_machineset_exists(f"{cls_id}-{role}-{az_zone}"):
-                    logging.info(f"Machineset {cls_id}-{role}-{az_zone} created")
+                    log.info(f"Machineset {cls_id}-{role}-{az_zone} created")
                     return f"{cls_id}-{role}-{az_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
@@ -547,7 +547,7 @@ def create_custom_machineset(
             ms_obj = OCS(**machineset_yaml)
             ms_obj.create()
             if check_machineset_exists(f"{cls_id}-{role}-{zone}"):
-                logging.info(f"Machineset {cls_id}-{role}-{zone} created")
+                log.info(f"Machineset {cls_id}-{role}-{zone} created")
                 return f"{cls_id}-{role}-{zone}"
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
@@ -675,7 +675,7 @@ def create_custom_machineset(
             ms_obj = OCS(**machineset_yaml)
             ms_obj.create()
             if check_machineset_exists(f"{cls_id}-{role}"):
-                logging.info(f"Machineset {cls_id}-{role} created")
+                log.info(f"Machineset {cls_id}-{role} created")
                 return f"{cls_id}-{role}"
             else:
                 raise ResourceNotFoundError("Machineset resource not found")
@@ -763,7 +763,7 @@ def delete_custom_machineset(machine_set):
     ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
     ocp.exec_oc_cmd(f"delete machineset {machine_set}")
     if not check_machineset_exists(machine_set):
-        logging.info(f"Machineset {machine_set} deleted")
+        log.info(f"Machineset {machine_set} deleted")
     else:
         raise UnexpectedBehaviour(f"Machineset {machine_set} not deleted")
 
@@ -1055,6 +1055,45 @@ def wait_for_ready_replica_count_to_reach_expected_value(
     except TimeoutExpiredError:
         log.info(
             f"Ready replica count failed to reach the expected value {expected_value}"
+        )
+        res = False
+
+    return res
+
+
+def wait_for_current_replica_count_to_reach_expected_value(
+    machine_set, expected_value, timeout=360
+):
+    """
+    Wait for the current replica count to reach an expected value
+
+    Args:
+        machine_set (str): Name of the machine set
+        expected_value (int): The expected value to reach
+        timeout (int): Time to wait for the current replica count to reach the expected value
+
+    Return:
+        bool: True, in case of the current replica count reached the expected value. False otherwise
+
+    """
+    current_replica_count = get_replica_count(machine_set)
+    log.info(f"Current replica count = {current_replica_count}")
+    log.info(
+        f"Wait {timeout} seconds for the current replica count to reach the "
+        f"expected value {expected_value}"
+    )
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_replica_count,
+        machine_set=machine_set,
+    )
+    try:
+        sample.wait_for_func_value(value=expected_value)
+        res = True
+    except TimeoutExpiredError:
+        log.info(
+            f"Current replica count failed to reach the expected value {expected_value}"
         )
         res = False
 

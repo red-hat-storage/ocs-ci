@@ -14,8 +14,13 @@ from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
     update_machine_conf,
+    comment_sensitive_var,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, NotAllNodesCreated
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    NotAllNodesCreated,
+    RebootEventNotFoundException,
+)
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
@@ -30,6 +35,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import version as version_module
 from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
@@ -45,7 +51,6 @@ from ocs_ci.utility.utils import (
     delete_file,
     AZInfo,
     download_file_from_git_repo,
-    get_running_ocp_version,
     set_aws_region,
     run_cmd,
     get_module_ip,
@@ -79,6 +84,7 @@ class PlatformNodesFactory:
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
+            "rosa": AWSNodes,
         }
 
     def get_nodes_platform(self):
@@ -247,9 +253,22 @@ class VMWareNodes(NodesBase):
         ]
 
     def get_node_by_attached_volume(self, volume):
-        raise NotImplementedError(
-            "get node by attached volume functionality is not implemented"
-        )
+        """
+        Get node OCS object of the VM instance that has the volume attached to
+
+        Args:
+            volume (Volume): The volume to get the VM according to
+
+        Returns:
+            OCS: The OCS object of the VM instance
+
+        """
+        volume_kube_path = f"kubernetes.io/vsphere-volume/{volume}"
+        all_nodes = get_node_objs()
+        for node in all_nodes:
+            for volume in node.data["status"]["volumesAttached"]:
+                if volume_kube_path in volume.values():
+                    return node
 
     def stop_nodes(self, nodes, force=True, wait=True):
         """
@@ -290,18 +309,10 @@ class VMWareNodes(NodesBase):
                 reaches READY state. False otherwise
 
         """
-        num_events_pre_reboot = {}
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
 
-        for node in nodes:
-            reboot_events_cmd = (
-                "get events -A --field-selector involvedObject.name="
-                f"{node.name},reason=Rebooted -o yaml"
-            )
-            num_events_pre_reboot[node.name] = len(
-                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
-            )
+        num_events_pre_reboot = self.get_reboot_events(nodes)
 
         self.vsphere.restart_vms(vms, force=force)
 
@@ -313,9 +324,6 @@ class VMWareNodes(NodesBase):
             When the reboot operation is completed and the VM is reachable the
             OCP node reaches status Ready and a Reboot event is logged.
             """
-            logger.info("Waiting for 30 seconds for reboot to complete...")
-            time.sleep(30)
-
             nodes_names = [n.name for n in nodes]
 
             wait_for_nodes_status(
@@ -326,10 +334,50 @@ class VMWareNodes(NodesBase):
                     "get events -A --field-selector involvedObject.name="
                     f"{node.name},reason=Rebooted -o yaml"
                 )
+                try:
+                    for node_reboot_events in TimeoutSampler(
+                        timeout=300, sleep=3, func=self.get_reboot_events, nodes=[node]
+                    ):
+                        if (
+                            node_reboot_events[node.name]
+                            != num_events_pre_reboot[node.name]
+                        ):
+                            break
+                except TimeoutExpiredError:
+                    logger.error(
+                        f"{node.name}: reboot events before reboot are {num_events_pre_reboot[node.name]} and "
+                        f"reboot events after reboot are {node_reboot_events[node.name]}"
+                    )
+                    raise RebootEventNotFoundException
+
                 assert num_events_pre_reboot[node.name] < len(
                     node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
                 ), f"Reboot event not found on node {node.name}"
                 logger.info(f"Node {node.name} rebooted")
+
+    def get_reboot_events(self, nodes):
+        """
+        Gets the number of reboot events
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            dict: Dictionary which contains node names as key and value as number
+                of reboot events
+                e.g: {'compute-0': 11, 'compute-1': 9, 'compute-2': 9}
+
+        """
+        num_reboot_events = {}
+        for node in nodes:
+            reboot_events_cmd = (
+                "get events -A --field-selector involvedObject.name="
+                f"{node.name},reason=Rebooted -o yaml"
+            )
+            num_reboot_events[node.name] = len(
+                node.ocp.exec_oc_cmd(reboot_events_cmd)["items"]
+            )
+        return num_reboot_events
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
@@ -1001,7 +1049,7 @@ class AWSNodes(NodesBase):
                 for each in entry["status"]["addresses"]:
                     if each["type"] == "Hostname":
                         if each["address"] in hosts:
-                            logging.info(f"Checking status for {each['address']}")
+                            logger.info(f"Checking status for {each['address']}")
                             sample = TimeoutSampler(
                                 timeout, 3, self.get_ready_status, entry
                             )
@@ -1049,12 +1097,12 @@ class AWSNodes(NodesBase):
         ansible_host_file["pod_pull_secret"] = "/tmp/pull-secret"
         ansible_host_file["rhel_worker_nodes"] = hosts
 
-        logging.info(ansible_host_file)
+        logger.info(ansible_host_file)
         data = _templating.render_template(
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:%s", data)
+        logger.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, "w") as f:
             f.write(data)
@@ -1374,7 +1422,7 @@ class AWSUPINode(AWSNodes):
                 {"Key": self.worker_tag[0], "Value": self.worker_tag[1]},
             ],
         )
-        logging.info(self.worker_iam_role)
+        logger.info(self.worker_iam_role)
         self.client.associate_iam_instance_profile(
             IamInstanceProfile=self.worker_iam_role,
             InstanceId=inst_id,
@@ -1481,10 +1529,11 @@ class VSPHEREUPINode(VMWareNodes):
         terraform_binary_path = os.path.join(bin_dir, terraform_filename)
         config.ENV_DATA["terraform_installer"] = terraform_binary_path
 
-        # get OCP version
-        ocp_version = get_running_ocp_version()
         self.folder_structure = False
-        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_5
+        ):
             set_aws_region()
             self.folder_structure = True
             config.ENV_DATA["folder_structure"] = True
@@ -1508,12 +1557,12 @@ class VSPHEREUPINode(VMWareNodes):
         logger.debug("Updating terraform variables")
         compute_str = "compute_count ="
         updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
 
         # backup the terraform variable file
         original_file = f"{self.terraform_var}_{int(time.time())}"
         shutil.copyfile(self.terraform_var, original_file)
-        logging.info(f"original terraform file: {original_file}")
+        logger.info(f"original terraform file: {original_file}")
 
         replace_content_in_file(
             self.terraform_var,
@@ -1533,7 +1582,7 @@ class VSPHEREUPINode(VMWareNodes):
             if self.folder_structure
             else constants.INSTALLER_MACHINE_CONF
         )
-        logging.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
+        logger.debug(f"Adding {constants.LIFECYCLE} to {vm_machine_conf}")
         replace_content_in_file(vm_machine_conf, to_change, add_file_block)
 
         # update the machine configurations
@@ -1615,6 +1664,13 @@ class VSPHEREUPINode(VMWareNodes):
         clone_openshift_installer()
         self._update_terraform()
         self._update_machine_conf()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_11
+        ):
+            comment_sensitive_var()
 
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)

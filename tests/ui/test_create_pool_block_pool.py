@@ -1,6 +1,10 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_ui_not_support
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_ui_not_support,
+    green_squad,
+)
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
@@ -66,6 +70,7 @@ class TestPoolUserInterface(ManageTest):
     @ui
     @tier1
     @skipif_ocs_version("<4.8")
+    @green_squad
     def test_create_delete_pool(
         self,
         replica,

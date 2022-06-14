@@ -4,7 +4,7 @@ import pytest
 
 
 from ocs_ci.framework.testlib import (
-    tier4c,
+    tier4b,
     ignore_leftovers,
     ManageTest,
     bugzilla,
@@ -19,7 +19,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
-@tier4c
+@tier4b
 @pytest.mark.polarion_id("OCS-2633")
 @bugzilla("1895819")
 @skipif_ibm_cloud

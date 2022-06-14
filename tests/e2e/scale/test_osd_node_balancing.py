@@ -32,6 +32,8 @@ REPLICA_COUNT = 3
 OSD_LIMIT_AT_START = MAX_OSDS_PER_NODE * START_NODE_NUM
 MAX_TIMES_ADDED = 3
 
+logger = logging.getLogger(__name__)
+
 
 def is_balanced(this_skew, maxov):
     """
@@ -51,7 +53,7 @@ def is_balanced(this_skew, maxov):
     ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
     if not balanced:
         if ocs_version < version.VERSION_4_9:
-            logging.info(NOT_BALANCED)
+            logger.info(NOT_BALANCED)
             return True
     return balanced
 
@@ -93,7 +95,7 @@ def collect_stats(action_text, elastic_info):
     maxov = max(osds_per_node)
     minov = min(osds_per_node)
     this_skew = maxov - minov
-    logging.info(f"Skew found is {this_skew}")
+    logger.info(f"Skew found is {this_skew}")
     output_info["osds"] = osd_list
     output_info["worker_nodes"] = wnodes
     output_info["pairings"] = {}
@@ -123,13 +125,13 @@ class ElasticData(PerfResult):
 
     def log_recent_activity(self):
         new_data = self.results[self.record_counter]
-        logging.info(new_data["title"])
-        logging.info("pairings:")
+        logger.info(new_data["title"])
+        logger.info("pairings:")
         for entry in new_data["pairings"]:
-            logging.info(f"     {entry} -- {new_data['pairings'][entry]}")
-        logging.info(f"maxov: {new_data['maxov']}")
-        logging.info(f"minov: {new_data['minov']}")
-        logging.info(f"skew_value: {new_data['skew_value']}")
+            logger.info(f"     {entry} -- {new_data['pairings'][entry]}")
+        logger.info(f"maxov: {new_data['maxov']}")
+        logger.info(f"minov: {new_data['minov']}")
+        logger.info(f"skew_value: {new_data['skew_value']}")
 
 
 @scale_changed_layout
@@ -175,7 +177,7 @@ class Test_Osd_Balance(PASTest):
                 scale_ocs_node()
                 collect_stats("Three nodes have been added", self.elastic_info)
             cntval = 3 * osd_incr
-            logging.info(f"Adding {cntval} osds to nodes")
+            logger.info(f"Adding {cntval} osds to nodes")
             scale_capacity_with_deviceset(add_deviceset_count=osd_incr, timeout=900)
             collect_stats("OSD capacity increase", self.elastic_info)
         collect_stats(FINAL_REPORT, self.elastic_info)

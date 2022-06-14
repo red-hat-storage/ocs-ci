@@ -457,6 +457,23 @@ class AWS(object):
             "Delete response for volume: %s is: %s", volume.volume_id, delete_response
         )
 
+    def get_cluster_subnet_ids(self, cluster_name):
+        """
+        Get the cluster's subnet ids of existing cluster
+
+        Args:
+            cluster_name (str): Cluster name
+
+        Returns:
+            string of space separated subnet ids
+
+        """
+        subnets = self.ec2_client.describe_subnets(
+            Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
+        )
+        subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+        return subnet_ids
+
     def detach_and_delete_volume(self, volume, timeout=120):
         """
         Detach volume if attached and then delete it from AWS
@@ -1427,9 +1444,30 @@ class AWS(object):
         """
         domain = domain or config.ENV_DATA["base_domain"]
         hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=domain)
-        record_sets = self.route53_client.list_resource_record_sets(
+        record_sets = []
+        record_sets_data = self.route53_client.list_resource_record_sets(
             HostedZoneId=hosted_zone_id
-        )["ResourceRecordSets"]
+        )
+        record_sets.extend(record_sets_data["ResourceRecordSets"])
+        # If a ListResourceRecordSets command returns more than one page of results,
+        # the value of IsTruncated is true. To display the next page of results,
+        # get the values of NextRecordName, NextRecordType, and NextRecordIdentifier (if any)
+        # from the response.
+        # Then submit another ListResourceRecordSets request, and specify those values for StartRecordName,
+        # StartRecordType, and StartRecordIdentifier.
+        is_truncated = record_sets_data["IsTruncated"]
+        while is_truncated:
+            start_record_name = record_sets_data["NextRecordName"]
+            start_record_type = record_sets_data["NextRecordType"]
+
+            record_sets_data = self.route53_client.list_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                StartRecordName=start_record_name,
+                StartRecordType=start_record_type,
+            )
+            record_sets.extend(record_sets_data["ResourceRecordSets"])
+            is_truncated = record_sets_data["IsTruncated"]
+
         return record_sets
 
     def delete_record(self, record, hosted_zone_id):
@@ -1700,24 +1738,24 @@ def terminate_rhel_workers(worker_list):
         logger.info("No workers in list, skipping termination of RHEL workers")
         return
 
-    logging.info(f"Terminating RHEL workers {worker_list}")
+    logger.info(f"Terminating RHEL workers {worker_list}")
     # Do a dry run of instance termination
     try:
         aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=True)
     except aws.ec2_client.exceptions.ClientError as err:
         if "DryRunOperation" in str(err):
-            logging.info("Instances can be deleted")
+            logger.info("Instances can be deleted")
         else:
-            logging.error("Some of the Instances can't be deleted")
+            logger.error("Some of the Instances can't be deleted")
             raise exceptions.FailedToDeleteInstance()
     # Actual termination call here
     aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=False)
     try:
         waiter = aws.ec2_client.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=worker_list)
-        logging.info("Instances are terminated")
+        logger.info("Instances are terminated")
     except aws.ec2_client.exceptions.WaiterError as ex:
-        logging.error(f"Failed to terminate instances {ex}")
+        logger.error(f"Failed to terminate instances {ex}")
         raise exceptions.FailedToDeleteInstance()
 
 
