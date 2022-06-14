@@ -16,7 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL, AWSCLI_TEST_OBJ_DIR
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.retry import retry
 
