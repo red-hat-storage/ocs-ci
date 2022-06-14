@@ -22,18 +22,22 @@ class TestKernelCrash(E2ETest):
     """
 
     pvc_size = 1
+    original_dir = "/var/lib/www/html/"
+    result_dir = "mydir"
 
     def creates_files(self, pod_obj):
         while True:
             for i in range(1, 125):
                 pod_obj.exec_cmd_on_pod(
-                    f"dd if=/dev/zero of=/var/lib/www/html/mydir/emp bs=1MB count=1"
+                    f"dd if=/dev/zero of={self.original_dir}{self.result_dir}/emp.txt bs=1M count=1"
                 )
 
     def remove_files(self, pod_obj):
         while True:
             for i in range(1, 125):
-                pod_obj.exec_cmd_on_pod(f"rm /var/lib/www/html/mydir/emp")
+                pod_obj.exec_cmd_on_pod(
+                    f"rm {self.original_dir}{self.result_dir}/emp.txt"
+                )
 
     def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
         """
@@ -44,8 +48,6 @@ class TestKernelCrash(E2ETest):
         5. Check Node gets Panic or not
         """
 
-        original_dir = "/var/lib/www/html/"
-        result_dir = "mydir"
         worker_nodes_list = get_worker_nodes()
 
         # Create a Cephfs PVC
@@ -93,10 +95,13 @@ class TestKernelCrash(E2ETest):
         helpers.run_cmd(cmd=cmd)
         log.info("Files copied successfully ")
 
-        commands = ["mkdir" + " " + original_dir + result_dir, "apt-get update"]
+        commands = [
+            "mkdir" + " " + self.original_dir + self.result_dir,
+            "apt-get update",
+        ]
         for cmd in commands:
             pod_obj.exec_cmd_on_pod(command=f"{cmd}")
-        pod_obj.exec_sh_cmd_on_pod(command=f"apt-get install python -y")
+        pod_obj.exec_sh_cmd_on_pod(command="apt-get install python -y")
         log.info("Starting creation and deletion of files on volume")
 
         # Create and delete files on mount point
@@ -106,7 +111,7 @@ class TestKernelCrash(E2ETest):
         sleep(3)
         log.info("Started deletion of files on volume")
         executor.submit(self.remove_files, pod_obj)
-        executor.submit(pod_obj.exec_sh_cmd_on_pod, command=f"python fsync.py")
+        executor.submit(pod_obj.exec_sh_cmd_on_pod, command="python fsync.py")
 
         # Check Node gets Panic or not
         try:
@@ -114,7 +119,9 @@ class TestKernelCrash(E2ETest):
                 selected_node, status=constants.NODE_NOT_READY, timeout=120
             )
         except ResourceWrongStatusException as ex:
-            log.error(f"Node in NotReady status found, hence TC is failed. ")
+            log.error(
+                "Node in NotReady status found due to it gets panic, hence TC is failed. "
+            )
             raise ex
         else:
-            log.info(f"Node in Ready status found, hence TC is Passed. ")
+            log.info("Node in Ready status found, hence TC is Passed.")

@@ -1755,4 +1755,4 @@ SPACE = " "
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
 
-FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "fsync.py")
+FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/fsync.py")
