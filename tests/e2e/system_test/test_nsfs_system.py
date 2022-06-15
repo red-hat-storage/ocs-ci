@@ -1,22 +1,31 @@
 import logging
+import uuid
 
 import pytest
 
 from ocs_ci.framework.testlib import MCGTest, system_test
-from ocs_ci.framework.pytest_customization.marks import skipif_mcg_only, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_mcg_only,
+    ignore_leftovers,
+)
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.bucket_utils import (
     random_object_round_trip_verification,
-    compare_directory, sync_object_directory,
+    compare_directory,
+    sync_object_directory,
+    s3_put_object,
+    s3_get_object,
+    s3_list_objects_v1,
+    s3_copy_object,
+    s3_head_object,
+    s3_delete_objects,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
-from ocs_ci.ocs.resources.pod import get_plugin_pods, get_mds_pods
-from tests.conftest import snapshot_factory
-from tests.e2e.conftest import noobaa_db_backup_and_recovery
+from ocs_ci.ocs.resources.pod import get_mds_pods
 
 logger = logging.getLogger(__name__)
 
@@ -29,37 +38,106 @@ class TestNSFSSystem(MCGTest):
 
     @pytest.mark.polarion_id("")
     def test_nsfs(
-        self, mcg_obj, nsfs_bucket_factory, awscli_pod_session, test_directory_setup, snapshot_factory,
+        self,
+        mcg_obj,
+        nsfs_bucket_factory,
+        awscli_pod_session,
+        test_directory_setup,
+        snapshot_factory,
         noobaa_db_backup_and_recovery,
     ):
         """"""
+        s3_ops_obj = "obj-key" + str(uuid.uuid4().hex)
+        s3_ops_copy_obj = "copy-obj-key" + str(uuid.uuid4().hex)
+        s3_ops_obj_data = "object data-" + str(uuid.uuid4().hex)
+        nsfs_obj_pattern = "nsfs-obj-" + str(uuid.uuid4().hex)
 
-        nsfs_obj_new = NSFS(
-            method="OC",
-            pvc_size=20,
-        )
-        nsfs_bucket_factory(nsfs_obj_new)
-        nsfs_obj_existing = NSFS(
-            method="OC",
-            pvc_size=20,
-            mount_existing_dir=True,
-        )
-        nsfs_bucket_factory(nsfs_obj_existing)
-        nsfs_objs = [nsfs_obj_new, nsfs_obj_existing]
+        nsfs_objs = [
+            NSFS(
+                method="OC",
+                pvc_size=10,
+            ),
+            NSFS(
+                method="OC",
+                pvc_size=10,
+                mount_existing_dir=True,
+            ),
+        ]
         for nsfs_obj in nsfs_objs:
-            awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_directory_setup.origin_dir}/{nsfs_obj.bucket_name} {test_directory_setup.result_dir}/{nsfs_obj.bucket_name}")
+            nsfs_bucket_factory(nsfs_obj)
+            logger.info(f"Successfully created NSFS bucket: {nsfs_obj.bucket_name}")
+
+        # Put, Get, Copy, Head, list and Delete S3 operations
+        for nsfs_obj in nsfs_objs:
+            logger.info(f"Put and Get object operation on {nsfs_obj.bucket_name}")
+            assert s3_put_object(
+                s3_obj=nsfs_obj,
+                bucketname=nsfs_obj.bucket_name,
+                object_key=s3_ops_obj,
+                data=s3_ops_obj_data,
+            ), "Failed: PutObject"
+            get_res = s3_get_object(
+                s3_obj=nsfs_obj, bucketname=nsfs_obj.bucket_name, object_key=s3_ops_obj
+            )
+
+            logger.info(f"Head object operation on {nsfs_obj.bucket_name}")
+            assert s3_head_object(
+                s3_obj=nsfs_obj,
+                bucketname=nsfs_obj.bucket_name,
+                object_key=s3_ops_obj,
+                if_match=get_res["ETag"],
+            ), "ETag does not match with the head object"
+
+            logger.info(f"Copy object operation on {nsfs_obj.bucket_name}")
+            assert s3_copy_object(
+                s3_obj=nsfs_obj,
+                bucketname=nsfs_obj.bucket_name,
+                source=f"/{nsfs_obj.bucket_name}/{s3_ops_obj}",
+                object_key=s3_ops_copy_obj,
+            ), "Failed: CopyObject"
+            get_copy_res = s3_get_object(
+                s3_obj=nsfs_obj,
+                bucketname=nsfs_obj.bucket_name,
+                object_key=s3_ops_copy_obj,
+            )
+            logger.info(
+                f"Verifying Etag of {s3_ops_copy_obj} from Get object operations"
+            )
+            assert get_copy_res["ETag"] == get_res["ETag"], "Incorrect object key"
+
+            logger.info(f"List object operation on {nsfs_obj.bucket_name}")
+            list_response = s3_list_objects_v1(
+                s3_obj=nsfs_obj, bucketname=nsfs_obj.bucket_name
+            )
+            logger.info(f"Validating keys are listed on {nsfs_obj.bucket_name}")
+            page_keys = [item["Key"] for item in list_response["Contents"]]
+            assert s3_ops_obj and s3_ops_copy_obj in page_keys, "keys not listed"
+
+            logger.info(
+                f"Deleting {s3_ops_obj} and {s3_ops_copy_obj} and verifying response"
+            )
+            del_res = s3_delete_objects(
+                s3_obj=nsfs_obj,
+                bucketname=nsfs_obj.bucket_name,
+                object_keys=[{"Key": f"{s3_ops_obj}"}, {"Key": f"{s3_ops_copy_obj}"}],
+            )
+            for i, key in enumerate([s3_ops_obj, s3_ops_copy_obj]):
+                assert (
+                    key == del_res["Deleted"][i]["Key"]
+                ), "Object key not found/not-deleted"
+
+        for nsfs_obj in nsfs_objs:
             random_object_round_trip_verification(
                 io_pod=awscli_pod_session,
                 bucket_name=nsfs_obj.bucket_name,
                 upload_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
                 download_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}",
                 amount=5,
-                pattern="nsfs-test-obj-",
+                pattern=nsfs_obj_pattern,
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
                 result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
             )
-
         pods_to_respin = [
             pod.Pod(
                 **pod.get_pods_having_label(
@@ -69,24 +147,44 @@ class TestNSFSSystem(MCGTest):
             ),
             get_mds_pods()[0],
         ]
+        for pod_del in pods_to_respin:
+            logger.info(f"Deleting pod {pod_del.name}")
+            pod_del.delete()
 
-        for pods in pods_to_respin:
-            pods.delete()
-
-        pods_to_respin = [
+        pods_to_validate = [
             pod.Pod(
                 **pod.get_pods_having_label(
                     label=constants.NOOBAA_CORE_POD_LABEL,
                     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 )[0]
             ),
-            get_plugin_pods(constants.CEPHFILESYSTEM)[0],
             get_mds_pods()[0],
         ]
-        for pods in pods_to_respin:
+        for pod_val in pods_to_validate:
             wait_for_resource_state(
-                resource=pods, state=constants.STATUS_RUNNING, timeout=300
+                resource=pod_val, state=constants.STATUS_RUNNING, timeout=300
             )
+        for nsfs_obj in nsfs_objs:
+            logger.info(
+                f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
+                f"post pod re-spins"
+            )
+            sync_object_directory(
+                podobj=awscli_pod_session,
+                src=f"s3://{nsfs_obj.bucket_name}",
+                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                signed_request_creds=nsfs_obj.s3_creds,
+            )
+            compare_directory(
+                awscli_pod=awscli_pod_session,
+                original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
+                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                amount=5,
+                pattern=nsfs_obj_pattern,
+                result_pod=nsfs_obj.interface_pod,
+            )
+        logger.info("Partially bringing the ceph cluster down")
+        scale_ceph(replica=0)
         for nsfs_obj in nsfs_objs:
             sync_object_directory(
                 podobj=awscli_pod_session,
@@ -99,55 +197,19 @@ class TestNSFSSystem(MCGTest):
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
                 result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
                 amount=5,
-                pattern="nsfs-test-obj-",
+                pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
             )
+        logger.info("Scaling the ceph cluster back to normal")
+        scale_ceph(replica=1)
 
-        dep_ocp = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-operator --replicas=0"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-mon-a --replicas=0"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-osd-0 --replicas=0"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-mds-ocs-storagecluster-cephfilesystem-a --replicas=0"
-        )
-
-        for nsfs_obj in nsfs_objs:
-            sync_object_directory(
-                podobj=awscli_pod_session,
-                src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                signed_request_creds=nsfs_obj.s3_creds,
-            )
-            compare_directory(
-                awscli_pod=awscli_pod_session,
-                original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                amount=5,
-                pattern="nsfs-test-obj-",
-                result_pod=nsfs_obj.interface_pod,
-            )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-operator --replicas=1"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-mon-a --replicas=1"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-osd-0 --replicas=1"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment rook-ceph-mds-ocs-storagecluster-cephfilesystem-a --replicas=1"
-        )
+        logger.info("Performing noobaa db backup/recovery")
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
         for nsfs_obj in nsfs_objs:
+            logger.info(
+                f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
+                f"post noobaa-db recovery"
+            )
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
@@ -159,6 +221,22 @@ class TestNSFSSystem(MCGTest):
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
                 result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
                 amount=5,
-                pattern="nsfs-test-obj-",
+                pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
             )
+
+
+def scale_ceph(replica=1):
+    """"""
+    dep_ocp = OCP(
+        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    deployments = [
+        constants.ROOK_CEPH_OPERATOR,
+        "rook-ceph-mon-a",
+        "rook-ceph-osd-0",
+        "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a",
+    ]
+    for dep in deployments:
+        logger.info(f"Scaling {dep} to replica {replica}")
+        dep_ocp.exec_oc_cmd(f"scale deployment {dep} --replicas={replica}")
