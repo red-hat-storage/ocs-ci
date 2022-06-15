@@ -270,7 +270,8 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     )
     cmd = (
         f"oc mirror --config {imageset_config_file} "
-        f"docker://{config.DEPLOYMENT['mirror_registry']} --dest-skip-tls"
+        f"docker://{config.DEPLOYMENT['mirror_registry']} "
+        "--dest-skip-tls --ignore-history"
     )
     exec_cmd(cmd, timeout=7200)
 
