@@ -488,7 +488,16 @@ class FlexyBase(object):
             terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
-            for _file in ("terraform.tfstate", "terraform.tfvars"):
+            ocp_version = get_ocp_version()
+            # related to flexy-templates changes 4a4099541
+            if Version.coerce(ocp_version) >= Version.coerce("4.11"):
+                files_to_copy = (
+                    "upi_on_vsphere-terraform-scripts/terraform.tfstate",
+                    "terraform.tfvars",
+                )
+            else:
+                files_to_copy = ("terraform.tfstate", "terraform.tfvars")
+            for _file in files_to_copy:
                 shutil.copy2(
                     os.path.join(flexy_terraform_dir, _file), terraform_data_dir
                 )
