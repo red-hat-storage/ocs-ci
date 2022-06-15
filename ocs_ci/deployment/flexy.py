@@ -33,6 +33,7 @@ from ocs_ci.utility.flexy import (
     configure_allowed_domains_in_proxy,
     load_cluster_info,
 )
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -488,9 +489,8 @@ class FlexyBase(object):
             terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
-            ocp_version = get_ocp_version()
             # related to flexy-templates changes 4a4099541
-            if Version.coerce(ocp_version) >= Version.coerce("4.11"):
+            if version.get_semantic_ocp_running_version() >= version.VERSION_4_11:
                 files_to_copy = (
                     "upi_on_vsphere-terraform-scripts/terraform.tfstate",
                     "terraform.tfvars",
