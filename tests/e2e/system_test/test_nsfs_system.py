@@ -40,7 +40,7 @@ class TestNSFSSystem(MCGTest):
     NSFS system test
     """
 
-    @pytest.mark.polarion_id("")
+    @pytest.mark.polarion_id("OCS-3952")
     def test_nsfs(
         self,
         mcg_obj,
