@@ -129,8 +129,11 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.ocs.longevity_stage2 import (
+    _multi_pvc_pod_lifecycle_factory,
+    _multi_obc_lifecycle_factory,
+)
 from ocs_ci.ocs.longevity import start_app_workload
-
 
 log = logging.getLogger(__name__)
 
@@ -5285,6 +5288,28 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         return pvcs, pods
 
     return factory
+
+
+@pytest.fixture()
+def multi_pvc_pod_lifecycle_factory(
+    project_factory, multi_pvc_factory, pod_factory, teardown_factory
+):
+    return _multi_pvc_pod_lifecycle_factory(
+        project_factory, multi_pvc_factory, pod_factory, teardown_factory
+    )
+
+
+@pytest.fixture()
+def multi_obc_lifecycle_factory(
+    bucket_factory, mcg_obj, awscli_pod_session, mcg_obj_session, test_directory_setup
+):
+    return _multi_obc_lifecycle_factory(
+        bucket_factory,
+        mcg_obj,
+        awscli_pod_session,
+        mcg_obj_session,
+        test_directory_setup,
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
