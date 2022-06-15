@@ -11,6 +11,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -109,6 +110,20 @@ class TestPvPool:
         edit_pv_backingstore.patch(
             resource_name=pv_backingstore.name, params=params, format_type="merge"
         )
+
+        logger.info("Checking if backingstore went to SCALING state")
+        sample = TimeoutSampler(
+            timeout=60,
+            sleep=5,
+            func=check_pv_backingstore_status,
+            backingstore_name=pv_backingstore.name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            desired_status="`SCALING`"
+        )
+        assert (
+            sample.wait_for_func_status(result=True)
+        ), f"Backing Store {pv_backingstore.name} never reached SCALING state"
+
         logger.info("Waiting for backingstore to return to OPTIMAL state")
         wait_for_pv_backingstore(
             pv_backingstore.name, config.ENV_DATA["cluster_namespace"]
