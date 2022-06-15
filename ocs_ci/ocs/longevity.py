@@ -1,3 +1,4 @@
+import time
 import logging
 import pathlib
 
@@ -553,6 +554,69 @@ class Longevity(object):
             )
 
         return kube_job_file_list
+
+    def stage_2(
+        self,
+        multi_pvc_pod_lifecycle_factory,
+        multi_obc_lifecycle_factory,
+        num_of_pvcs=100,
+        pvc_size=2,
+        num_of_obcs=20,
+        run_time=1440,
+        measure=True,
+        delay=600,
+    ):
+        """
+        Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and
+        OBCs and measurement of creation / deletion times of the mentioned resources.
+
+        Args:
+            multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
+                                                measure pvc creation/deletion time and pod attach time.
+            multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
+                                            measure their creation/deletion time.
+            num_of_pvcs (int) : Total Number of PVCs / PODs we want to create.
+            pvc_size (int) : Size of each PVC in GB.
+            num_of_obcs (int) : Number of OBCs we want to create of each type. (Total OBCs = num_of_obcs * 5)
+            run_time (int) : Total Run Time in minutes.
+            measure (bool) : True if we want to measure the performance metrics, False otherwise.
+            delay (int) : Delay time (in seconds) between sequential and bulk operations as well as between cycles.
+
+        """
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        cycle_no = 0
+
+        while datetime.now() < end_time:
+            cycle_no += 1
+            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+
+            for bulk in (False, True):
+                current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
+                log.info(f"#################[{current_ops}]#################")
+                multi_pvc_pod_lifecycle_factory(
+                    num_of_pvcs=num_of_pvcs,
+                    pvc_size=pvc_size,
+                    bulk=bulk,
+                    namespace=f"stage-2-cycle-{cycle_no}-{current_ops.lower()}",
+                    measure=measure,
+                )
+                multi_obc_lifecycle_factory(
+                    num_of_obcs=num_of_obcs, bulk=bulk, measure=False
+                )
+
+                # Delay between Sequential and Bulk Operations
+                if not bulk:
+                    log.info(
+                        f"#################[WAITING FOR {delay} SECONDS AFTER {current_ops}.]#################"
+                    )
+                    time.sleep(delay)
+
+            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+
+            log.info(
+                f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
+            )
+            time.sleep(delay)
 
 
 def start_app_workload(
