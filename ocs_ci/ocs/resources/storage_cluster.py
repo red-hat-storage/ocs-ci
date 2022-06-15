@@ -605,6 +605,19 @@ def verify_storage_system():
             "Because of the BZ 2075422, we are skipping storage system validation!"
         )
         return
+    if config.UPGRADE.get("upgrade_ocs_version"):
+        upgrade_ocs_version = version.get_semantic_version(
+            config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
+        )
+        if (
+            live_deployment
+            and ocp_version == version.VERSION_4_10
+            and upgrade_ocs_version == version.VERSION_4_10
+        ):
+            log.warning(
+                "Because of the BZ 2075422, we are skipping storage system validation after upgrade"
+            )
+            return
     if ocs_version >= version.VERSION_4_9 and not managed_service:
         log.info("Verifying storage system status")
         storage_system = OCP(
