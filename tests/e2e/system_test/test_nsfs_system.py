@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import MCGTest, system_test
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     ignore_leftovers,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants, defaults
@@ -33,8 +34,11 @@ logger = logging.getLogger(__name__)
 @system_test
 @skipif_mcg_only
 @ignore_leftovers
+@skipif_ocs_version("<4.10")
 class TestNSFSSystem(MCGTest):
-    """"""
+    """
+    NSFS system test
+    """
 
     @pytest.mark.polarion_id("")
     def test_nsfs(
@@ -46,7 +50,13 @@ class TestNSFSSystem(MCGTest):
         snapshot_factory,
         noobaa_db_backup_and_recovery,
     ):
-        """"""
+        """
+        The objectives of this test case are:
+        1) To verify S3 operations on NSFS buckets
+        2) NSFS based data is accessible/intact when cluster related operations pod failures are performed
+        3) Noobaa DB backup and recovery does not impact data on NSFS
+
+        """
         s3_ops_obj = "obj-key" + str(uuid.uuid4().hex)
         s3_ops_copy_obj = "copy-obj-key" + str(uuid.uuid4().hex)
         s3_ops_obj_data = "object data-" + str(uuid.uuid4().hex)
@@ -227,7 +237,13 @@ class TestNSFSSystem(MCGTest):
 
 
 def scale_ceph(replica=1):
-    """"""
+    """
+    Scales down/up mon, osd and mds pods
+
+    Args:
+        replica(int): Replica count
+
+    """
     dep_ocp = OCP(
         kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
