@@ -6,11 +6,14 @@ OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
 
 login = {
+    "pre_login_page_title": "Log In",
+    "login_page_title": "Log in · Red Hat OpenShift Container Platform",
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
+    "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
 }
 
 deployment = {
