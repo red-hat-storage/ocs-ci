@@ -27,6 +27,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import CephCluster
 
 log = logging.getLogger(__name__)
 
@@ -53,24 +54,34 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    def create_obc_creation(self, bucket_factory, mcg_obj, key):
+    def create_obc_creation(self, bucket_factory, interface, obj, key):
 
         # Create a bucket then read & write
-        bucket_name = bucket_factory(amount=1, interface="OC", timeout=120)[0].name
+        bucket_name = bucket_factory(amount=1, interface=interface, timeout=120)[0].name
         obj_data = "A random string data"
         assert s3_put_object(
-            mcg_obj, bucket_name, key, obj_data
+            obj, bucket_name, key, obj_data
         ), f"Failed: Put object, {key}"
-        assert s3_get_object(mcg_obj, bucket_name, key), f"Failed: Get object, {key}"
+        assert s3_get_object(obj, bucket_name, key), f"Failed: Get object, {key}"
 
     def test_rgw_host_node_failure(
-        self, nodes, node_restart_teardown, node_drain_teardown, mcg_obj, bucket_factory
+        self,
+        nodes,
+        node_restart_teardown,
+        node_drain_teardown,
+        mcg_obj,
+        bucket_factory,
+        rgw_obj,
+        rgw_bucket_factory,
     ):
         """
         Test case to fail node where RGW and the NooBaa DB are hosted
         and verify the new pods spin on a healthy node
 
         """
+
+        # Create a CephCluster obj, for noobaa health check
+        ceph_cluster_obj = CephCluster()
 
         # Get nooba pods
         noobaa_pod_obj = get_noobaa_pods()
@@ -115,6 +126,9 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
             # Check the ceph health OK
             ceph_health_check(tries=90, delay=15)
+
+            # Check nooba health OK
+            ceph_cluster_obj.wait_for_noobaa_health_ok()
 
             # Verify all storage pods are running
             wait_for_storage_pods()
@@ -169,11 +183,19 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
                 # Check the ceph health OK
                 ceph_health_check(tries=90, delay=15)
 
+                # Check nooba health OK
+                ceph_cluster_obj.wait_for_noobaa_health_ok()
+
                 # Verify all storage pods are running
                 wait_for_storage_pods()
 
-                # Create OBC and read wnd write
-                self.create_obc_creation(bucket_factory, mcg_obj, "Object-key-2")
+                # Create OBC and read and write
+                self.create_obc_creation(bucket_factory, mcg_obj, "OC", "Object-key-2")
+
+                # Create RGW OBC and read and write
+                self.create_obc_creation(
+                    rgw_bucket_factory, rgw_obj, "RGW-OC", "Object-key-3"
+                )
 
         # Verify cluster health
         self.sanity_helpers.health_check()
