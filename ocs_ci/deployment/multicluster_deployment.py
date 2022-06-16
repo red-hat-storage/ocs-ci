@@ -51,6 +51,14 @@ class OCPDeployWithACM(Deployment):
             return
         if self.multicluster_mode == constants.RDR_MODE:
             self.do_rdr_acm_ocp_deploy()
+            self.post_deploy_ops()
+
+    def post_deploy_ops(self):
+        """
+        1. Install ingress certificates on OCP clusters deployed through ACM
+        2. Run post_ocp_deploy on OCP clusters
+
+        """
         prev = config.cur_index
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
