@@ -158,6 +158,47 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
+def list_objects_from_bucket(
+    pod_obj, target, prefix=None, s3_obj=None, signed_request_creds=None, **kwargs
+):
+    """
+    Lists objects in a bucket using s3 ls command
+
+    Args:
+        podobj: Pod object that is used to perform copy operation
+        src_obj: full path to object
+        target: target bucket
+        prefix: prefix
+        s3_obj: obc/mcg object
+
+    Returns:
+        List of objects in a bucket
+    """
+
+    if prefix:
+        retrieve_cmd = f"ls {target}/{prefix}"
+    else:
+        retrieve_cmd = f"ls {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    return pod_obj.exec_cmd_on_pod(
+        command=craft_s3_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    )
+
+
 def copy_objects(
     podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
 ):
@@ -391,7 +432,10 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "awsS3": {
             "targetBucket": uls_name,
             "region": region,
-            "secret": {"name": cld_mgr.aws_client.secret.name},
+            "secret": {
+                "name": cld_mgr.aws_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -413,7 +457,8 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         f"backingstore create aws-s3 {backingstore_name} "
         f"--access-key {cld_mgr.aws_client.access_key} "
         f"--secret-key {cld_mgr.aws_client.secret_key} "
-        f"--target-bucket {uls_name} --region {region}"
+        f"--target-bucket {uls_name} --region {region}",
+        use_yes=True,
     )
 
 
@@ -434,7 +479,10 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
             "targetBucket": uls_name,
-            "secret": {"name": cld_mgr.gcp_client.secret.name},
+            "secret": {
+                "name": cld_mgr.gcp_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -457,7 +505,8 @@ def cli_create_google_backingstore(
     mcg_obj.exec_mcg_cmd(
         f"backingstore create google-cloud-storage {backingstore_name} "
         f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
@@ -478,7 +527,10 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
             "targetBlobContainer": uls_name,
-            "secret": {"name": cld_mgr.azure_client.secret.name},
+            "secret": {
+                "name": cld_mgr.azure_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -501,7 +553,8 @@ def cli_create_azure_backingstore(
         f"backingstore create azure-blob {backingstore_name} "
         f"--account-key {cld_mgr.azure_client.credential} "
         f"--account-name {cld_mgr.azure_client.account_name} "
-        f"--target-blob-container {uls_name}"
+        f"--target-blob-container {uls_name}",
+        use_yes=True,
     )
 
 
@@ -527,7 +580,10 @@ def oc_create_ibmcos_backingstore(cld_mgr, backingstore_name, uls_name, region):
             "endpoint": constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
                 cld_mgr.ibmcos_client.region.lower()
             ),
-            "secret": {"name": cld_mgr.ibmcos_client.secret.name},
+            "secret": {
+                "name": cld_mgr.ibmcos_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -555,7 +611,8 @@ def cli_create_ibmcos_backingstore(
                 cld_mgr.ibmcos_client.region.lower()
             )
         } """
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
@@ -583,7 +640,8 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"]["pvPool"]["resources"]["requests"]["storage"] = str(size) + "Gi"
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
-    bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    if storage_class:
+        bs_data["spec"]["pvPool"]["storageClass"] = storage_class
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -601,10 +659,13 @@ def cli_create_pv_backingstore(
         storage_class (str): which storage class to use
 
     """
-    mcg_obj.exec_mcg_cmd(
+    cmd = (
         f"backingstore create pv-pool {backingstore_name} --num-volumes "
-        f"{vol_num} --pv-size-gb {size} --storage-class {storage_class}"
+        f"{vol_num} --pv-size-gb {size}"
     )
+    if storage_class:
+        cmd += f" --storage-class {storage_class}"
+    mcg_obj.exec_mcg_cmd(cmd)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
 
@@ -620,7 +681,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=240,
+        timeout=300,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,

@@ -90,6 +90,14 @@ def init_ocsci_conf(arguments=None):
         process_ocsci_conf(arguments)
         check_config_requirements()
 
+    if (
+        framework.config.DEPLOYMENT.get("proxy")
+        or framework.config.DEPLOYMENT.get("disconnected")
+        or framework.config.ENV_DATA.get("private_link")
+    ) and framework.config.ENV_DATA.get("client_http_proxy"):
+        os.environ["http_proxy"] = framework.config.ENV_DATA["client_http_proxy"]
+        os.environ["https_proxy"] = framework.config.ENV_DATA["client_http_proxy"]
+
 
 def process_ocsci_conf(arguments):
     parser = argparse.ArgumentParser(add_help=False)

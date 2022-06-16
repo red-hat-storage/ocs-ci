@@ -507,6 +507,10 @@ CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
 )
 
+OC_MIRROR_IMAGESET_CONFIG = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
 
@@ -1292,6 +1296,20 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-operator",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
+    "4.11": [
+        "cluster-logging",
+        "elasticsearch-operator",
+        "mcg-operator",
+        "ocs-operator",
+        "odf-csi-addons-operator",
+        "odf-lvm-operator",
+        "odf-multicluster-orchestrator",
+        "odf-operator",
+    ]
+}
+
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -1333,6 +1351,8 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
+    80: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    240: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
@@ -1341,6 +1361,8 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 SCALE_PVC_ROUND_UP_VALUE = {
+    80: 80,
+    240: 240,
     1500: 1520,
     3000: 3040,
     4500: 4560,

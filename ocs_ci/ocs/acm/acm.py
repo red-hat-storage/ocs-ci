@@ -286,7 +286,7 @@ def login_to_acm():
 
     """
     url = get_acm_url()
-    log.info(f"URL: {url}, {type(url)}")
+    log.info(f"URL: {url}")
     driver = login_ui(url)
     validate_page_title(driver, title=ACM_PAGE_TITLE)
 
