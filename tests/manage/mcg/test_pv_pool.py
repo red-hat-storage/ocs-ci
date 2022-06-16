@@ -118,10 +118,10 @@ class TestPvPool:
             func=check_pv_backingstore_status,
             backingstore_name=pv_backingstore.name,
             namespace=config.ENV_DATA["cluster_namespace"],
-            desired_status="`SCALING`"
+            desired_status="`SCALING`",
         )
-        assert (
-            sample.wait_for_func_status(result=True)
+        assert sample.wait_for_func_status(
+            result=True
         ), f"Backing Store {pv_backingstore.name} never reached SCALING state"
 
         logger.info("Waiting for backingstore to return to OPTIMAL state")
