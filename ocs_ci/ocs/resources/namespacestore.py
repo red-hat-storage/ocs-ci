@@ -244,7 +244,7 @@ def cli_create_namespacestore(
         ),
     }
     nss_creation_cmd += NSS_MAPPING[platform.lower()]()
-    mcg_obj.exec_mcg_cmd(nss_creation_cmd)
+    mcg_obj.exec_mcg_cmd(nss_creation_cmd, use_yes=True)
 
 
 def oc_create_namespacestore(
@@ -281,14 +281,20 @@ def oc_create_namespacestore(
             "type": "aws-s3",
             "awsS3": {
                 "targetBucket": uls_name,
-                "secret": {"name": get_attr_chain(cld_mgr, "aws_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "aws_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.AZURE_PLATFORM: lambda: {
             "type": "azure-blob",
             "azureBlob": {
                 "targetBlobContainer": uls_name,
-                "secret": {"name": get_attr_chain(cld_mgr, "azure_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "azure_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.RGW_PLATFORM: lambda: {
@@ -297,7 +303,10 @@ def oc_create_namespacestore(
                 "targetBucket": uls_name,
                 "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
                 "signatureVersion": "v2",
-                "secret": {"name": get_attr_chain(cld_mgr, "rgw_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "rgw_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.NAMESPACE_FILESYSTEM: lambda: {

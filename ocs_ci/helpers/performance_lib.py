@@ -150,14 +150,13 @@ def string_to_time(time_string):
     return datetime.strptime(time_string, "%H:%M:%S.%f")
 
 
-def get_logfile_names(interface):
+def get_logfile_names(interface, provisioning=True):
     """
     Finds names for log files pods in which logs for pvc creation are located
-    For CephFS: 2 pods that start with "csi-cephfsplugin-provisioner" prefix
-    For RBD: 2 pods that start with "csi-rbdplugin-provisioner" prefix
 
     Args:
         interface (str) : an interface (RBD or CephFS) to run on
+        provisioning (bool): if True, look for the provisioner log pods
 
     Returns:
         log names (list) : names of the log files relevant for searching in
@@ -168,13 +167,18 @@ def get_logfile_names(interface):
     pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
 
     if "Error in command" in pods:
-        raise Exception("Can not get csi controller pod")
+        raise Exception("Cannot get csi controller pod")
 
     provisioning_name = interface_data[interface]["prov"]
+    csi_name = interface_data[interface]["csi_cnt"]
 
     for line in pods:
-        if provisioning_name in line:
-            log_names.append(line.split()[0])
+        if provisioning:
+            if provisioning_name in line:
+                log_names.append(line.split()[0])
+        else:
+            if csi_name in line and provisioning_name not in line:
+                log_names.append(line.split()[0])
 
     logger.info(f"The logs pods are : {log_names}")
     return log_names
@@ -237,14 +241,14 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
                 st = string_to_time(line.split(" ")[1])
             elif "provision" in line and pvc_name in line and "succeeded" in line:
                 et = string_to_time(line.split(" ")[1])
-
+    del logs
     if st is None:
-        logger.error(f"Can not find start time of {pvc_name}")
-        raise Exception(f"Can not find start time of {pvc_name}")
+        logger.error(f"Cannot find start time of {pvc_name}")
+        raise Exception(f"Cannot find start time of {pvc_name}")
 
     if et is None:
-        logger.error(f"Can not find end time of {pvc_name}")
-        raise Exception(f"Can not find end time of {pvc_name}")
+        logger.error(f"Cannot find end time of {pvc_name}")
+        raise Exception(f"Cannot find end time of {pvc_name}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
@@ -291,14 +295,14 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
                 st = string_to_time(line.split(" ")[1])
             if f"Req-ID: {pv_name} GRPC response:" in line:
                 et = string_to_time(line.split(" ")[1])
-
+    del logs
     if st is None:
-        err_msg = f"Can not find CSI start time of {pvc_obj.name}"
+        err_msg = f"Cannot find CSI start time of {pvc_obj.name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
     if et is None:
-        err_msg = f"Can not find CSI end time of {pvc_obj.name}"
+        err_msg = f"Cannot find CSI end time of {pvc_obj.name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
@@ -358,12 +362,12 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
                     single_et = string_to_time(line.split(" ")[1])
 
         if single_st is None:
-            err_msg = f"Can not find CSI start time of {pvc.name}"
+            err_msg = f"Cannot find CSI start time of {pvc.name}"
             logger.error(err_msg)
             raise Exception(err_msg)
 
         if single_et is None:
-            err_msg = f"Can not find CSI end time of {pvc.name}"
+            err_msg = f"Cannot find CSI end time of {pvc.name}"
             logger.error(err_msg)
             raise Exception(err_msg)
 
@@ -423,11 +427,11 @@ def measure_total_snapshot_creation_time(snap_name, start_time):
         return total.total_seconds()
 
     if start is None:
-        err_msg = f"Can not find start creation time of snapshot {snap_name}"
+        err_msg = f"Cannot find start creation time of snapshot {snap_name}"
         logger.error(err_msg)
         raise Exception(err_msg)
     if end is None:
-        err_msg = f"Can not find end creation time of snapshot {snap_name}"
+        err_msg = f"Cannot find end creation time of snapshot {snap_name}"
         logger.error(err_msg)
         raise Exception(err_msg)
 
@@ -482,7 +486,7 @@ def get_snapshot_time(snap_name, status, start_time):
     pods = run_oc_command(cmd="get pod", namespace="openshift-cluster-storage-operator")
 
     if "Error in command" in pods:
-        raise Exception("Can not get csi controller pod")
+        raise Exception("Cannot get csi controller pod")
 
     log_names = []
     for line in pods:
@@ -548,12 +552,12 @@ def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
                 et = line.split(" ")[1]
                 et = datetime.strptime(et, time_format)
     if st is None:
-        logger.error(f"Can not find start time of snapshot {snapshot_id}")
-        raise Exception(f"Can not find start time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find start time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find start time of snapshot {snapshot_id}")
 
     if et is None:
-        logger.error(f"Can not find end time of snapshot {snapshot_id}")
-        raise Exception(f"Can not find end time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find end time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find end time of snapshot {snapshot_id}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
@@ -748,3 +752,97 @@ def wait_for_resource_bulk_status(
     err_msg = f"{resource.upper()} failed reaching {status} on time"
     logger.error(err_msg)
     raise Exception(err_msg)
+
+
+def pod_attach_csi_time(
+    interface, pv_name, start_time, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
+    """
+    Get the pod start/attach csi time of a pod based on csi-rbdplugin container in csi-rbdplugin pods
+
+    Args:
+        interface (str): The interface backed the PVC
+        pv_name (str): Name of the PV
+        start_time (time): the start time of the test to reduce log size reading
+        namespace (str): the tests namespace
+
+    Return:
+        float : Pod attachment csi time in seconds
+
+    Raise:
+        Exception : in case that the expected time logs are not found
+
+    """
+    volume_handle = None
+    for line in run_oc_command(f"describe pv {pv_name}", namespace=namespace):
+        if "VolumeHandle:" in line:
+            volume_handle = line.split()[1]
+            break
+    if volume_handle is None:
+        logger.error("Cannot get volume handle")
+        raise Exception("Cannot get volume handle")
+
+    log_names = get_logfile_names(interface, provisioning=False)
+    logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
+
+    node_stage_st = None
+    node_publish_st = None
+
+    for sublog in logs:
+        for line in sublog:
+            if "GRPC call: /csi.v1.Node/NodeStageVolume" in line:
+                node_stage_st = string_to_time(line.split()[1])
+                node_stage_id = line.split()[5]
+            if "GRPC call: /csi.v1.Node/NodePublishVolume" in line:
+                node_publish_st = string_to_time(line.split()[1])
+                node_publish_id = line.split()[5]
+
+    if node_stage_st is None:
+        logger.error("Cannot find node stage GRPC call")
+        raise Exception("Cannot find node stage GRPC call")
+
+    if node_publish_st is None:
+        logger.error("Cannot find node publish GRPC call")
+        raise Exception("Cannot find node publish GRPC call")
+
+    logger.info(f"Node stage GRPC call start time is: {node_stage_st}")
+    logger.info(f"Node publish GRPC call start time is: {node_publish_st}")
+
+    node_stage_et = None
+    node_publish_et = None
+    for sublog in logs:
+        for line in sublog:
+            if "GRPC response:" in line and f"ID: {node_stage_id}" in line:
+                node_stage_et = string_to_time(line.split(" ")[1])
+            if "GRPC response:" in line and f"ID: {node_publish_id}" in line:
+                node_publish_et = string_to_time(line.split(" ")[1])
+
+    if node_stage_et is None:
+        logger.error("Cannot find node stage GRPC response")
+        raise Exception("Cannot find node stage GRPC response")
+
+    if node_publish_et is None:
+        logger.error("Cannot find node publish GRPC response")
+        raise Exception("Cannot find node publish GRPC response")
+
+    logger.info(f"Node stage GRPC response time is: {node_stage_et}")
+    logger.info(f"Node publish GRPC response time is: {node_publish_et}")
+
+    node_stage_time = (node_stage_et - node_stage_st).total_seconds()
+    if node_stage_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        node_stage_time += 24 * 60 * 60
+
+    logger.info(f"Node stage time is {node_stage_time} seconds")
+
+    node_publish_time = (node_publish_et - node_publish_st).total_seconds()
+    if node_publish_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        node_publish_time += 24 * 60 * 60
+
+    logger.info(f"Node publish time is {node_publish_time} seconds")
+
+    total_time = node_stage_time + node_publish_time
+    logger.info(f"Total csi pod attach time is {total_time} seconds")
+
+    return total_time

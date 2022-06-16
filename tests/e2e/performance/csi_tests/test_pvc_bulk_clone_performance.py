@@ -1,5 +1,5 @@
 """
-Test to measure pvc scale creation time. Total pvc count would be 50, 1 clone per PVC
+Test to measure pvc scale creation total and csi times. Total pvc count would be 50, 1 clone per PVC
 Total number of clones in bulk will be 50
 The results are uploaded to the ES server
 """
@@ -95,7 +95,7 @@ class TestBulkCloneCreation(PASTest):
         Creates number of PVCs in a bulk using kube job
         Write 60% of PVC capacity to each one of the created PVCs
         Creates 1 clone per each PVC altogether in a bulk
-        Measuring time for bulk of clones creation
+        Measuring total and csi creation times for bulk of clones
 
         """
         pvc_count = 50
@@ -169,6 +169,8 @@ class TestBulkCloneCreation(PASTest):
 
             log.info("Created clone dict list")
 
+            csi_bulk_start_time = self.get_time(time_format="csi")
+
             job_clone_file = ObjectConfFile(
                 name="job_profile_clone",
                 obj_dict_list=clone_dict_list,
@@ -211,8 +213,14 @@ class TestBulkCloneCreation(PASTest):
             )
             total_time = (end_time - start_time).total_seconds()
             speed = round(total_files_size / total_time, 2)
+
+            csi_creation_time = performance_lib.csi_bulk_pvc_time_measure(
+                self.interface, clone_objs, "create", csi_bulk_start_time
+            )
+
             log.info(
-                f"Total creation time = {total_time} secs, data size = {total_files_size} MB, speed = {speed} MB/sec "
+                f"Total creation time = {total_time} secs, csi creation time = {csi_creation_time},"
+                f" data size = {total_files_size} MB, speed = {speed} MB/sec "
                 f"for {self.interface} clone in bulk of {pvc_count} clones."
             )
 
@@ -234,6 +242,7 @@ class TestBulkCloneCreation(PASTest):
             full_results.add_key("bulk_size", pvc_count)
             full_results.add_key("clone_size", vol_size)
             full_results.add_key("bulk_creation_time", total_time)
+            full_results.add_key("bulk_csi_creation_time", csi_creation_time)
             full_results.add_key("data_size(MB)", total_files_size)
             full_results.add_key("speed", speed)
             full_results.add_key("es_results_link", full_results.results_link())

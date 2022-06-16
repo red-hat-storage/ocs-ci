@@ -3669,3 +3669,79 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)
