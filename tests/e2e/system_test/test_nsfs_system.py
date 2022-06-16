@@ -1,5 +1,6 @@
 import logging
 import uuid
+from time import sleep
 
 import pytest
 
@@ -26,7 +27,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
-from ocs_ci.ocs.resources.pod import get_mds_pods
+from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
 
 logger = logging.getLogger(__name__)
 
@@ -210,8 +211,12 @@ class TestNSFSSystem(MCGTest):
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
             )
-        logger.info("Scaling the ceph cluster back to normal")
+        logger.info(
+            "Scaling the ceph cluster back to normal and validating all storage pods"
+        )
         scale_ceph(replica=1)
+        sleep(30)
+        wait_for_storage_pods()
 
         logger.info("Performing noobaa db backup/recovery")
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
