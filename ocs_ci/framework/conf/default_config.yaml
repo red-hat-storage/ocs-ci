@@ -28,6 +28,7 @@ RUN:
   chrome_binary_path: "/usr/bin/chromium-browser"
   io_in_bg: False
   io_load: 30
+  io_verification_method: "crc32c"
   log_utilization: False
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
