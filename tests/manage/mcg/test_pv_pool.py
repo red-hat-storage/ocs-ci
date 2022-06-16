@@ -149,7 +149,7 @@ class TestPvPool:
     @pytest.mark.polarion_id("OCS-3932")
     @tier2
     @bugzilla("2064599")
-    def test_modify_resource(
+    def test_pvpool_cpu_and_memory_modifications(
         self,
         awscli_pod_session,
         backingstore_factory,
@@ -214,10 +214,10 @@ class TestPvPool:
         wait_for_pods_to_be_running(
             namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pv_pod_name]
         )
-        out = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="pod").get(
-            resource_name=pv_pod_name
-        )
-        resource_dict = out["spec"]["containers"][0]["resources"]
+        get_output = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
+        ).get(resource_name=pv_pod_name)
+        resource_dict = get_output["spec"]["containers"][0]["resources"]
         assert (
             resource_dict["limits"]["cpu"] == new_cpu
             and resource_dict["limits"]["memory"] == new_mem
