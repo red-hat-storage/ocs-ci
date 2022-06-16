@@ -228,7 +228,7 @@ class VMWareNodes(NodesBase):
         vms_in_pool = self.vsphere.get_all_vms_in_pool(
             self.cluster_name, self.datacenter, self.cluster
         )
-        node_names = [node.get().get("metadata").get("name") for node in nodes]
+        node_names = [node.name for node in nodes]
         vms = []
         for node in node_names:
             node_vms = [vm for vm in vms_in_pool if vm.name in node]
@@ -2668,7 +2668,7 @@ class VMWareIPINodes(VMWareNodes):
 
         """
         vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
-        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        node_names = set([node.name for node in nodes])
         vms = []
         for vm in vms_in_dc:
             try:
