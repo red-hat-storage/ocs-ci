@@ -800,6 +800,74 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     return True
 
 
+def verify_data_integrity_for_multi_pvc_objs(pod_objs, pvc_objs, file_name):
+    """
+    Verifies existence and md5sum of file created during IO, for all the pods.
+
+    Args:
+        pod_objs (list) : List of POD objects for which existence and md5sum of file created during IO needs to be
+                            verified.
+        pvc_objs (list) : List of original PVC objects.
+        file_name (str) : The name of the file for which md5sum is to be calculated.
+
+    Raises:
+        AssertionError : Raises an exception if current md5sum does not match the original md5sum.
+
+    """
+    for pod_no in range(len(pod_objs)):
+        pod_obj = pod_objs[pod_no]
+        is_block = (
+            True
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else False
+        )
+        file_name_pod = (
+            file_name
+            if not is_block
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+        logger.info(f"Verifying md5sum of {file_name_pod} " f"on pod {pod_obj.name}")
+        verify_data_integrity(pod_obj, file_name_pod, pvc_objs[pod_no].md5sum)
+        logger.info(
+            f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
+            f"matches with the original md5sum"
+        )
+
+
+def verify_data_integrity_after_expansion_for_block_pvc(pod_obj, pvc_obj, fio_size):
+    """
+    Verifies data integrity the block PVC obj, by comparing the md5sum of data written using FIO before
+    expansion and after expansion.
+
+    Args:
+        pod_obj (Pod) : POD object for which md5sum of data written during FIO needs to be verified.
+        pvc_obj (PVC) : Original PVC object before expansion.
+        fio_size (int) : Size in MB of FIO.
+
+    Raises:
+        AssertionError : Raises an exception if current md5sum does not match the original md5sum.
+
+    """
+    logger.info(f"Verifying md5sum on pod {pod_obj.name}")
+    # Read IO from given block PVCs using dd and calculate md5sum.
+    # This dd command reads the data from the device, writes it to stdout, and reads md5sum from stdin.
+    current_md5sum = pod_obj.exec_sh_cmd_on_pod(
+        command=(
+            f"dd iflag=direct if={pod_obj.get_storage_path(storage_type='block')} bs=10M "
+            f"count={fio_size // 10} | md5sum"
+        )
+    )
+    logger.info(f"Original md5sum of file: {pvc_obj.md5sum}")
+    logger.info(f"Current md5sum of file: {current_md5sum}")
+    assert current_md5sum == pvc_obj.md5sum, "Data corruption found"
+    logger.info("md5sum matches")
+
+    logger.info(
+        f"Verified: md5sum of {pod_obj.get_storage_path(storage_type='block')} on pod {pod_obj.name} "
+        f"matches with the original md5sum"
+    )
+
+
 def get_fio_rw_iops(pod_obj):
     """
     Execute FIO on a pod

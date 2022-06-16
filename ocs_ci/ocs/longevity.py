@@ -517,104 +517,6 @@ class Longevity(object):
 
         return obc_bound_list
 
-    def verify_io(self, pod_objs, pvc_objs, file_name):
-        """
-        Verifies existence and md5sum of file created during IO, for all the pods.
-
-        Args:
-            pod_objs (list) : List of POD objects for which existence and md5sum of file created during IO needs to be
-                                verified.
-            pvc_objs (list) : List of original PVC objects.
-            file_name (str) : The name of the file for which md5sum is to be calculated.
-
-        """
-        for pod_no in range(len(pod_objs)):
-            pod_obj = pod_objs[pod_no]
-            is_block = (
-                True
-                if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
-                else False
-            )
-            file_name_pod = (
-                file_name
-                if not is_block
-                else pod_obj.get_storage_path(storage_type="block")
-            )
-            if pod_obj.pvc.get_pvc_vol_mode != constants.VOLUME_MODE_BLOCK:
-                log.info(
-                    f"Verifying md5sum of {file_name_pod} " f"on pod {pod_obj.name}"
-                )
-                pod.verify_data_integrity(
-                    pod_obj, file_name_pod, pvc_objs[pod_no].md5sum
-                )
-            else:
-                io_size = int(0.25 * pvc_objs[pod_no].size * 1000)
-                log.info(f"Verifying md5sum on pod {pod_obj.name}")
-                current_md5sum = pod_obj.exec_sh_cmd_on_pod(
-                    command=(
-                        f"dd iflag=direct if={file_name_pod} bs=10M "
-                        f"count={io_size // 10} | md5sum"
-                    )
-                )
-
-                log.info(f"Original md5sum of file: {pvc_objs[pod_no].md5sum}")
-                log.info(f"Current md5sum of file: {current_md5sum}")
-                assert (
-                    current_md5sum == pvc_objs[pod_no].md5sum
-                ), "Data corruption found"
-                log.info("md5sum matches")
-
-            log.info(
-                f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
-                f"matches with the original md5sum"
-            )
-
-    def create_verify_clones(
-        self, multi_pvc_clone_factory, pod_factory, pvc_objs, file_name
-    ):
-        """
-        Creates clones from each PVC in the provided list of PVCs
-        and
-        Verifies data integrity by checking the existence and md5sum of file in the cloned PVC.
-
-        Args:
-            multi_pvc_clone_factory : Fixture to create a clone from each PVC in the provided list of PVCs.
-            pod_factory : Fixture to create new PODs.
-            pvc_objs (list) : List of PVC objects for which clones are to be created.
-            file_name (str) : Name of the file on which FIO is performed.
-
-        Returns:
-            tuple: A tuple of size 2 containing a list of cloned PVC objects and a list of the pods attached to the
-                    cloned PVCs, respectively.
-
-        """
-        # Create Clones
-        log.info("Started creation of clones of the PVCs.")
-        cloned_pvcs = multi_pvc_clone_factory(pvc_obj=pvc_objs, wait_each=True)
-        log.info("Successfully created clones of the PVCs.")
-
-        # Attach PODs to cloned PVCs
-        cloned_pod_objs = list()
-        for cloned_pvc_obj in cloned_pvcs:
-            if cloned_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                cloned_pod_objs.append(
-                    pod_factory(
-                        pvc=cloned_pvc_obj,
-                        raw_block_pv=True,
-                        status=constants.STATUS_RUNNING,
-                        pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
-                    )
-                )
-            else:
-                cloned_pod_objs.append(
-                    pod_factory(pvc=cloned_pvc_obj, status=constants.STATUS_RUNNING)
-                )
-
-        # Verify that the fio exists and md5sum matches
-        self.verify_io(cloned_pod_objs, pvc_objs, file_name)
-
-        return cloned_pvcs, cloned_pod_objs
-
     def create_restore_verify_snapshots(
         self,
         multi_snapshot_factory,
@@ -661,6 +563,7 @@ class Longevity(object):
                     snapshot_obj=snapshots[snapshot_no],
                     volume_mode=pvc_objs[snapshot_no].get_pvc_vol_mode,
                     access_mode=pvc_objs[snapshot_no].get_pvc_access_mode,
+                    timeout=600,
                 )
             )
         log.info("Restoration complete - Created new PVCs from all the snapshots.")
@@ -683,11 +586,13 @@ class Longevity(object):
                 )
 
         # Verify that the fio exists and md5sum matches
-        self.verify_io(restored_pod_objs, pvc_objs, file_name)
+        pod.verify_data_integrity_for_multi_pvc_objs(
+            restored_pod_objs, pvc_objs, file_name
+        )
 
         return restored_pvc_objs, restored_pod_objs
 
-    def expand_verify_pvcs(self, pvc_objs, pod_objs, pvc_size_new, file_name):
+    def expand_verify_pvcs(self, pvc_objs, pod_objs, pvc_size_new, file_name, fio_size):
         """
         Expands size of each PVC in the provided list of PVCs,
         Verifies data integrity by checking the existence and md5sum of file in the expanded PVC
@@ -699,6 +604,7 @@ class Longevity(object):
             pod_objs (list) : List of POD objects attached to the PVCs.
             pvc_size_new (int) : Size of the expanded PVC in GB.
             file_name (str) : Name of the file on which FIO is performed.
+            fio_size (int) : Size in MB of FIO.
 
         """
         # Expand original PVCs
@@ -709,10 +615,17 @@ class Longevity(object):
         log.info("Successfully expanded the PVCs.")
 
         # Verify that the fio exists and md5sum matches
-        self.verify_io(pod_objs, pvc_objs, file_name)
+        for pod_no in range(len(pod_objs)):
+            pod_obj = pod_objs[pod_no]
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+                pod.verify_data_integrity_after_expansion_for_block_pvc(
+                    pod_obj, pvc_objs[pod_no], fio_size
+                )
+            else:
+                pod.verify_data_integrity(pod_obj, file_name, pvc_objs[pod_no].md5sum)
 
         # Run IO to utilize 50% of volume
-        log.info("Run IO on all pods to utilise 50% of the expanded PVCs")
+        log.info("Run IO on all pods to utilise 50% of the expanded PVC used space")
         expanded_file_name = "fio_50"
         for pod_obj in pod_objs:
             log.info(f"Running IO on pod {pod_obj.name}")
@@ -864,6 +777,8 @@ class Longevity(object):
                 executor = ThreadPoolExecutor(max_workers=1)
                 operation_pvc_dict = dict()
                 operation_pod_dict = dict()
+                fio_size = int(0.25 * pvc_size * 1000)
+                file_name = "fio_25"
 
                 for operation in ("clone", "snapshot", "expand"):
                     pvc_objs = list()
@@ -935,12 +850,10 @@ class Longevity(object):
                     )
 
                     # Run IO to utilize 25% of volume
-                    log.info("Run IO on all pods to utilise 25% of PVCs")
-                    file_name = "fio_25"
+                    log.info("Run IO on all pods to utilise 25% of PVC used space")
                     for pod_obj in pod_objs:
                         log.info(f"Running IO on pod {pod_obj.name}")
                         log.info(f"File created during IO {file_name}")
-                        fio_size = int(0.25 * pvc_size * 1000)
                         storage_type = (
                             "block"
                             if pod_obj.pvc.get_pvc_vol_mode
@@ -965,7 +878,7 @@ class Longevity(object):
                         )
 
                     log.info(
-                        "Waiting for IO to complete on all pods to utilise 25% of PVCs"
+                        "Waiting for IO to complete on all pods to utilise 25% of PVC used space"
                     )
 
                     for pod_obj in pod_objs:
@@ -995,8 +908,10 @@ class Longevity(object):
                         ), f"File {file_name_pod} does not exist"
                         log.info(f"File {file_name_pod} exists in {pod_obj.name}")
 
-                        if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                            # Run IO on block PVCs using dd and calculate md5su
+                        if operation == "expand" and is_block:
+                            # Read IO from block PVCs using dd and calculate md5sum.
+                            # This dd command reads the data from the device, writes it to
+                            # stdout, and reads md5sum from stdin.
                             pod_obj.pvc.md5sum = pod_obj.exec_sh_cmd_on_pod(
                                 command=(
                                     f"dd iflag=direct if={file_path} bs=10M "
@@ -1015,11 +930,12 @@ class Longevity(object):
                     )
 
                 if not concurrent:
-                    cloned_pvcs, cloned_pod_objs = self.create_verify_clones(
-                        multi_pvc_clone_factory,
-                        pod_factory,
-                        operation_pvc_dict["clone"],
-                        file_name,
+                    cloned_pvcs, cloned_pod_objs = multi_pvc_clone_factory(
+                        pvc_obj=operation_pvc_dict["clone"],
+                        wait_each=True,
+                        attach_pods=True,
+                        verify_data_integrity=True,
+                        file_name=file_name,
                     )
 
                     (
@@ -1039,16 +955,18 @@ class Longevity(object):
                         operation_pod_dict["expand"],
                         pvc_size_new,
                         file_name,
+                        fio_size,
                     )
 
                 else:
                     stage4_executor1 = ThreadPoolExecutor(max_workers=1)
                     stage4_thread1 = stage4_executor1.submit(
-                        self.create_verify_clones,
                         multi_pvc_clone_factory,
-                        pod_factory,
-                        operation_pvc_dict["clone"],
-                        file_name,
+                        pvc_obj=operation_pvc_dict["clone"],
+                        wait_each=True,
+                        attach_pods=True,
+                        verify_data_integrity=True,
+                        file_name=file_name,
                     )
 
                     stage4_executor2 = ThreadPoolExecutor(max_workers=1)
@@ -1069,6 +987,7 @@ class Longevity(object):
                         operation_pod_dict["expand"],
                         pvc_size_new,
                         file_name,
+                        fio_size,
                     )
 
                     cloned_pvcs, cloned_pod_objs = stage4_thread1.result()
