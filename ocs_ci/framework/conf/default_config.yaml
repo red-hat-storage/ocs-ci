@@ -213,6 +213,7 @@ ENV_DATA:
   size: '20'
   ms_env_type: 'staging'
   rosa_cli_version: '1.2.2'
+  appliance_mode: true
 
 # This section is related to upgrade
 UPGRADE:
