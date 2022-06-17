@@ -3731,6 +3731,47 @@ def create_reclaim_space_job(
     return ocs_obj
 
 
+def create_reclaim_space_cronjob(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+    schedule="weekly",
+):
+    """
+    Create ReclaimSpaceCronJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceCRonJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+        schedule (str): Type of schedule
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
+    """
+    reclaim_space_cronjob_name = reclaim_space_job_name or create_unique_resource_name(
+        pvc_name, f"{constants.RECLAIMSPACECRONJOB}-{schedule}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_cronjob_name
+    job_data["spec"]["jobTemplate"]["spec"]["target"][
+        "persistentVolumeClaim"
+    ] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["jobTemplate"]["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["jobTemplate"]["spec"][
+            "retryDeadlineSeconds"
+        ] = retry_deadline_seconds
+    if schedule:
+        job_data["spec"]["schedule"] = "@" + schedule
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
