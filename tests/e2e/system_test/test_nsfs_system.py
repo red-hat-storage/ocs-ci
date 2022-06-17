@@ -161,7 +161,7 @@ class TestNSFSSystem(MCGTest):
         for pod_del in pods_to_respin:
             logger.info(f"Deleting pod {pod_del.name}")
             pod_del.delete()
-
+        sleep(30)
         pods_to_validate = [
             pod.Pod(
                 **pod.get_pods_having_label(
