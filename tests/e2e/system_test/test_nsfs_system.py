@@ -58,10 +58,10 @@ class TestNSFSSystem(MCGTest):
         3) Noobaa DB backup and recovery does not impact data on NSFS
 
         """
-        s3_ops_obj = "obj-key" + str(uuid.uuid4().hex)
-        s3_ops_copy_obj = "copy-obj-key" + str(uuid.uuid4().hex)
+        s3_ops_obj = "obj-key"
+        s3_ops_copy_obj = "copy-obj-key"
         s3_ops_obj_data = "object data-" + str(uuid.uuid4().hex)
-        nsfs_obj_pattern = "nsfs-obj-" + str(uuid.uuid4().hex)
+        nsfs_obj_pattern = "nsfs-obj"
 
         nsfs_objs = [
             NSFS(
@@ -215,7 +215,7 @@ class TestNSFSSystem(MCGTest):
             "Scaling the ceph cluster back to normal and validating all storage pods"
         )
         scale_ceph(replica=1)
-        sleep(30)
+        sleep(15)
         wait_for_storage_pods()
 
         logger.info("Performing noobaa db backup/recovery")
