@@ -44,6 +44,7 @@ supported_app_workloads = ["pgsql", "couchbase", "cosbench"]
 supported_ocp_workloads = ["logging", "monitoring", "registry"]
 
 STAGE_2_PREFIX = "stage-2-cycle-"
+STAGE_3_PREFIX = "stage-3-cycle-"
 STAGE_4_PREFIX = "stage-4-cycle-"
 
 
@@ -266,7 +267,6 @@ class Longevity(object):
             If None, random size pvc will be created
 
         Returns:
-            pvc_bound_list (list): List of all PVCs in Bound state
             pvc_job_file_list (list): List of all PVC.yaml dicts
 
         Raises:
@@ -289,13 +289,36 @@ class Longevity(object):
             kube_job_obj_list=pvc_job_file_list, namespace=namespace
         )
         # Validate PVCs in kube job reached BOUND state
-        pvc_bound_list = self.validate_pvc_in_kube_job_reached_bound_state(
+        self.validate_pvc_in_kube_job_reached_bound_state(
             kube_job_obj_list=pvc_job_file_list,
             namespace=namespace,
             pvc_count=num_of_pvc,
         )
 
-        return pvc_bound_list, pvc_job_file_list
+        return pvc_job_file_list
+
+    def get_pvc_bound_list(self, pvc_job_file_list, namespace, pvc_count):
+        """
+        Get the pvcs which are in Bound state from the given pvc job file list
+
+        Args:
+            pvc_job_file_list (list): List of all PVC.yaml dicts
+            namespace (str): Namespace where the resource has to be created
+            pvc_count (int): Bulk PVC count; If not specified the count will be
+            fetched from the kube job pvc yaml dict
+
+        Returns:
+            list: List of all PVCs in Bound state
+
+        Raises:
+        AssertionError: If not all PVCs reached to Bound state
+
+        """
+        return self.validate_pvc_in_kube_job_reached_bound_state(
+            kube_job_obj_list=pvc_job_file_list,
+            namespace=namespace,
+            pvc_count=pvc_count,
+        )
 
     def construct_stage_builder_bulk_pod_creation_yaml(self, pvc_list, namespace):
         """
@@ -382,7 +405,12 @@ class Longevity(object):
         return running_pods_list
 
     def create_stagebuilder_pods_with_all_pvc_types(
-        self, num_of_pvc, namespace, pvc_size
+        self,
+        num_of_pvc,
+        namespace,
+        pvc_size,
+        pvc_kube_job_name="all_pvc_for_pod_attach_job_profile",
+        pod_kube_job_name="all_pods_job_profile",
     ):
         """
         Create stagebuilder pods with all supported PVC types and access modes
@@ -410,11 +438,16 @@ class Longevity(object):
 
         """
         # Create stage builder PVCs of all supported types and access modes
-        pvc_bound_list, pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
+        pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
             num_of_pvc=num_of_pvc,
             namespace=namespace,
             pvc_size=pvc_size,
-            kube_job_name="all_pvc_for_pod_attach_job_profile",
+            kube_job_name=pvc_kube_job_name,
+        )
+        pvc_bound_list = self.get_pvc_bound_list(
+            pvc_job_file_list=pvc_job_file_list,
+            namespace=namespace,
+            pvc_count=num_of_pvc,
         )
         # Construct bulk POD creation yaml for kube job
         pods_dict_list = self.construct_stage_builder_bulk_pod_creation_yaml(
@@ -424,7 +457,7 @@ class Longevity(object):
         pod_job_file_list = self.construct_stage_builder_kube_job(
             obj_dict_list=pods_dict_list,
             namespace=namespace,
-            kube_job_name="all_pods_job_profile",
+            kube_job_name=pod_kube_job_name,
         )
         # Create stage builder for POD kube job
         self.create_stage_builder_kube_job(
@@ -439,7 +472,11 @@ class Longevity(object):
         return pod_pvc_job_file_list
 
     def create_stagebuilder_obc(
-        self, num_of_obcs, namespace, sc_name=constants.NOOBAA_SC
+        self,
+        num_of_obcs,
+        namespace,
+        sc_name=constants.NOOBAA_SC,
+        obc_kube_job_name="obc_job_profile",
     ):
         """
         Create stagebuilder OBC
@@ -468,7 +505,7 @@ class Longevity(object):
         obc_job_file = self.construct_stage_builder_kube_job(
             obj_dict_list=[obc_dict_list],
             namespace=namespace,
-            kube_job_name="obc_job_profile",
+            kube_job_name=obc_kube_job_name,
         )
         # Create stage builder for OBC kube job
         self.create_stage_builder_kube_job(
@@ -628,6 +665,110 @@ class Longevity(object):
                 f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
             )
             time.sleep(delay)
+
+    def stage3(
+        self, project_factory, num_of_pvc, num_of_obc, pvc_size, delay=60, run_time=1440
+    ):
+        """
+        Concurrent bulk operations of following
+            PVC creation - all supported types  (RBD, CephFS, RBD-block)
+            PVC deletion - all supported types  (RBD, CephFS, RBD-block)
+            OBC creation
+            OBC deletion
+            APP pod creation - all supported types  (RBD, CephFS, RBD-block)
+            APP pod deletion - all supported types  (RBD, CephFS, RBD-block)
+
+        Args:
+            project_factory : Fixture to create a new Project.
+            num_of_pvc (int): Bulk PVC count
+            num_of_obc (int): Bulk OBC count
+            pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
+            If None, random size pvc will be created
+            delay (int): Delay in seconds before starting the next cycle
+            run_time (int): The amount of time the particular stage has to run (in minutes)
+
+        """
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        cycle_count = 1
+        while datetime.now() < end_time:
+            log.info(f"Current time is {datetime.now()}")
+            log.info(f"End time is {end_time}")
+            log.info(
+                f"##############[STARTING CYCLE:{cycle_count}]####################"
+            )
+            namespace = f"{STAGE_3_PREFIX}{cycle_count}"
+            project_factory(project_name=namespace)
+            log.info(
+                "Creating the initial resources required for PVC/OBC/POD deletion operations concurrently"
+            )
+            resource_to_delete = [
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                    kube_job_name="delete_all_pvc_job_profile",
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_obc,
+                    num_of_obc,
+                    namespace,
+                    obc_kube_job_name="delete_obc_job_profile",
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_pods_with_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                    pvc_kube_job_name="delete_all_pvc_for_pod_attach_job_profile",
+                    pod_kube_job_name="delete_all_pods_job_profile",
+                ),
+            ]
+            resource_to_delete_job_file = []
+            # waiting for the resource thread to complete
+            for resource in resource_to_delete:
+                log.info("Waiting for the resource thread to complete")
+                resource_to_delete_job_file.append(resource.result())
+
+            log.info(
+                "Starting concurrent bulk creation and deletion requests of PVC, OBC and APP pod"
+            )
+            bulk_create_delete = [
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_obc, num_of_obc, namespace
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_pods_with_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                ),
+            ]
+            for job_file in resource_to_delete_job_file:
+                self.delete_stage_builder_kube_job(job_file, namespace)
+
+            bulk_create_delete_job_file = []
+            # waiting for the bulk create delete thread to complete
+            for thread in bulk_create_delete:
+                log.info("Waiting for the bulk create delete thread to complete")
+                bulk_create_delete_job_file.append(thread.result())
+            # Delete all the created resources in the bulk create delete thread
+            for job_file in bulk_create_delete_job_file:
+                self.delete_stage_builder_kube_job(job_file, namespace)
+
+            log.info(
+                f"##############[COMPLETED CYCLE:{cycle_count}]####################"
+            )
+            cycle_count += 1
+            log.info(
+                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT CYCLE]###########"
+            )
 
     def stage_4(
         self,
