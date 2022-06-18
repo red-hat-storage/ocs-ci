@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class TestPodReattachTimePerformance(PASTest):
     """
     Test to verify Pod Reattach Time Performance
-    creates samples and measures average reattach time
+    creates samples and measures average total and csi reattach times
     """
 
     def setup(self):
@@ -32,6 +32,9 @@ class TestPodReattachTimePerformance(PASTest):
         logger.info("Starting the test setup")
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
+
+        # Run the test in its own project (namespace)
+        self.create_test_project()
 
     def init_full_results(self, full_results):
         """
@@ -72,7 +75,7 @@ class TestPodReattachTimePerformance(PASTest):
         argnames=["interface", "copies", "timeout", "total_time_limit"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 3, 1200, 70],
+                *[constants.CEPHBLOCKPOOL, 3, 120, 70],
                 marks=pytest.mark.polarion_id("OCS-2043"),
             ),
             pytest.param(
@@ -97,14 +100,14 @@ class TestPodReattachTimePerformance(PASTest):
         Test assign nodeName to a pod using RWX pvc
         Each kernel (unzipped) is 892M and 61694 files
         The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
-        and calculates average reattach time and standard deviation
+        and calculates average total and csi reattach times and standard deviation
         """
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
 
         samples_num = 10
         if self.dev_mode:
-            samples_num = 2
+            samples_num = 3
 
         test_start_time = PASTest.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
@@ -121,7 +124,12 @@ class TestPodReattachTimePerformance(PASTest):
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        time_measures, csi_time_measures, files_written_list, data_written_list = ([], [], [], [])
+        time_measures, csi_time_measures, files_written_list, data_written_list = (
+            [],
+            [],
+            [],
+            [],
+        )
         for sample_index in range(1, samples_num + 1):
             # Create a PVC
             accessmode = constants.ACCESS_MODE_RWX
@@ -142,6 +150,11 @@ class TestPodReattachTimePerformance(PASTest):
             # Create a pod on one node
             logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
+            pvc_obj.reload()
+            logger.info(
+                f"PVC Obj created with name {pvc_obj.name} in the namespace {pvc_obj.namespace} "
+                f"with backed pv {pvc_obj.backed_pv}"
+            )
             try:
                 pod_obj1 = helpers.create_pod(
                     interface_type=self.interface,
@@ -236,7 +249,8 @@ class TestPodReattachTimePerformance(PASTest):
                 )
 
             csi_time = performance_lib.pod_attach_csi_time(
-                    self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace)
+                self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace
+            )
             csi_time_measures.append(csi_time)
             logger.info(
                 f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
