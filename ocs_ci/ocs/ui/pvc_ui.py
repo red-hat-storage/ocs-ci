@@ -61,14 +61,12 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
-        if (
-            (sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS or sc_name !=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
-            and access_mode == "ReadWriteOnce"
-        ):
-            logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
+        if sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
+            if sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
+                logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
 
-            logger.info(f"Selecting Volume Mode of type {vol_mode}")
-            self.do_click(self.pvc_loc[vol_mode])
+                logger.info(f"Selecting Volume Mode of type {vol_mode}")
+                self.do_click(self.pvc_loc[vol_mode])
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
