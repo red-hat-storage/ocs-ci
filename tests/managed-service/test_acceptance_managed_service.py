@@ -21,12 +21,11 @@ class TestAcceptanceManagedService(ManageTest):
     """
 
     def test_acceptance_managed_service(
-        self, pvc_factory, pod_factory, teardown_factory, teardown_project_factory
+        self, pvc_factory, pod_factory, teardown_factory, teardown_project_ms_factory
     ):
-        for index in config.index_consumer_clusters:
-            config.switch_ctx(index)
-            project_obj = OCP(kind="Project", namespace="acceptance-ms")
-            teardown_project_factory(project_obj)
+
+        project_obj = OCP(kind="Project", namespace="acceptance-ms")
+        teardown_project_ms_factory(project_obj)
 
         expected_clusters = list()
         for index in config.index_consumer_clusters:
