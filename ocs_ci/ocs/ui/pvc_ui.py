@@ -1,4 +1,5 @@
 import logging
+import time
 
 from selenium.common.exceptions import StaleElementReferenceException
 
@@ -106,9 +107,9 @@ class PvcUI(PageNavigator):
         #             self.do_click(get_element_type(pvc_name), enable_screenshot=True)
         #     except:
         #         raise StaleElementReferenceException
+        time.sleep(2)
         if pvc_name == f"{pvc_name}-clone":
-            self.driver.refresh()
-
+            time.sleep(2)
             logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
             self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
