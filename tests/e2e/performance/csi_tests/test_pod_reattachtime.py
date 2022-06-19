@@ -33,8 +33,6 @@ class TestPodReattachTimePerformance(PASTest):
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
 
-        # Run the test in its own project (namespace)
-        self.create_test_project()
 
     def init_full_results(self, full_results):
         """
@@ -151,10 +149,7 @@ class TestPodReattachTimePerformance(PASTest):
             logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
             pvc_obj.reload()
-            logger.info(
-                f"PVC Obj created with name {pvc_obj.name} in the namespace {pvc_obj.namespace} "
-                f"with backed pv {pvc_obj.backed_pv}"
-            )
+
             try:
                 pod_obj1 = helpers.create_pod(
                     interface_type=self.interface,
@@ -249,7 +244,7 @@ class TestPodReattachTimePerformance(PASTest):
                 )
 
             csi_time = performance_lib.pod_attach_csi_time(
-                self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace
+                self.interface, pvc_obj.backed_pv, csi_start_time, pvc_obj.namespace
             )
             csi_time_measures.append(csi_time)
             logger.info(
