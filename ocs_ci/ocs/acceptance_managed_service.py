@@ -194,3 +194,8 @@ class AcceptanceManagedService(object):
         logger.info(
             f"Verified: Modified size {pvc_size_new}G is reflected on all pods."
         )
+
+
+def flow_func(pvc_factory, pod_factory, index, data_process_dict):
+    acceptance_ms_obj = AcceptanceManagedService()
+    acceptance_ms_obj.flow(pvc_factory, pod_factory, index, data_process_dict)

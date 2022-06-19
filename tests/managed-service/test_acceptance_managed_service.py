@@ -1,6 +1,5 @@
 import logging
 import multiprocessing
-import pytest
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -21,23 +20,20 @@ class TestAcceptanceManagedService(ManageTest):
 
     """
 
-    @pytest.fixture()
-    def teardown(self, teardown_project_factory):
-        project_obj = OCP(kind="Project", namespace="acceptance-ms")
-        teardown_project_factory(project_obj)
-
     def test_acceptance_managed_service(
-        self,
-        pvc_factory,
-        pod_factory,
-        teardown_factory,
+        self, pvc_factory, pod_factory, teardown_factory, teardown_project_factory
     ):
+        for index in config.index_consumer_clusters:
+            config.switch_ctx(index)
+            project_obj = OCP(kind="Project", namespace="acceptance-ms")
+            teardown_project_factory(project_obj)
+
         expected_clusters = list()
         for index in config.index_consumer_clusters:
             expected_clusters.append(
                 f"{config.clusters[index].ENV_DATA.get('cluster_name')}"
             )
-        logger.info(f"Expected clusters {expected_clusters}")
+        logger.info(f"Expected clusters: {expected_clusters}")
         process_list = list()
         manager = multiprocessing.Manager()
         data_process_dict = manager.dict()
@@ -49,7 +45,7 @@ class TestAcceptanceManagedService(ManageTest):
                 "data_process_dict": data_process_dict,
             }
             p = multiprocessing.Process(
-                target=acceptance_managed_service.AcceptanceManagedService.flow(),
+                target=acceptance_managed_service.flow_func,
                 kwargs=fixtures_dict,
             )
             process_list.append(p)
@@ -64,7 +60,9 @@ class TestAcceptanceManagedService(ManageTest):
         logger.info(f"oded123456{data_process_dict}")
         for expected_cluster in expected_clusters:
             if data_process_dict.get(expected_cluster) is not True:
-                failure_tests.append(f"{expected_cluster}_failed {data_process_dict.get(expected_cluster)}")
+                failure_tests.append(
+                    f"{expected_cluster}_failed {data_process_dict.get(expected_cluster)}"
+                )
                 logger.error(f"{data_process_dict.get(expected_cluster)}")
         logger.info(failure_tests)
         logger.info(data_process_dict)
