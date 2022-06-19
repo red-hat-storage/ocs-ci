@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -397,7 +398,9 @@ def pytest_configure(config):
                     del config._metadata[extra_meta]
 
             config._metadata["Test Run Name"] = get_testrun_name()
-            gather_version_info_for_report(config)
+            check_clusters()
+            if ocsci_config.RUN["cephcluster"]:
+                gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 

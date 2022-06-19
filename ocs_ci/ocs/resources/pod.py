@@ -862,6 +862,24 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
+def get_device_path(pod_obj):
+    """
+    get device path from pod in block mode
+    Args:
+         pod_obj (Pod): The object of the pod
+    Returns:
+          str: device path
+    """
+
+    return (
+        pod_obj.get()
+        .get("spec")
+        .get("containers")[0]
+        .get("volumeDevices")[0]
+        .get("devicePath")
+    )
+
+
 def cal_md5sum(pod_obj, file_name, block=False):
     """
     Calculates the md5sum of the file
@@ -875,7 +893,11 @@ def cal_md5sum(pod_obj, file_name, block=False):
     Returns:
         str: The md5sum of the file
     """
-    file_path = file_name if block else get_file_path(pod_obj, file_name)
+
+    if block:
+        file_path = get_device_path(pod_obj)
+    else:
+        file_path = get_file_path(pod_obj, file_name)
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
     )

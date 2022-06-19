@@ -49,6 +49,7 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.namespacestore import (
     namespace_store_factory as namespacestore_factory_implementation,
 )
@@ -204,6 +205,13 @@ def pytest_collection_modifyitems(session, items):
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
+            skipif_lvm_not_installed_marker = item.get_closest_marker(
+                "skipif_lvm_not_installed"
+            )
+            if skipif_lvm_not_installed_marker and "lvm" in config.RUN:
+                if not config.RUN["lvm"]:
+                    items.remove(item)
+                    log.info("Test will be removed due to lvm not installed")
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
@@ -1390,7 +1398,13 @@ def health_checker(request, tier_marks_name):
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                if not (teardown or skip_ocs_deployment or mcg_only_deployment):
+                ceph_cluster_installed = config.RUN["cephcluster"]
+                if not (
+                    teardown
+                    or skip_ocs_deployment
+                    or mcg_only_deployment
+                    or not ceph_cluster_installed
+                ):
                     ceph_health_check_base()
                     log.info("Ceph health check passed at teardown")
             except CephHealthException:
@@ -1403,7 +1417,7 @@ def health_checker(request, tier_marks_name):
     node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name:
+        if mark.name in tier_marks_name and config.RUN["cephcluster"]:
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
@@ -1470,7 +1484,7 @@ def cluster(
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
-    if not config.ENV_DATA["skip_ocs_deployment"]:
+    if not config.ENV_DATA["skip_ocs_deployment"] and config.RUN["cephcluster"]:
         record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
@@ -1479,7 +1493,6 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
-
     # app labels of resources to be excluded for leftover check
     exclude_labels = [constants.must_gather_pod_label]
     for mark in node.iter_markers():
@@ -3310,15 +3323,21 @@ def ceph_toolbox(request):
     This fixture initiates ceph toolbox pod for manually created deployment
     and if it does not already exist.
     """
+    if "cephcluster" not in config.RUN:
+        check_clusters()
     deploy = config.RUN["cli_params"]["deploy"]
     teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
+    ceph_cluster = config.RUN["cephcluster"]
+    no_ocs = ceph_cluster or skip_ocs
     deploy_teardown = deploy or teardown
     managed_platform = (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     )
-    if not (deploy_teardown or skip_ocs) or (managed_platform and not deploy_teardown):
+    if not (deploy_teardown or not no_ocs) or (
+        managed_platform and not deploy_teardown
+    ):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
@@ -3519,8 +3538,22 @@ def namespace_store_factory_session(
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
+def snapshot_factory_session(request):
+    return snapshot_factory_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def snapshot_factory_class(request):
+    return snapshot_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def snapshot_factory(request):
+    return snapshot_factory_fixture(request)
+
+
+def snapshot_factory_fixture(request):
     """
     Snapshot factory. Calling this fixture creates a volume snapshot from the
     specified PVC
@@ -3605,8 +3638,22 @@ def multi_snapshot_factory(snapshot_factory):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def snapshot_restore_factory_class(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def snapshot_restore_factory_session(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def snapshot_restore_factory(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+def snapshot_restore_factory_fixture(request):
     """
     Snapshot restore factory. Calling this fixture creates new PVC out of the
     specified VolumeSnapshot.
@@ -3645,6 +3692,7 @@ def snapshot_restore_factory(request):
             PVC: Restored PVC object
 
         """
+        no_interface = False
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info["status"]["restoreSize"]
         restore_pvc_name = restore_pvc_name or (
@@ -3652,7 +3700,7 @@ def snapshot_restore_factory(request):
         )
 
         if snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            helpers.default_volumesnapshotclass(constants.CEPHBLOCKPOOL).name
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         ):
             storageclass = (
                 storageclass
@@ -3661,7 +3709,7 @@ def snapshot_restore_factory(request):
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
+            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
         ):
             storageclass = (
                 storageclass
@@ -3669,6 +3717,13 @@ def snapshot_restore_factory(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
             interface = constants.CEPHFILESYSTEM
+        elif (
+            snapshot_info["spec"]["volumeSnapshotClassName"]
+            == constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVM
+        ):
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_LVM_PVC_RESTORE_YAML
+            no_interface = True
+
         restored_pvc = create_restore_pvc(
             sc_name=storageclass,
             snap_name=snapshot_obj.name,
@@ -3681,7 +3736,8 @@ def snapshot_restore_factory(request):
         )
         instances.append(restored_pvc)
         restored_pvc.snapshot = snapshot_obj
-        restored_pvc.interface = interface
+        if not no_interface:
+            restored_pvc.interface = interface
         if status:
             helpers.wait_for_resource_state(restored_pvc, status)
         return restored_pvc
@@ -3894,8 +3950,22 @@ def nb_ensure_endpoint_count(request):
             )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def pvc_clone_factory_class(request):
+    return pvc_clone_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def pvc_clone_factory_session(request):
+    return pvc_clone_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def pvc_clone_factory(request):
+    return pvc_clone_factory_fixture(request)
+
+
+def pvc_clone_factory_fixture(request):
     """
     Calling this fixture creates a clone from the specified PVC
 
@@ -3932,13 +4002,16 @@ def pvc_clone_factory(request):
         assert (
             pvc_obj.provisioner in constants.OCS_PROVISIONERS
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
+        no_interface = False
         if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
-
+        elif pvc_obj.provisioner == constants.LVM_PROVISIONER:
+            clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+            no_interface = True
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
             "storage"
         )
@@ -3960,8 +4033,8 @@ def pvc_clone_factory(request):
         instances.append(clone_pvc_obj)
         clone_pvc_obj.parent = pvc_obj
         clone_pvc_obj.volume_mode = volume_mode
-        clone_pvc_obj.interface = interface
-
+        if not no_interface:
+            clone_pvc_obj.interface = interface
         if status:
             helpers.wait_for_resource_state(clone_pvc_obj, status)
         return clone_pvc_obj
