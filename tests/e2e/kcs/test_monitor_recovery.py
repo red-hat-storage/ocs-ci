@@ -14,7 +14,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     skipif_openshift_dedicated,
     skipif_external_mode,
-    system_test, skipif_ocp_version,
+    system_test,
+    skipif_ocp_version,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.ocp import OCP, switch_to_project
