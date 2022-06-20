@@ -5359,11 +5359,12 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
 
     def factory(
         scale_count=None,
-        pvc_per_pod_count=10,
+        pvc_per_pod_count=5,
         start_io=True,
         io_runtime=None,
         pvc_size=None,
         max_pvc_size=30,
+        remove_security_context_section=False,
     ):
         """
         Create a factory for creating resources using k8s fixture.
@@ -5377,6 +5378,8 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
+            remove_security_context_section (bool): If True, remove the security section from the Yaml file.
+                False, otherwise. Default value is False.
 
         Returns:
             FioPodScale: The FioPodScale object
@@ -5385,7 +5388,13 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         nonlocal orig_index
         nonlocal fio_scale
 
-        orig_index = config.cur_index
+        if (
+            config.multicluster
+            and config.ENV_DATA.get("platform", "").lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+        ):
+            orig_index = config.cur_index
+
         # Scale FIO pods in the cluster
         scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
         fio_scale = FioPodScale(
@@ -5398,6 +5407,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
             io_runtime=io_runtime,
             pvc_size=pvc_size,
             max_pvc_size=max_pvc_size,
+            remove_security_context_section=remove_security_context_section,
         )
         log.info(
             f"kube pod list = {kube_pod_obj_list}, kube pvc list = {kube_pvc_obj_list}"
@@ -5430,7 +5440,7 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 
     def factory(
         scale_count=None,
-        pvc_per_pod_count=10,
+        pvc_per_pod_count=5,
         start_io=True,
         io_runtime=None,
         pvc_size=None,
@@ -5459,16 +5469,30 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
         nonlocal orig_index
         orig_index = config.cur_index
 
+        scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
         consumer_indexes = consumer_indexes or config.get_consumer_indexes_list()
         for consumer_i in consumer_indexes:
             config.switch_ctx(consumer_i)
-            fio_scale = create_scale_pods_and_pvcs_using_kube_job(
+
+            fio_scale = FioPodScale(
+                kind=constants.DEPLOYMENTCONFIG,
+                node_selector=constants.SCALE_NODE_SELECTOR,
+            )
+            kube_pod_obj_list, kube_pvc_obj_list = fio_scale.create_scale_pods(
                 scale_count=scale_count,
                 pvc_per_pod_count=pvc_per_pod_count,
                 start_io=start_io,
                 io_runtime=io_runtime,
                 pvc_size=pvc_size,
                 max_pvc_size=max_pvc_size,
+                obj_name_prefix=f"obj_c{consumer_i}_",
+                remove_security_context_section=True,
+            )
+            kube_pod_obj_list_names = [p.name for p in kube_pod_obj_list]
+            kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
+
+            log.info(
+                f"kube pod list = {kube_pod_obj_list_names}, kube pvc list = {kube_pvc_obj_list_names}"
             )
 
             consumer_index_per_fio_scale_dict[consumer_i] = fio_scale
@@ -5477,6 +5501,12 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
         return consumer_index_per_fio_scale_dict
 
     def finalizer():
+        log.info("Cleaning the fio_scale instances")
+        for consumer_i, fio_scale in consumer_index_per_fio_scale_dict.items():
+            config.switch_ctx(consumer_i)
+            if not fio_scale.is_cleanup:
+                fio_scale.cleanup()
+
         if orig_index is not None:
             config.switch_ctx(orig_index)
 

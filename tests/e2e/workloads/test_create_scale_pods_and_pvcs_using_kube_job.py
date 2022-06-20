@@ -13,6 +13,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     ipi_deployment_required,
     managed_service_required,
 )
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         """
         config.switch_to_consumer()
         log.info("Start creating resources using kube job...")
-        create_scale_pods_and_pvcs_using_kube_job()
+        create_scale_pods_and_pvcs_using_kube_job(remove_security_context_section=True)
         ceph_health_check()
 
         log.info("Switch to the provider")
@@ -78,6 +80,33 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     Test create scale pods and PVCs using a kube job with MS consumers
     """
 
+    def setup(self):
+        self.scale_count = min(constants.SCALE_PVC_ROUND_UP_VALUE)
+        self.pvc_per_pod_count = 5
+        self.expected_pod_num = int(self.scale_count / self.pvc_per_pod_count)
+        self.consumer_i_per_fio_scale = {}
+
+    def check_scale_pods_and_pvcs_created_on_consumers(self):
+        for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
+            config.switch_ctx(consumer_i)
+            ocp_pvc = OCP(kind=constants.PVC, namespace=fio_scale.namespace)
+            ocp_pvc.wait_for_resource(
+                timeout=30,
+                condition=constants.STATUS_BOUND,
+                resource_count=self.scale_count,
+            )
+            log.info(f"All the PVCs were created successfully on consumer {consumer_i}")
+
+            ocp_pod = OCP(kind=constants.POD, namespace=fio_scale.namespace)
+            ocp_pod.wait_for_resource(
+                timeout=30,
+                condition=constants.STATUS_COMPLETED,
+                resource_count=self.expected_pod_num,
+            )
+            log.info(f"All the pods were created successfully on consumer {consumer_i}")
+
+        log.info("All the pods and PVCs were created successfully on the consumers")
+
     def test_create_scale_pods_and_pvcs_with_ms_consumers(
         self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
     ):
@@ -85,7 +114,12 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         Test create scale pods and PVCs using a kube job with MS consumers
         """
         config.switch_to_provider()
-        create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers()
+        self.consumer_i_per_fio_scale = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
+                scale_count=self.scale_count,
+                pvc_per_pod_count=self.pvc_per_pod_count,
+            )
+        )
         assert (
             config.cur_index == config.get_provider_index()
         ), "The current index has changed"
@@ -101,9 +135,10 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         log.info("Checking the Ceph Health on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()
         for i in consumer_indexes:
-            config.switch_to_consumer(i)
+            config.switch_ctx(i)
             ceph_health_check()
 
+        self.check_scale_pods_and_pvcs_created_on_consumers()
         log.info(
             "The scale pods and PVCs using a kube job with MS consumers created successfully"
         )
@@ -115,8 +150,11 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         Test create and delete scale pods and PVCs using a kube job with MS consumers
         """
         config.switch_to_provider()
-        consumer_i_per_fio_scale = (
-            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers()
+        self.consumer_i_per_fio_scale = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
+                scale_count=self.scale_count,
+                pvc_per_pod_count=self.pvc_per_pod_count,
+            )
         )
         assert (
             config.cur_index == config.get_provider_index()
@@ -131,14 +169,14 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         ceph_health_check()
 
         log.info("Clean up the pods and PVCs from all consumers")
-        for consumer_i, fio_scale in consumer_i_per_fio_scale.items():
-            config.switch_to_consumer(consumer_i)
+        for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
+            config.switch_ctx(consumer_i)
             fio_scale.cleanup()
 
         log.info("Checking the Ceph Health on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()
         for i in consumer_indexes:
-            config.switch_to_consumer(i)
+            config.switch_ctx(i)
             ceph_health_check()
 
         log.info(
