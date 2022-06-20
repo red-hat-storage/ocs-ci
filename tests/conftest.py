@@ -1215,6 +1215,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
+        access_mode=constants.ACCESS_MODE_RWO,
         service_account=None,
         size=None,
         custom_data=None,
@@ -1231,6 +1232,9 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
             pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+                This decides the access mode to be used for the PVC.
+                ReadWriteOnce is default.
             service_account (str): service account name for dc_pods
             size (int): The requested size for the PVC
             custom_data (dict): If provided then Pod object is created
@@ -1247,7 +1251,9 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         if custom_data:
             dc_pod_obj = helpers.create_resource(**custom_data)
         else:
-            pvc = pvc or pvc_factory(interface=interface, size=size)
+            pvc = pvc or pvc_factory(
+                interface=interface, size=size, access_mode=access_mode
+            )
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
@@ -3095,7 +3101,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
     """
     Prepare multiple dc pods for the test
     Returns:
-        list: Pod instances
+        any: Pod instances
     """
 
     def factory(
