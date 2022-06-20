@@ -5,6 +5,9 @@ metadata:
   name: perf-pod
   namespace: default
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
   containers:
    - name: performance
      image: quay.io/ocsci/perf:latest
@@ -18,6 +21,7 @@ spec:
      securityContext:
        allowPrivilegeEscalation: false
        runAsNonRoot: true
+       runAsUser: 1000
        capabilities:
          drop:
            - ALL
