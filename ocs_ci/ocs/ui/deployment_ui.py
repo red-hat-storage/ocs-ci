@@ -246,18 +246,24 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal")
-        if self.operator_name == ODF_OPERATOR:
+        if (
+            self.operator_name == ODF_OPERATOR
+            and self.ocp_version_semantic != version.VERSION_4_11
+        ):
             self.do_click(
                 locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
             )
-        else:
+        elif self.ocp_version_semantic != version.VERSION_4_11:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
 
-        logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
-        self.do_click(
-            locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
-        )
-        self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
+        if self.ocp_version_semantic != version.VERSION_4_11:
+            logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+            self.do_click(
+                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc[self.storage_class], enable_screenshot=True
+            )
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
@@ -336,7 +342,12 @@ class DeploymentUI(PageNavigator):
         device_size = str(config.ENV_DATA.get("device_size"))
         osd_size = device_size if device_size in osd_sizes else "512"
         logger.info(f"Configure OSD Capacity {osd_size}")
-        self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
+        if self.ocp_version_semantic == version.VERSION_4_11:
+            self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
+        else:
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["osd_size_dropdown"]
+            )
         self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
 
     def verify_operator_succeeded(
@@ -380,7 +391,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version in ("4.7", "4.8", "4.9", "4.11"):
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
