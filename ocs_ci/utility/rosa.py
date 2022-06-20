@@ -218,9 +218,12 @@ def appliance_mode_cluster(cluster_name):
                 logger.info(f"Addon {addon_name} is installed")
                 break
             if "failed" in addon_info:
-                raise ManagedServiceAddonDeploymentError(
-                    f"Addon {addon_name} failed to be installed"
-                )
+                logger.warning(f"Addon {addon_name} failed to be installed")
+        addon_info = get_addon_info(cluster_name, addon_name)
+        if "failed" in addon_info:
+            raise ManagedServiceAddonDeploymentError(
+                f"Addon {addon_name} failed to be installed"
+            )
         logger.info("Waiting for ROSA service ready status")
     for service_status in utils.TimeoutSampler(
         7200, 30, get_rosa_service_details, cluster_name
@@ -229,7 +232,7 @@ def appliance_mode_cluster(cluster_name):
             logger.info(f"service {cluster_name} is ready")
             break
         elif "failed" in service_status:
-            logger.info(f"service {cluster_name} is ready")
+            logger.info(f"service {cluster_name} is failed")
             break
         else:
             logger.info(f"Current service creation status: {service_status}")
@@ -444,9 +447,13 @@ def install_odf_addon(cluster):
             logger.info(f"Addon {addon_name} was installed")
             break
         if "failed" in addon_info:
-            raise ManagedServiceAddonDeploymentError(
-                f"Addon {addon_name} failed to be installed"
-            )
+            logger.warning(f"Addon {addon_name} is failed")
+
+    addon_info = get_addon_info(cluster, addon_name)
+    if "failed" in addon_info:
+        raise ManagedServiceAddonDeploymentError(
+            f"Addon {addon_name} failed to be installed"
+        )
 
 
 def delete_odf_addon(cluster):
