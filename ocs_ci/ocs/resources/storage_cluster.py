@@ -1183,6 +1183,7 @@ def verify_managed_service_resources():
         verify_provider_resources()
     else:
         verify_consumer_storagecluster(sc_data)
+        verify_consumer_resources()
     ocp_version = get_semantic_version(get_ocp_version(), only_major_minor=True)
     if ocp_version < VERSION_4_11:
         prometheus_csv = csv.get_csvs_start_with_prefix(
@@ -1220,6 +1221,31 @@ def verify_provider_resources():
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
     assert verify_worker_nodes_security_groups()
+
+
+def verify_consumer_resources():
+    """
+    Verify resources specific to managed OCS consumer:
+    1. MGR endpoint
+    2. monitoring endpoint in cephcluster yaml
+    """
+    mgr_endpoint = OCP(
+        kind="endpoints",
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        selector=constants.MGR_APP_LABEL,
+    )
+    mgr_ep_yaml = mgr_endpoint.get().get("items")[0]
+    log.info("Verifying that MGR endpoint has an IP address")
+    mgr_ip = mgr_ep_yaml["subsets"][0]["addresses"][0]["ip"]
+    log.info(f"MGR endpoint IP is {mgr_ip}")
+    assert re.match("\\d+(\\.\\d+){3}", mgr_ip)
+    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster_yaml = cephcluster.get().get("items")[0]
+    monitoring_endpoint = cephcluster_yaml["spec"]["monitoring"][
+        "externalMgrEndpoints"
+    ][0]["ip"]
+    log.info(f"Monitoring endpoint of cephcluster yaml: {monitoring_endpoint}")
+    assert re.match("\\d+(\\.\\d+){3}", monitoring_endpoint)
 
 
 def verify_managed_service_networkpolicy():
