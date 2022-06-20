@@ -184,6 +184,9 @@ class Deployment(object):
         Deploy Submariner operator
 
         """
+        if config.ENV_DATA.get("skip_submariner_deployment", False):
+            return
+
         # Multicluster operations
         if config.multicluster:
             # Configure submariner only on non-ACM clusters
