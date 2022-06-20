@@ -214,10 +214,10 @@ class TestPvPool:
         wait_for_pods_to_be_running(
             namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pv_pod_name]
         )
-        get_output = OCP(
+        pv_pod_ocp_obj = OCP(
             namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
         ).get(resource_name=pv_pod_name)
-        resource_dict = get_output["spec"]["containers"][0]["resources"]
+        resource_dict = pv_pod_ocp_obj["spec"]["containers"][0]["resources"]
         assert (
             resource_dict["limits"]["cpu"] == new_cpu
             and resource_dict["limits"]["memory"] == new_mem
