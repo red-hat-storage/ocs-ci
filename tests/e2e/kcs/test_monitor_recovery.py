@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     skipif_openshift_dedicated,
     skipif_external_mode,
-    system_test,
+    system_test, skipif_ocp_version,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.ocp import OCP, switch_to_project
@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-3911")
 @pytest.mark.bugzilla("1973256")
 @skipif_ocs_version("<4.6")
+@skipif_ocp_version("<4.10")
 @skipif_openshift_dedicated
 @skipif_external_mode
 class TestMonitorRecovery(E2ETest):
@@ -658,7 +659,7 @@ def update_mon_initial_delay():
         insert_delay(mon_dep=mon.name)
 
     logger.info("Sleeping for mons to get initialized")
-    time.sleep(60)
+    time.sleep(90)
     logger.info("Validating whether all mons reached running state")
     validate_mon_pods()
 
