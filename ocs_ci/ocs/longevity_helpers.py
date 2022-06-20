@@ -224,7 +224,7 @@ def _multi_pvc_pod_lifecycle_factory(
         namespace="stage-2",
         measure=True,
         file_name=None,
-        fio_fraction=0.25,
+        fio_percentage=25,
         verify_fio=False,
     ):
         """
@@ -236,7 +236,7 @@ def _multi_pvc_pod_lifecycle_factory(
             measure (bool) : True if we want to measure the PVC creation/deletion time and POD to PVC attach time,
                                 False otherwise.
             file_name (str) : Name of the file on which FIO is performed.
-            fio_fraction (float) : Fraction of PVC space utilized for FIO.
+            fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
             verify_fio (bool) : True if we want to verify FIO, False otherwise.
 
         """
@@ -343,7 +343,7 @@ def _multi_pvc_pod_lifecycle_factory(
             teardown_factory(pod_obj)
 
         # Run FIO on PODs
-        fio_size = int(fio_fraction * pvc_size * 1000)
+        fio_size = int((fio_percentage / 100) * pvc_size * 1000)
         for pod_obj in pod_objs:
             storage_type = (
                 "block"
