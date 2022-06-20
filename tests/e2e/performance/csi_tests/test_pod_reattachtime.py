@@ -33,7 +33,6 @@ class TestPodReattachTimePerformance(PASTest):
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
 
-
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
