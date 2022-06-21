@@ -1,9 +1,20 @@
 import logging
+from concurrent.futures.thread import ThreadPoolExecutor
+from time import sleep
+
 from ocs_ci.framework import config
 
 import pytest
 
 from ocs_ci.framework.pytest_customization import marks
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ibm_power,
+    skipif_aws_i3,
+    skipif_bm,
+    tier4b,
+    skipif_vsphere_ipi,
+    bugzilla,
+)
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftovers,
@@ -16,11 +27,14 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs import cluster, constants, defaults, ocp
+from ocs_ci.ocs import cluster, constants, defaults, ocp, node
+from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import version
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -297,3 +311,62 @@ class TestMCGResourcesDisruptions(MCGTest):
         ), "Invalid scc"
         # Check the NB status to verify the system is healthy
         self.cl_obj.wait_for_noobaa_health_ok()
+
+    @tier4b
+    @skipif_bm
+    @skipif_aws_i3
+    @skipif_vsphere_ipi
+    @skipif_ibm_power
+    @bugzilla("2029690")
+    @pytest.mark.polarion_id("")
+    def test_mcg_nw_failure(
+        self,
+        nodes,
+        mcg_obj,
+        bucket_factory,
+        node_restart_teardown,
+    ):
+        """
+        Test OBC creation post n/w failures
+
+        """
+        worker_nodes = node.get_worker_nodes()
+        # Induce network failure on all worker nodes
+        with ThreadPoolExecutor() as executor:
+            for node_name in worker_nodes:
+                executor.submit(node.node_network_failure, node_name, False)
+
+        node.wait_for_nodes_status(
+            node_names=worker_nodes, status=constants.NODE_NOT_READY
+        )
+        nw_fail_time = 300
+        log.info(f"Waiting for {nw_fail_time} seconds")
+        sleep(nw_fail_time)
+
+        # Reboot the worker nodes
+        log.info(f"Stop and start the worker nodes: {worker_nodes}")
+        nodes.restart_nodes_by_stop_and_start(node.get_node_objs(worker_nodes))
+
+        try:
+            node.wait_for_nodes_status(
+                node_names=worker_nodes, status=constants.NODE_READY
+            )
+            log.info("Wait for ODF/Noobaa pods to be in running state")
+            if not pod.wait_for_pods_to_be_running(timeout=720):
+                raise ResourceWrongStatusException("Pods are not in running state")
+        except ResourceWrongStatusException:
+            # Restart nodes
+            nodes.restart_nodes(node.get_node_objs(worker_nodes))
+
+        ceph_health_check(tries=80)
+        bucket_name = bucket_factory(interface="OC")[0].name
+        log.info(f"Created new bucket {bucket_name}")
+        assert s3_put_object(
+            s3_obj=mcg_obj,
+            bucketname=bucket_name,
+            object_key="test-obj",
+            data="string data",
+        ), "Failed: Put object"
+        assert s3_get_object(
+            s3_obj=mcg_obj, bucketname=bucket_name, object_key="test-obj"
+        ), "Failed: Get object"
