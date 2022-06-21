@@ -1,12 +1,12 @@
 import logging
 import random
+import pytest
 
 from time import sleep
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.ocs.resources import pod
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
 
@@ -37,7 +37,20 @@ class TestKernelCrash(E2ETest):
                 "for i in {1..125}; rm %s/emp_$i.txt ; done" % self.result_dir
             )
 
-    def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
+    @pytest.mark.parametrize(
+        argnames="interface_type",
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+            ),
+        ],
+    )
+    def test_node_kernel_crash_ceph_fsync(
+        self, pvc_factory, teardown_factory, pod_factory, interface_type
+    ):
         """
         1. Create 1GiB PVC
         2. Attach PVC to an application pod
@@ -48,37 +61,24 @@ class TestKernelCrash(E2ETest):
 
         worker_nodes_list = get_worker_nodes()
 
-        # Create a Cephfs PVC
+        # Create a Cephfs, rbd PVC
         pvc_obj = pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            access_mode=constants.ACCESS_MODE_RWX,
+            interface=interface_type,
         )
 
         # Set interface argument for reference
-        pvc_obj.interface = constants.CEPHFILESYSTEM
+        pvc_obj.interface = interface_type
 
         # Create a pod on a particular node
         selected_node = random.choice(worker_nodes_list)
         log.info(f"Creating a pod on node: {selected_node} with pvc {pvc_obj.name}")
 
-        pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM,
-            pvc_name=pvc_obj.name,
-            namespace=pvc_obj.namespace,
-            node_name=selected_node,
+        pod_obj = pod_factory(
+            interface=interface_type,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
             pod_dict_path=constants.NGINX_POD_YAML,
         )
-
-        # Confirm that the pod is running on the selected_node
-        helpers.wait_for_resource_state(
-            resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
-        )
-        pod_obj.reload()
-        teardown_factory(pod_obj)
-
-        assert pod.verify_node_name(
-            pod_obj, selected_node
-        ), "Pod is running on a different node than the selected node"
 
         file = constants.FSYNC
         cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
