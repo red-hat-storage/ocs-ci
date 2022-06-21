@@ -285,17 +285,6 @@ skipif_ms_consumer = pytest.mark.skipif(
     reason="Test will not run on Managed service consumer cluster",
 )
 
-skipif_ms_consumers_with_no_provider = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
-    and all(
-        [
-            cluster_config.ENV_DATA["cluster_type"].lower() == "consumer"
-            for cluster_config in config.clusters
-        ]
-    ),
-    reason="Test will not run on Managed service consumer clusters with no provider cluster",
-)
-
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
     reason="Test will not run on ROSA cluster",

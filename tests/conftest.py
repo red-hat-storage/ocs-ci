@@ -5111,9 +5111,14 @@ def switch_to_provider_for_test(request):
         and current_cluster.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
     ):
-        log.debug("Switching to the provider cluster context")
-        config.switch_to_provider()
-        switched_to_provider = True
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "provider":
+                provider_cluster = cluster
+                log.debug("Switching to the provider cluster context")
+                # TODO: Use 'switch_to_provider' function introduced in PR 5541
+                config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+                switched_to_provider = True
+                break
 
     def finalizer():
         """
@@ -5395,37 +5400,6 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         log.info("Cleaning the fioscale instances")
         for instance in fioscale_instances:
             instance.cleanup()
-
-
-@pytest.fixture(scope="function")
-def switch_to_provider_for_test_factory(request):
-    """
-    Switch to provider cluster in case we use multi cluster and Managed service. If we don't use
-    multi cluster and Managed Services, the test will run as usual.
-
-    """
-    orig_index = None
-
-    def factory():
-        nonlocal orig_index
-
-        if (
-            config.multicluster
-            and config.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
-        ):
-            orig_index = config.cur_index
-            log.info("Switching to the provider cluster context")
-            config.switch_to_provider()
-
-    def finalizer():
-        """
-        Switch to the original cluster context(if needed)
-
-        """
-        if orig_index is not None:
-            log.info("Switching back to the original cluster context")
-            config.switch_ctx(orig_index)
 
     request.addfinalizer(finalizer)
     return factory
