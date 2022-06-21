@@ -650,7 +650,7 @@ class PageNavigator(BaseUI):
                 == "false"
             ):
                 logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
+                self.do_click(self.page_nav["show-default-projects"])
 
         pvc_loc = locators[self.ocp_version]["pvc"]
         logger.info(f"Wait and select namespace {project_name}")

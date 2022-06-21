@@ -388,6 +388,7 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
+    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
 }
 
 page_nav_4_10 = {
