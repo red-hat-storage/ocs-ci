@@ -96,20 +96,11 @@ class PvcUI(PageNavigator):
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
-        # for i in range(10):
-        #     try:
-        #         element_check = self.check_staleness_of_element(locator=get_element_type(pvc_name))
-        #         if element_check:
-        #             self.refresh_page()
-        #             logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
-        #             self.do_click(get_element_type(pvc_name), enable_screenshot=True)
-        #     except:
-        #         raise StaleElementReferenceException
-        time.sleep(2)
-        if pvc_name == f"{pvc_name}-clone":
-            time.sleep(2)
-            logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
-            self.do_click(get_element_type(pvc_name), enable_screenshot=True)
+        time.sleep(5)
+        # Using sleep to avoid StaleElementReferenceException. Use of explict wait or refreshing the page didn't help.
+
+        logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
+        self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
         logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
         self.do_click(get_element_type(pvc_name), enable_screenshot=True)
