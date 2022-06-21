@@ -14,6 +14,7 @@ import subprocess
 import time
 import traceback
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -2085,6 +2086,24 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         git_params = ""
     else:
         raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("shyRozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("shyRozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
 
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
