@@ -8,6 +8,8 @@ spec:
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
   containers:
    - name: performance
      image: quay.io/ocsci/perf:latest
@@ -22,6 +24,8 @@ spec:
        allowPrivilegeEscalation: false
        runAsNonRoot: true
        runAsUser: 1000
+       fsGroup: 1000
+       fsGroupChangePolicy: OnRootMismatch
        capabilities:
          drop:
            - ALL
