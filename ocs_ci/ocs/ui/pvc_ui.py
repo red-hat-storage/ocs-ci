@@ -1,8 +1,6 @@
 import logging
 import time
 
-from selenium.common.exceptions import StaleElementReferenceException
-
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import locators, generic_locators
@@ -61,8 +59,14 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
-        if sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
-            if sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS and access_mode == "ReadWriteOnce":
+        if (
+            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
+            and access_mode == "ReadWriteOnce"
+        ):
+            if (
+                sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+                and access_mode == "ReadWriteOnce"
+            ):
                 logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
 
                 logger.info(f"Selecting Volume Mode of type {vol_mode}")
@@ -119,12 +123,16 @@ class PvcUI(PageNavigator):
         logger.info(f"Verifying access mode : {pvc_access_mode_new}")
 
         if (
-            (sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS or sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
+            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
             and access_mode == "ReadWriteOnce"
         ):
-            pvc_new_vol_mode = f"{vol_mode}"
-            self.check_element_text(expected_text=pvc_new_vol_mode)
-            logger.info(f"Verifying volume mode : {pvc_new_vol_mode}")
+            if (
+                sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+                and access_mode == "ReadWriteOnce"
+            ):
+                pvc_new_vol_mode = f"{vol_mode}"
+                self.check_element_text(expected_text=pvc_new_vol_mode)
+                logger.info(f"Verifying volume mode : {pvc_new_vol_mode}")
 
     def pvc_resize_ui(self, project_name, pvc_name, new_size):
         """

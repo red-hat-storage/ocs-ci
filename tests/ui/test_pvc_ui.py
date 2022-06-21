@@ -31,36 +31,36 @@ class TestPvcUserInterface(object):
     @pytest.mark.parametrize(
         argnames=["sc_name", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
-            # pytest.param(
-            #     "ocs-storagecluster-cephfs",
-            #     "ReadWriteMany",
-            #     "2",
-            #     "Filesystem",
-            # ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "ReadWriteMany",
+                "2",
+                "Filesystem",
+            ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "ReadWriteMany",
                 "3",
                 "Block",
             ),
-            # pytest.param(
-            #     "ocs-storagecluster-cephfs",
-            #     "ReadWriteOnce",
-            #     "10",
-            #     "Filesystem",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd",
-            #     "ReadWriteOnce",
-            #     "11",
-            #     "Block",
-            # ),
-            # pytest.param(
-            #     "ocs-storagecluster-ceph-rbd",
-            #     "ReadWriteOnce",
-            #     "13",
-            #     "Filesystem",
-            # ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                "ReadWriteOnce",
+                "10",
+                "Filesystem",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "ReadWriteOnce",
+                "11",
+                "Block",
+            ),
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                "ReadWriteOnce",
+                "13",
+                "Filesystem",
+            ),
         ],
     )
     def test_create_resize_delete_pvc(
@@ -136,7 +136,7 @@ class TestPvcUserInterface(object):
         if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
-            interface_type = constants.CEPHBLOCKPOOL_SC
+            interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
 
@@ -211,91 +211,91 @@ class TestPvcUserInterface(object):
         if len(pvcs) > 0:
             assert f"PVC {pvcs[0].name} does not deleted"
 
-    # @tier1
-    # @pytest.mark.parametrize(
-    #     argnames=["sc_name", "access_mode", "clone_access_mode"],
-    #     argvalues=[
-    #         # pytest.param(
-    #         #     "ocs-storagecluster-ceph-rbd",
-    #         #     constants.ACCESS_MODE_RWO,
-    #         #     constants.ACCESS_MODE_RWO,
-    #         # ),
-    #         pytest.param(
-    #             "ocs-storagecluster-cephfs",
-    #             constants.ACCESS_MODE_RWX,
-    #             constants.ACCESS_MODE_RWO,
-    #         ),
-    #     ],
-    # )
-    # def test_clone_pvc(
-    #     self,
-    #     project_factory,
-    #     teardown_factory,
-    #     setup_ui_class,
-    #     sc_name,
-    #     access_mode,
-    #     clone_access_mode,
-    # ):
-    #     """
-    #     Test to verify PVC clone from UI
-    #
-    #     """
-    #     pvc_size = "1"
-    #     vol_mode = constants.VOLUME_MODE_FILESYSTEM
-    #
-    #     # Creating a project from CLI
-    #     pro_obj = project_factory()
-    #     project_name = pro_obj.namespace
-    #
-    #     pvc_ui_obj = PvcUI(setup_ui_class)
-    #
-    #     if config.DEPLOYMENT["external_mode"]:
-    #         if sc_name == constants.CEPHFILESYSTEM_SC:
-    #             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
-    #         elif sc_name == constants.CEPHBLOCKPOOL_SC:
-    #             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-    #
-    #     # Creating PVC from UI
-    #     pvc_name = create_unique_resource_name("test", "pvc")
-    #     pvc_ui_obj.create_pvc_ui(
-    #         project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
-    #     )
-    #
-    #     teardown_factory(get_pvc_objs(pvc_names=[pvc_name], namespace=project_name)[0])
-    #
-    #     # Verifying PVC details in UI
-    #     logger.info("Verifying PVC details in UI")
-    #     pvc_ui_obj.verify_pvc_ui(
-    #         pvc_size=pvc_size,
-    #         access_mode=access_mode,
-    #         vol_mode=vol_mode,
-    #         sc_name=sc_name,
-    #         pvc_name=pvc_name,
-    #         project_name=project_name,
-    #     )
-    #     logger.info("Verified PVC details in UI")
-    #
-    #     # Clone PVC from UI
-    #     clone_pvc_name = f"{pvc_name}-clone"
-    #     pvc_ui_obj.pvc_clone_ui(
-    #         project_name=project_name,
-    #         pvc_name=pvc_name,
-    #         cloned_pvc_access_mode=clone_access_mode,
-    #         cloned_pvc_name=clone_pvc_name,
-    #     )
-    #
-    #     teardown_factory(
-    #         get_pvc_objs(pvc_names=[clone_pvc_name], namespace=project_name)[0]
-    #     )
-    #
-    #     # Verifying cloned PVC details in UI
-    #     logger.info("Verifying cloned PVC details in UI")
-    #     pvc_ui_obj.verify_pvc_ui(
-    #         pvc_size=pvc_size,
-    #         access_mode=clone_access_mode,
-    #         vol_mode=vol_mode,
-    #         sc_name=sc_name,
-    #         pvc_name=clone_pvc_name,
-    #         project_name=project_name,
-    #     )
-    #     logger.info("Verified cloned PVC details in UI")
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["sc_name", "access_mode", "clone_access_mode"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-ceph-rbd",
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWO,
+            ),
+            pytest.param(
+                "ocs-storagecluster-cephfs",
+                constants.ACCESS_MODE_RWX,
+                constants.ACCESS_MODE_RWO,
+            ),
+        ],
+    )
+    def test_clone_pvc(
+        self,
+        project_factory,
+        teardown_factory,
+        setup_ui_class,
+        sc_name,
+        access_mode,
+        clone_access_mode,
+    ):
+        """
+        Test to verify PVC clone from UI
+
+        """
+        pvc_size = "1"
+        vol_mode = constants.VOLUME_MODE_FILESYSTEM
+
+        # Creating a project from CLI
+        pro_obj = project_factory()
+        project_name = pro_obj.namespace
+
+        pvc_ui_obj = PvcUI(setup_ui_class)
+
+        if config.DEPLOYMENT["external_mode"]:
+            if sc_name == constants.CEPHFILESYSTEM_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif sc_name == constants.CEPHBLOCKPOOL_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+
+        # Creating PVC from UI
+        pvc_name = create_unique_resource_name("test", "pvc")
+        pvc_ui_obj.create_pvc_ui(
+            project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
+        )
+
+        teardown_factory(get_pvc_objs(pvc_names=[pvc_name], namespace=project_name)[0])
+
+        # Verifying PVC details in UI
+        logger.info("Verifying PVC details in UI")
+        pvc_ui_obj.verify_pvc_ui(
+            pvc_size=pvc_size,
+            access_mode=access_mode,
+            vol_mode=vol_mode,
+            sc_name=sc_name,
+            pvc_name=pvc_name,
+            project_name=project_name,
+        )
+        logger.info("Verified PVC details in UI")
+
+        # Clone PVC from UI
+        clone_pvc_name = f"{pvc_name}-clone"
+        pvc_ui_obj.pvc_clone_ui(
+            project_name=project_name,
+            pvc_name=pvc_name,
+            cloned_pvc_access_mode=clone_access_mode,
+            cloned_pvc_name=clone_pvc_name,
+        )
+
+        teardown_factory(
+            get_pvc_objs(pvc_names=[clone_pvc_name], namespace=project_name)[0]
+        )
+
+        # Verifying cloned PVC details in UI
+        logger.info("Verifying cloned PVC details in UI")
+        pvc_ui_obj.verify_pvc_ui(
+            pvc_size=pvc_size,
+            access_mode=clone_access_mode,
+            vol_mode=vol_mode,
+            sc_name=sc_name,
+            pvc_name=clone_pvc_name,
+            project_name=project_name,
+        )
+        logger.info("Verified cloned PVC details in UI")

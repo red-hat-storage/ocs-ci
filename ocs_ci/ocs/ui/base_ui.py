@@ -10,7 +10,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     NoSuchElementException,
-    StaleElementReferenceException
+    StaleElementReferenceException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -319,8 +319,16 @@ class BaseUI:
 
         """
         try:
-            ignored_exceptions = (NoSuchElementException, StaleElementReferenceException)
-            wait = WebDriverWait(self.driver, timeout=timeout, ignored_exceptions=ignored_exceptions, poll_frequency=1)
+            ignored_exceptions = (
+                NoSuchElementException,
+                StaleElementReferenceException,
+            )
+            wait = WebDriverWait(
+                self.driver,
+                timeout=timeout,
+                ignored_exceptions=ignored_exceptions,
+                poll_frequency=1,
+            )
             wait.until(ec.presence_of_element_located(locator))
             return True
         except (NoSuchElementException, StaleElementReferenceException):
@@ -329,28 +337,6 @@ class BaseUI:
             return False
         except TimeoutException:
             logger.error(f"Timedout while waiting for element with {locator}")
-            self.take_screenshot()
-            return False
-
-    def check_staleness_of_element(self, locator, timeout=5):
-        """
-        Check if an web element is present on the web console or not.
-
-
-        Args:
-             locator (tuple): (GUI element needs to operate on (str), type (By))
-             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
-        Returns:
-            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
-
-        """
-        try:
-            ignored_exceptions = StaleElementReferenceException
-            wait = WebDriverWait(self.driver, timeout=timeout, ignored_exceptions=ignored_exceptions)
-            wait.until(ec.e(locator))
-            return True
-        except StaleElementReferenceException:
-            logger.error(f"Expected element with locator {locator} is stale")
             self.take_screenshot()
             return False
 
