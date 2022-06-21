@@ -12,7 +12,6 @@ import tempfile
 import time
 from pathlib import Path
 import base64
-
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -244,6 +243,13 @@ class Deployment(object):
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
             deploy_dr.deploy()
 
+    def do_deploy_lvmo(self):
+        """
+        call lvm deploy
+
+        """
+        self.deploy_lvmo()
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -282,7 +288,7 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             self.deploy_acm_hub()
-
+        self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
@@ -1221,6 +1227,66 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+    def deploy_lvmo(self):
+        """
+        deploy lvmo for platform specific (for now only vsphere)
+        """
+        if not config.DEPLOYMENT["install_lvmo"]:
+            logger.warning("LVMO deployment will be skipped")
+            return
+
+        logger.info(f"Installing lvmo version {config.ENV_DATA['ocs_version']}")
+        lvmo_version = config.ENV_DATA["ocs_version"]
+        lvmo_version_without_period = lvmo_version.replace(".", "")
+        label_version = constants.LVMO_POD_LABEL
+        create_catalog_source()
+        cluster_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
+            f"lvm-cluster-{lvmo_version_without_period}.yaml",
+        )
+        bundle_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
+        )
+        run_cmd(f"oc create -f {bundle_config_file} -n {self.namespace}")
+        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "controller_manager_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "topolvm-controller_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["topolvm-node_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["vg-manager_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        catalgesource = run_cmd(
+            "oc -n openshift-marketplace get  "
+            "catalogsources.operators.coreos.com redhat-operators -o json"
+        )
+        json_cts = json.loads(catalgesource)
+        logger.info(
+            f"LVMO installed successfully from image {json_cts['spec']['image']}"
+        )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
