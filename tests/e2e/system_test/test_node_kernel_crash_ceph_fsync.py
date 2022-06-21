@@ -52,7 +52,6 @@ class TestKernelCrash(E2ETest):
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             access_mode=constants.ACCESS_MODE_RWX,
-            status=constants.STATUS_BOUND,
         )
 
         # Set interface argument for reference
