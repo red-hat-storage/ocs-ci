@@ -22,22 +22,20 @@ class TestKernelCrash(E2ETest):
     """
 
     pvc_size = 1
-    original_dir = "/var/lib/www/html/"
-    result_dir = "mydir"
+    result_dir = constants.MOUNT_POINT + "/mydir"
 
     def creates_files(self, pod_obj):
         while True:
-            for i in range(1, 125):
-                pod_obj.exec_cmd_on_pod(
-                    f"dd if=/dev/zero of={self.original_dir}{self.result_dir}/emp.txt bs=1M count=1"
-                )
+            pod_obj.exec_sh_cmd_on_pod(
+                "for i in {1..125}; do dd if=/dev/zero of=%s/emp_$i.txt bs=1M count=1; done"
+                % self.result_dir
+            )
 
     def remove_files(self, pod_obj):
         while True:
-            for i in range(1, 125):
-                pod_obj.exec_cmd_on_pod(
-                    f"rm {self.original_dir}{self.result_dir}/emp.txt"
-                )
+            pod_obj.exec_sh_cmd_on_pod(
+                "for i in {1..125}; rm %s/emp_$i.txt ; done" % self.result_dir
+            )
 
     def test_node_kernel_crash_ceph_fsync(self, pvc_factory, teardown_factory):
         """
@@ -56,13 +54,6 @@ class TestKernelCrash(E2ETest):
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
         )
-
-        # Confirm PVCs are Bound
-        log.info("Verifying the CephFS PVC are Bound")
-        helpers.wait_for_resource_state(
-            resource=pvc_obj, state=constants.STATUS_BOUND, timeout=240
-        )
-        log.info("Verified: CephFS PVC are Bound")
 
         # Set interface argument for reference
         pvc_obj.interface = constants.CEPHFILESYSTEM
@@ -96,7 +87,7 @@ class TestKernelCrash(E2ETest):
         log.info("Files copied successfully ")
 
         commands = [
-            "mkdir" + " " + self.original_dir + self.result_dir,
+            "mkdir" + " " + self.result_dir,
             "apt-get update",
         ]
         for cmd in commands:
@@ -105,8 +96,7 @@ class TestKernelCrash(E2ETest):
         log.info("Starting creation and deletion of files on volume")
 
         # Create and delete files on mount point
-        executor = ThreadPoolExecutor(max_workers=3)
-
+        executor = ThreadPoolExecutor(max_workers=5)
         executor.submit(self.creates_files, pod_obj)
         sleep(3)
         log.info("Started deletion of files on volume")
@@ -118,10 +108,8 @@ class TestKernelCrash(E2ETest):
             node.wait_for_nodes_status(
                 selected_node, status=constants.NODE_NOT_READY, timeout=120
             )
-        except ResourceWrongStatusException as ex:
-            log.error(
-                "Node in NotReady status found due to it gets panic, hence TC is failed. "
-            )
-            raise ex
-        else:
+
+        except ResourceWrongStatusException:
             log.info("Node in Ready status found, hence TC is Passed.")
+        else:
+            assert "Node in NotReady status found due to it gets panic, hence TC is failed."
