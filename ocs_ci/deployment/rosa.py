@@ -8,6 +8,7 @@ import logging
 import os
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
+from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
@@ -69,11 +70,20 @@ class ROSAOCP(BaseOCPDeployment):
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
-        ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
         password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
-        ocm.get_kubeadmin_password(self.cluster_name, password_path)
+
+        # generate kubeconfig and kubeadmin-password files
+        if config.ENV_DATA["ms_env_type"] == "staging":
+            ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
+            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+        if config.ENV_DATA["ms_env_type"] == "production":
+            rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
+            rosa_prod_cluster.create_admin_and_login()
+            rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
+            rosa_prod_cluster.generate_kubeadmin_password_file()
+
         self.test_cluster()
 
     def destroy(self, log_level="DEBUG"):
