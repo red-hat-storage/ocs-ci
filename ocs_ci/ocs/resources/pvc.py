@@ -12,7 +12,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -412,7 +412,10 @@ def create_pvc_snapshot(
     Returns:
         OCS object
     """
+    ocp_version = version.get_semantic_ocp_version_from_config()
     snapshot_data = templating.load_yaml(snap_yaml)
+    if ocp_version >= version.VERSION_4_11:
+        snapshot_data["apiVersion"] = "snapshot.storage.k8s.io/v1"
     snapshot_data["metadata"]["name"] = snap_name
     snapshot_data["metadata"]["namespace"] = namespace
     if sc_name:
