@@ -315,10 +315,6 @@ class CephCluster(object):
                 and version.get_semantic_ocs_version_from_config()
                 == version.VERSION_4_9
                 and config.DEPLOYMENT.get("live_deployment")
-                and version.get_semantic_version(
-                    config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
-                )
-                == version.VERSION_4_10
             ):
                 logger.info("skipping noobaa health check due to bug 2075422")
                 return
