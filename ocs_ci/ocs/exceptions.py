@@ -526,3 +526,7 @@ class RebootEventNotFoundException(Exception):
 
 class ConnectivityFail(Exception):
     pass
+
+
+class ROSAProdAdminLoginFailedException(Exception):
+    pass
