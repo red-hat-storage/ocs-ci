@@ -343,7 +343,8 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
-        self.validation_loc = locators[self.ocp_version]["validation"]
+        if self.ocp_version_full != version.VERSION_4_11:
+            self.validation_loc = locators[self.ocp_version]["validation"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.operator_name = (
@@ -649,7 +650,7 @@ class PageNavigator(BaseUI):
                 == "false"
             ):
                 logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
+                self.do_click(self.page_nav["show-default-projects"])
 
         pvc_loc = locators[self.ocp_version]["pvc"]
         logger.info(f"Wait and select namespace {project_name}")
