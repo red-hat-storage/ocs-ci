@@ -12,6 +12,9 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     bugzilla,
 )
+from ocs_ci.ocs.managedservice import (
+    post_onboarding_verification,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
@@ -26,6 +29,11 @@ class TestPostInstallationState(ManageTest):
     @managed_service_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
+
+    @acceptance
+    @ms_consumer_required
+    def test_post_onboarding(self):
+        post_onboarding_verification()
 
     @acceptance
     @ms_provider_required

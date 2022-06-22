@@ -15,6 +15,9 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
 )
+from ocs_ci.ocs.managedservice import (
+    post_onboarding_verification,
+)
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -462,6 +465,7 @@ def install_odf_addon(cluster):
         raise ManagedServiceAddonDeploymentError(
             f"Addon {addon_name} failed to be installed"
         )
+    post_onboarding_verification()
 
 
 def delete_odf_addon(cluster):
