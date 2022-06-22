@@ -302,7 +302,7 @@ def post_onboarding_verification():
         )
         current_consumer = clusterversion_yaml.get().get("spec")["clusterID"]
         logger.info(f"Current consumer's ID is {current_consumer}")
-        config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+        config.switch_to_provider()
         all_consumer_names = get_consumer_names()
         if current_consumer not in all_consumer_names:
             raise ResourceNotFoundError(

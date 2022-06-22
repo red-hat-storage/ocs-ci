@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     managed_service_required,
     ManageTest,
     ms_provider_required,
+    ms_consumer_required,
     tier1,
     runs_on_provider,
     bugzilla,
