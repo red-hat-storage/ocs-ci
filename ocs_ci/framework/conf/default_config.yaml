@@ -100,6 +100,7 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  install_lvmo: False
 
 
 # Section for reporting configuration
@@ -125,6 +126,7 @@ ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
+  sno: false
   cluster_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
