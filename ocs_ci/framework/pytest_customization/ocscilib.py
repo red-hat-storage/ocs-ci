@@ -122,6 +122,18 @@ def _pytest_addoption_cluster_specific(parser):
             type=int,
             help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
         )
+        parser.addoption(
+            f"--lvmo-disks{suffix}",
+            dest=f"lvmo_disks{suffix}",
+            type=int,
+            help="Number of disks to add to node for LVMO",
+        )
+        parser.addoption(
+            f"--lvmo-disks-size{suffix}",
+            dest=f"lvmo_disks_size{suffix}",
+            type=int,
+            help="Size of the disks to add to lvmo in GB",
+        )
 
 
 def pytest_addoption(parser):
@@ -301,6 +313,15 @@ def pytest_addoption(parser):
         Sets the default index of the cluster whose context needs to be
         loaded when run-ci starts
         """,
+    )
+    parser.addoption(
+        "--install-lvmo",
+        dest="install_lvmo",
+        action="store_true",
+        default=False,
+        help="""
+            set for installing lvmo operator and lvmo cluster
+            """,
     )
 
 
@@ -509,6 +530,19 @@ def process_cluster_cli_params(config):
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
+    install_lvmo = get_cli_param(config, "install_lvmo")
+    if install_lvmo:
+        ocsci_config.DEPLOYMENT["install_lvmo"] = True
+        number_of_disks = get_cli_param(config, "lvmo_disks")
+        if number_of_disks is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = 3
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = number_of_disks
+        disk_size = get_cli_param(config, "lvmo_disks_size")
+        if disk_size is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = 200
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = disk_size
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image

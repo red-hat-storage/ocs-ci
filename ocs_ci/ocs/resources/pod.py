@@ -307,6 +307,7 @@ class Pod(OCS):
         buffer_pattern=None,
         readwrite=None,
         direct=0,
+        verify=False,
     ):
         """
         Execute FIO on a pod
@@ -341,6 +342,7 @@ class Pod(OCS):
             buffer_pattern (str): fio will fill the I/O buffers with this pattern
             readwrite (str): Type of I/O pattern default is randrw from yaml
             direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
+            verify (bool): This method verifies file contents after each iteration of the job. e.g. crc32c, md5
 
         """
         if not self.wl_setup_done:
@@ -375,6 +377,8 @@ class Pod(OCS):
             self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
+        if verify:
+            self.io_params["verify"] = config.RUN["io_verification_method"]
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):

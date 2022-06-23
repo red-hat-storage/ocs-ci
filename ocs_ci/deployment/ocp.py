@@ -25,6 +25,7 @@ class OCPDeployment:
         self.pull_secret = {}
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA["platform"].lower()
+        self.sno = config.ENV_DATA["sno"]
         self.deployment_type = config.ENV_DATA["deployment_type"].lower()
         if not hasattr(self, "flexy_deployment"):
             self.flexy_deployment = False

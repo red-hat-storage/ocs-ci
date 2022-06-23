@@ -154,6 +154,9 @@ to the pytest.
     previous execution. If the file is provided, the execution will remove all the test cases
     which passed and will run only those test cases which were skipped / failed / or had error
     in the provided report.
+* `--install-lvmo` - Deploy LVMCluster, will skip ODF deployment.
+* `--lvmo-disks` - Number of disks to add to SNO deployment.
+* `--lvmo-disks-size` - Size of disks to add to SNO deployment.
 
 ## Examples
 

@@ -2,6 +2,9 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
+  # MS cluster via rosa _addons
+  # or via rosa_service i.e appliance mode
+  appliance_mode: True
   cluster_type: 'consumer'
   multi_availability_zones: True
   worker_replicas: 3
