@@ -867,7 +867,7 @@ locators = {
             **deployment_4_10,
             **deployment_4_11,
         },
-        "add_capacity": add_capacity,
+        "add_capacity": {**add_capacity, **add_capacity_4_11},
     },
     "4.10": {
         "login": login,
