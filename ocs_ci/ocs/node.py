@@ -1603,10 +1603,13 @@ def verify_all_nodes_created():
 
     """
     expected_num_nodes = (
-        config.ENV_DATA["worker_replicas"]
-        + config.ENV_DATA["master_replicas"]
-        + config.ENV_DATA.get("infra_replicas", 0)
+        config.ENV_DATA["worker_replicas"] + config.ENV_DATA["master_replicas"]
     )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        expected_num_nodes += 3
+    else:
+        expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
+
     existing_num_nodes = len(get_all_nodes())
     if expected_num_nodes != existing_num_nodes:
         raise NotAllNodesCreated(
