@@ -5,9 +5,6 @@ metadata:
   name: perf-pod
   namespace: default
 spec:
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
   containers:
    - name: performance
      image: quay.io/ocsci/perf:latest
@@ -18,16 +15,6 @@ spec:
      volumeMounts:
        - name: mypvc
          mountPath: /mnt
-     securityContext:
-       allowPrivilegeEscalation: false
-       runAsNonRoot: true
-       runAsUser: 1000
-       capabilities:
-         drop:
-           - ALL
-       seccompProfile:
-         type: RuntimeDefault
-
   volumes:
    - name: mypvc
      persistentVolumeClaim:
