@@ -96,7 +96,7 @@ class FioPodScale(object):
         io_runtime=None,
         pvc_size=None,
         max_pvc_size=105,
-        remove_security_context_section=False,
+        remove_security_context_section=True,
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -110,8 +110,8 @@ class FioPodScale(object):
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
-            remove_security_context_section (bool): If True, remove the security section from the Yaml file.
-                False, otherwise. Default value is False.
+            remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
+                False, otherwise. Default value is True.
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -246,7 +246,7 @@ class FioPodScale(object):
         pvc_size=None,
         max_pvc_size=105,
         obj_name_prefix="obj",
-        remove_security_context_section=False,
+        remove_security_context_section=True,
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes
@@ -264,8 +264,8 @@ class FioPodScale(object):
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
             obj_name_prefix (str): The prefix of the object name. The default value is 'obj'
-            remove_security_context_section (bool): If True, remove the security section from the Yaml file.
-                False, otherwise. Default value is False.
+            remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
+                False, otherwise. Default value is True.
 
         """
 
@@ -1375,7 +1375,7 @@ def attach_multiple_pvc_to_pod_dict(
     io_runtime=None,
     io_size=None,
     pod_yaml=constants.PERF_POD_YAML,
-    remove_security_context_section=False,
+    remove_security_context_section=True,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1393,8 +1393,8 @@ def attach_multiple_pvc_to_pod_dict(
         io_runtime (seconds): Runtime in Seconds to continue IO
         io_size (str value with M|K|G): io_size with respective unit
         pod_yaml (dict): Pod yaml file dict
-        remove_security_context_section (bool): If True, remove the security section from the Yaml file.
-            False, otherwise. Default value is False.
+        remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
+            False, otherwise. Default value is True.
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added

@@ -5364,7 +5364,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         io_runtime=None,
         pvc_size=None,
         max_pvc_size=30,
-        remove_security_context_section=False,
+        remove_security_context_section=True,
     ):
         """
         Create a factory for creating resources using k8s fixture.
@@ -5378,8 +5378,8 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
-            remove_security_context_section (bool): If True, remove the security section from the Yaml file.
-                False, otherwise. Default value is False.
+            remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
+                False, otherwise. Default value is True.
 
         Returns:
             FioPodScale: The FioPodScale object

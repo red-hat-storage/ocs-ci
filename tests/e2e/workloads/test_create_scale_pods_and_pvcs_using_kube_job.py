@@ -57,7 +57,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         """
         config.switch_to_consumer()
         log.info("Start creating resources using kube job...")
-        create_scale_pods_and_pvcs_using_kube_job(remove_security_context_section=True)
+        create_scale_pods_and_pvcs_using_kube_job()
         ceph_health_check()
 
         log.info("Switch to the provider")
