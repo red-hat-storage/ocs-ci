@@ -210,8 +210,12 @@ class PackageManifest(OCP):
             raise NoInstallPlanForApproveFoundException(
                 "No insall plan for approve found!"
             )
-        install_plans.reverse()
-        for ip in install_plans:
+        sorted_install_plans = sorted(
+            install_plans,
+            key=lambda ip: ip["metadata"]["creationTimestamp"],
+            reverse=True,
+        )
+        for ip in sorted_install_plans:
             for csv_name in ip["spec"]["clusterServiceVersionNames"]:
                 if pattern in csv_name and ip["spec"]["approved"]:
                     return csv_name

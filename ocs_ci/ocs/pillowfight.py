@@ -1,7 +1,6 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
-import time
 import logging
 import tempfile
 import re
@@ -26,7 +25,6 @@ class PillowFight(object):
     This class was modelled after the RipSaw class in this directory.
     """
 
-    WAIT_FOR_TIME = 1800
     MIN_ACCEPTABLE_OPS_PER_SEC = 2000
     MAX_ACCEPTABLE_RESPONSE_TIME = 2000
 
@@ -59,7 +57,9 @@ class PillowFight(object):
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
-    def run_pillowfights(self, replicas=1, num_items=None, num_threads=None):
+    def run_pillowfights(
+        self, replicas=1, num_items=None, num_threads=None, timeout=1800
+    ):
         """
         loop through all the yaml files extracted from the pillowfight repo
         and run them.  Run oc logs on the results and save the logs in self.logs
@@ -92,11 +92,10 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
-            time.sleep(15)
         self.pods_info = {}
 
         for pillowfight_pods in TimeoutSampler(
-            self.WAIT_FOR_TIME,
+            timeout,
             9,
             get_pod_name_by_pattern,
             "pillowfight",

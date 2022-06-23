@@ -16,7 +16,12 @@ from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
-from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, EXTERNAL_CLUSTER_USER
+from ocs_ci.ocs.defaults import (
+    EXTERNAL_CLUSTER_USER,
+    MUST_GATHER_UPSTREAM_IMAGE,
+    MUST_GATHER_UPSTREAM_TAG,
+    OCS_OPERATOR_NAME,
+)
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -298,18 +303,25 @@ class OCSUpgrade(object):
                 f"Upgrade version {upgrade_version} is not higher than old version:"
                 f" {self.version_before_upgrade}, config file will not be loaded"
             )
-        overwrite_must_gather_image = config.REPORTING["overwrite_must_gather_image"]
-        if live_deployment and upgrade_in_same_source and overwrite_must_gather_image:
+        # For IBM ROKS cloud, there is no possibility to use internal build of must gather image.
+        # If we are not testing the live upgrade, then we will need to change images to the upsream.
+        ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        use_upstream_mg_image = ibm_cloud_platform and not upgrade_in_same_source
+        if (live_deployment and upgrade_in_same_source) or (
+            ibm_cloud_platform and not use_upstream_mg_image
+        ):
             update_live_must_gather_image()
+        elif use_upstream_mg_image:
+            config.REPORTING["ocs_must_gather_image"] = MUST_GATHER_UPSTREAM_IMAGE
+            config.REPORTING["ocs_must_gather_latest_tag"] = MUST_GATHER_UPSTREAM_TAG
         else:
-            if overwrite_must_gather_image:
-                must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
-                must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
-                log.info(
-                    f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
-                )
-                config.REPORTING["ocs_must_gather_image"] = must_gather_image
-                config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
+            must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
+            must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
+            log.info(
+                f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
+            )
+            config.REPORTING["ocs_must_gather_image"] = must_gather_image
+            config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
     def get_csv_name_pre_upgrade(self):
         """

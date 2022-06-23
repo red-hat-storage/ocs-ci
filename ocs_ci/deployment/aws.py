@@ -274,6 +274,7 @@ class AWSUPI(AWSBase):
                 "AWS_REGION": config.ENV_DATA["region"],
                 "rhcos_ami": config.ENV_DATA.get("rhcos_ami"),
                 "route53_domain_name": config.ENV_DATA["base_domain"],
+                "vm_type_bootstrap": config.ENV_DATA["vm_type_bootstrap"],
                 "vm_type_masters": config.ENV_DATA["master_instance_type"],
                 "vm_type_workers": config.ENV_DATA["worker_instance_type"],
                 "num_workers": str(config.ENV_DATA["worker_replicas"]),

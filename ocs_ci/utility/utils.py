@@ -14,6 +14,7 @@ import subprocess
 import time
 import traceback
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -42,6 +43,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedImage,
+    UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
 )
@@ -513,9 +515,8 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
-    index = 0
     for cluster in config.clusters:
-        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -524,7 +525,9 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[index] = exec_cmd(
+                completed_process[
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ] = exec_cmd(
                     cmd,
                     secrets=secrets,
                     timeout=timeout,
@@ -538,7 +541,6 @@ def run_cmd_multicluster(
                     f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
                 )
                 raise
-            index = +1
     config.switch_ctx(restore_ctx_index)
     return completed_process
 
@@ -1491,7 +1493,7 @@ def move_summary_to_top(soup):
 
     """
     summary = []
-    summary.append(soup.find("h2", text="Summary"))
+    summary.append(soup.find("h2", string="Summary"))
     for tag in summary[0].next_siblings:
         if tag.name == "h2":
             break
@@ -2053,7 +2055,7 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None):
+def clone_repo(url, location, branch="master", to_checkout=None, clone_type="shallow"):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2063,10 +2065,49 @@ def clone_repo(url, location, branch="master", to_checkout=None):
         location (str): path where the repository will be cloned to
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
+        clone_type (str): type of clone (shallow, blobless, treeless and normal)
+            By default, shallow clone will be used. For normal clone use
+            clone_type as "normal".
+
+    Raises:
+        UnknownCloneTypeException: In case of incorrect clone_type is used
+
     """
+    if clone_type == "shallow":
+        if branch != "master":
+            git_params = "--no-single-branch --depth=1"
+        else:
+            git_params = "--depth=1"
+    elif clone_type == "blobless":
+        git_params = "--filter=blob:none"
+    elif clone_type == "treeless":
+        git_params = "--filter=tree:0"
+    elif clone_type == "normal":
+        git_params = ""
+    else:
+        raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("shyRozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("shyRozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
+
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {url} {location}")
+        run_cmd(f"git clone {git_params} {url} {location}")
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
@@ -3174,7 +3215,7 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # Download and untar
     download_file(url, terraform_ignition_provider_zip_file)
-    run_cmd(f"unzip {terraform_ignition_provider_zip_file}")
+    run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)
@@ -3647,3 +3688,79 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)

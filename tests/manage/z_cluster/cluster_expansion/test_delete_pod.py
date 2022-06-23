@@ -3,7 +3,7 @@ import pytest
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.testlib import ignore_leftovers, tier4c
+from ocs_ci.framework.testlib import ignore_leftovers, tier4c, skipif_managed_service
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -20,6 +20,7 @@ from ocs_ci.ocs import node
 logger = logging.getLogger(__name__)
 
 
+@skipif_managed_service
 @ignore_leftovers
 @tier4c
 class TestAddCapacityWithResourceDelete:

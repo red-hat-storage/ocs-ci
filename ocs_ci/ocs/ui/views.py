@@ -6,11 +6,18 @@ OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
 
 login = {
+    "pre_login_page_title": "Log In",
+    "login_page_title": "Log in · Red Hat OpenShift Container Platform",
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
+    "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
+}
+
+login_4_11 = {
+    "ocp_page": "Overview · Red Hat OpenShift",
 }
 
 deployment = {
@@ -147,6 +154,13 @@ deployment_4_10 = {
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+}
+
+deployment_4_11 = {
+    "osd_size_dropdown": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "512": ("//span[text()='0.5 TiB']", By.XPATH),
+    "2048": ("//span[text()='2 TiB']", By.XPATH),
+    "4096": ("//span[text()='4 TiB']", By.XPATH),
 }
 
 generic_locators = {
@@ -374,6 +388,7 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
+    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
 }
 
 page_nav_4_10 = {
@@ -560,6 +575,27 @@ acm_configuration = {
     "cc_cluster_status_text": ("//span[text()='Status']", By.XPATH),
     "cc_details_toggle_icon": (
         "//span[@class='pf-c-card__header-toggle-icon']",
+        By.XPATH,
+    ),
+    "cc_deployment_yaml_toggle_button": (
+        "//span[@class='pf-c-switch__toggle']",
+        By.XPATH,
+    ),
+    "cc_yaml_editor": ("//div[@class='yamlEditorContainer']", By.CSS_SELECTOR),
+    "cc_install_config_tab": ("//a[normalize-space()='install-config']", By.XPATH),
+    # Action button name format: '<cluster-name>-actions'
+    "cc_delete_cluster_action_dropdown": ("//button[@id='{}']", By.XPATH),
+    "cc_destroy_cluster": ("//a[normalize-space()='Destroy cluster']", By.XPATH),
+    "cc_destroy_cluster_confirm_textbox": ("//input[@id='confirm']", By.XPATH),
+    "cc_destroy_button": ("//button[normalize-space()='Destroy']", By.XPATH),
+    "cc_cluster_destroying": ("//button[normalize-space()='Destroying']", By.XPATH),
+    # Destroy in progress text = '<cluster-name> is being destroyed'
+    "cc_cluster_being_destroyed_heading": (
+        "//h4[normalize-space()='{} is being destroyed']",
+        By.XPATH,
+    ),
+    "cc_destroy_cluster_back_to_clusters_button": (
+        "//button[normalize-space()='Back to clusters']",
         By.XPATH,
     ),
 }
@@ -813,6 +849,18 @@ validation_4_10 = {
 }
 
 locators = {
+    "4.11": {
+        "login": {**login, **login_4_11},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+        },
+    },
     "4.10": {
         "login": login,
         "page": {**page_nav, **page_nav_4_10},

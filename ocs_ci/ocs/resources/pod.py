@@ -21,6 +21,7 @@ from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    CephToolBoxNotFoundException,
     CommandFailed,
     NotAllPodsHaveSameImagesError,
     NonUpgradedImagesFoundError,
@@ -306,6 +307,7 @@ class Pod(OCS):
         buffer_pattern=None,
         readwrite=None,
         direct=0,
+        verify=False,
     ):
         """
         Execute FIO on a pod
@@ -340,6 +342,7 @@ class Pod(OCS):
             buffer_pattern (str): fio will fill the I/O buffers with this pattern
             readwrite (str): Type of I/O pattern default is randrw from yaml
             direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
+            verify (bool): This method verifies file contents after each iteration of the job. e.g. crc32c, md5
 
         """
         if not self.wl_setup_done:
@@ -374,6 +377,8 @@ class Pod(OCS):
             self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
+        if verify:
+            self.io_params["verify"] = config.RUN["io_verification_method"]
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
@@ -571,23 +576,32 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod():
+def get_ceph_tools_pod(skip_creating_pod=False):
     """
     Get the Ceph tools pod
 
+    Args:
+        skip_creating_pod (bool): True if user doesn't want to create new tool box
+            if it doesn't exist
+
     Returns:
         Pod object: The Ceph tools pod object
+
+    Raises:
+        ToolBoxNotFoundException: In case of tool box not found
+
     """
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
     ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
-    if not ct_pod_items:
+    if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
         ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
 
-    assert ct_pod_items, "No Ceph tools pod found"
+    if not ct_pod_items:
+        raise CephToolBoxNotFoundException
 
     # In the case of node failure, the CT pod will be recreated with the old
     # one in status Terminated. Therefore, need to filter out the Terminated pod
@@ -1420,19 +1434,25 @@ def wait_for_storage_pods(timeout=200):
 
     """
     all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    # Ignoring pods with "app=rook-ceph-detect-version" app label
 
+    # Ignoring detect version pods
+    labels_to_ignore = [
+        constants.ROOK_CEPH_DETECT_VERSION_LABEL,
+        constants.CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL,
+        constants.CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL,
+    ]
     all_pod_obj = [
         pod
         for pod in all_pod_obj
         if pod.get_labels()
-        and constants.ROOK_CEPH_DETECT_VERSION_LABEL[4:]
-        not in pod.get_labels().values()
+        and all(
+            label[4:] not in pod.get_labels().values() for label in labels_to_ignore
+        )
     ]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
-        if any(i in pod_obj.name for i in ["-1-deploy", "ocs-deviceset"]):
+        if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
@@ -2369,3 +2389,30 @@ def get_pod_ip(pod_obj):
 
     """
     return pod_obj.get().get("status").get("podIP")
+
+
+def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
+    """
+    Wait for the osd pods having specific ids
+
+    Args:
+        osd_ids (list): The list of the osd ids
+        timeout (int): Time to wait for the osd pods having the specified ids
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        list: The osd pods having the specified ids
+
+    Raise:
+        TimeoutExpiredError: In case it didn't find all the osd pods with the specified ids
+
+    """
+    for osd_pods in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_osd_pods_having_ids,
+        osd_ids=osd_ids,
+    ):
+        if len(osd_pods) == len(osd_ids):
+            logger.info(f"Found all the osd pods with the ids: {osd_ids}")
+            return osd_pods

@@ -26,6 +26,7 @@ from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -257,6 +258,30 @@ class CephCluster(object):
         expected_mds_count = self.mds_count
 
         self.scan_cluster()
+
+        if (
+            config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
+            and config.ENV_DATA["cluster_type"] == "consumer"
+        ):
+            # on Managed Service Consumer cluster, check that there are no
+            # extra Ceph pods
+            mon_pods = pod.get_mon_pods()
+            if mon_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mon pods!"
+                )
+            osd_pods = pod.get_osd_pods()
+            if osd_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any osd pods!"
+                )
+            mds_pods = pod.get_mds_pods()
+            if mds_pods:
+                raise exceptions.CephHealthException(
+                    "Managed Service Consumer cluster shouldn't have any mds pods!"
+                )
+            return True
+
         try:
             self.mon_health_check(expected_mon_count)
         except exceptions.MonCountException as e:
@@ -284,7 +309,21 @@ class CephCluster(object):
             config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
             and not config.COMPONENTS["disable_noobaa"]
         ):
-            self.wait_for_noobaa_health_ok()
+            # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
+            if (
+                version.get_semantic_ocp_version_from_config() == version.VERSION_4_10
+                and version.get_semantic_ocs_version_from_config()
+                == version.VERSION_4_9
+                and config.DEPLOYMENT.get("live_deployment")
+                and version.get_semantic_version(
+                    config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
+                )
+                == version.VERSION_4_10
+            ):
+                logger.info("skipping noobaa health check due to bug 2075422")
+                return
+            else:
+                self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
@@ -879,18 +918,20 @@ class CephCluster(object):
         if pool_name == "ocs-storagecluster-cephblockpool":
             return
 
+        # To make the deletion time faster, delete the created pool brutally
+        patch = (
+            f"cephblockpool {pool_name} --type=merge -p "
+            '\'{"metadata":{"finalizers":null}}\''
+        )
         # Delete the RBD pool
         try:
-            self.RBD.delete(resource_name=pool_name)
+            self.RBD.delete(resource_name=pool_name, wait=False)
         except Exception:
             logger.warning(f"BlockPoool {pool_name} couldnt delete")
             logger.info("Try to force delete it")
-            patch = (
-                f"cephblockpool {pool_name} --type=merge -p "
-                '\'{"metadata":{"finalizers":null}}\''
-            )
-            self.RBD.exec_oc_cmd(f"patch {patch}")
-        self.RBD.wait_for_delete(resource_name=pool_name)
+        # Wait for 30 seconds before brutally delete the bool.
+        time.sleep(30)
+        self.RBD.exec_oc_cmd(f"patch {patch}")
 
 
 class CephHealthMonitor(threading.Thread):
@@ -2000,6 +2041,17 @@ def validate_existence_of_blocking_pdb():
                 f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
             )
     return blocking_pdb_exist
+
+
+def is_managed_service_cluster():
+    """
+    Check if the cluster is a managed service cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service cluster. False, otherwise
+
+    """
+    return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
 
 
 class CephClusterExternal(CephCluster):

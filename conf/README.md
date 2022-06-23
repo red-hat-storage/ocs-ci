@@ -143,7 +143,6 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
-* `overwrite_must_gather_image` - If true, it allows overwrite must gather image when reloading config during upgrade to the default value.
 
 #### ENV_DATA
 
@@ -228,7 +227,7 @@ higher priority).
 * `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
-
+* `ms_env_type` - to choose managed service environment type staging or production, default set to staging
 #### UPGRADE
 
 Upgrade related configuration data.

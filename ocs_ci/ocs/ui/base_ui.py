@@ -343,7 +343,8 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
-        self.validation_loc = locators[self.ocp_version]["validation"]
+        if self.ocp_version_full != version.VERSION_4_11:
+            self.validation_loc = locators[self.ocp_version]["validation"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.operator_name = (
@@ -364,7 +365,10 @@ class PageNavigator(BaseUI):
             else:
                 self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-            self.storage_class = "managed-premium_sc"
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
 
     def navigate_overview_page(self):
         """
@@ -646,7 +650,7 @@ class PageNavigator(BaseUI):
                 == "false"
             ):
                 logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
+                self.do_click(self.page_nav["show-default-projects"])
 
         pvc_loc = locators[self.ocp_version]["pvc"]
         logger.info(f"Wait and select namespace {project_name}")
@@ -720,7 +724,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating snapshot: {filename}")
+    logger.info(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
@@ -773,7 +777,9 @@ def login_ui(console_url=None):
 
         # use proxy server, if required
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
             # there is a big difference between configuring not authenticated
@@ -828,6 +834,8 @@ def login_ui(console_url=None):
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
     driver.get(console_url)
+    # Validate proceeding to the login console before taking any action:
+    proceed_to_login_console(driver)
     if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
         "import_clusters_to_acm"
     ):
@@ -875,3 +883,26 @@ def close_browser(driver):
     logger.info("Close browser")
     take_screenshot(driver)
     driver.close()
+
+
+def proceed_to_login_console(driver: WebDriver):
+    """
+    Proceed to the login console, if needed to confirm this action in a page that appears before.
+    This is required to be as a solo function, because the driver initializes in the login_ui function.
+    Function needs to be called just before login
+
+    Args:
+        driver (Selenium WebDriver)
+
+    Returns:
+        None
+
+    """
+    login_loc = locators[get_ocp_version()]["login"]
+    if driver.title == login_loc["pre_login_page_title"]:
+        proceed_btn = driver.find_element(
+            by=login_loc["proceed_to_login_btn"][1],
+            value=login_loc["proceed_to_login_btn"][0],
+        )
+        proceed_btn.click()
+        WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
