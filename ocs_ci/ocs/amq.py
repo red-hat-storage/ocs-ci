@@ -227,7 +227,11 @@ class AMQ(object):
         return : kafka_persistent
 
         """
-        if storagecluster_independent_check():
+        if (
+            storagecluster_independent_check()
+            and config.ENV_DATA["platform"].lower()
+            not in constants.MANAGED_SERVICE_PLATFORMS
+        ):
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         try:
             kafka_persistent = templating.load_yaml(

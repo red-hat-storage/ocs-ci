@@ -906,7 +906,7 @@ class Vault(KMS):
             if self.vault_namespace:
                 buf["vaultNamespace"] = self.vault_namespace
             if self.vault_kube_auth_path:
-                buf["vaultAuthPath"] = self.vault_kube_auth_path
+                buf["vaultAuthPath"] = f"/v1/auth/{self.vault_kube_auth_path}/login"
             else:
                 buf.pop("vaultAuthPath")
             if self.vault_kube_auth_namespace:
@@ -1063,6 +1063,7 @@ class Vault(KMS):
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
+            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -path={auth_path} kubernetes"
 
         elif auth_namespace:

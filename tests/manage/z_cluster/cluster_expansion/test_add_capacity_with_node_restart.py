@@ -1,7 +1,12 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
+from ocs_ci.framework.testlib import (
+    ignore_leftovers,
+    ManageTest,
+    tier4b,
+    skipif_managed_service,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -28,6 +33,7 @@ logger = logging.getLogger(__name__)
 )
 @ignore_leftovers
 @tier4b
+@skipif_managed_service
 class TestAddCapacityNodeRestart(ManageTest):
     """
     Test add capacity when one of the worker nodes got restart

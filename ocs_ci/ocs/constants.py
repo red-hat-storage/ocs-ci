@@ -26,6 +26,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
@@ -143,6 +144,8 @@ NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
+CATSRC = "catsrc"
+RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -290,6 +293,10 @@ NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
 NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
+CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
+CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
+    "app=ceph-object-controller-detect-version"
+)
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
@@ -463,6 +470,8 @@ NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
 PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
+PERF_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_block.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
@@ -497,6 +506,10 @@ GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
 CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
+CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls
@@ -676,7 +689,7 @@ RBD_SIDECAR_PATCH_CMD = (
     ' \'[{ "op": "add", "path": "/data/CSI_ENABLE_OMAP_GENERATOR", "value": "true" },'
     '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
-RBD_SIDECAR_COUNT = 16
+RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -808,11 +821,12 @@ AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
+SNO_BOOTSTRAP_IGN = "bootstrap-in-place-for-live-iso.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
-# Minimum storage needed for vSphere Datastore in bytes
+# Minimum storage needed for vSphere Datastore in bytes.
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
@@ -830,6 +844,7 @@ VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
+VM_VAR = os.path.join(VSPHERE_DIR, "vm/variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
@@ -847,6 +862,8 @@ SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
 SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
+RUST_URL = "https://sh.rustup.rs"
+COREOS_INSTALLER_REPO = "https://github.com/coreos/coreos-installer.git"
 
 # v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
@@ -979,9 +996,19 @@ RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
-NB_OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-noobaa-ceph-objectstore-user"
-NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("")
-EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = NB_OSU_SECRET_BASE.format("external-")
+OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
+CEPH_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "ocs-storagecluster", "cephobjectstoreuser"
+)
+CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "ocs-storagecluster", "cephobjectstoreuser"
+)
+NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "", "noobaa", "ceph-objectstore-user"
+)
+EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
+    "external-", "noobaa", "ceph-objectstore-user"
+)
 OCS_SECRET = "ocs-secret"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
@@ -1187,6 +1214,10 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
+# Routes
+RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
+
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
@@ -1269,6 +1300,20 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-operator",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
+    "4.11": [
+        "cluster-logging",
+        "elasticsearch-operator",
+        "mcg-operator",
+        "ocs-operator",
+        "odf-csi-addons-operator",
+        "odf-lvm-operator",
+        "odf-multicluster-orchestrator",
+        "odf-operator",
+    ]
+}
+
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -1310,6 +1355,8 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
+    80: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    240: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
@@ -1318,6 +1365,8 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 SCALE_PVC_ROUND_UP_VALUE = {
+    80: 80,
+    240: 240,
     1500: 1520,
     3000: 3040,
     4500: 4560,
@@ -1354,7 +1403,7 @@ HAPROXY_SERVICE = "/etc/systemd/system/haproxy.service"
 CHRONY_CONF = "/etc/chrony.conf"
 
 # NTP server
-RH_NTP_CLOCK = "clock.redhat.com"
+RH_NTP_CLOCK = "clock1.rdu2.redhat.com"
 
 # Disruptions pod names
 OSD = "osd"
@@ -1674,11 +1723,13 @@ ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
 ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
-ACM_HUB_DOWNSTREAM_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
-ACM_HUB_DOWNSTREAM_ICSP_YAML = os.path.join(
+ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
+ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
 )
-ACM_HUB_DOWNSTREAM_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
+ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
+ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
@@ -1696,6 +1747,7 @@ ACM_PLATOFRM_VSPHERE_CRED_PREFIX = "vsphereacmocp-"
 ACM_OCP_RELEASE_IMG_URL_PREFIX = "registry.ci.openshift.org/ocp/release"
 ACM_VSPHERE_NETWORK = "VM Network"
 ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
+ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 # Concatenated CA file for vcenter
@@ -1703,3 +1755,22 @@ VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
 SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
 SPACE = " "
+
+# Longevity constants
+STAGE_0_NAMESPACE = "ever-running-project"
+# Sno and lvmo constants
+SNO_NODE_NAME = "sno-edge-0"
+LVMO_POD_LABEL = {
+    "410": {
+        "controller_manager_label": "control-plane=controller-manager",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
+        "topolvm-node_label": "app=topolvm-node",
+        "vg-manager_label": "app=vg-manager",
+    },
+    "411": {
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
+        "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
+        "vg-manager_label": "app.lvm.openshift.io=vg-manager",
+    },
+}

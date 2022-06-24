@@ -133,3 +133,7 @@ HPCS_CSI_CONNECTION_CONF = {
         "IBM_KP_TOKEN_URL": "https://iam.cloud.ibm.com/oidc/token",
     }
 }
+
+# Must-gather:
+MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
+MUST_GATHER_UPSTREAM_TAG = "latest"

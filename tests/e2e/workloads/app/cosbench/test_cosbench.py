@@ -14,7 +14,7 @@ def cosbench(request):
     cosbench = Cosbench()
 
     def teardown():
-        cosbench.cosbench_teardown()
+        cosbench.cleanup()
 
     request.addfinalizer(teardown)
     return cosbench

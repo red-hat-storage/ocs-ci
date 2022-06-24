@@ -8,8 +8,8 @@ import logging
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.cloud import IPIOCPDeployment
+from ocs_ci.utility import version
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,11 @@ class AZUREBase(CloudDeploymentBase):
     """
 
     # default storage class for StorageCluster CRD on Azure platform
-    DEFAULT_STORAGECLASS = "managed-premium"
+    # From OCP 4.11, default storage class is managed-csi
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
+        DEFAULT_STORAGECLASS = "managed-csi"
+    else:
+        DEFAULT_STORAGECLASS = "managed-premium"
 
     def __init__(self):
         super(AZUREBase, self).__init__()

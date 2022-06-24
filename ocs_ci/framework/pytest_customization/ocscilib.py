@@ -13,6 +13,7 @@ import pytest
 from junitparser import JUnitXml
 
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
     ClusterNameLengthError,
     ClusterNameNotProvidedError,
@@ -21,7 +22,6 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
 from ocs_ci.ocs.exceptions import (
@@ -40,16 +40,13 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
-from ocs_ci.utility.reporting import update_live_must_gather_image
 
 __all__ = [
     "pytest_addoption",
 ]
 
+current_factory = logging.getLogRecordFactory()
 log = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter(LOG_FORMAT))
-log.addHandler(handler)
 
 
 def _pytest_addoption_cluster_specific(parser):
@@ -124,6 +121,18 @@ def _pytest_addoption_cluster_specific(parser):
             dest=f"osd_size{suffix}",
             type=int,
             help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+        )
+        parser.addoption(
+            f"--lvmo-disks{suffix}",
+            dest=f"lvmo_disks{suffix}",
+            type=int,
+            help="Number of disks to add to node for LVMO",
+        )
+        parser.addoption(
+            f"--lvmo-disks-size{suffix}",
+            dest=f"lvmo_disks_size{suffix}",
+            type=int,
+            help="Size of the disks to add to lvmo in GB",
         )
 
 
@@ -305,6 +314,15 @@ def pytest_addoption(parser):
         loaded when run-ci starts
         """,
     )
+    parser.addoption(
+        "--install-lvmo",
+        dest="install_lvmo",
+        action="store_true",
+        default=False,
+        help="""
+            set for installing lvmo operator and lvmo cluster
+            """,
+    )
 
 
 def pytest_configure(config):
@@ -316,6 +334,8 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
+    # Set the new factory for the logging of pytest
+    set_log_record_factory()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -494,8 +514,7 @@ def process_cluster_cli_params(config):
         config, "live_deploy", default=False
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
-    if live_deployment:
-        update_live_must_gather_image()
+
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
@@ -511,6 +530,19 @@ def process_cluster_cli_params(config):
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
+    install_lvmo = get_cli_param(config, "install_lvmo")
+    if install_lvmo:
+        ocsci_config.DEPLOYMENT["install_lvmo"] = True
+        number_of_disks = get_cli_param(config, "lvmo_disks")
+        if number_of_disks is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = 3
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = number_of_disks
+        disk_size = get_cli_param(config, "lvmo_disks_size")
+        if disk_size is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = 200
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = disk_size
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image

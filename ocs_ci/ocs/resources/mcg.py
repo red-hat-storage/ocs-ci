@@ -41,6 +41,7 @@ from ocs_ci.helpers.helpers import (
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
     storagecluster_independent_check,
+    wait_for_resource_state,
 )
 import subprocess
 
@@ -80,7 +81,9 @@ class MCG:
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
-
+        wait_for_resource_state(
+            resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
         self.retrieve_noobaa_cli_binary()
 
         """
@@ -877,7 +880,7 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -895,9 +898,18 @@ class MCG:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
-        result = exec_cmd(
-            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}", **kwargs
-        )
+
+        if use_yes:
+            result = exec_cmd(
+                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                shell=True,
+                **kwargs,
+            )
+        else:
+            result = exec_cmd(
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                **kwargs,
+            )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
