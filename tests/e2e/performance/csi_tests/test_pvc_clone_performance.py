@@ -127,46 +127,13 @@ class TestPVCClonePerformance(PASTest):
         Cleanup the test environment
         """
         logger.info("Starting the test environment cleanup")
-
-        # Delete The test POD
-        try:
-            self.pod_object.delete()
-            # Wait for the POD to be deleted
-            performance_lib.wait_for_resource_bulk_status(
-                "pod", 0, self.namespace, constants.STATUS_RUNNING, 60, 5
-            )
-            logger.info("The POD was deleted successfully")
-        except Exception:
-            pass
-
-        # Delete the test PVC
-        try:
-            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
-            self.pvc_obj.delete()
-            # Wait for the PVC to be deleted
-            performance_lib.wait_for_resource_bulk_status(
-                "pvc", 0, self.namespace, constants.STATUS_BOUND, 60, 5
-            )
-            logger.info("The PVC was deleted successfully")
-        except Exception:
-            pass
-
-        # Delete the backend PV of the PVC
-        try:
-            logger.info(f"Try to delete the backend PV : {pv}")
-            performance_lib.run_oc_command(f"delete pv {pv}")
-        except Exception as ex:
-            err_msg = f"cannot delete PV {pv} - [{ex}]"
-            logger.error(err_msg)
-
         try:
             logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
             self.sc_obj.delete()
             logger.info("Wait until the SC is deleted.")
             self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
         except Exception as ex:
-            logger.error(f"Can not delete the test sc : {ex}")
-
+            logger.warning(f"Can not delete the test sc : {ex}")
         # Delete the test project (namespace)
         self.delete_test_project()
         if self.interface == constants.CEPHBLOCKPOOL:
@@ -568,6 +535,7 @@ class TestPVCClonePerformance(PASTest):
         This is not a test - it is only check that previous tests ran and finished as expected
         and reporting the full results (links in the ES) of previous tests (8 + 2)
         """
+        self.interface = None  # for the teardown phase
 
         self.add_test_to_results_check(
             test="test_clone_create_delete_performance",
