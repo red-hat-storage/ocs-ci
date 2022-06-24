@@ -52,4 +52,4 @@ class TestNoobaaStorageAccount:
             headers=headers,
         ).json()
         assert res["properties"]["minimumTlsVersion"] == "TLS1_2"
-        assert not res["properties"]["supportsHttpsTrafficOnly"]
+        assert res["properties"]["supportsHttpsTrafficOnly"]
