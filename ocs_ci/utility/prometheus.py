@@ -307,7 +307,6 @@ def validate_status(content):
     if status != "success":
         logger.error("content status is not success, but %s", status)
         raise ValueError("content status is not success")
-    logger.info("content status is success as expected")
 
 
 class PrometheusAPI(object):

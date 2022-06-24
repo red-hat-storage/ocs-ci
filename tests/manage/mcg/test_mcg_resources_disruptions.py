@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
+    skipif_external_mode,
     tier4c,
     tier3,
     skipif_managed_service,
@@ -82,6 +83,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
+    @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["scale_down_to"],
         argvalues=[

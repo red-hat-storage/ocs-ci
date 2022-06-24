@@ -66,7 +66,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         pvc_size,
@@ -80,7 +80,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
 
         # Creating PVC via UI
         pvc_name = create_unique_resource_name("test", "pvc")
@@ -219,7 +219,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         clone_access_mode,
@@ -235,7 +235,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
 
         # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")

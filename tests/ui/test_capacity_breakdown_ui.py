@@ -53,7 +53,7 @@ class TestCapacityBreakdownUI(ManageTest):
     @skipif_ui_not_support("validation")
     @green_squad
     def test_capacity_breakdown_ui(
-        self, setup_ui, project_name, pod_name, sc_type, teardown_project_factory
+        self, setup_ui_class, project_name, pod_name, sc_type, teardown_project_factory
     ):
         """
         Test Capacity Breakdown UI
@@ -102,7 +102,7 @@ class TestCapacityBreakdownUI(ManageTest):
         logger.info(f"Read: {reads}")
         logger.info(f"Write: {writes}")
 
-        validation_ui_obj = ValidationUI(setup_ui)
+        validation_ui_obj = ValidationUI(setup_ui_class)
         assert validation_ui_obj.check_capacity_breakdown(
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"

@@ -17,7 +17,7 @@ from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
     wait_for_resource_state,
-    wait_for_rook_ceph_pod_status,
+    get_failure_domain,
 )
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -28,6 +28,9 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     recover_node_to_ready_state,
     add_new_nodes_and_label_after_node_failure_ipi,
+    get_another_osd_node_in_same_rack_or_zone,
+    get_node_pods,
+    wait_for_nodes_racks_or_zones,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -150,9 +153,17 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
 
         # Add a new node and label it
-        add_new_node_and_label_it(machineset_name)
+        new_ocs_node_names = add_new_node_and_label_it(machineset_name)
+        failure_domain = get_failure_domain()
+        log.info("Wait for the nodes racks or zones to appear...")
+        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+
+        new_ocs_node = get_node_objs(new_ocs_node_names)[0]
+        osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
+            failure_domain, new_ocs_node, common_nodes
+        )
         # Get the failure node obj
-        failure_node_obj = get_node_objs(node_names=[common_nodes[0]])
+        failure_node_obj = get_node_objs([osd_node_in_same_rack_or_zone.name])
 
         # Induce failure on the selected failure node
         log.info(f"Inducing failure on node {failure_node_obj[0].name}")
@@ -213,17 +224,17 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     def teardown(self, request, nodes):
         def finalizer():
             if self.extra_node:
-                nodes.terminate_nodes(self.osd_worker_node, wait=True)
+                nodes.terminate_nodes([self.osd_worker_node], wait=True)
                 log.info(
                     f"Successfully terminated node : "
-                    f"{self.osd_worker_node[0].name} instance"
+                    f"{self.osd_worker_node.name} instance"
                 )
             else:
-                is_recovered = recover_node_to_ready_state(self.osd_worker_node[0])
+                is_recovered = recover_node_to_ready_state(self.osd_worker_node)
                 if not is_recovered:
                     log.warning(
                         f"The recovery of the osd worker node "
-                        f"{self.osd_worker_node[0].name} failed. Adding a new OCS worker node..."
+                        f"{self.osd_worker_node.name} failed. Adding a new OCS worker node..."
                     )
                     add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
 
@@ -235,24 +246,19 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             log.info(
                 "Verify that the current replica count is equal to the ready replica count"
             )
-            machine.change_current_replica_count_to_ready_replica_count(
-                self.machineset_name
+            ready_replica_count = machine.get_ready_replica_count(self.machineset_name)
+            res = machine.wait_for_current_replica_count_to_reach_expected_value(
+                self.machineset_name, expected_value=ready_replica_count
             )
+            if not res:
+                machine.change_current_replica_count_to_ready_replica_count(
+                    self.machineset_name
+                )
+
             log.info("Check again that the Ceph Health is Health OK")
             ceph_health_check()
 
         request.addfinalizer(finalizer)
-
-    def add_new_storage_node(self, node_name):
-        machine_name = machine.get_machine_from_node_name(node_name)
-        log.info(f"{node_name} associated machine is {machine_name}")
-
-        # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        log.info(f"{node_name} associated machineset is {machineset_name}")
-
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_name)
 
     @pytest.mark.parametrize(
         argnames=["additional_node"],
@@ -288,18 +294,36 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             self.machineset_name
         )
 
-        temp_osd = get_osd_pods()[0]
-        osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
-        self.osd_worker_node = [get_pod_node(temp_osd)]
         if additional_node:
-            self.add_new_storage_node(self.osd_worker_node[0].name)
+            new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+            failure_domain = get_failure_domain()
+            log.info("Wait for the nodes racks or zones to appear...")
+            wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+
+            new_ocs_node = get_node_objs(new_ocs_node_names)[0]
+            log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
             self.extra_node = True
-        nodes.stop_nodes(self.osd_worker_node, wait=True)
-        log.info(f"Successfully powered off node: {self.osd_worker_node[0].name}")
+            log.info("Get another OSD node in the same rack or zone...")
+            self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
+                failure_domain, new_ocs_node
+            )
+            assert (
+                self.osd_worker_node
+            ), "Didn't find another osd node in the same rack or zone"
+        else:
+            osd_node_names = get_osd_running_nodes()
+            self.osd_worker_node = get_node_objs(osd_node_names)[0]
+
+        osd_pods = get_osd_pods()
+        temp_osd = get_node_pods(self.osd_worker_node.name, pods_to_search=osd_pods)[0]
+        osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
+
+        nodes.stop_nodes([self.osd_worker_node], wait=True)
+        log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
-        assert wait_for_rook_ceph_pod_status(
-            temp_osd, constants.STATUS_TERMINATING, timeout
+        assert pod.wait_for_pods_to_be_in_statuses(
+            [constants.STATUS_TERMINATING], [temp_osd.name], timeout=timeout
         ), (
             f"The pod {osd_real_name} didn't reach the status {constants.STATUS_TERMINATING} "
             f"after {timeout} seconds"
@@ -315,11 +339,11 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                 new_osd = pod_obj
                 break
 
-        nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
-        log.info(f"Successfully powered on node: {self.osd_worker_node[0].name}")
+        nodes.start_nodes(nodes=[self.osd_worker_node], wait=True)
+        log.info(f"Successfully powered on node: {self.osd_worker_node.name}")
         wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=180)
         if additional_node:
             new_osd_node = get_pod_node(new_osd)
             assert (
-                new_osd_node.name != self.osd_worker_node[0].name
+                new_osd_node.name != self.osd_worker_node.name
             ), "New OSD is expected to run on the new additional node"

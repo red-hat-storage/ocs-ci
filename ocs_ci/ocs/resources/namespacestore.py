@@ -1,7 +1,11 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_resource,
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -244,7 +248,7 @@ def cli_create_namespacestore(
         ),
     }
     nss_creation_cmd += NSS_MAPPING[platform.lower()]()
-    mcg_obj.exec_mcg_cmd(nss_creation_cmd)
+    mcg_obj.exec_mcg_cmd(nss_creation_cmd, use_yes=True)
 
 
 def oc_create_namespacestore(
@@ -281,14 +285,20 @@ def oc_create_namespacestore(
             "type": "aws-s3",
             "awsS3": {
                 "targetBucket": uls_name,
-                "secret": {"name": get_attr_chain(cld_mgr, "aws_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "aws_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.AZURE_PLATFORM: lambda: {
             "type": "azure-blob",
             "azureBlob": {
                 "targetBlobContainer": uls_name,
-                "secret": {"name": get_attr_chain(cld_mgr, "azure_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "azure_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.RGW_PLATFORM: lambda: {
@@ -297,7 +307,10 @@ def oc_create_namespacestore(
                 "targetBucket": uls_name,
                 "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
                 "signatureVersion": "v2",
-                "secret": {"name": get_attr_chain(cld_mgr, "rgw_client.secret.name")},
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "rgw_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
             },
         },
         constants.NAMESPACE_FILESYSTEM: lambda: {
@@ -342,7 +355,11 @@ def template_pvc(
     pvc_data["metadata"]["namespace"] = namespace
     pvc_data["spec"]["accessModes"] = [access_mode]
     pvc_data["spec"]["resources"]["requests"]["storage"] = size
-    pvc_data["spec"]["storageClassName"] = storageclass
+    pvc_data["spec"]["storageClassName"] = (
+        constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        if storagecluster_independent_check()
+        else storageclass
+    )
     return pvc_data
 
 

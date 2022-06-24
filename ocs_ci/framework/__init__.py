@@ -189,13 +189,14 @@ class MultiClusterConfig:
         ]
         self.to_dict = self.cluster_ctx.to_dict
         if self.RUN.get("kubeconfig"):
-            logger.debug("switching kubeconfig")
             os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
 
     def switch_ctx(self, index=0):
         self.cluster_ctx = self.clusters[index]
         self.cur_index = index
         self._refresh_ctx()
+        # Log the switch after changing the current index
+        logger.info(f"Switched to cluster: {self.current_cluster_name()}")
 
     def switch_acm_ctx(self):
         self.switch_ctx(self.get_acm_index())
@@ -301,6 +302,16 @@ class MultiClusterConfig:
 
         """
         self.switch_ctx(self.get_cluster_index_by_name(cluster_name))
+
+    def current_cluster_name(self):
+        """
+        Get the Cluster name of the current context
+
+        Returns:
+            str: The cluster name which is stored as str in config (None if key not exist)
+
+        """
+        return self.ENV_DATA.get("cluster_name")
 
 
 config = MultiClusterConfig()
