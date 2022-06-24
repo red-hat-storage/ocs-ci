@@ -48,8 +48,8 @@ class OCP(object):
         resource_name="",
         selector=None,
         field_selector=None,
-        threading_lock=None,
         cluster_kubeconfig="",
+        threading_lock=None,
     ):
         """
         Initializer function
@@ -63,9 +63,9 @@ class OCP(object):
                 priority than resource_name and is used instead of the name.
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
             threading_lock (threading.Lock): threading.Lock object that is used
                 for handling concurrent oc commands
-            cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
         """
         self._api_version = api_version
         self._kind = kind
@@ -74,8 +74,8 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
-        self.threading_lock = threading_lock
         self.cluster_kubeconfig = cluster_kubeconfig
+        self.threading_lock = threading_lock
 
     @property
     def api_version(self):
