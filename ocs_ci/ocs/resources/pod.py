@@ -1768,6 +1768,10 @@ def check_pods_in_running_state(
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
+            and not (
+                config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
+                and p.name[:-5] in p.labels.get("job-name", "")
+            )
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if status not in "Running":
