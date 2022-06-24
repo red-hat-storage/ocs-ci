@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: java-s3
+  namespace: openshift-storage
+  labels:
+    app: java-s3
+spec:
+  containers:
+  - name: java-s3
+    image: quay.io/ocsci/javasdk-s3:latest
+    command: ["/bin/sleep", "3650d"]
+    imagePullPolicy: IfNotPresent
+  restartPolicy: Always
