@@ -130,7 +130,7 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
-from ocs_ci.ocs.longevity_stage2 import (
+from ocs_ci.ocs.longevity_helpers import (
     _multi_pvc_pod_lifecycle_factory,
     _multi_obc_lifecycle_factory,
 )
