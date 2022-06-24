@@ -33,8 +33,7 @@ class TestLongevity(E2ETest):
         long.stage3(
             project_factory,
             num_of_pvc=50,
-            num_of_obc=100,
-            pvc_size="10Gi",
-            run_time=2880,
+            num_of_obc=50,
+            run_time=180,
             delay=60,
         )

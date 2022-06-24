@@ -667,7 +667,13 @@ class Longevity(object):
             time.sleep(delay)
 
     def stage3(
-        self, project_factory, num_of_pvc, num_of_obc, pvc_size, delay=60, run_time=1440
+        self,
+        project_factory,
+        num_of_pvc,
+        num_of_obc,
+        pvc_size=None,
+        delay=60,
+        run_time=1440,
     ):
         """
         Concurrent bulk operations of following
@@ -751,7 +757,9 @@ class Longevity(object):
                 ),
             ]
             for job_file in resource_to_delete_job_file:
-                self.delete_stage_builder_kube_job(job_file, namespace)
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.delete_stage_builder_kube_job, job_file, namespace
+                )
 
             bulk_create_delete_job_file = []
             # waiting for the bulk create delete thread to complete
@@ -760,7 +768,9 @@ class Longevity(object):
                 bulk_create_delete_job_file.append(thread.result())
             # Delete all the created resources in the bulk create delete thread
             for job_file in bulk_create_delete_job_file:
-                self.delete_stage_builder_kube_job(job_file, namespace)
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.delete_stage_builder_kube_job, job_file, namespace
+                )
 
             log.info(
                 f"##############[COMPLETED CYCLE:{cycle_count}]####################"
