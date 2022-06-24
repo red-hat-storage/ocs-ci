@@ -4,7 +4,7 @@ import pathlib
 
 from datetime import datetime, timedelta
 
-from ocs_ci.ocs import constants, workload as _workload
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedWorkloadError
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.scale_noobaa_lib import (
@@ -25,12 +25,15 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
 from ocs_ci.ocs.resources.pod import delete_pods
-from ocs_ci.ocs.resources import pod
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.deployment.deployment import setup_persistent_monitoring
 from ocs_ci.ocs.registry import (
     change_registry_backend_to_ocs,
     check_if_registry_stack_exists,
+)
+from ocs_ci.ocs.longevity_helpers import (
+    create_restore_verify_snapshots,
+    expand_verify_pvcs,
 )
 from ocs_ci.utility.deployment_openshift_logging import install_logging
 from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
@@ -40,6 +43,7 @@ log = logging.getLogger(__name__)
 supported_app_workloads = ["pgsql", "couchbase", "cosbench"]
 supported_ocp_workloads = ["logging", "monitoring", "registry"]
 
+STAGE_2_PREFIX = "stage-2-cycle-"
 STAGE_4_PREFIX = "stage-4-cycle-"
 
 
@@ -518,171 +522,6 @@ class Longevity(object):
 
         return obc_bound_list
 
-    def create_restore_verify_snapshots(
-        self,
-        multi_snapshot_factory,
-        snapshot_restore_factory,
-        pod_factory,
-        pvc_objs,
-        namespace,
-        file_name,
-    ):
-        """
-        Creates snapshots from each PVC in the provided list of PVCs,
-        Restores new PVCs out of the created snapshots
-        and
-        Verifies data integrity by checking the existence and md5sum of file in the restored PVC.
-
-        Args:
-            multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
-            snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
-            pod_factory : Fixture to create new PODs.
-            pvc_objs (list) : List of PVC objects for which snapshots are to be created.
-            namespace (str) : Namespace in which the PVCs are created.
-            file_name (str) : Name of the file on which FIO is performed.
-
-        Returns:
-            tuple: A tuple of size 2 containing a list of restored PVC objects and a list of the pods attached to the
-                    restored PVCs, respectively.
-
-        """
-        # Create Snapshots
-        log.info("Started creation of snapshots of the PVCs.")
-        snapshots = multi_snapshot_factory(
-            pvc_obj=pvc_objs, snapshot_name_suffix=namespace
-        )
-        log.info(
-            "Created snapshots from all the PVCs and snapshots are in Ready state."
-        )
-
-        # Restore Snapshots
-        log.info("Started restoration of the snapshots created.")
-        restored_pvc_objs = list()
-        for snapshot_no in range(len(snapshots)):
-            restored_pvc_objs.append(
-                snapshot_restore_factory(
-                    snapshot_obj=snapshots[snapshot_no],
-                    volume_mode=pvc_objs[snapshot_no].get_pvc_vol_mode,
-                    access_mode=pvc_objs[snapshot_no].get_pvc_access_mode,
-                    timeout=600,
-                )
-            )
-        log.info("Restoration complete - Created new PVCs from all the snapshots.")
-
-        # Attach PODs to restored PVCs
-        restored_pod_objs = list()
-        for restored_pvc_obj in restored_pvc_objs:
-            if restored_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                restored_pod_objs.append(
-                    pod_factory(
-                        pvc=restored_pvc_obj,
-                        raw_block_pv=True,
-                        status=constants.STATUS_RUNNING,
-                        pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
-                    )
-                )
-            else:
-                restored_pod_objs.append(
-                    pod_factory(pvc=restored_pvc_obj, status=constants.STATUS_RUNNING)
-                )
-
-        # Verify that the fio exists and md5sum matches
-        pod.verify_data_integrity_for_multi_pvc_objs(
-            restored_pod_objs, pvc_objs, file_name
-        )
-
-        return restored_pvc_objs, restored_pod_objs
-
-    def expand_verify_pvcs(self, pvc_objs, pod_objs, pvc_size_new, file_name, fio_size):
-        """
-        Expands size of each PVC in the provided list of PVCs,
-        Verifies data integrity by checking the existence and md5sum of file in the expanded PVC
-        and
-        Runs FIO on expanded PVCs and verifies results.
-
-        Args:
-            pvc_objs (list) : List of PVC objects which are to be expanded.
-            pod_objs (list) : List of POD objects attached to the PVCs.
-            pvc_size_new (int) : Size of the expanded PVC in GB.
-            file_name (str) : Name of the file on which FIO is performed.
-            fio_size (int) : Size in MB of FIO.
-
-        """
-        # Expand original PVCs
-        log.info("Started expansion of the PVCs.")
-        for pvc_obj in pvc_objs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
-            pvc_obj.resize_pvc(pvc_size_new, True)
-        log.info("Successfully expanded the PVCs.")
-
-        # Verify that the fio exists and md5sum matches
-        for pod_no in range(len(pod_objs)):
-            pod_obj = pod_objs[pod_no]
-            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                pod.verify_data_integrity_after_expansion_for_block_pvc(
-                    pod_obj, pvc_objs[pod_no], fio_size
-                )
-            else:
-                pod.verify_data_integrity(pod_obj, file_name, pvc_objs[pod_no].md5sum)
-
-        # Run IO to utilize 50% of volume
-        log.info("Run IO on all pods to utilise 50% of the expanded PVC used space")
-        expanded_file_name = "fio_50"
-        for pod_obj in pod_objs:
-            log.info(f"Running IO on pod {pod_obj.name}")
-            log.info(f"File created during IO {expanded_file_name}")
-            fio_size = int(0.50 * pvc_size_new * 1000)
-            storage_type = (
-                "block"
-                if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
-                else "fs"
-            )
-            pod_obj.wl_setup_done = True
-            pod_obj.wl_obj = _workload.WorkLoad(
-                "test_workload_fio",
-                pod_obj.get_storage_path(storage_type),
-                "fio",
-                storage_type,
-                pod_obj,
-                1,
-            )
-            pod_obj.run_io(
-                storage_type=storage_type,
-                size=f"{fio_size}M",
-                runtime=20,
-                fio_filename=expanded_file_name,
-                end_fsync=1,
-            )
-
-        log.info("Started IO on all pods to utilise 50% of PVCs")
-
-        for pod_obj in pod_objs:
-            # Wait for IO to finish
-            pod_obj.get_fio_results(3600)
-            log.info(f"IO finished on pod {pod_obj.name}")
-            is_block = (
-                True
-                if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
-                else False
-            )
-            expanded_file_name_pod = (
-                expanded_file_name
-                if not is_block
-                else pod_obj.get_storage_path(storage_type="block")
-            )
-
-            # Verify presence of the file
-            expanded_file_path = (
-                expanded_file_name_pod
-                if is_block
-                else pod.get_file_path(pod_obj, expanded_file_name_pod)
-            )
-            log.info(f"Actual file path on the pod {expanded_file_path}")
-            assert pod.check_file_existence(
-                pod_obj, expanded_file_path
-            ), f"File {expanded_file_name_pod} does not exist"
-            log.info(f"File {expanded_file_name_pod} exists in {pod_obj.name}")
-
     def stage_0(
         self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True
     ):
@@ -725,6 +564,7 @@ class Longevity(object):
 
     def stage_2(
         self,
+        project_factory,
         multi_pvc_pod_lifecycle_factory,
         multi_obc_lifecycle_factory,
         num_of_pvcs=100,
@@ -739,6 +579,7 @@ class Longevity(object):
         OBCs and measurement of creation / deletion times of the mentioned resources.
 
         Args:
+            project_factory : Fixture to create a new Project.
             multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
                                                 measure pvc creation/deletion time and pod attach time.
             multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
@@ -757,15 +598,17 @@ class Longevity(object):
         while datetime.now() < end_time:
             cycle_no += 1
             log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
-            
+
             for bulk in (False, True):
                 current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
                 log.info(f"#################[{current_ops}]#################")
+                namespace = f"{STAGE_2_PREFIX}{cycle_no}-{current_ops.lower()}"
+                project = project_factory(project_name=namespace)
                 multi_pvc_pod_lifecycle_factory(
                     num_of_pvcs=num_of_pvcs,
                     pvc_size=pvc_size,
                     bulk=bulk,
-                    namespace=f"stage-2-cycle-{cycle_no}-{current_ops.lower()}",
+                    project=project,
                     measure=measure,
                 )
                 multi_obc_lifecycle_factory(
@@ -789,20 +632,22 @@ class Longevity(object):
     def stage_4(
         self,
         project_factory,
-        multi_pvc_factory,
+        multi_pvc_pod_lifecycle_factory,
         pod_factory,
         multi_pvc_clone_factory,
         multi_snapshot_factory,
         snapshot_restore_factory,
         teardown_factory,
         num_of_pvcs=30,
+        fio_percentage=25,
         pvc_size=2,
-        run_time=1440,
+        run_time=180,
         pvc_size_new=4,
     ):
         """
         Function to handle automation of Longevity Stage 4 i.e.
-            1. Creation / Deletion of PODs, PVCs of different types + fill data upto 25% of mount point space.
+            1. Creation / Deletion of PODs, PVCs of different types +
+                fill data upto fio_percentage (default is 25%) of mount point space.
             2. Creation / Deletion of Clones of the given PVCs.
             3. Creation / Deletion of VolumeSnapshots of the given PVCs.
             4. Restore the created VolumeSnapshots into a new set of PVCs.
@@ -811,17 +656,19 @@ class Longevity(object):
 
         Args:
             project_factory : Fixture to create a new Project.
-            multi_pvc_factory : Fixture to create multiple PVCs of different access modes and interface types.
+            multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods, verify FIO and
+                                                measure pvc creation/deletion time and pod attach time
             pod_factory : Fixture to create new PODs.
             multi_pvc_clone_factory : Fixture to create a clone from each PVC in the provided list of PVCs.
             multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
             snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
             teardown_factory : Fixture to tear down a resource that was created during the test.
             num_of_pvcs (int) : Total Number of PVCs we want to create for each operation (clone, snapshot, expand).
+            fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
             pvc_size (int) : Size of each PVC in GB.
             run_time (int) : Total Run Time in minutes.
             pvc_size_new (int) : Size of the expanded PVC in GB.
-            
+
         """
         end_time = datetime.now() + timedelta(minutes=run_time)
         cycle_no = 0
@@ -829,7 +676,7 @@ class Longevity(object):
         while datetime.now() < end_time:
             cycle_no += 1
             log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
-            
+
             for concurrent in (False, True):
                 current_ops = (
                     "CONCURRENT-OPERATION" if concurrent else "SEQUENTIAL-OPERATION"
@@ -841,156 +688,26 @@ class Longevity(object):
                 executor = ThreadPoolExecutor(max_workers=1)
                 operation_pvc_dict = dict()
                 operation_pod_dict = dict()
-                fio_size = int(0.25 * pvc_size * 1000)
-                file_name = "fio_25"
+                fio_size = int((fio_percentage / 100) * pvc_size * 1000)
+                file_name = f"fio_{fio_percentage}"
 
                 for operation in ("clone", "snapshot", "expand"):
-                    pvc_objs = list()
-                    for interface in (
-                        constants.CEPHFILESYSTEM,
-                        constants.CEPHBLOCKPOOL,
-                    ):
-                        if interface == constants.CEPHFILESYSTEM:
-                            access_modes = [
-                                constants.ACCESS_MODE_RWO,
-                                constants.ACCESS_MODE_RWX,
-                            ]
-                            num_of_pvc = num_of_pvcs // 2
-                        else:
-                            access_modes = [
-                                constants.ACCESS_MODE_RWO,
-                                constants.ACCESS_MODE_RWO
-                                + "-"
-                                + constants.VOLUME_MODE_BLOCK,
-                                constants.ACCESS_MODE_RWX
-                                + "-"
-                                + constants.VOLUME_MODE_BLOCK,
-                            ]
-                            num_of_pvc = num_of_pvcs - num_of_pvcs // 2
-
-                        # Create PVCs
-                        if num_of_pvc > 0:
-                            pvc_objs_tmp = multi_pvc_factory(
-                                interface=interface,
-                                size=pvc_size,
-                                project=project,
-                                access_modes=access_modes,
-                                status=constants.STATUS_BOUND,
-                                num_of_pvc=num_of_pvc,
-                                wait_each=True,
-                            )
-                            log.info(
-                                f"PVCs of interface:{interface} for operation:{operation} were successfully created."
-                            )
-                            pvc_objs.extend(pvc_objs_tmp)
-                        else:
-                            log.error(
-                                f"Num of PVCs of interface - {interface} = {num_of_pvc}. So no PVCs created."
-                            )
-
-                    # Create PODs
-                    pod_objs = list()
-                    for pvc_obj in pvc_objs:
-                        if pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                            pod_objs.append(
-                                pod_factory(
-                                    pvc=pvc_obj,
-                                    raw_block_pv=True,
-                                    status=constants.STATUS_RUNNING,
-                                    pod_dict_path=constants.PERF_BLOCK_POD_YAML,
-                                )
-                            )
-                        else:
-                            pod_objs.append(
-                                pod_factory(
-                                    pvc=pvc_obj,
-                                    status=constants.STATUS_RUNNING,
-                                    pod_dict_path=constants.PERF_POD_YAML,
-                                )
-                            )
-
-                    log.info(
-                        f"PODs for operation:{operation} were successfully created."
+                    pvc_objs, pod_objs = multi_pvc_pod_lifecycle_factory(
+                        num_of_pvcs=num_of_pvcs,
+                        pvc_size=pvc_size,
+                        project=project,
+                        measure=False,
+                        delete=False,
+                        file_name=file_name,
+                        fio_percentage=fio_percentage,
+                        verify_fio=True,
+                        expand=(operation == "expand"),
                     )
-
-                    # Run IO to utilize 25% of volume
-                    log.info("Run IO on all pods to utilise 25% of PVC used space")
-                    for pod_obj in pod_objs:
-                        log.info(f"Running IO on pod {pod_obj.name}")
-                        log.info(f"File created during IO {file_name}")
-                        storage_type = (
-                            "block"
-                            if pod_obj.pvc.get_pvc_vol_mode
-                            == constants.VOLUME_MODE_BLOCK
-                            else "fs"
-                        )
-                        pod_obj.wl_setup_done = True
-                        pod_obj.wl_obj = _workload.WorkLoad(
-                            "test_workload_fio",
-                            pod_obj.get_storage_path(storage_type),
-                            "fio",
-                            storage_type,
-                            pod_obj,
-                            1,
-                        )
-                        pod_obj.run_io(
-                            storage_type=storage_type,
-                            size=f"{fio_size}M",
-                            runtime=20,
-                            fio_filename=file_name,
-                            end_fsync=1,
-                        )
-
-                    log.info(
-                        "Waiting for IO to complete on all pods to utilise 25% of PVC used space"
-                    )
-
-                    for pod_obj in pod_objs:
-                        # Wait for IO to finish
-                        pod_obj.get_fio_results(3600)
-                        log.info(f"IO finished on pod {pod_obj.name}")
-                        is_block = (
-                            True
-                            if pod_obj.pvc.get_pvc_vol_mode
-                            == constants.VOLUME_MODE_BLOCK
-                            else False
-                        )
-                        file_name_pod = (
-                            file_name
-                            if not is_block
-                            else pod_obj.get_storage_path(storage_type="block")
-                        )
-                        # Verify presence of the file
-                        file_path = (
-                            file_name_pod
-                            if is_block
-                            else pod.get_file_path(pod_obj, file_name_pod)
-                        )
-                        log.info(f"Actual file path on the pod {file_path}")
-                        assert pod.check_file_existence(
-                            pod_obj, file_path
-                        ), f"File {file_name_pod} does not exist"
-                        log.info(f"File {file_name_pod} exists in {pod_obj.name}")
-
-                        if operation == "expand" and is_block:
-                            # Read IO from block PVCs using dd and calculate md5sum.
-                            # This dd command reads the data from the device, writes it to
-                            # stdout, and reads md5sum from stdin.
-                            pod_obj.pvc.md5sum = pod_obj.exec_sh_cmd_on_pod(
-                                command=(
-                                    f"dd iflag=direct if={file_path} bs=10M "
-                                    f"count={fio_size // 10} | md5sum"
-                                )
-                            )
-                            log.info(f"md5sum of {file_name_pod}: {pod_obj.pvc.md5sum}")
-                        else:
-                            # Calculate md5sum of the file
-                            pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name_pod)
 
                     operation_pvc_dict[operation] = pvc_objs
                     operation_pod_dict[operation] = pod_objs
                     log.info(
-                        f"PVCs and PODs for operation:{operation} were successfully created + 25% FIO."
+                        f"PVCs and PODs for operation:{operation} were successfully created + {fio_percentage}% FIO."
                     )
 
                 if not concurrent:
@@ -1005,7 +722,7 @@ class Longevity(object):
                     (
                         restored_pvc_objs,
                         restored_pod_objs,
-                    ) = self.create_restore_verify_snapshots(
+                    ) = create_restore_verify_snapshots(
                         multi_snapshot_factory,
                         snapshot_restore_factory,
                         pod_factory,
@@ -1014,7 +731,7 @@ class Longevity(object):
                         file_name,
                     )
 
-                    self.expand_verify_pvcs(
+                    expand_verify_pvcs(
                         operation_pvc_dict["expand"],
                         operation_pod_dict["expand"],
                         pvc_size_new,
@@ -1035,7 +752,7 @@ class Longevity(object):
 
                     stage4_executor2 = ThreadPoolExecutor(max_workers=1)
                     stage4_thread2 = stage4_executor2.submit(
-                        self.create_restore_verify_snapshots,
+                        create_restore_verify_snapshots,
                         multi_snapshot_factory,
                         snapshot_restore_factory,
                         pod_factory,
@@ -1046,7 +763,7 @@ class Longevity(object):
 
                     stage4_executor3 = ThreadPoolExecutor(max_workers=1)
                     stage4_thread3 = stage4_executor3.submit(
-                        self.expand_verify_pvcs,
+                        expand_verify_pvcs,
                         operation_pvc_dict["expand"],
                         operation_pod_dict["expand"],
                         pvc_size_new,

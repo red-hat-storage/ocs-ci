@@ -14,7 +14,7 @@ class TestLongevityStage4(E2ETest):
     def test_longevity_stage4(
         self,
         project_factory,
-        multi_pvc_factory,
+        multi_pvc_pod_lifecycle_factory,
         pod_factory,
         multi_pvc_clone_factory,
         multi_snapshot_factory,
@@ -34,7 +34,7 @@ class TestLongevityStage4(E2ETest):
         long = Longevity()
         long.stage_4(
             project_factory,
-            multi_pvc_factory,
+            multi_pvc_pod_lifecycle_factory,
             pod_factory,
             multi_pvc_clone_factory,
             multi_snapshot_factory,

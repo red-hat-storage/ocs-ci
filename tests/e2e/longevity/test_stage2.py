@@ -12,7 +12,10 @@ class TestLongevityStage2(E2ETest):
     """
 
     def test_longevity_stage2(
-        self, multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory
+        self,
+        project_factory,
+        multi_pvc_pod_lifecycle_factory,
+        multi_obc_lifecycle_factory,
     ):
         """
         Tests Longevity Testing - Stage 2
@@ -33,6 +36,7 @@ class TestLongevityStage2(E2ETest):
         # issue gets resolved we will set it back to default.
         long = Longevity()
         long.stage_2(
+            project_factory,
             multi_pvc_pod_lifecycle_factory,
             multi_obc_lifecycle_factory,
             num_of_obcs=0,
