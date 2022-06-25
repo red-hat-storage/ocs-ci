@@ -859,6 +859,12 @@ validation_4_10 = {
         By.XPATH,
     ),
 }
+validation_4_11 = (
+    {
+        "object": ("//span[normalize-space()='Object']", By.XPATH),
+    },
+)
+
 
 locators = {
     "4.11": {

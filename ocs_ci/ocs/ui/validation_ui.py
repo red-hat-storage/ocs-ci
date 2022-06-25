@@ -397,33 +397,36 @@ class ValidationUI(PageNavigator):
                 self.validation_loc["ocs-external-storagecluster-storagesystem"],
                 enable_screenshot=True,
             )
+        logger.info("Click on Overview tab")
+        self.do_click(self.validation_loc["overview"], enable_screenshot=True)
         logger.info("Click on 'Object' tab")
         self.do_click(self.validation_loc["object"], enable_screenshot=True)
         if not config.ENV_DATA["mcg_only_deployment"]:
             logger.info("Click on 'Block and File' tab")
             self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
-        logger.info("Click on Overview tab")
-        self.do_click(self.validation_loc["overview"])
-        logger.info("Click on 'BlockPools' tab")
-        self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         if not config.DEPLOYMENT.get("external_mode"):
-            logger.info(
-                "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
-            )
-            self.do_click(
-                self.validation_loc["ocs-storagecluster-cephblockpool"],
-                enable_screenshot=True,
-            )
-            self.page_has_loaded(retries=15, sleep_time=2)
-            logger.info("Verifying the status of 'ocs-storagecluster-cephblockpool'")
-            cephblockpool_status = self.get_element_text(
-                self.validation_loc["ocs-storagecluster-cephblockpool-status"]
-            )
-            assert "Ready" == cephblockpool_status, (
-                f"cephblockpool status error | expected status:Ready \n "
-                f"actual status:{cephblockpool_status}"
-            )
-            logger.info("Verification of cephblockpool status is successful!")
+            if not config.ENV_DATA["mcg_only_deployment"]:
+                logger.info("Click on 'BlockPools' tab")
+                self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
+                logger.info(
+                    "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
+                )
+                self.do_click(
+                    self.validation_loc["ocs-storagecluster-cephblockpool"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded(retries=15, sleep_time=2)
+                logger.info(
+                    "Verifying the status of 'ocs-storagecluster-cephblockpool'"
+                )
+                cephblockpool_status = self.get_element_text(
+                    self.validation_loc["ocs-storagecluster-cephblockpool-status"]
+                )
+                assert "Ready" == cephblockpool_status, (
+                    f"cephblockpool status error | expected status:Ready \n "
+                    f"actual status:{cephblockpool_status}"
+                )
+                logger.info("Verification of cephblockpool status is successful!")
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
