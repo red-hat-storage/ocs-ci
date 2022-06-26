@@ -39,6 +39,12 @@ def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
+    if is_flexible_scaling_enabled():
+        from ocs_ci.ocs.node import get_nodes, add_disk_to_node
+
+        node_obj = get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=1)
+        logger.info(f"Add a new disk to node {node_obj[0].name}")
+        add_disk_to_node(node_obj=node_obj[0])
     if ui_add_capacity_conditions():
         try:
             result = ui_add_capacity(osd_size)

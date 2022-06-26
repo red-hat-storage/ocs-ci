@@ -102,7 +102,6 @@ def ui_add_capacity_conditions():
     ocp_version = get_ocp_version()
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
-    is_lso = config.DEPLOYMENT.get("local_storage")
     is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
@@ -121,12 +120,12 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
-    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10"):
+    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10", "4.11"):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )
         return False
-    elif is_external or is_disconnected or is_proxy or is_lso:
+    elif is_external or is_disconnected or is_proxy:
         if is_external:
             logger.info(
                 "Add capacity via UI is not automated at the moment on external cluster"
@@ -138,10 +137,6 @@ def ui_add_capacity_conditions():
         if is_proxy:
             logger.info(
                 "Add capacity via UI is not automated at the moment on proxy cluster"
-            )
-        if is_lso:
-            logger.info(
-                "Add capacity via UI is not automated at the moment on lso cluster"
             )
         return False
     else:

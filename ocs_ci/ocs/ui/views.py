@@ -627,9 +627,18 @@ add_capacity = {
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+    "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+}
+
+add_capacity_4_11 = {
+    "thin_sc": ("//span[text()='thin']", By.XPATH),
+    "gp2_sc": ("//span[text()='gp2']", By.XPATH),
+    "gp2-csi_sc": ("//span[text()='gp2-csi']", By.XPATH),
+    "gp3-csi_sc": ("//span[text()='gp3-csi']", By.XPATH),
+    "localblock_sc": ("//span[text()='localblock']", By.XPATH),
 }
 
 block_pool = {
@@ -860,6 +869,7 @@ locators = {
             **deployment_4_10,
             **deployment_4_11,
         },
+        "add_capacity": {**add_capacity, **add_capacity_4_11},
     },
     "4.10": {
         "login": login,
