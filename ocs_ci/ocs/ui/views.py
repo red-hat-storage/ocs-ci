@@ -149,7 +149,6 @@ deployment_4_9 = {
     "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
 
-
 deployment_4_10 = {
     "mcg_only_option_4_10": ("//span[text()='MultiCloud Object Gateway']", By.XPATH),
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
