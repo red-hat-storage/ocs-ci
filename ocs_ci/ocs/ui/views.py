@@ -632,13 +632,6 @@ add_capacity = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
-add_capacity_4_11 = {
-    "thin_sc": ("//span[text()='thin']", By.XPATH),
-    "gp2_sc": ("//span[text()='gp2']", By.XPATH),
-    "gp2-csi_sc": ("//span[text()='gp2-csi']", By.XPATH),
-    "gp3-csi_sc": ("//span[text()='gp3-csi']", By.XPATH),
-}
-
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -867,7 +860,7 @@ locators = {
             **deployment_4_10,
             **deployment_4_11,
         },
-        "add_capacity": {**add_capacity, **add_capacity_4_11},
+        "add_capacity": add_capacity,
     },
     "4.10": {
         "login": login,
