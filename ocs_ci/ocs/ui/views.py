@@ -859,11 +859,12 @@ validation_4_10 = {
         By.XPATH,
     ),
 }
-validation_4_11 = (
-    {
-        "object": ("//span[normalize-space()='Object']", By.XPATH),
-    },
-)
+validation_4_11 = {
+    "overview": ("//span[normalize-space()='Overview']", By.XPATH),
+    "object": ("//span[normalize-space()='Object']", By.XPATH),
+    "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
+    "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+}
 
 
 locators = {
@@ -882,6 +883,7 @@ locators = {
             **validation_4_8,
             **validation_4_9,
             **validation_4_10,
+            **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
