@@ -2,6 +2,9 @@
 ENV_DATA:
   platform: 'rosa'
   deployment_type: 'managed'
+  # MS cluster via rosa _addons
+  # or via rosa_service i.e appliance mode
+  appliance_mode: True
   cluster_type: 'consumer'
   multi_availability_zones: True
   worker_replicas: 3
@@ -9,7 +12,7 @@ ENV_DATA:
   worker_instance_type: 'm5.2xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-consumer-qe"
-  region: 'us-east-2'
+  region: 'us-east-1'
   #The requested capacity of the storage cluster to be deployed.
   size: '1'
   #Selected storage unit for the requested capacity in Ti or Gi

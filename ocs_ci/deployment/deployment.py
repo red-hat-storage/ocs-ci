@@ -12,7 +12,6 @@ import tempfile
 import time
 from pathlib import Path
 import base64
-
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -184,6 +183,9 @@ class Deployment(object):
         Deploy Submariner operator
 
         """
+        if config.ENV_DATA.get("skip_submariner_deployment", False):
+            return
+
         # Multicluster operations
         if config.multicluster:
             # Configure submariner only on non-ACM clusters
@@ -241,6 +243,13 @@ class Deployment(object):
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
             deploy_dr.deploy()
 
+    def do_deploy_lvmo(self):
+        """
+        call lvm deploy
+
+        """
+        self.deploy_lvmo()
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -279,7 +288,7 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             self.deploy_acm_hub()
-
+        self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
@@ -638,6 +647,21 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
+            if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
+                logger.info("Creating secret for IBM Cloud Object Storage")
+                with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
+                    cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
+                key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
+                key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
+                cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
+                cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+                cos_secret_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="cos_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    cos_secret_data, cos_secret_data_yaml.name
+                )
+                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
         if (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and live_deployment
@@ -713,21 +737,6 @@ class Deployment(object):
                 f"oc patch configmap -n {self.namespace} "
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
-            if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
-                logger.info("Creating secret for IBM Cloud Object Storage")
-                with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
-                    cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
-                key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
-                key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
-                cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
-                cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
-                cos_secret_data_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="cos_secret", delete=False
-                )
-                templating.dump_data_to_temp_yaml(
-                    cos_secret_data, cos_secret_data_yaml.name
-                )
-                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
 
         # Modify the CSV with custom values if required
         if all(
@@ -1218,6 +1227,66 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+    def deploy_lvmo(self):
+        """
+        deploy lvmo for platform specific (for now only vsphere)
+        """
+        if not config.DEPLOYMENT["install_lvmo"]:
+            logger.warning("LVMO deployment will be skipped")
+            return
+
+        logger.info(f"Installing lvmo version {config.ENV_DATA['ocs_version']}")
+        lvmo_version = config.ENV_DATA["ocs_version"]
+        lvmo_version_without_period = lvmo_version.replace(".", "")
+        label_version = constants.LVMO_POD_LABEL
+        create_catalog_source()
+        cluster_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
+            f"lvm-cluster-{lvmo_version_without_period}.yaml",
+        )
+        bundle_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
+        )
+        run_cmd(f"oc create -f {bundle_config_file} -n {self.namespace}")
+        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "controller_manager_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "topolvm-controller_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["topolvm-node_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["vg-manager_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        catalgesource = run_cmd(
+            "oc -n openshift-marketplace get  "
+            "catalogsources.operators.coreos.com redhat-operators -o json"
+        )
+        json_cts = json.loads(catalgesource)
+        logger.info(
+            f"LVMO installed successfully from image {json_cts['spec']['image']}"
+        )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

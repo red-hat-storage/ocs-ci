@@ -14,6 +14,7 @@ import subprocess
 import time
 import traceback
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -438,7 +439,9 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
@@ -451,6 +454,8 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -458,7 +463,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (str) Decoded stdout of command
     """
-    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    completed_process = exec_cmd(
+        cmd, secrets, timeout, ignore_error, threading_lock, **kwargs
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -544,7 +551,9 @@ def run_cmd_multicluster(
     return completed_process
 
 
-def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def exec_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     Run an arbitrary command locally
 
@@ -556,6 +565,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -573,6 +584,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -581,6 +594,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -2085,6 +2100,24 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         git_params = ""
     else:
         raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("shyRozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("shyRozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
 
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
@@ -3669,3 +3702,79 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)

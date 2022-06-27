@@ -134,8 +134,7 @@ to the pytest.
   ```bash
   [DEFAULT]
   bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
-  bugzilla_username = kerberos@redhat.com
-  bugzilla_password = yourPassword
+  bugzilla_api_key = <API_KEY>
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--collect-logs-on-success-run` - Collect must gather logs at the end of the
@@ -155,6 +154,9 @@ to the pytest.
     previous execution. If the file is provided, the execution will remove all the test cases
     which passed and will run only those test cases which were skipped / failed / or had error
     in the provided report.
+* `--install-lvmo` - Deploy LVMCluster, will skip ODF deployment.
+* `--lvmo-disks` - Number of disks to add to SNO deployment.
+* `--lvmo-disks-size` - Size of disks to add to SNO deployment.
 
 ## Examples
 

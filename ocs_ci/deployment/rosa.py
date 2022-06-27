@@ -4,11 +4,11 @@ This module contains platform specific methods and classes for deployment
 on Openshfit Dedicated Platform.
 """
 
-
 import logging
 import os
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
+from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
@@ -67,15 +67,31 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+        if (
+            config.ENV_DATA.get("appliance_mode", False)
+            and config.ENV_DATA.get("cluster_type", "") == "provider"
+        ):
+            rosa.appliance_mode_cluster(self.cluster_name)
+        else:
+            rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
-        ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
         password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
-        ocm.get_kubeadmin_password(self.cluster_name, password_path)
+
+        # generate kubeconfig and kubeadmin-password files
+        if config.ENV_DATA["ms_env_type"] == "staging":
+            ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
+            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+        if config.ENV_DATA["ms_env_type"] == "production":
+            rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
+            rosa_prod_cluster.create_admin_and_login()
+            rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
+            rosa_prod_cluster.generate_kubeadmin_password_file()
+
         self.test_cluster()
 
     def destroy(self, log_level="DEBUG"):

@@ -48,8 +48,15 @@ class OCS(object):
         if "metadata" in self.data:
             self._namespace = self.data.get("metadata").get("namespace")
             self._name = self.data.get("metadata").get("name")
+        if "threading_lock" in self.data:
+            self.threading_lock = self.data.pop("threading_lock")
+        else:
+            self.threading_lock = None
         self.ocp = OCP(
-            api_version=self._api_version, kind=self.kind, namespace=self._namespace
+            api_version=self._api_version,
+            kind=self.kind,
+            namespace=self._namespace,
+            threading_lock=self.threading_lock,
         )
         with tempfile.NamedTemporaryFile(
             mode="w+", prefix=self._kind, delete=False
@@ -86,8 +93,10 @@ class OCS(object):
         After creating a resource from a yaml file, the actual yaml file is
         being changed and more information about the resource is added.
         """
+        cluster_kubeconfig = self.ocp.cluster_kubeconfig
         self.data = self.get()
         self.__init__(**self.data)
+        self.ocp.cluster_kubeconfig = cluster_kubeconfig
 
     def get(self, out_yaml_format=True):
         return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)

@@ -240,6 +240,10 @@ class RDMDiskNotFound(Exception):
     pass
 
 
+class PassThroughEnabledDeviceNotFound(Exception):
+    pass
+
+
 class ExternalClusterDetailsException(Exception):
     pass
 
@@ -517,4 +521,12 @@ class UnsupportedWorkloadError(Exception):
 
 
 class RebootEventNotFoundException(Exception):
+    pass
+
+
+class ConnectivityFail(Exception):
+    pass
+
+
+class ROSAProdAdminLoginFailedException(Exception):
     pass

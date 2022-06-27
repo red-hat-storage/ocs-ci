@@ -26,6 +26,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
@@ -144,7 +145,7 @@ BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
-VOLUME_REPLICATION = "VolumeReplication"
+RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -309,6 +310,7 @@ MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
+PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -469,6 +471,8 @@ NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
 PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
+PERF_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_block.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
@@ -503,6 +507,10 @@ GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
 CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
+CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls
@@ -814,11 +822,12 @@ AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
+SNO_BOOTSTRAP_IGN = "bootstrap-in-place-for-live-iso.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
-# Minimum storage needed for vSphere Datastore in bytes
+# Minimum storage needed for vSphere Datastore in bytes.
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
@@ -854,6 +863,8 @@ SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
 SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
+RUST_URL = "https://sh.rustup.rs"
+COREOS_INSTALLER_REPO = "https://github.com/coreos/coreos-installer.git"
 
 # v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
@@ -1290,6 +1301,20 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-operator",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
+    "4.11": [
+        "cluster-logging",
+        "elasticsearch-operator",
+        "mcg-operator",
+        "ocs-operator",
+        "odf-csi-addons-operator",
+        "odf-lvm-operator",
+        "odf-multicluster-orchestrator",
+        "odf-operator",
+    ]
+}
+
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -1331,6 +1356,8 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
+    80: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
+    240: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     3000: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     4500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
@@ -1339,6 +1366,8 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 SCALE_PVC_ROUND_UP_VALUE = {
+    80: 80,
+    240: 240,
     1500: 1520,
     3000: 3040,
     4500: 4560,
@@ -1730,3 +1759,19 @@ SPACE = " "
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+# Sno and lvmo constants
+SNO_NODE_NAME = "sno-edge-0"
+LVMO_POD_LABEL = {
+    "410": {
+        "controller_manager_label": "control-plane=controller-manager",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
+        "topolvm-node_label": "app=topolvm-node",
+        "vg-manager_label": "app=vg-manager",
+    },
+    "411": {
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
+        "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
+        "vg-manager_label": "app.lvm.openshift.io=vg-manager",
+    },
+}
