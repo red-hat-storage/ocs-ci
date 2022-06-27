@@ -147,7 +147,7 @@ class TestMonLogTrimming(E2ETest):
             runtime=480,
         )
         thread1 = threading.Thread(
-            target=self.check_mon_db_trim(self.selected_mon_pod_obj)
+            target=self.check_mon_db_trim, args=(self.selected_mon_pod_obj,)
         )
         thread1.start()
 
