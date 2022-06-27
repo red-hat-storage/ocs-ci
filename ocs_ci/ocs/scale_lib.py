@@ -1407,7 +1407,10 @@ def attach_multiple_pvc_to_pod_dict(
         if len(temp_list) == pvcs_per_pod:
             pod_dict = pod_yaml
             pod_data = templating.load_yaml(pod_dict)
-            if remove_security_context_section:
+            if (
+                remove_security_context_section
+                and "securityContext" in pod_data["spec"]["containers"][0]
+            ):
                 del pod_data["spec"]["containers"][0]["securityContext"]
             pod_name = helpers.create_unique_resource_name("scale", "pod")
 
