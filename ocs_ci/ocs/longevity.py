@@ -585,53 +585,49 @@ class Longevity(object):
             wait_for_pods_to_be_running(timeout=600)
 
         if db_usage:
-            cluster_sanity_list = []
+            mon_db_usage = []
             cluster_sanity_check_dict["db_usage"] = {}
             # Check mon db usage
             mon_pods = get_mon_pods()
             for mon_pod in mon_pods:
                 # Get mon db size
-                cluster_sanity_list.append(
-                    f" {mon_pod.name} DB usage: {get_mon_db_size_in_kb(mon_pod)} in KB"
+                mon_db_usage.append(
+                    f"{mon_pod.name} DB usage: {get_mon_db_size_in_kb(mon_pod)}KB"
                 )
-            cluster_sanity_check_dict["db_usage"]["mon_db_usage"] = cluster_sanity_list
-            cluster_sanity_list.clear()
+            cluster_sanity_check_dict["db_usage"]["mon_db_usage"] = mon_db_usage
             # Check Noobaa db usage
-            cluster_sanity_list.append(
-                f" Noobaa DB usage: {get_noobaa_db_used_space()}"
-            )
             cluster_sanity_check_dict["db_usage"][
                 "noobaa_db_usage"
-            ] = cluster_sanity_list
+            ] = get_noobaa_db_used_space()
 
         if resource_utilization:
-            cluster_sanity_list = []
+            res_util_list = []
             cluster_sanity_check_dict["resource_utilization"] = {}
             # Get the cpu and memory of each nodes from adm top
             master_top_dict_out = get_node_resource_utilization_from_adm_top(
                 node_type="master", print_table=True
             )
-            cluster_sanity_list.append(master_top_dict_out)
+            res_util_list.append(master_top_dict_out)
             worker_top_dict_out = get_node_resource_utilization_from_adm_top(
                 node_type="worker", print_table=True
             )
-            cluster_sanity_list.append(worker_top_dict_out)
+            res_util_list.append(worker_top_dict_out)
             cluster_sanity_check_dict["resource_utilization"][
                 "adm_top_nodes_res_util"
-            ] = cluster_sanity_list
+            ] = res_util_list
             # Get the cpu and memory from describe of nodes
             master_describe_dict_out = get_node_resource_utilization_from_oc_describe(
                 node_type="master", print_table=True
             )
-            cluster_sanity_list.clear()
-            cluster_sanity_list.append(master_describe_dict_out)
+            res_util_list.clear()
+            res_util_list.append(master_describe_dict_out)
             worker_describe_dict_out = get_node_resource_utilization_from_oc_describe(
                 node_type="worker", print_table=True
             )
-            cluster_sanity_list.append(worker_describe_dict_out)
+            res_util_list.append(worker_describe_dict_out)
             cluster_sanity_check_dict["resource_utilization"][
                 "oc_describe_nodes_res_util"
-            ] = cluster_sanity_list
+            ] = res_util_list
 
             # Get the resource utilization of the pods in openshift-storage namespace
             pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
@@ -682,7 +678,7 @@ class Longevity(object):
         for key1 in cluster_sanity_out_dict:
             with open(f"{destination_dir}/{key1}", "w") as f:
                 for key2, value in cluster_sanity_out_dict[key1].items():
-                    f.write(f"{key2} : {value}\n")
+                    f.write(f"{key2} : {value}\n\n")
 
     def stage_0(
         self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True

@@ -2415,11 +2415,11 @@ def check_for_zombie_process_on_node(node_name=None):
     """
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
-        debug_cmd = f'debug nodes/{node_obj.name} -- chroot /host /bin/bash -c "top -b1 -n1 | grep Z"'
+        debug_cmd = f'debug nodes/{node_obj.name} -- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
         out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
-        log.info(f"Zombie process check command output: {out}")
         if not out:
             log.info(f"No Zombie process found on the node: {node_obj.name}")
         else:
             log.error(f"Zombie process found on node: {node_obj.name}")
+            log.error(f"pid and ppid details: {out}")
             raise exceptions.ZombieProcessFoundException

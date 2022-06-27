@@ -2641,6 +2641,12 @@ def pod_resource_utilization_raw_output_from_adm_top(
     """
     Gets the pod's memory utilization using adm top command.
 
+    Args:
+        namespace (str) : The pod's namespace where the adm top command has to be run
+
+    Returns:
+        str : Raw output of adm top pods command
+
     """
     obj = ocp.OCP()
     resource_utilization_all_pods = obj.exec_oc_cmd(
