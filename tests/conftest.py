@@ -5405,8 +5405,11 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
             pvc_size=pvc_size,
             max_pvc_size=max_pvc_size,
         )
+        kube_pod_obj_list_names = [p.name for p in kube_pod_obj_list]
+        kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
+
         log.info(
-            f"kube pod list = {kube_pod_obj_list}, kube pvc list = {kube_pvc_obj_list}"
+            f"kube pod list = {kube_pod_obj_list_names}, kube pvc list = {kube_pvc_obj_list_names}"
         )
 
         return fio_scale
