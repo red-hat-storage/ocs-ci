@@ -54,7 +54,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    def create_obc_creation(self, bucket_factory, interface, obj, key):
+    def create_obc_creation(self, bucket_factory, obj, interface, key):
 
         # Create a bucket then read & write
         bucket_name = bucket_factory(amount=1, interface=interface, timeout=120)[0].name
