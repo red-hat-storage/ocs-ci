@@ -236,6 +236,14 @@ def appliance_mode_cluster(cluster_name):
             break
         else:
             logger.info(f"Current service creation status: {service_status}")
+    # Create metadata file to store the cluster name
+    cluster_info = ocm.get_cluster_details(cluster_name)
+    cluster_info["clusterName"] = cluster_name
+    cluster_info["clusterID"] = cluster_info["id"]
+    cluster_path = config.ENV_DATA["cluster_path"]
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file, "w+") as f:
+        json.dump(cluster_info, f)
 
 
 def get_rosa_service_details(cluster):
@@ -464,6 +472,16 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    if cluster_type.lower() == "provider" and config.ENV_DATA.get("appliance_mode"):
+        logger.info(
+            "Addon uninstallation is not allowed for appliance mode"
+            " managed service. It can be changed after fix of "
+            "https://issues.redhat.com/browse/SDA-6011"
+        )
+        # TODO : Update rosa delete service addon command after completion of jira SDA-6011
+        return
+
     addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
@@ -489,6 +507,63 @@ def delete_operator_roles(cluster_id):
     """
     cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
+
+
+def get_rosa_cluster_service_id(cluster):
+    """
+    Get service id of cluster
+
+    Args:
+        cluster (str): cluster name
+
+    Returns:
+        str: service id of cluster. If not found, it returns None.
+
+    """
+    cmd = "rosa list service"
+    cmd_out = utils.run_cmd(cmd)
+    line = [line for line in cmd_out.splitlines() if re.search(f"{cluster}$", line)]
+    cluster_service_info = line[0].split()[0] if line else None
+    return cluster_service_info
+
+
+def destroy_appliance_mode_cluster(cluster):
+    """
+    Delete rosa cluster if appliance mode
+
+    Args:
+        cluster: name of the cluster
+
+    Returns:
+        bool: True if appliance mode and cluster delete initiated
+              else False
+    """
+    service_id = get_rosa_cluster_service_id(cluster)
+    if not service_id:
+        logger.info(
+            f"Cluster does not exist in rosa list service. "
+            f"The cluster '{cluster}' is not appliance mode cluster. "
+        )
+        return False
+
+    delete_service_cmd = f"rosa delete service --id={service_id} --yes"
+    utils.run_cmd(delete_service_cmd, timeout=1200)
+    logger.info("Waiting for ROSA cluster state changed to uninstalling")
+    for cluster_info in utils.TimeoutSampler(
+        1000, 90, ocm.get_cluster_details, cluster
+    ):
+        status = cluster_info["status"]["state"]
+        logger.info(f"Cluster uninstalling status: {status}")
+        if status == "uninstalling":
+            logger.info(f"Cluster '{cluster}' is uninstalling")
+            break
+    for service_status in utils.TimeoutSampler(
+        1000, 30, get_rosa_service_details, cluster
+    ):
+        if "deleting service" in service_status:
+            logger.info("Rosa service status is 'deleting service'")
+            break
+    return True
 
 
 def delete_oidc_provider(cluster_id):

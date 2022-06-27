@@ -96,10 +96,13 @@ class ROSAOCP(BaseOCPDeployment):
         """
         cluster_details = ocm.get_cluster_details(self.cluster_name)
         cluster_id = cluster_details.get("id")
-        ocm.destroy_cluster(self.cluster_name)
+        delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
+        if not delete_status:
+            ocm.destroy_cluster(self.cluster_name)
+        logger.info("Waiting for ROSA cluster to be uninstalled")
         sample = TimeoutSampler(
-            timeout=1000,
-            sleep=20,
+            timeout=7200,
+            sleep=30,
             func=self.cluster_present,
             cluster_name=self.cluster_name,
         )
