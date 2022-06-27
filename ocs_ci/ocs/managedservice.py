@@ -220,8 +220,8 @@ def update_non_ga_version():
     if config.ENV_DATA.get("cluster_type").lower() == "provider":
         subscriptions_to_edit = {"odf-operator"}
         patch_changes = [
-            f'[{{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}}]',
-            f'[{{{"op": "replace", "path": "/spec/startingCSV", "value" : "{odf_operator_u}"}}}]',
+            f'[{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}]',
+            f'[{{"op": "replace", "path": "/spec/startingCSV", "value" : "{odf_operator_u}"}}]',
         ]
     elif config.ENV_DATA.get("cluster_type").lower() == "consumer":
         subscriptions_to_edit = {
@@ -231,9 +231,9 @@ def update_non_ga_version():
             "odf-csi-addons-operator",
         }
         patch_changes = [
-            f'[{{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}}]',
-            f'[{{{"op": "replace", "path": "/spec/sourceNamespace", "value" : "{mplace}"}}}]',
-            f'[{{{"op": "replace", "path": "/spec/startingCSV", "value" : "{odf_operator_u}"}}}]',
+            f'[{{"op": "replace", "path": "/spec/channel", "value" : "{ocs_channel}"}}]',
+            f'[{{"op": "replace", "path": "/spec/sourceNamespace", "value" : "{mplace}"}}]',
+            f'[{{"op": "replace", "path": "/spec/startingCSV", "value" : "{odf_operator_u}"}}]',
         ]
     for subscription in subscriptions:
         for to_edit in subscriptions_to_edit:
