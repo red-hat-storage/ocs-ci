@@ -103,7 +103,7 @@ class TestMonLogTrimming(E2ETest):
         Check mon db size while fio runs in the background
         """
         while not self.stop_checking_mon_db:
-            temp_mon_db_size = self.get_mon_db_size_in_kb()
+            temp_mon_db_size = get_mon_db_size_in_kb()
             assert temp_mon_db_size is not None, "Failed to get mon db size"
             log.info(
                 f"Monitoring mon-{self.selected_mon_pod} db size: {temp_mon_db_size}K"
