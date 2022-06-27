@@ -439,7 +439,9 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
@@ -452,6 +454,8 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -459,7 +463,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (str) Decoded stdout of command
     """
-    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    completed_process = exec_cmd(
+        cmd, secrets, timeout, ignore_error, threading_lock, **kwargs
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -545,7 +551,9 @@ def run_cmd_multicluster(
     return completed_process
 
 
-def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def exec_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     Run an arbitrary command locally
 
@@ -557,6 +565,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -574,6 +584,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -582,6 +594,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
