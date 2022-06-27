@@ -203,7 +203,7 @@ def update_non_ga_version():
         '"value":{"packageName":"ose-prometheus-operator","versionRange":"4.10.0"}},'
         '{"type":"olm.package.required","value":{"packageName":"odf-operator",'
         f'"versionRange":"{upgrade_ocs_version}"'
-        "}}]}'"
+        "}}]}' -n openshift-storage"
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
