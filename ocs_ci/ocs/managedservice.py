@@ -75,7 +75,7 @@ def update_pull_secret():
     secret_data = base64.b64decode(secret_data).decode()
     rhceph_dev_key = config.AUTH["quay-rhceph-dev-auth"]
     secret_data = json.loads(secret_data)
-    secret_data["quay.io"] = {"auth": rhceph_dev_key}
+    secret_data["auths"]["quay.io"] = {"auth": rhceph_dev_key}
     secret_data = str.encode(json.dumps(secret_data))
     with tempfile.NamedTemporaryFile() as secret_file:
         secret_file.write(secret_data)
