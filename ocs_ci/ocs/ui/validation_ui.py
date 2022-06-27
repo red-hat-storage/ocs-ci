@@ -332,7 +332,7 @@ class ValidationUI(PageNavigator):
         logger.info("Click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate back to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]))
+        self.do_click((self.validation_loc["odf-overview"]))
         logger.info(
             "Now search for 'Performance' Card on Data Foundation Overview page"
         )
@@ -362,9 +362,44 @@ class ValidationUI(PageNavigator):
             )
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
+        logger.info("Click on Backing Store")
+        self.do_click((self.validation_loc["backingstore"]))
+        logger.info("Click on Backing Store Hyperlink")
+        self.do_click(
+            (self.validation_loc["backingstore-link"]), enable_screenshot=True
+        )
+        logger.info("Verifying the status of 'noobaa-default-backing-store'")
+        backingstore_status = self.get_element_text(
+            self.validation_loc["backingstore-status"]
+        )
+        assert "Ready" == backingstore_status, (
+            f"backingstore status error | expected status:Ready \n "
+            f"actual status:{backingstore_status}"
+        )
+        logger.info("Verification of backingstore status is successful!")
+        logger.info("Click on backingstore breadcrumb")
+        self.do_click((self.validation_loc["backingstorage-breadcrumb"]))
+        logger.info("Click on Bucket Class")
+        self.do_click((self.validation_loc["bucketclass"]))
+        logger.info("Click on Bucket Class Hyperlink")
+        self.do_click((self.validation_loc["bucketclass-link"]), enable_screenshot=True)
+        logger.info("Verifying the status of 'noobaa-default-bucket-class'")
+        bucketclass_status = self.get_element_text(
+            self.validation_loc["bucketclass-status"]
+        )
+        assert "Ready" == bucketclass_status, (
+            f"bucketclass status error | expected status:Ready \n "
+            f"actual status:{bucketclass_status}"
+        )
+        logger.info("Verification of bucketclass status is successful!")
+        logger.info("Click on bucketclass breadcrumb")
+        self.do_click(
+            (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
+        )
+        logger.info("Click on Namespace Store")
+        self.do_click((self.validation_loc["namespace-store"]), enable_screenshot=True)
         logger.info("Navigate again to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]), enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click((self.validation_loc["odf-overview"]), enable_screenshot=True)
         logger.info(
             "Successfully navigated back to ODF tab under Storage, test successful!"
         )

@@ -866,6 +866,22 @@ validation_4_11 = {
     "object": ("//span[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+    "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
+    "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),
+    "backingstore-link": (
+        "//a[normalize-space()='noobaa-default-backing-store']",
+        By.XPATH,
+    ),
+    "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
+    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "bucketclass": ("a[data-test-id='horizontal-link-Bucket Class']", By.CSS_SELECTOR),
+    "bucketclass-link": (
+        "//a[normalize-space()='noobaa-default-bucket-class']",
+        By.XPATH,
+    ),
+    "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
+    "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
+    "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
 }
 
 
