@@ -1245,6 +1245,12 @@ class Deployment(object):
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
             f"lvm-cluster-{lvmo_version_without_period}.yaml",
         )
+        # this is a workaround for 2101343
+        rolebinding_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
+        )
+        run_cmd(f"oc create -f {rolebinding_config_file} -n default")
+        # end of workaround
         bundle_config_file = os.path.join(
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
         )
