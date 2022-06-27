@@ -247,7 +247,7 @@ def update_non_ga_version():
             if sub:
                 for change in patch_changes:
                     oc.patch(
-                        resource_name=odf_operator_sub,
+                        resource_name=sub,
                         params=change,
                         format_type="json",
                     )
