@@ -294,7 +294,7 @@ class ValidationUI(PageNavigator):
             logger.info("Click on StorageSystems breadcrumb")
             self.do_click((self.validation_loc["storagesystems"]))
             logger.info("Navigate back to ODF Overview page")
-            self.do_click((self.validation_loc["overview"]))
+            self.do_click((self.validation_loc["odf-overview"]))
         else:
             logger.critical(
                 "Storage system under Status card on Data Foundation Overview tab is missing"

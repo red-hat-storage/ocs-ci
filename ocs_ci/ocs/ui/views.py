@@ -764,6 +764,7 @@ validation_4_9 = {
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
+    "odf-overview": ("a[data-test-id='horizontal-link-Overview']", By.CSS_SELECTOR),
     "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
     "blockandfile": (
         "a[data-test-id='horizontal-link-Block and File']",
@@ -861,6 +862,7 @@ validation_4_10 = {
 }
 validation_4_11 = {
     "overview": ("//span[normalize-space()='Overview']", By.XPATH),
+    "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
