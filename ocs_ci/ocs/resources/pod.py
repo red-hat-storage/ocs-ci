@@ -1768,12 +1768,20 @@ def check_pods_in_running_state(
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
-            and not (
-                config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
-                and p.name[:-5] in p.labels.get("job-name", "")
-            )
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
+            # Skip the pods which are in 'Completed' state when checking for all pods in the
+            # namespace openshift-storage. 'Completed' will be the expected state of such pods.
+            if (
+                (status == constants.STATUS_COMPLETED)
+                and (not pod_names)
+                and (namespace == defaults.ROOK_CLUSTER_NAMESPACE)
+            ):
+                logger.warning(
+                    f"The pod {p.name} is not in {constants.STATUS_RUNNING} state, "
+                    f"but in {constants.STATUS_COMPLETED} state."
+                )
+                continue
             if status not in "Running":
                 logger.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
