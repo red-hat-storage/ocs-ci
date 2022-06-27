@@ -96,7 +96,6 @@ class FioPodScale(object):
         io_runtime=None,
         pvc_size=None,
         max_pvc_size=105,
-        remove_security_context_section=True,
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -110,8 +109,6 @@ class FioPodScale(object):
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
-            remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
-                False, otherwise. Default value is True.
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -196,7 +193,6 @@ class FioPodScale(object):
                 node_selector=self.node_selector,
                 start_io=start_io,
                 io_runtime=io_runtime,
-                remove_security_context_section=remove_security_context_section,
             )
         )
         pod_data_list.extend(
@@ -208,7 +204,6 @@ class FioPodScale(object):
                 node_selector=self.node_selector,
                 start_io=start_io,
                 io_runtime=io_runtime,
-                remove_security_context_section=remove_security_context_section,
             )
         )
 
@@ -246,7 +241,6 @@ class FioPodScale(object):
         pvc_size=None,
         max_pvc_size=105,
         obj_name_prefix="obj",
-        remove_security_context_section=True,
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes
@@ -264,8 +258,6 @@ class FioPodScale(object):
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
             obj_name_prefix (str): The prefix of the object name. The default value is 'obj'
-            remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
-                False, otherwise. Default value is True.
 
         """
 
@@ -351,7 +343,6 @@ class FioPodScale(object):
                     io_runtime=io_runtime,
                     pvc_size=pvc_size,
                     max_pvc_size=max_pvc_size,
-                    remove_security_context_section=remove_security_context_section,
                 )
                 logger.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
@@ -1375,7 +1366,6 @@ def attach_multiple_pvc_to_pod_dict(
     io_runtime=None,
     io_size=None,
     pod_yaml=constants.PERF_POD_YAML,
-    remove_security_context_section=True,
 ):
     """
     Function to construct pod.yaml with multiple PVC's
@@ -1393,8 +1383,6 @@ def attach_multiple_pvc_to_pod_dict(
         io_runtime (seconds): Runtime in Seconds to continue IO
         io_size (str value with M|K|G): io_size with respective unit
         pod_yaml (dict): Pod yaml file dict
-        remove_security_context_section (bool): If True, remove the security context section from the Yaml file.
-            False, otherwise. Default value is True.
 
     Returns:
         pod_data (str): pod data with multiple PVC mount paths added
@@ -1407,11 +1395,6 @@ def attach_multiple_pvc_to_pod_dict(
         if len(temp_list) == pvcs_per_pod:
             pod_dict = pod_yaml
             pod_data = templating.load_yaml(pod_dict)
-            if (
-                remove_security_context_section
-                and "securityContext" in pod_data["spec"]["containers"][0]
-            ):
-                del pod_data["spec"]["containers"][0]["securityContext"]
             pod_name = helpers.create_unique_resource_name("scale", "pod")
 
             # Update pod yaml with required params
