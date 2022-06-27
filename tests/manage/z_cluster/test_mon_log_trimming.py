@@ -98,12 +98,12 @@ class TestMonLogTrimming(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def check_mon_db_trim(self):
+    def check_mon_db_trim(self, mon_pod_obj):
         """
         Check mon db size while fio runs in the background
         """
         while not self.stop_checking_mon_db:
-            temp_mon_db_size = get_mon_db_size_in_kb()
+            temp_mon_db_size = get_mon_db_size_in_kb(mon_pod_obj)
             assert temp_mon_db_size is not None, "Failed to get mon db size"
             log.info(
                 f"Monitoring mon-{self.selected_mon_pod} db size: {temp_mon_db_size}K"
@@ -146,7 +146,9 @@ class TestMonLogTrimming(E2ETest):
             size="100M",
             runtime=480,
         )
-        thread1 = threading.Thread(target=self.check_mon_db_trim)
+        thread1 = threading.Thread(
+            target=self.check_mon_db_trim(self.selected_mon_pod_obj)
+        )
         thread1.start()
 
         thread2 = threading.Thread(target=self.restart_osd_pod)
