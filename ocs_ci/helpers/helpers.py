@@ -45,6 +45,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.ocs.resources.pod import get_mon_label
 
 
 logger = logging.getLogger(__name__)
@@ -3839,17 +3840,17 @@ def get_mon_db_size_in_kb(mon_pod_obj):
         convert_device_size (int): Converted Mon db size in KB
 
     """
-    mon_pod_name = mon_pod_obj.get().get("metadata").get("labels").get("mon")
-    logger.info(f"Getting the current mon db size for mon-{mon_pod_name}")
+    mon_pod_label = get_mon_label(mon_pod_obj=mon_pod_obj)
+    logger.info(f"Getting the current mon db size for mon-{mon_pod_label}")
     size = mon_pod_obj.exec_cmd_on_pod(
-        f"du -sh /var/lib/ceph/mon/ceph-{mon_pod_name}/store.db",
+        f"du -sh /var/lib/ceph/mon/ceph-{mon_pod_label}/store.db",
         out_yaml_format=False,
     )
     size = re.split("\t+", size)
-    assert len(size) > 0, f"Failed to get mon-{mon_pod_name} db size"
+    assert len(size) > 0, f"Failed to get mon-{mon_pod_label} db size"
     size = size[0]
     mon_db_size_kb = convert_device_size(size + "i", "KB")
-    logger.info(f"mon-{mon_pod_name} DB size: {mon_db_size_kb} KB")
+    logger.info(f"mon-{mon_pod_label} DB size: {mon_db_size_kb} KB")
     return mon_db_size_kb
 
 

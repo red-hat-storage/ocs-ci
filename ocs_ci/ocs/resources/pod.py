@@ -2649,3 +2649,17 @@ def pod_resource_utilization_raw_output_from_adm_top(
     logger.info("Command RAW output of adm top pods")
     logger.info(f"{resource_utilization_all_pods}")
     return resource_utilization_all_pods
+
+
+def get_mon_label(mon_pod_obj):
+    """
+    Gets the mon pod label
+
+    Args:
+        mon_pod_obj (Pod): The pod object
+
+    Returns:
+        str: The mon pod label (eg: a)
+
+    """
+    return mon_pod_obj.get().get("metadata").get("labels").get("mon")
