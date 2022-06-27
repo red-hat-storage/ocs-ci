@@ -145,6 +145,7 @@ BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
+VOLUME_REPLICATION = "VolumeReplication"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 
 # Provisioners
@@ -511,6 +512,10 @@ CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
 
 CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
+)
+
+OC_MIRROR_IMAGESET_CONFIG = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls
