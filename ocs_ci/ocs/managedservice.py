@@ -192,8 +192,6 @@ def update_non_ga_version():
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
-    # Wait for catalog source is ready
-    catalog_source.wait_for_state("READY")
     logger.info("Edit annotation on the deployer CSV")
     run_cmd(
         f"oc annotate csv --overwrite ocs-osd-deployer.v{deployer_version} "
@@ -207,6 +205,8 @@ def update_non_ga_version():
         f'"versionRange":"{upgrade_ocs_version}"'
         "}}]}'"
     )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")
     ocs_channel = config.UPGRADE["ocs_channel"]
     odf_operator_u = f"odf-operator.v{deployer_version}"
     mplace = constants.MARKETPLACE_NAMESPACE
