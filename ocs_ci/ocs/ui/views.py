@@ -306,14 +306,8 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
-}
-
-pvc_4_7 = {
-    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
-    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
-    "Block": ("input[value='Block']", By.CSS_SELECTOR),
-    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
-    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
@@ -321,7 +315,6 @@ pvc_4_7 = {
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
     ),
-    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expected-capacity": (
         "//dd[contains(text(),'{}') and @data-test='pvc-requested-capacity']",
         By.XPATH,
@@ -330,6 +323,50 @@ pvc_4_7 = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
+}
+
+pvc_4_6 = {
+    "pvc_create_button": ("#yaml-create", By.CSS_SELECTOR),
+    "pvc_storage_class_selector": (
+        "#storageclass-dropdown",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-ceph-rbd": (
+        "a[id='ocs-storagecluster-ceph-rbd-link'] span[class='co-resource-item']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-cephfs": (
+        "a[id='ocs-storagecluster-cephfs-link'] span[class='co-resource-item']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_name": ("#pvc-name", By.CSS_SELECTOR),
+    "ReadWriteOnce": (
+        "input[value='ReadWriteOnce']",
+        By.CSS_SELECTOR,
+    ),
+    "ReadWriteMany": (
+        "input[value='ReadWriteMany']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_size": ("#request-size-input", By.CSS_SELECTOR),
+    "pvc_create": ("#save-changes", By.CSS_SELECTOR),
+    "pvc-status": (
+        "dd[data-test-id='pvc-status'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_delete": (
+        "button[data-test-action='Delete Persistent Volume Claim']",
+        By.CSS_SELECTOR,
+    ),
+    "clone_name_input": ("//input[@value='{}']", By.XPATH),
+}
+
+pvc_4_7 = {
+    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
+    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
+    "Block": ("input[value='Block']", By.CSS_SELECTOR),
+    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
 }
 
 pvc_4_8 = {
@@ -388,6 +425,10 @@ page_nav = {
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+}
+
+page_nav_4_6 = {
+    "persistentvolumeclaims_page": ("Persistent Volume Claims", By.LINK_TEXT),
 }
 
 page_nav_4_10 = {
@@ -968,8 +1009,9 @@ locators = {
     },
     "4.6": {
         "login": login,
-        "page": page_nav,
+        "page": {**page_nav, **page_nav_4_6},
         "deployment": {**deployment, **deployment_4_6},
-        "pvc": pvc,
+        "pvc": {**pvc, **pvc_4_6},
+        "validation": validation,
     },
 }
