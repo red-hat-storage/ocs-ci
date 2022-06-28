@@ -15,7 +15,6 @@ login = {
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
     "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
 }
-
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
 }
@@ -757,10 +756,16 @@ validation_4_9 = {
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster/overview']",
+        By.CSS_SELECTOR,
+    ),
     "overview": (
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
+    "odf-overview": ("a[data-test-id='horizontal-link-Overview']", By.CSS_SELECTOR),
+    "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
     "blockandfile": (
         "a[data-test-id='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
@@ -820,8 +825,12 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
-    "storage-system-health-card-hyperlink": (
+    "storage-system-status-card-hyperlink": (
         "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        By.XPATH,
+    ),
+    "storage-system-external-status-card-hyperlink": (
+        "(//a[contains(text(),'ocs-external-storagecluster-storagesystem')])[3]",
         By.XPATH,
     ),
     "storagesystem-details": (
@@ -829,12 +838,37 @@ validation_4_9 = {
         By.XPATH,
     ),
     "performance-card": ("//h2[normalize-space()='Performance']", By.XPATH),
+    "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),
+    "backingstore-link": (
+        "//a[normalize-space()='noobaa-default-backing-store']",
+        By.XPATH,
+    ),
+    "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
+    "backingstorage-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass": ("a[data-test-id='horizontal-link-Bucket Class']", By.CSS_SELECTOR),
+    "bucketclass-link": (
+        "//a[normalize-space()='noobaa-default-bucket-class']",
+        By.XPATH,
+    ),
+    "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
+    "bucketclass-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
+    "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
 }
 
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
         By.CSS_SELECTOR,
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
@@ -847,6 +881,17 @@ validation_4_10 = {
         By.XPATH,
     ),
 }
+validation_4_11 = {
+    "overview": ("//span[normalize-space()='Overview']", By.XPATH),
+    "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
+    "object": ("//span[normalize-space()='Object']", By.XPATH),
+    "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
+    "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+    "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
+    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
+}
+
 
 locators = {
     "4.11": {
@@ -858,8 +903,15 @@ locators = {
             **deployment_4_7,
             **deployment_4_9,
             **deployment_4_10,
-            **deployment_4_11,
         },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+        },
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
     },
     "4.10": {
         "login": login,
