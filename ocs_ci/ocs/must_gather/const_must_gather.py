@@ -725,7 +725,6 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-scc-describe.txt",
     "obc_list",
     "subscription",
-    "odf-csi-addons-operator.yaml",
     "odf-operator.yaml",
 ]
 
