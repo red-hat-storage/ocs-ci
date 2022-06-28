@@ -844,14 +844,20 @@ validation_4_9 = {
         By.XPATH,
     ),
     "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
-    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "backingstorage-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
     "bucketclass": ("a[data-test-id='horizontal-link-Bucket Class']", By.CSS_SELECTOR),
     "bucketclass-link": (
         "//a[normalize-space()='noobaa-default-bucket-class']",
         By.XPATH,
     ),
     "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
-    "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
+    "bucketclass-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
 }
 
@@ -882,6 +888,8 @@ validation_4_11 = {
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
+    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
 }
 
 
