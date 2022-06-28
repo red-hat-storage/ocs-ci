@@ -38,6 +38,7 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    get_ocp_version,
     encode,
 )
 
@@ -1033,18 +1034,21 @@ class Vault(KMS):
         """
 
         # Get secret name from serviceaccount
-        logger.info("Retrieving secret name from serviceaccount ")
-        cmd = (
-            f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-        )
-        secrets = run_cmd(cmd=cmd).split()
-        secret_name = ""
-        for secret in secrets:
-            if "-token-" in secret and "docker" not in secret:
-                secret_name = secret
-        if not secret_name:
-            raise NotFoundError("Secret name not found")
+        if Version.coerce(get_ocp_version()) < Version.coerce("4.11"):
+            logger.info("Retrieving secret name from serviceaccount ")
+            cmd = (
+                f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
+                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            secrets = run_cmd(cmd=cmd).split()
+            secret_name = ""
+            for secret in secrets:
+                if "-token-" in secret and "docker" not in secret:
+                    secret_name = secret
+            if not secret_name:
+                raise NotFoundError("Secret name not found")
+        else:
+            secret_name = helpers.create_sa_token_secret(sa_name=token_reviewer_name)
 
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")
