@@ -57,7 +57,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     def create_obc_creation(self, bucket_factory, obj, interface, key):
 
         # Create a bucket then read & write
-        bucket_name = bucket_factory(amount=1, interface=interface, timeout=120)[0].name
+        bucket_name = bucket_factory(amount=1, interface=interface)[0].name
         obj_data = "A random string data"
         assert s3_put_object(
             obj, bucket_name, key, obj_data
