@@ -14,8 +14,9 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
-from ocs_ci.ocs.exceptions import CSVNotFound
+from ocs_ci.ocs.exceptions import CSVNotFound, CommandFailed
 from ocs_ci.utility import templating, utils
+from ocs_ci.ocs.cluster import CephCluster
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +213,12 @@ def get_ocs_csv():
         CSVNotFound: In case no CSV found.
 
     """
+    try:
+        CephCluster()
+    except CommandFailed:
+        raise CSVNotFound
+    except FileNotFoundError:
+        raise CSVNotFound
     namespace = config.ENV_DATA["cluster_namespace"]
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
