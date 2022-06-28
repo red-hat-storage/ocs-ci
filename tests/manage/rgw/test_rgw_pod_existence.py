@@ -32,12 +32,8 @@ class TestRGWPodExistence:
                 )
             ):
                 logger.info("Checking whether RGW pod is not present")
-                pods = pod.get_pods_having_label(
-                    label=constants.RGW_APP_LABEL,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
                 assert (
-                    not pods
+                    not pod.get_rgw_pods()
                 ), "RGW pods should not exist in the current platform/cluster"
 
         elif (
