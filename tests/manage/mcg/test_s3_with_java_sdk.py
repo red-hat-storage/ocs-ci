@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 
 from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk

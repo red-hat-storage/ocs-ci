@@ -2230,7 +2230,6 @@ def javasdk_pod_fixture(request, scope_name):
     """
     Creates a new javasdk pod for executing s3 commands through java application
     """
-
     javas3_pod_dict = templating.load_yaml(constants.JAVA_SDK_S3_POD_YAML)
     javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
     javas3_pod_dict["metadata"]["name"] = javas3_pod_name
@@ -2243,7 +2242,7 @@ def javasdk_pod_fixture(request, scope_name):
     def _javas3_pod_cleanup():
         javas3_pod_obj.delete()
 
-    request.addfinalizer(_javas3_pod_cleanup())
+    request.addfinalizer(_javas3_pod_cleanup)
 
     return javas3_pod_obj
 
