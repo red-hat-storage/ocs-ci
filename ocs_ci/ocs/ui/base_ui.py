@@ -10,6 +10,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     NoSuchElementException,
+    StaleElementReferenceException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -41,7 +42,6 @@ from ocs_ci.utility.utils import (
     get_kubeadmin_password,
     get_ocp_version,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +225,7 @@ class BaseUI:
             page_hash_new = get_page_hash()
             if retry_counter == retries:
                 raise PageNotLoaded(
-                    f"Current URL did not finish loading in {retries*sleep_time}"
+                    f"Current URL did not finish loading in {retries * sleep_time}"
                 )
         logger.info(f"page loaded: {self.driver.current_url}")
 
@@ -319,15 +319,24 @@ class BaseUI:
 
         """
         try:
-            wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
+            ignored_exceptions = (
+                NoSuchElementException,
+                StaleElementReferenceException,
+            )
+            wait = WebDriverWait(
+                self.driver,
+                timeout=timeout,
+                ignored_exceptions=ignored_exceptions,
+                poll_frequency=1,
+            )
             wait.until(ec.presence_of_element_located(locator))
             return True
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
             self.take_screenshot()
             return False
         except TimeoutException:
-            logger.error("Timedout while waiting for element")
+            logger.error(f"Timedout while waiting for element with {locator}")
             self.take_screenshot()
             return False
 
@@ -386,12 +395,14 @@ class PageNavigator(BaseUI):
     def navigate_odf_overview_page(self):
         """
         Navigate to OpenShift Data Foundation Overview Page
-
         """
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_10:
+        if (
+            self.ocp_version_full >= version.VERSION_4_10
+            and ocs_version >= version.VERSION_4_10
+        ):
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
@@ -465,7 +476,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=25)
+        self.page_has_loaded(retries=25, sleep_time=5)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
@@ -638,11 +649,9 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.10"):
-
+        if self.ocp_version_full >= version.VERSION_4_10:
             default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//*[@data-test='showSystemSwitch']"
+                "//span[@class='pf-c-switch__toggle']"
             )
 
             if (
@@ -660,8 +669,8 @@ class PageNavigator(BaseUI):
             timeout=10,
         )
         if wait_for_project:
-            logger.info(f"Namespace {project_name} selected")
             self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            logger.info(f"Namespace {project_name} selected")
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")
 
@@ -833,6 +842,7 @@ def login_ui(console_url=None):
 
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
+    driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console(driver)
