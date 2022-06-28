@@ -69,18 +69,20 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
-            time.sleep(80)
-            self.refresh_popup()
+            try:
+                self.navigate_installed_operators_page()
+                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=300)
+            except Exception as e:
+                logger.error(f"Refresh pop-up does not exist: {e}")
         self.verify_operator_succeeded(operator=self.operator_name)
-        self.refresh_popup()
 
-    def refresh_popup(self):
+    def refresh_popup(self, timeout=30):
         """
         Refresh PopUp
         """
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
-            self.do_click(locator=self.dep_loc["refresh_popup"])
+            self.do_click(locator=self.dep_loc["refresh_popup"], timeout=timeout)
 
     def install_local_storage_operator(self):
         """
