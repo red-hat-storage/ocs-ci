@@ -157,8 +157,8 @@ deployment_4_10 = {
 
 deployment_4_11 = {
     "osd_size_dropdown": ("//div[@data-test-id='dropdown-button']", By.XPATH),
-    "thin_sc": ("thin-link",  By.ID),
-    "gp2_sc": ("gp2-link",  By.ID),
+    "thin_sc": ("thin-link", By.ID),
+    "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
     "512": ("//span[text()='0.5 TiB']", By.XPATH),
