@@ -272,14 +272,19 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
     endpoint = s3_obj.s3_internal_endpoint
+
+    # compile the src code
+    javas3_pod.exec_cmd_on_pod(
+        command="mvn clean compile", out_yaml_format=False
+    ), "Failed to compile project!!"
+
+    # execute the upload application
     command = (
         'mvn exec:java -Dexec.mainClass=amazons3.s3test.ChunkedUploadApplication -Dexec.args="'
         + f"{endpoint} {access_key} {secret_key} {bucket_name} {is_multipart}"
         + '" -Dmaven.test.skip=true package'
     )
-    javas3_pod.exec_cmd_on_pod(
-        command=command, out_yaml_format=False
-    ), "Failed to upload objects!"
+    return javas3_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
 
 
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):

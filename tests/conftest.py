@@ -120,6 +120,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
+
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -2238,6 +2239,13 @@ def javasdk_pod_fixture(request, scope_name):
 
     assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
     helpers.wait_for_resource_state(javas3_pod_obj, constants.STATUS_RUNNING)
+
+    # push java code to the pod created
+    java_src_code_path = constants.JAVA_SRC_CODE_PATH
+    target_path = "/app/"
+    assert javas3_pod_obj.copy_to_pod(
+        src_path=java_src_code_path, target_path=target_path
+    ), "Failed to copy java source code!!"
 
     def _javas3_pod_cleanup():
         javas3_pod_obj.delete()

@@ -194,6 +194,24 @@ class Pod(OCS):
             else None,
         )
 
+    def copy_to_pod(self, src_path, target_path, container=None):
+        """
+        Copies to pod path from the local path
+
+        Args:
+            src_path (str): local path
+            target_path (str): path within pod where you want to copy
+            container (str): if multi-container pod you can specify the container name, by default its None
+
+        Returns:
+            str: stdout of the command
+
+        """
+        cmd = f"rsync {src_path} {self.name}:/{target_path}"
+        if container:
+            cmd = cmd + f" -c {container}"
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+
     def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
