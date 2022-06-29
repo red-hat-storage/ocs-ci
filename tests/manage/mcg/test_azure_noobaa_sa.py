@@ -61,7 +61,7 @@ class TestNoobaaStorageAccount:
             headers=headers,
         ).json()
         logger.info(
-            "Validating noobaa storage account is configure with TLS:1.2 and secure transfer enabled"
+            "Validating whether noobaa storage account is configured with TLS:1.2 and secure transfer enabled"
         )
         assert (
             res["properties"]["minimumTlsVersion"] == "TLS1_2"
