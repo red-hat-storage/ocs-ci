@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -39,6 +40,7 @@ class TestCouchBaseNodeReboot(E2ETest):
         # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
+    @bugzilla("2101689")
     @pytest.mark.parametrize(
         argnames=["pod_name_of_node"],
         argvalues=[

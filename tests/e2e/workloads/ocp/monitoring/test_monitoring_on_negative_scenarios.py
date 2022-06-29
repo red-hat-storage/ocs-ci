@@ -35,6 +35,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
+    bugzilla,
 )
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 
@@ -429,6 +430,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check(tries=40)
 
+    @bugzilla("2101689")
     @pytest.mark.polarion_id("OCS-710")
     def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):
         """

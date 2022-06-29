@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi
+from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi, bugzilla
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
@@ -44,6 +44,7 @@ class TestJenkinsNodeReboot(E2ETest):
         # Deployment of jenkins
         jenkins.create_ocs_jenkins_template()
 
+    @bugzilla("2101689")
     @pytest.mark.parametrize(
         argnames=["node_type", "num_projects", "num_of_builds"],
         argvalues=[

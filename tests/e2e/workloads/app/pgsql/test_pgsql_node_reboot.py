@@ -5,6 +5,7 @@ from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -45,6 +46,7 @@ class TestPgSQLNodeReboot(E2ETest):
         # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
+    @bugzilla("2101689")
     @pytest.mark.parametrize(
         argnames=["transactions", "pod_name"],
         argvalues=[
