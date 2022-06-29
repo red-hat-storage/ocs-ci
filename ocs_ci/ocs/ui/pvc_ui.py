@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.views import locators, generic_locators
 from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +47,13 @@ class PvcUI(PageNavigator):
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
 
-        logger.info("Select Storage Class")
+        logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
+
+        logger.info("Select the Storage Class type")
         self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
 
-        logger.info("Select PVC name")
+        logger.info("Enter PVC name")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
 
         logger.info("Select Access Mode")
@@ -59,18 +62,25 @@ class PvcUI(PageNavigator):
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
+        ocs_version = version.get_semantic_ocs_version_from_config()
         if (
-            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
-            and access_mode == "ReadWriteOnce"
+            not self.ocp_version_full == version.VERSION_4_6
+            and ocs_version == version.VERSION_4_6
         ):
             if (
-                sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+                sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
                 and access_mode == "ReadWriteOnce"
             ):
-                logger.info(f"Test running on OCP version: {get_running_ocp_version()}")
+                if (
+                    sc_name != constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+                    and access_mode == "ReadWriteOnce"
+                ):
+                    logger.info(
+                        f"Test running on OCP version: {get_running_ocp_version()}"
+                    )
 
-                logger.info(f"Selecting Volume Mode of type {vol_mode}")
-                self.do_click(self.pvc_loc[vol_mode])
+                    logger.info(f"Selecting Volume Mode of type {vol_mode}")
+                    self.do_click(self.pvc_loc[vol_mode])
 
         logger.info("Create PVC")
         self.do_click(self.pvc_loc["pvc_create"])
@@ -283,13 +293,33 @@ class PvcUI(PageNavigator):
         self.do_click(self.pvc_loc["clone_pvc"], enable_screenshot=True)
 
         logger.info("Clear the default name of clone PVC")
-        self.do_clear(self.pvc_loc["clone_name_input"])
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (
+            self.ocp_version_full == version.VERSION_4_6
+            and ocs_version == version.VERSION_4_6
+        ):
+            self.do_clear(format_locator(self.pvc_loc["clone_name_input"], clone_name))
+        else:
+            self.do_clear(self.pvc_loc["clone_name_input"])
 
         logger.info("Enter the name of clone PVC")
-        self.do_send_keys(self.pvc_loc["clone_name_input"], text=clone_name)
+        if (
+            self.ocp_version_full == version.VERSION_4_6
+            and ocs_version == version.VERSION_4_6
+        ):
+            self.do_send_keys(
+                format_locator(self.pvc_loc["clone_name_input"], clone_name),
+                text=clone_name,
+            )
+        else:
+            self.do_send_keys(self.pvc_loc["clone_name_input"], text=clone_name)
 
-        logger.info("Select Access Mode of clone PVC")
-        self.do_click(self.pvc_loc[cloned_pvc_access_mode])
+        if (
+            not self.ocp_version_full == version.VERSION_4_6
+            and ocs_version == version.VERSION_4_6
+        ):
+            logger.info("Select Access Mode of clone PVC")
+            self.do_click(self.pvc_loc[cloned_pvc_access_mode])
 
         logger.info("Click on Clone button")
         self.do_click(generic_locators["confirm_action"], enable_screenshot=True)
