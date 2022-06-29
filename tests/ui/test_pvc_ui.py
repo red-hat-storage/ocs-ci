@@ -50,10 +50,8 @@ class TestPvcUserInterface(object):
                 "Filesystem",
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "ReadWriteOnce",
-                "11",
-                "Block",
+                *["ocs-storagecluster-ceph-rbd", "ReadWriteOnce", "11", "Block"],
+                marks=[skipif_ocs_version("<4.7")],
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
