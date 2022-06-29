@@ -1733,9 +1733,12 @@ def check_pods_in_running_state(
     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     pod_names=None,
     raise_pod_not_found_error=False,
+    skip_for_status=None,
 ):
     """
-    checks whether all the pods in a given namespace are in Running state or not
+    Checks whether the pods in a given namespace are in Running state or not.
+    The pods which are in 'Completed' state will be skipped when checking for all pods in the
+    namespace openshift-storage. 'Completed' will be the expected state of such pods.
 
     Args:
         namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
@@ -1744,7 +1747,9 @@ def check_pods_in_running_state(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             returns the pod objects of the rest of the pod names. The default value is False
-
+        skip_for_status(list): List of pod status that should be skipped. If the status of a pod is in the given list,
+            the check for 'Running' status of that particular pod will be skipped.
+            eg: ["Pending", "Completed"]
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
@@ -1770,6 +1775,21 @@ def check_pods_in_running_state(
             and ("debug" not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
+            if skip_for_status:
+                if status in skip_for_status:
+                    continue
+            # Skip the pods which are in 'Completed' state when checking for all pods in the
+            # namespace openshift-storage. 'Completed' will be the expected state of such pods.
+            if (
+                (status == constants.STATUS_COMPLETED)
+                and (not pod_names)
+                and (namespace == defaults.ROOK_CLUSTER_NAMESPACE)
+            ):
+                logger.warning(
+                    f"The pod {p.name} is not in {constants.STATUS_RUNNING} state, "
+                    f"but in {constants.STATUS_COMPLETED} state."
+                )
+                continue
             if status not in "Running":
                 logger.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
