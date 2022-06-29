@@ -162,7 +162,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
         if self.ocp_version == "4.9":
             self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version == "4.10":
+        elif self.ocp_version in ("4.10", "4.11"):
             self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
         if config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
@@ -246,24 +246,20 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Click Internal")
-        if (
-            self.operator_name == ODF_OPERATOR
-            and self.ocp_version_semantic != version.VERSION_4_11
-        ):
+        if self.operator_name == ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
             )
-        elif self.ocp_version_semantic != version.VERSION_4_11:
+        else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
 
-        if self.ocp_version_semantic != version.VERSION_4_11:
-            logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
-            self.do_click(
-                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
-            )
-            self.do_click(
-                locator=self.dep_loc[self.storage_class], enable_screenshot=True
-            )
+        logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+        self.do_click(
+            locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+        )
+        self.do_click(
+            locator=self.dep_loc[self.storage_class], enable_screenshot=True
+        )
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
@@ -342,7 +338,7 @@ class DeploymentUI(PageNavigator):
         device_size = str(config.ENV_DATA.get("device_size"))
         osd_size = device_size if device_size in osd_sizes else "512"
         logger.info(f"Configure OSD Capacity {osd_size}")
-        if self.ocp_version_semantic == version.VERSION_4_11:
+        if self.ocp_version_semantic >= version.VERSION_4_11:
             self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
         else:
             self.choose_expanded_mode(

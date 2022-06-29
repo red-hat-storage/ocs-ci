@@ -156,7 +156,11 @@ deployment_4_10 = {
 }
 
 deployment_4_11 = {
-    "osd_size_dropdown": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "osd_size_dropdown": ("//div[@data-test-id='dropdown-button']", By.XPATH),
+    "thin_sc": ("thin-link",  By.ID),
+    "gp2_sc": ("gp2-link",  By.ID),
+    "gp2-csi_sc": ("gp2-csi-link", By.ID),
+    "gp3-csi_sc": ("gp3-csi-link", By.ID),
     "512": ("//span[text()='0.5 TiB']", By.XPATH),
     "2048": ("//span[text()='2 TiB']", By.XPATH),
     "4096": ("//span[text()='4 TiB']", By.XPATH),
@@ -903,6 +907,7 @@ locators = {
             **deployment_4_7,
             **deployment_4_9,
             **deployment_4_10,
+            **deployment_4_11,
         },
         "validation": {
             **validation,
@@ -922,6 +927,7 @@ locators = {
             **deployment_4_7,
             **deployment_4_9,
             **deployment_4_10,
+            **deployment_4_11,
         },
         "add_capacity": add_capacity,
         "validation": {
