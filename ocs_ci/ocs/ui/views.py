@@ -927,7 +927,6 @@ locators = {
             **deployment_4_7,
             **deployment_4_9,
             **deployment_4_10,
-            **deployment_4_11,
         },
         "add_capacity": add_capacity,
         "validation": {
