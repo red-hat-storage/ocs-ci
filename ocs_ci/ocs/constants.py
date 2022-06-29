@@ -1010,6 +1010,7 @@ EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
     "external-", "noobaa", "ceph-objectstore-user"
 )
 OCS_SECRET = "ocs-secret"
+AZURE_NOOBAA_SECRET = "noobaa-azure-container-creds"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
 MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
