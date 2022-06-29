@@ -3817,6 +3817,6 @@ def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESP
     token_secret["metadata"]["annotations"][
         "kubernetes.io/service-account.name"
     ] = sa_name
-    create_resource(token_secret, prefix="token-secret")
+    create_resource(**token_secret)
     logger.info(f"Serviceaccount token secret {sa_name}-token created successfully")
     return token_secret["metadata"]["name"]
