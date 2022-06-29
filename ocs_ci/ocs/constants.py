@@ -1776,8 +1776,8 @@ LVMO_POD_LABEL = {
     },
     "411": {
         "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
-        "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
-        "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
-        "vg-manager_label": "app.lvm.openshift.io=vg-manager",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
+        "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
+        "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
 }
