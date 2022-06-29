@@ -1940,7 +1940,9 @@ def get_testrun_name():
         )
         if baremetal_config:
             testrun_name = f"LSO {baremetal_config} {testrun_name}"
-
+        post_upgrade = config.REPORTING.get("post_upgrade", "")
+        if post_upgrade:
+            post_upgrade = "post-upgrade"
         testrun_name = (
             f"{testrun_name}"
             f"{get_az_count()}AZ "
@@ -1948,7 +1950,7 @@ def get_testrun_name():
             f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
-            f"{markers}"
+            f"{markers} {post_upgrade}".rstrip()
         )
     testrun_name = (
         f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
