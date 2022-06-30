@@ -16,6 +16,8 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
+
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +214,16 @@ def get_ocs_csv():
         CSVNotFound: In case no CSV found.
 
     """
+
+    ver = get_semantic_ocs_version_from_config()
+    operator_base = (
+        defaults.OCS_OPERATOR_NAME if ver < VERSION_4_9 else defaults.ODF_OPERATOR_NAME
+    )
+    operator_name = f"{operator_base}.openshift-storage"
+    operator = OCP(kind="operator", resource_name=operator_name)
+
+    if "Error" in operator.data:
+        raise CSVNotFound(f"{operator_name} is not found, csv check will be skipped")
     namespace = config.ENV_DATA["cluster_namespace"]
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
