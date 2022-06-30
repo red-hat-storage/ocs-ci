@@ -201,6 +201,166 @@ def measure_pvc_deletion_time(interface, pvc_objs):
             )
 
 
+def create_restore_verify_snapshots(
+    multi_snapshot_factory,
+    snapshot_restore_factory,
+    pod_factory,
+    pvc_objs,
+    namespace,
+    file_name,
+):
+    """
+    Creates snapshots from each PVC in the provided list of PVCs,
+    Restores new PVCs out of the created snapshots
+    and
+    Verifies data integrity by checking the existence and md5sum of file in the restored PVC.
+
+    Args:
+        multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
+        snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
+        pod_factory : Fixture to create new PODs.
+        pvc_objs (list) : List of PVC objects for which snapshots are to be created.
+        namespace (str) : Namespace in which the PVCs are created.
+        file_name (str) : Name of the file on which FIO is performed.
+
+    Returns:
+        tuple: A tuple of size 2 containing a list of restored PVC objects and a list of the pods attached to the
+                restored PVCs, respectively.
+
+    """
+    # Create Snapshots
+    log.info("Started creation of snapshots of the PVCs.")
+    snapshots = multi_snapshot_factory(pvc_obj=pvc_objs, snapshot_name_suffix=namespace)
+    log.info("Created snapshots from all the PVCs and snapshots are in Ready state.")
+
+    # Restore Snapshots
+    log.info("Started restoration of the snapshots created.")
+    restored_pvc_objs = list()
+    for snapshot_no in range(len(snapshots)):
+        restored_pvc_objs.append(
+            snapshot_restore_factory(
+                snapshot_obj=snapshots[snapshot_no],
+                volume_mode=pvc_objs[snapshot_no].get_pvc_vol_mode,
+                access_mode=pvc_objs[snapshot_no].get_pvc_access_mode,
+                timeout=600,
+            )
+        )
+    log.info("Restoration complete - Created new PVCs from all the snapshots.")
+
+    # Attach PODs to restored PVCs
+    restored_pod_objs = list()
+    for restored_pvc_obj in restored_pvc_objs:
+        if restored_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+            restored_pod_objs.append(
+                pod_factory(
+                    pvc=restored_pvc_obj,
+                    raw_block_pv=True,
+                    status=constants.STATUS_RUNNING,
+                    pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                )
+            )
+        else:
+            restored_pod_objs.append(
+                pod_factory(pvc=restored_pvc_obj, status=constants.STATUS_RUNNING)
+            )
+
+    # Verify that the fio exists and md5sum matches
+    pod.verify_data_integrity_for_multi_pvc_objs(restored_pod_objs, pvc_objs, file_name)
+
+    return restored_pvc_objs, restored_pod_objs
+
+
+def expand_verify_pvcs(pvc_objs, pod_objs, pvc_size_new, file_name, fio_size):
+    """
+    Expands size of each PVC in the provided list of PVCs,
+    Verifies data integrity by checking the existence and md5sum of file in the expanded PVC
+    and
+    Runs FIO on expanded PVCs and verifies results.
+
+    Args:
+        pvc_objs (list) : List of PVC objects which are to be expanded.
+        pod_objs (list) : List of POD objects attached to the PVCs.
+        pvc_size_new (int) : Size of the expanded PVC in GB.
+        file_name (str) : Name of the file on which FIO is performed.
+        fio_size (int) : Size in MB of FIO.
+
+    """
+    # Expand original PVCs
+    log.info("Started expansion of the PVCs.")
+    for pvc_obj in pvc_objs:
+        log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+        pvc_obj.resize_pvc(pvc_size_new, True)
+    log.info("Successfully expanded the PVCs.")
+
+    # Verify that the fio exists and md5sum matches
+    for pod_no in range(len(pod_objs)):
+        pod_obj = pod_objs[pod_no]
+        if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+            pod.verify_data_integrity_after_expansion_for_block_pvc(
+                pod_obj, pvc_objs[pod_no], fio_size
+            )
+        else:
+            pod.verify_data_integrity(pod_obj, file_name, pvc_objs[pod_no].md5sum)
+
+    # Run IO to utilize 50% of volume
+    log.info("Run IO on all pods to utilise 50% of the expanded PVC used space")
+    expanded_file_name = "fio_50"
+    for pod_obj in pod_objs:
+        log.info(f"Running IO on pod {pod_obj.name}")
+        log.info(f"File created during IO {expanded_file_name}")
+        fio_size = int(0.50 * pvc_size_new * 1000)
+        storage_type = (
+            "block"
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else "fs"
+        )
+        pod_obj.wl_setup_done = True
+        pod_obj.wl_obj = workload.WorkLoad(
+            "test_workload_fio",
+            pod_obj.get_storage_path(storage_type),
+            "fio",
+            storage_type,
+            pod_obj,
+            1,
+        )
+        pod_obj.run_io(
+            storage_type=storage_type,
+            size=f"{fio_size}M",
+            runtime=20,
+            fio_filename=expanded_file_name,
+            end_fsync=1,
+        )
+
+    log.info("Started IO on all pods to utilise 50% of PVCs")
+
+    for pod_obj in pod_objs:
+        # Wait for IO to finish
+        pod_obj.get_fio_results(3600)
+        log.info(f"IO finished on pod {pod_obj.name}")
+        is_block = (
+            True
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else False
+        )
+        expanded_file_name_pod = (
+            expanded_file_name
+            if not is_block
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+
+        # Verify presence of the file
+        expanded_file_path = (
+            expanded_file_name_pod
+            if is_block
+            else pod.get_file_path(pod_obj, expanded_file_name_pod)
+        )
+        log.info(f"Actual file path on the pod {expanded_file_path}")
+        assert pod.check_file_existence(
+            pod_obj, expanded_file_path
+        ), f"File {expanded_file_name_pod} does not exist"
+        log.info(f"File {expanded_file_name_pod} exists in {pod_obj.name}")
+
+
 def _multi_pvc_pod_lifecycle_factory(
     project_factory, multi_pvc_factory, pod_factory, teardown_factory
 ):
@@ -221,26 +381,32 @@ def _multi_pvc_pod_lifecycle_factory(
         num_of_pvcs=100,
         pvc_size=2,
         bulk=False,
-        namespace="stage-2",
+        project=None,
         measure=True,
+        delete=True,
         file_name=None,
         fio_percentage=25,
         verify_fio=False,
+        expand=False,
     ):
         """
         Args:
             num_of_pvcs (int) : Number of PVCs / PODs we want to create.
             pvc_size (int) : Size of each PVC in GB.
             bulk (bool) : True for bulk operations, False otherwise.
-            namespace (str) : Name of the namespace inside which the PODs/PVCs are created.
+            project (obj) : Project obj inside which the PODs/PVCs are created.
             measure (bool) : True if we want to measure the PVC creation/deletion time and POD to PVC attach time,
                                 False otherwise.
+            delete (bool) : True if we want to delete PVCs and PODs, False otherwise
             file_name (str) : Name of the file on which FIO is performed.
             fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
             verify_fio (bool) : True if we want to verify FIO, False otherwise.
+            expand (bool) : True if we want to verify_fio for expansion of PVCs operation, False otherwise.
 
         """
-        project = project_factory(namespace)
+
+        if not project:
+            project = project_factory("longevity")
         pvc_objs = list()
         executor = ThreadPoolExecutor(max_workers=1)
         start_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -370,85 +536,90 @@ def _multi_pvc_pod_lifecycle_factory(
                     end_fsync=1,
                 )
 
-            if verify_fio:
-                log.info(
-                    "Waiting for IO to complete on all pods to utilise 25% of PVC used space"
+        if verify_fio:
+            log.info(
+                "Waiting for IO to complete on all pods to utilise 25% of PVC used space"
+            )
+
+            for pod_obj in pod_objs:
+                # Wait for IO to finish
+                pod_obj.get_fio_results(3600)
+                log.info(f"IO finished on pod {pod_obj.name}")
+                is_block = (
+                    True
+                    if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+                    else False
                 )
+                file_name_pod = (
+                    file_name
+                    if not is_block
+                    else pod_obj.get_storage_path(storage_type="block")
+                )
+                # Verify presence of the file
+                file_path = (
+                    file_name_pod
+                    if is_block
+                    else pod.get_file_path(pod_obj, file_name_pod)
+                )
+                log.info(f"Actual file path on the pod {file_path}")
+                assert pod.check_file_existence(
+                    pod_obj, file_path
+                ), f"File {file_name_pod} does not exist"
+                log.info(f"File {file_name_pod} exists in {pod_obj.name}")
 
-                for pod_obj in pod_objs:
-                    # Wait for IO to finish
-                    pod_obj.get_fio_results(3600)
-                    log.info(f"IO finished on pod {pod_obj.name}")
-                    is_block = (
-                        True
-                        if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
-                        else False
-                    )
-                    file_name_pod = (
-                        file_name
-                        if not is_block
-                        else pod_obj.get_storage_path(storage_type="block")
-                    )
-                    # Verify presence of the file
-                    file_path = (
-                        file_name_pod
-                        if is_block
-                        else pod.get_file_path(pod_obj, file_name_pod)
-                    )
-                    log.info(f"Actual file path on the pod {file_path}")
-                    assert pod.check_file_existence(
-                        pod_obj, file_path
-                    ), f"File {file_name_pod} does not exist"
-                    log.info(f"File {file_name_pod} exists in {pod_obj.name}")
-
-                    if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
-                        # Read IO from block PVCs using dd and calculate md5sum
-                        pod_obj.pvc.md5sum = pod_obj.exec_sh_cmd_on_pod(
-                            command=(
-                                f"dd iflag=direct if={file_path} bs=10M "
-                                f"count={fio_size // 10} | md5sum"
-                            )
+                if expand and is_block:
+                    # Read IO from block PVCs using dd and calculate md5sum.
+                    # This dd command reads the data from the device, writes it to
+                    # stdout, and reads md5sum from stdin.
+                    pod_obj.pvc.md5sum = pod_obj.exec_sh_cmd_on_pod(
+                        command=(
+                            f"dd iflag=direct if={file_path} bs=10M "
+                            f"count={fio_size // 10} | md5sum"
                         )
-                        log.info(f"md5sum of {file_name_pod}: {pod_obj.pvc.md5sum}")
-                    else:
-                        # Calculate md5sum of the file
-                        pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name_pod)
+                    )
+                    log.info(f"md5sum of {file_name_pod}: {pod_obj.pvc.md5sum}")
+                else:
+                    # Calculate md5sum of the file
+                    pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name_pod)
 
         log.info("POD FIO was successful.")
 
-        # Delete PODs
-        pod_delete = executor.submit(delete_pods, pod_objs, wait=not bulk)
-        pod_delete.result()
+        if delete:
+            # Delete PODs
+            pod_delete = executor.submit(delete_pods, pod_objs, wait=not bulk)
+            pod_delete.result()
 
-        log.info("Verified: Pods are deleted.")
+            log.info("Verified: Pods are deleted.")
 
-        # Delete PVCs
-        pvc_delete = executor.submit(delete_pvcs, pvc_objs, concurrent=bulk)
-        res = pvc_delete.result()
-        if not res:
-            raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
-        log.info("PVC deletion was successful.")
+            # Delete PVCs
+            pvc_delete = executor.submit(delete_pvcs, pvc_objs, concurrent=bulk)
+            res = pvc_delete.result()
+            if not res:
+                raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
+            log.info("PVC deletion was successful.")
 
-        # Validate PV Deletion
-        for pvc_obj in pvc_objs:
-            helpers.validate_pv_delete(pvc_obj.backed_pv)
-        log.info("PV deletion was successful.")
+            # Validate PV Deletion
+            for pvc_obj in pvc_objs:
+                helpers.validate_pv_delete(pvc_obj.backed_pv)
+            log.info("PV deletion was successful.")
 
-        if measure:
-            # Measure PVC Deletion Time
-            for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
-                if interface == constants.CEPHFILESYSTEM:
-                    measure_pvc_deletion_time(
-                        interface,
-                        pvc_objs[: num_of_pvcs // 2],
-                    )
-                else:
-                    measure_pvc_deletion_time(
-                        interface,
-                        pvc_objs[num_of_pvcs // 2 :],
-                    )
+            if measure:
+                # Measure PVC Deletion Time
+                for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
+                    if interface == constants.CEPHFILESYSTEM:
+                        measure_pvc_deletion_time(
+                            interface,
+                            pvc_objs[: num_of_pvcs // 2],
+                        )
+                    else:
+                        measure_pvc_deletion_time(
+                            interface,
+                            pvc_objs[num_of_pvcs // 2 :],
+                        )
 
-        log.info(f"Successfully deleted {num_of_pvcs} PVCs")
+            log.info(f"Successfully deleted {num_of_pvcs} PVCs")
+        else:
+            return pvc_objs, pod_objs
 
     return factory
 
