@@ -292,6 +292,7 @@ def ocs_install_verification(
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
+    cluster_name = config.ENV_DATA["cluster_name"]
     if config.DEPLOYMENT["external_mode"]:
         sc_rbd = storage_class.get(
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -317,14 +318,32 @@ def ocs_install_verification(
                 in sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
             )
         else:
-            assert (
-                sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                == constants.RBD_NODE_SECRET
-            )
-            assert (
-                sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                == constants.RBD_PROVISIONER_SECRET
-            )
+            if (
+                config.DEPLOYMENT["external_mode"]
+                and config.ENV_DATA["restricted-auth-permission"]
+            ):
+                rbd_node_secret = f"{constants.RBD_NODE_SECRET}-{cluster_name}-rbd"
+                rbd_provisioner_secret = (
+                    f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-rbd"
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == rbd_node_secret
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                    == rbd_provisioner_secret
+                )
+            else:
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == constants.RBD_NODE_SECRET
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                    == constants.RBD_PROVISIONER_SECRET
+                )
+
     if not disable_cephfs and not provider_cluster:
         if consumer_cluster:
             assert (
@@ -336,14 +355,38 @@ def ocs_install_verification(
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
             )
         else:
-            assert (
-                sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                == constants.CEPHFS_NODE_SECRET
-            )
-            assert (
-                sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                == constants.CEPHFS_PROVISIONER_SECRET
-            )
+            if (
+                config.DEPLOYMENT["external_mode"]
+                and config.ENV_DATA["restricted-auth-permission"]
+            ):
+                cephfs_node_secret = (
+                    f"{constants.CEPHFS_NODE_SECRET}-{cluster_name}-cephfs"
+                )
+                cephfs_provisioner_secret = (
+                    f"{constants.CEPHFS_PROVISIONER_SECRET}-{cluster_name}-cephfs"
+                )
+                assert (
+                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == cephfs_node_secret
+                )
+                assert (
+                    sc_cephfs["parameters"][
+                        "csi.storage.k8s.io/provisioner-secret-name"
+                    ]
+                    == cephfs_provisioner_secret
+                )
+            else:
+                assert (
+                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == constants.CEPHFS_NODE_SECRET
+                )
+                assert (
+                    sc_cephfs["parameters"][
+                        "csi.storage.k8s.io/provisioner-secret-name"
+                    ]
+                    == constants.CEPHFS_PROVISIONER_SECRET
+                )
+
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
@@ -402,10 +445,23 @@ def ocs_install_verification(
     # verify caps for external cluster
     log.info("Verify CSI users and caps for external cluster")
     if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
-        ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+        if config.ENV_DATA["restricted-auth-permission"]:
+            ceph_csi_users = []
+            for csi_user in defaults.ceph_csi_users:
+                csi_user_type = csi_user.split("-")[1]
+                csi_user_with_auth_permission = (
+                    f"{csi_user}-{cluster_name}-{csi_user_type}"
+                )
+                ceph_csi_users.append(csi_user_with_auth_permission)
+            log.debug(f"CSI users for restricted auth permissions are {ceph_csi_users}")
+            expected_csi_users = copy.deepcopy(ceph_csi_users)
+        else:
+            ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+            expected_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+
         ceph_auth_data = ct_pod.exec_cmd_on_pod("ceph auth ls -f json")
         for each in ceph_auth_data["auth_dump"]:
-            if each["entity"] in defaults.ceph_csi_users:
+            if each["entity"] in expected_csi_users:
                 assert (
                     "osd blocklist" in each["caps"]["mon"]
                 ), f"osd blocklist caps are not present for user {each['entity']}"
