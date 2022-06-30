@@ -72,6 +72,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_ceph_tools_pod,
     get_all_pods,
+    verify_data_integrity_for_multi_pvc_objs,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -3623,6 +3624,7 @@ def snapshot_restore_factory(request):
         restore_pvc_yaml=None,
         access_mode=constants.ACCESS_MODE_RWO,
         status=constants.STATUS_BOUND,
+        timeout=60,
     ):
         """
         Args:
@@ -3640,6 +3642,7 @@ def snapshot_restore_factory(request):
                 PVC. ReadWriteOnce is default.
             status (str): If provided then factory waits for the PVC to reach
                 desired state.
+            timeout (int): Time in seconds to wait for the PVC to reach the desired status.
 
         Returns:
             PVC: Restored PVC object
@@ -3683,7 +3686,7 @@ def snapshot_restore_factory(request):
         restored_pvc.snapshot = snapshot_obj
         restored_pvc.interface = interface
         if status:
-            helpers.wait_for_resource_state(restored_pvc, status)
+            helpers.wait_for_resource_state(restored_pvc, status, timeout)
         return restored_pvc
 
     def finalizer():
@@ -3944,7 +3947,7 @@ def pvc_clone_factory(request):
         )
         storageclass = storageclass or pvc_obj.backed_sc
         access_mode = access_mode or pvc_obj.get_pvc_access_mode
-        volume_mode = volume_mode or getattr(pvc_obj, "volume_mode", None)
+        volume_mode = volume_mode or pvc_obj.get_pvc_vol_mode
 
         # Create clone
         clone_pvc_obj = pvc.create_pvc_clone(
@@ -3994,7 +3997,7 @@ def reportportal_customization(request):
 
 
 @pytest.fixture()
-def multi_pvc_clone_factory(pvc_clone_factory):
+def multi_pvc_clone_factory(pvc_clone_factory, pod_factory):
     """
     Calling this fixture creates clone from each PVC in the provided list of PVCs
 
@@ -4009,6 +4012,9 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         access_mode=None,
         volume_mode=None,
         wait_each=False,
+        attach_pods=False,
+        verify_data_integrity=False,
+        file_name=None,
     ):
         """
         Args:
@@ -4025,6 +4031,10 @@ def multi_pvc_clone_factory(pvc_clone_factory):
                 volume mode of parent PVC
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            attach_pods(bool): True if we want to attach PODs to the cloned PVCs, False otherwise.
+            verify_data_integrity(bool): True if we want to verify data integrity by checking the existence and md5sum
+                                            of file in the cloned PVC, False otherwise.
+            file_name(str): The name of the file for which data integrity is to be checked.
 
         Returns:
             PVC: List PVC instance
@@ -4034,6 +4044,7 @@ def multi_pvc_clone_factory(pvc_clone_factory):
 
         status_tmp = status if wait_each else ""
 
+        log.info("Started creation of clones of the PVCs.")
         for obj in pvc_obj:
             # Create clone
             clone_pvc_obj = pvc_clone_factory(
@@ -4050,6 +4061,34 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         if status and not wait_each:
             for cloned_pvc in cloned_pvcs:
                 helpers.wait_for_resource_state(cloned_pvc, status)
+
+        log.info("Successfully created clones of the PVCs.")
+
+        if attach_pods:
+            # Attach PODs to cloned PVCs
+            cloned_pod_objs = list()
+            for cloned_pvc_obj in cloned_pvcs:
+                if cloned_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+                    cloned_pod_objs.append(
+                        pod_factory(
+                            pvc=cloned_pvc_obj,
+                            raw_block_pv=True,
+                            status=constants.STATUS_RUNNING,
+                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                        )
+                    )
+                else:
+                    cloned_pod_objs.append(
+                        pod_factory(pvc=cloned_pvc_obj, status=constants.STATUS_RUNNING)
+                    )
+
+            # Verify that the fio exists and md5sum matches
+            if verify_data_integrity:
+                verify_data_integrity_for_multi_pvc_objs(
+                    cloned_pod_objs, pvc_obj, file_name
+                )
+
+            return cloned_pvcs, cloned_pod_objs
 
         return cloned_pvcs
 

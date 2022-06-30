@@ -23,24 +23,31 @@ from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.cosbench import Cosbench
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.ocs.resources.pvc import get_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
+from ocs_ci.ocs.resources.pod import delete_pods
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.deployment.deployment import setup_persistent_monitoring
 from ocs_ci.ocs.registry import (
     change_registry_backend_to_ocs,
     check_if_registry_stack_exists,
+)
+from ocs_ci.ocs.longevity_helpers import (
+    create_restore_verify_snapshots,
+    expand_verify_pvcs,
 )
 from ocs_ci.utility.deployment_openshift_logging import install_logging
 from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
 
 log = logging.getLogger(__name__)
 
-
 supported_app_workloads = ["pgsql", "couchbase", "cosbench"]
 supported_ocp_workloads = ["logging", "monitoring", "registry"]
 
+STAGE_2_PREFIX = "stage-2-cycle-"
+STAGE_4_PREFIX = "stage-4-cycle-"
+
 
 class Longevity(object):
-
     """
     This class consists of the library functions and params required for Longevity testing
     """
@@ -557,6 +564,7 @@ class Longevity(object):
 
     def stage_2(
         self,
+        project_factory,
         multi_pvc_pod_lifecycle_factory,
         multi_obc_lifecycle_factory,
         num_of_pvcs=100,
@@ -571,6 +579,7 @@ class Longevity(object):
         OBCs and measurement of creation / deletion times of the mentioned resources.
 
         Args:
+            project_factory : Fixture to create a new Project.
             multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
                                                 measure pvc creation/deletion time and pod attach time.
             multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
@@ -593,11 +602,13 @@ class Longevity(object):
             for bulk in (False, True):
                 current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
                 log.info(f"#################[{current_ops}]#################")
+                namespace = f"{STAGE_2_PREFIX}{cycle_no}-{current_ops.lower()}"
+                project = project_factory(project_name=namespace)
                 multi_pvc_pod_lifecycle_factory(
                     num_of_pvcs=num_of_pvcs,
                     pvc_size=pvc_size,
                     bulk=bulk,
-                    namespace=f"stage-2-cycle-{cycle_no}-{current_ops.lower()}",
+                    project=project,
                     measure=measure,
                 )
                 multi_obc_lifecycle_factory(
@@ -617,6 +628,193 @@ class Longevity(object):
                 f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
             )
             time.sleep(delay)
+
+    def stage_4(
+        self,
+        project_factory,
+        multi_pvc_pod_lifecycle_factory,
+        pod_factory,
+        multi_pvc_clone_factory,
+        multi_snapshot_factory,
+        snapshot_restore_factory,
+        teardown_factory,
+        num_of_pvcs=30,
+        fio_percentage=25,
+        pvc_size=2,
+        run_time=180,
+        pvc_size_new=4,
+    ):
+        """
+        Function to handle automation of Longevity Stage 4 i.e.
+            1. Creation / Deletion of PODs, PVCs of different types +
+                fill data upto fio_percentage (default is 25%) of mount point space.
+            2. Creation / Deletion of Clones of the given PVCs.
+            3. Creation / Deletion of VolumeSnapshots of the given PVCs.
+            4. Restore the created VolumeSnapshots into a new set of PVCs.
+            5. Expansion of size of the original PVCs.
+
+
+        Args:
+            project_factory : Fixture to create a new Project.
+            multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods, verify FIO and
+                                                measure pvc creation/deletion time and pod attach time
+            pod_factory : Fixture to create new PODs.
+            multi_pvc_clone_factory : Fixture to create a clone from each PVC in the provided list of PVCs.
+            multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
+            snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
+            teardown_factory : Fixture to tear down a resource that was created during the test.
+            num_of_pvcs (int) : Total Number of PVCs we want to create for each operation (clone, snapshot, expand).
+            fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
+            pvc_size (int) : Size of each PVC in GB.
+            run_time (int) : Total Run Time in minutes.
+            pvc_size_new (int) : Size of the expanded PVC in GB.
+
+        """
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        cycle_no = 0
+
+        while datetime.now() < end_time:
+            cycle_no += 1
+            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+
+            for concurrent in (False, True):
+                current_ops = (
+                    "CONCURRENT-OPERATION" if concurrent else "SEQUENTIAL-OPERATION"
+                )
+                log.info(f"#################[{current_ops}]#################")
+
+                namespace = f"{STAGE_4_PREFIX}{cycle_no}-{current_ops.lower()}"
+                project = project_factory(project_name=namespace)
+                executor = ThreadPoolExecutor(max_workers=1)
+                operation_pvc_dict = dict()
+                operation_pod_dict = dict()
+                fio_size = int((fio_percentage / 100) * pvc_size * 1000)
+                file_name = f"fio_{fio_percentage}"
+
+                for operation in ("clone", "snapshot", "expand"):
+                    pvc_objs, pod_objs = multi_pvc_pod_lifecycle_factory(
+                        num_of_pvcs=num_of_pvcs,
+                        pvc_size=pvc_size,
+                        project=project,
+                        measure=False,
+                        delete=False,
+                        file_name=file_name,
+                        fio_percentage=fio_percentage,
+                        verify_fio=True,
+                        expand=(operation == "expand"),
+                    )
+
+                    operation_pvc_dict[operation] = pvc_objs
+                    operation_pod_dict[operation] = pod_objs
+                    log.info(
+                        f"PVCs and PODs for operation:{operation} were successfully created + {fio_percentage}% FIO."
+                    )
+
+                if not concurrent:
+                    cloned_pvcs, cloned_pod_objs = multi_pvc_clone_factory(
+                        pvc_obj=operation_pvc_dict["clone"],
+                        wait_each=True,
+                        attach_pods=True,
+                        verify_data_integrity=True,
+                        file_name=file_name,
+                    )
+
+                    (
+                        restored_pvc_objs,
+                        restored_pod_objs,
+                    ) = create_restore_verify_snapshots(
+                        multi_snapshot_factory,
+                        snapshot_restore_factory,
+                        pod_factory,
+                        operation_pvc_dict["snapshot"],
+                        namespace,
+                        file_name,
+                    )
+
+                    expand_verify_pvcs(
+                        operation_pvc_dict["expand"],
+                        operation_pod_dict["expand"],
+                        pvc_size_new,
+                        file_name,
+                        fio_size,
+                    )
+
+                else:
+                    stage4_executor1 = ThreadPoolExecutor(max_workers=1)
+                    stage4_thread1 = stage4_executor1.submit(
+                        multi_pvc_clone_factory,
+                        pvc_obj=operation_pvc_dict["clone"],
+                        wait_each=True,
+                        attach_pods=True,
+                        verify_data_integrity=True,
+                        file_name=file_name,
+                    )
+
+                    stage4_executor2 = ThreadPoolExecutor(max_workers=1)
+                    stage4_thread2 = stage4_executor2.submit(
+                        create_restore_verify_snapshots,
+                        multi_snapshot_factory,
+                        snapshot_restore_factory,
+                        pod_factory,
+                        operation_pvc_dict["snapshot"],
+                        namespace,
+                        file_name,
+                    )
+
+                    stage4_executor3 = ThreadPoolExecutor(max_workers=1)
+                    stage4_thread3 = stage4_executor3.submit(
+                        expand_verify_pvcs,
+                        operation_pvc_dict["expand"],
+                        operation_pod_dict["expand"],
+                        pvc_size_new,
+                        file_name,
+                        fio_size,
+                    )
+
+                    cloned_pvcs, cloned_pod_objs = stage4_thread1.result()
+                    restored_pvc_objs, restored_pod_objs = stage4_thread2.result()
+                    stage4_thread3.result()
+
+                total_pvcs = (
+                    operation_pvc_dict["clone"]
+                    + operation_pvc_dict["snapshot"]
+                    + operation_pvc_dict["expand"]
+                    + cloned_pvcs
+                    + restored_pvc_objs
+                )
+                total_pods = (
+                    operation_pod_dict["clone"]
+                    + operation_pod_dict["snapshot"]
+                    + operation_pod_dict["expand"]
+                    + cloned_pod_objs
+                    + restored_pod_objs
+                )
+
+                # PVC and PV Teardown
+                pv_objs = list()
+                for pvc_obj in total_pvcs:
+                    teardown_factory(pvc_obj)
+                    pv_objs.append(pvc_obj.backed_pv_obj.name)
+                    teardown_factory(pvc_obj.backed_pv_obj)
+
+                # POD Teardown
+                for pod_obj in total_pods:
+                    teardown_factory(pod_obj)
+
+                # Delete PODs
+                pod_delete = executor.submit(delete_pods, total_pods)
+                pod_delete.result()
+
+                log.info("Verified: Pods are deleted.")
+
+                # Delete PVCs
+                pvc_delete = executor.submit(delete_pvcs, total_pvcs)
+                res = pvc_delete.result()
+                if not res:
+                    raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
+                log.info("PVC deletion was successful.")
+
+            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
 
 
 def start_app_workload(
