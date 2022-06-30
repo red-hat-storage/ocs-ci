@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
     ignore_leftovers,
+    runs_on_provider,
 )
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1959983")
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2572")
+@runs_on_provider
 class TestDrainNodeMon(ManageTest):
     """
     1.Get worker node name where monitoring pod run
