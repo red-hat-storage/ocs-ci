@@ -311,7 +311,7 @@ class Longevity(object):
             list: List of all PVCs in Bound state
 
         Raises:
-        AssertionError: If not all PVCs reached to Bound state
+            AssertionError: If not all PVCs reached to Bound state
 
         """
         return self.validate_pvc_in_kube_job_reached_bound_state(
@@ -732,8 +732,8 @@ class Longevity(object):
             ]
             resource_to_delete_job_file = []
             # waiting for the resource thread to complete
+            log.info("Waiting for the resource thread to complete")
             for resource in resource_to_delete:
-                log.info("Waiting for the resource thread to complete")
                 resource_to_delete_job_file.append(resource.result())
 
             log.info(
@@ -763,8 +763,8 @@ class Longevity(object):
 
             bulk_create_delete_job_file = []
             # waiting for the bulk create delete thread to complete
+            log.info("Waiting for the bulk create delete thread to complete")
             for thread in bulk_create_delete:
-                log.info("Waiting for the bulk create delete thread to complete")
                 bulk_create_delete_job_file.append(thread.result())
             # Delete all the created resources in the bulk create delete thread
             for job_file in bulk_create_delete_job_file:
