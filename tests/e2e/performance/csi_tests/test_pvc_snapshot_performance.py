@@ -21,6 +21,7 @@ from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers, performance_lib
@@ -77,13 +78,36 @@ class TestPvcSnapshotPerformance(PASTest):
         elif self.interface == constants.CEPHBLOCKPOOL_THICK:
             self.sc = "RBD-Thick"
 
-        self.pvc_obj = pvc_factory(
-            interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
-        )
+        # self.pvc_obj = pvc_factory(
+        #     interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
+        # )
 
-        self.pod_object = pod_factory(
-            interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
-        )
+        self.create_test_project()
+
+        self.pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name, size=pvc_size  + "Gi", namespace=self.namespace
+            )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
+
+        #self.pod_object = pod_factory(
+        #    interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING,
+        #)
+
+        # Create a POD and attache it the the PVC
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise ex.PodNotCreated("Pod on PVC was not created.")
 
     def setup(self):
         """
@@ -369,7 +393,8 @@ class TestPvcSnapshotPerformance(PASTest):
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
                 namespace=self.snap_obj.namespace,
-                pod_dict_path=constants.NGINX_POD_YAML,
+                # pod_dict_path=constants.NGINX_POD_YAML,
+                #pod_dict_path=constants.PERF_POD_YAML,
             )
 
             # Confirm that the pod is running
@@ -403,6 +428,12 @@ class TestPvcSnapshotPerformance(PASTest):
             restore_pvc_obj.delete()
 
             all_results.append(test_results)
+
+
+        # clean
+        self.pod_object.delete()
+        self.pvc_obj.delete()
+        self.delete_test_project()
 
         # logging the test summary, all info in one place for easy log reading
         c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime = (0 for i in range(5))
