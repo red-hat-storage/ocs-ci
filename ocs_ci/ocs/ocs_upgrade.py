@@ -13,7 +13,10 @@ from ocs_ci.deployment.deployment import (
     Deployment,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import (
@@ -555,11 +558,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     )
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
-        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
-            "ip_address"
-        ]
-        user = config.EXTERNAL_MODE["login"]["username"]
-        password = config.EXTERNAL_MODE["login"]["password"]
+        host, user, password = get_external_cluster_client()
         external_cluster = ExternalCluster(host, user, password)
 
     # For external cluster , create the secrets if upgraded version is 4.8
