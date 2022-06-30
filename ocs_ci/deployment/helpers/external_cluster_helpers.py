@@ -324,3 +324,20 @@ def get_rgw_endpoint():
             return rgw_endpoint
     if not rgw_endpoint:
         raise ExternalClusterRGWEndPointMissing
+
+
+def get_external_cluster_client():
+    """
+    Finding the client role node IP address.
+
+    Returns:
+        tuple: IP address, user, password of the client
+    """
+    user = config.EXTERNAL_MODE["login"]["username"]
+    password = config.EXTERNAL_MODE["login"]["password"]
+    nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
+    for each in nodes.values():
+        if "client" in each["role"]:
+            return (each["ip_address"], user, password)
+    logger.warning("No client role defined, using node1 address!")
+    return (nodes["node1"]["ip_address"], user, password)
