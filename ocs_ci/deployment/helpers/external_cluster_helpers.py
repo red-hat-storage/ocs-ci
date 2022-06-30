@@ -11,6 +11,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
+    ExternalClusterClientRoleMissing,
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
@@ -324,3 +325,20 @@ def get_rgw_endpoint():
             return rgw_endpoint
     if not rgw_endpoint:
         raise ExternalClusterRGWEndPointMissing
+
+
+def get_client_node():
+    """
+    Fetches the node having client role
+
+    Returns:
+        str: IP of node having client role
+
+    """
+    client_ip = None
+    for each in config.EXTERNAL_MODE["external_cluster_node_roles"].values():
+        if "client" in each["role"]:
+            client_ip = each["ip_address"]
+            return client_ip
+    if not client_ip:
+        raise ExternalClusterClientRoleMissing

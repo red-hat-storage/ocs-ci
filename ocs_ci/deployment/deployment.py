@@ -15,7 +15,10 @@ import base64
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_client_node,
+)
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
@@ -1066,9 +1069,7 @@ class Deployment(object):
         self.set_rook_log_level()
 
         # get external cluster details
-        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
-            "ip_address"
-        ]
+        host = get_client_node()
         user = config.EXTERNAL_MODE["login"]["username"]
         password = config.EXTERNAL_MODE["login"]["password"]
         external_cluster = ExternalCluster(host, user, password)
