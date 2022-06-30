@@ -136,6 +136,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @polarion_id("OCS-2774")
     @tier1
+    @skipif_managed_service
     def test_rbd_space_reclaim_no_space(self):
         """
         Test to verify RBD space reclamation
