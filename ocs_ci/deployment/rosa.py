@@ -79,10 +79,16 @@ class ROSAOCP(BaseOCPDeployment):
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
             ocm.get_kubeadmin_password(self.cluster_name, password_path)
         if config.ENV_DATA["ms_env_type"] == "production":
-            rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
-            rosa_prod_cluster.create_admin_and_login()
-            rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
-            rosa_prod_cluster.generate_kubeadmin_password_file()
+            if config.ENV_DATA.get("appliance_mode"):
+                logger.info(
+                    "creating admin account for cluster in production environment with "
+                    "appliance mode deployment is not supported"
+                )
+            else:
+                rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
+                rosa_prod_cluster.create_admin_and_login()
+                rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
+                rosa_prod_cluster.generate_kubeadmin_password_file()
 
         self.test_cluster()
 
