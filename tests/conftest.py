@@ -2464,7 +2464,10 @@ def bucket_factory_fixture(
             current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
-                created_bucket.verify_health(timeout=180, **kwargs)
+                created_bucket.verify_health(
+                    timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+                    **kwargs,
+                )
 
         return current_call_created_buckets
 
