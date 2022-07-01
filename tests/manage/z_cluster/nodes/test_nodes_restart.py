@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_no_lso,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
@@ -19,6 +20,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery, get_pv_names
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
@@ -31,12 +33,23 @@ class TestNodesRestart(ManageTest):
     Test ungraceful cluster shutdown
     """
 
+    # Flags for Managed Services platform
+    is_managed_services_platform = (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    )
+    node_ops_cluster_type = None
+    # Cluster index "cur_index" will be 0 if the platform is not Managed Services
+    initial_cluster_index = config.cur_index
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
 
         """
+        # Switch to provider cluster context if the platform is Managed Services
+        if self.is_managed_services_platform:
+            config.switch_to_provider()
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
@@ -47,7 +60,18 @@ class TestNodesRestart(ManageTest):
         """
 
         def finalizer():
-            nodes.restart_nodes_by_stop_and_start_teardown()
+            # Switch to the relevant cluster context if the platform is Managed Services
+            if self.is_managed_services_platform:
+                if self.node_ops_cluster_type == "provider":
+                    config.switch_to_provider()
+                elif self.node_ops_cluster_type == "consumer":
+                    config.switch_to_consumer()
+            try:
+                nodes.restart_nodes_by_stop_and_start_teardown()
+            finally:
+                # Switch back to initial cluster context. self.initial_cluster_index will be 0 if the platform
+                # is not Managed Services
+                config.switch_ctx(self.initial_cluster_index)
 
         request.addfinalizer(finalizer)
 
@@ -62,6 +86,7 @@ class TestNodesRestart(ManageTest):
             ),
         ],
     )
+    @runs_on_provider
     def test_nodes_restart(
         self, nodes, pvc_factory, pod_factory, force, bucket_factory, rgw_bucket_factory
     ):
@@ -69,9 +94,14 @@ class TestNodesRestart(ManageTest):
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
 
         """
+        self.node_ops_cluster_type = "provider"
         ocp_nodes = get_node_objs()
         nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
         self.sanity_helpers.health_check()
+
+        # Switch to consumer cluster context if the platform is Managed Services
+        if self.is_managed_services_platform:
+            config.switch_to_consumer()
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
@@ -79,6 +109,7 @@ class TestNodesRestart(ManageTest):
     @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
+    @runs_on_provider
     def test_rolling_nodes_restart(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -86,10 +117,15 @@ class TestNodesRestart(ManageTest):
         Test restart nodes one after the other and check health status in between
 
         """
+        self.node_ops_cluster_type = "provider"
         ocp_nodes = get_node_objs()
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+
+        # Switch to consumer cluster context if the platform is Managed Services
+        if self.is_managed_services_platform:
+            config.switch_to_consumer()
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
@@ -166,6 +202,11 @@ class TestNodesRestart(ManageTest):
         - Check cluster and Ceph health
 
         """
+        # Use consumer cluster context if the platform is Managed Services
+        if self.is_managed_services_platform:
+            config.switch_to_consumer()
+        self.node_ops_cluster_type = "consumer"
+
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
             self.sanity_helpers.create_resources(
@@ -289,6 +330,11 @@ class TestNodesRestart(ManageTest):
         - Start the worker node
         - Check cluster and Ceph health
         """
+        # Use consumer cluster context if the platform is Managed Services
+        if self.is_managed_services_platform:
+            config.switch_to_consumer()
+        self.node_ops_cluster_type = "consumer"
+
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
             self.sanity_helpers.create_resources(
