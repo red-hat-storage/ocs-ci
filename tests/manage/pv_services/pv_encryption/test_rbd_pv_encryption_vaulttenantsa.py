@@ -29,6 +29,8 @@ if config.ENV_DATA.get("vault_hcp"):
     argvalues = [
         pytest.param("v1", True, True, marks=pytest.mark.polarion_id("OCS-2799")),
         pytest.param("v2", True, True, marks=pytest.mark.polarion_id("OCS-2800")),
+        pytest.param("v1", False, True, marks=pytest.mark.polarion_id("OCS-2799")),
+        pytest.param("v2", False, True, marks=pytest.mark.polarion_id("OCS-2800")),
     ]
 else:
     argvalues = [
