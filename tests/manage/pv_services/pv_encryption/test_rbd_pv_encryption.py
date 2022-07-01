@@ -35,14 +35,24 @@ if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
     argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
-    argvalues = [
-        pytest.param(
-            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
-        ),
-        pytest.param(
-            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
-        ),
-    ]
+    if config.ENV_DATA.get("vault_hcp"):
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-2585")
+            ),
+            pytest.param(
+                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-2592")
+            ),
+        ]
+    else:
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
+            ),
+            pytest.param(
+                "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
+            ),
+        ]
 
 
 @pytest.mark.parametrize(

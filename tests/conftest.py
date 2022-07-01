@@ -4337,9 +4337,12 @@ def pv_encryption_vault_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[new_kmsid] = vdict.pop(old_key)
+            vdict[new_kmsid][
+                "VAULT_ADDR"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
             if use_vault_namespace:
-                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault.vault_namespace
             vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
@@ -4634,8 +4637,8 @@ def vault_tenant_sa_setup_factory(request):
 
     def factory(
         kv_version,
-        use_auth_path=False,
-        use_vault_namespace=True,
+        use_auth_path=True,
+        use_vault_namespace=False,
         use_backend=False,
     ):
         """
@@ -4696,10 +4699,13 @@ def vault_tenant_sa_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[vault.kmsid] = vdict.pop(old_key)
+            vdict[vault.kmsid][
+                "vaultAddress"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
             if use_vault_namespace:
-                vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
-                vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
+                vdict[vault.kmsid]["vaultNamespace"] = vault.vault_namespace
+                vdict[vault.kmsid]["vaultAuthNamespace"] = vault.vault_namespace
             else:
                 vdict[vault.kmsid].pop("vaultNamespace")
                 vdict[vault.kmsid].pop("vaultAuthNamespace")

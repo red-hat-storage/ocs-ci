@@ -318,12 +318,15 @@ class Vault(KMS):
         self.create_resource(ca_data, prefix="ca")
 
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+            self.client_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            self.client_key_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
             # create client cert secret
             client_cert_data = templating.load_yaml(
                 constants.EXTERNAL_VAULT_CLIENT_CERT
-            )
-            self.client_cert_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
             client_cert_data["data"]["cert"] = self.client_cert_base64
@@ -331,9 +334,6 @@ class Vault(KMS):
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-            self.client_key_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-            )
             client_key_data["metadata"]["name"] = self.client_key_name
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
