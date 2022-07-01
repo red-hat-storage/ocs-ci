@@ -1612,9 +1612,16 @@ def verify_all_nodes_created():
 
     existing_num_nodes = len(get_all_nodes())
     if expected_num_nodes != existing_num_nodes:
-        raise NotAllNodesCreated(
-            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
-        )
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            log.warning(
+                f"Expected number of nodes is {expected_num_nodes} but "
+                f"created during deployment is {existing_num_nodes}"
+            )
+        else:
+            raise NotAllNodesCreated(
+                f"Expected number of nodes is {expected_num_nodes} but "
+                f"created during deployment is {existing_num_nodes}"
+            )
 
 
 def add_node_to_lvd_and_lvs(node_name):
