@@ -111,8 +111,8 @@ class TestRbdSpaceReclaim(ManageTest):
                 raise
             log.info(f"Verified: File {file_path} deleted.")
 
-        # Wait for 5 seconds after deleting the file
-        time.sleep(5)
+        # Wait for 15 seconds after deleting the file
+        time.sleep(15)
 
         # Create ReclaimSpaceJob
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
