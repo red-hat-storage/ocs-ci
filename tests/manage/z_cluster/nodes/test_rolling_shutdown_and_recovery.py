@@ -10,10 +10,13 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_external_mode,
     skipif_ibm_cloud,
+    runs_on_provider,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -25,6 +28,7 @@ log = logging.getLogger(__name__)
 @skipif_ibm_cloud
 @skipif_external_mode
 @ignore_leftovers
+@runs_on_provider
 class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
     """
     Test rolling shutdown and recovery of OCS pods running worker nodes
@@ -46,6 +50,13 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
         """
 
         def finalizer():
+            # Switch to provider cluster context if the platform is Managed Services because node
+            # operations in the test was done on provider.
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            ):
+                config.switch_to_provider()
             nodes.restart_nodes_by_stop_and_start_teardown()
 
         request.addfinalizer(finalizer)
@@ -72,6 +83,10 @@ class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
             log.info("Checking storage pods status")
             # Validate storage pods are running
             wait_for_pods_to_be_running(timeout=600)
+
+        # Switch to consumer cluster context if the platform is Managed Services
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            config.switch_to_consumer()
 
         # Check basic cluster functionality by creating some resources
         self.sanity_helpers.create_resources(
