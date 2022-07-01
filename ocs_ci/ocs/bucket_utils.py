@@ -274,9 +274,7 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     endpoint = s3_obj.s3_internal_endpoint
 
     # compile the src code
-    javas3_pod.exec_cmd_on_pod(
-        command="mvn clean compile", out_yaml_format=False
-    ), "Failed to compile project!!"
+    javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
 
     # execute the upload application
     command = (

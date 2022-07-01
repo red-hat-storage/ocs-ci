@@ -14,7 +14,7 @@ class TestS3WithJavaSDK:
         argnames=["is_multipart"],
         argvalues=[
             pytest.param(*[False]),
-            # pytest.param(*[True]),
+            pytest.param(*[True]),
         ],
     )
     def test_s3_upload_with_java(

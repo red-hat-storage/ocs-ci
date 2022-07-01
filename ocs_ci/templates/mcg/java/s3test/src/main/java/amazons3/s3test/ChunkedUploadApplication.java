@@ -32,28 +32,11 @@ import com.amazonaws.services.s3.model.UploadPartResult;
 
 import software.amazon.awssdk.utils.Pair;
 
-/**
- * Hello world!
- *
- */
-//public class App
-//{
-//    public static void main( String[] args )
-//    {
-//        System.out.println( "Hello World!" );
-//    }
-//}
 
 public class ChunkedUploadApplication {
 
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException {
 		System.setProperty(SDKGlobalConfiguration.DISABLE_CERT_CHECKING_SYSTEM_PROPERTY, "true");
-
-		System.out.println("Endpoint: "+ args[0]);
-		System.out.println("Access Key: "+ args[1]);
-		System.out.println("Secret Key: "+ args[2]);
-		System.out.println("bucket name: "+ args[3]);
-		System.out.println("Is multipart?: "+ args[4]);
 
 		String endpoint = args[0];
 		String ACCESS_KEY = args[1];
@@ -64,51 +47,66 @@ public class ChunkedUploadApplication {
 		if (args[4] == "True")
 			isMultipart = true;
 		AmazonS3 s3Client = configureS3Client(endpoint, ACCESS_KEY, SECRET_KEY);
-		Boolean test1 = testCycle(s3Client, bucketName, isMultipart); // regular bucket + regular upload
-		int success = 1;
-		if (test1 == true) {
+		Boolean testResult = testCycle(s3Client, bucketName, isMultipart); // regular bucket + regular upload
+		int failure = 1;
+		if (testResult == true) {
 			System.out.println("TEST FINISHED SUCCEFULLY!!");
-			success = 0;
+			failure = 0;
 		}
 		else {
 			System.out.println("TEST FAILED!!");
 		}
-		System.exit(success);
-		return;
+		System.exit(failure);
 	}
 
 	public static Boolean testCycle(AmazonS3 s3Client, String bucketName, Boolean multipartUpload)
 			throws IOException, NoSuchAlgorithmException {
+
+        // this performs upload operation based on if multi part upload or not
+        // then downloads the file to compare the integrity of uploaded and downloaded objects
+        // finally cleans up the generated files
 
 		String OriginalFilePath = "TestFile" + Instant.now().toString();
 		String localFilePath = "PATH2";
 		File localFile = new File(localFilePath); // creates an empty file for the output
 
 		try {
-			// creates a file of size 8MB contains random content.
+			// creates a file of size 15MB contains random content.
 			File originalFile = createRandomContentFile(OriginalFilePath, 15 * 1024 * 1024);
 			Boolean uploadSuceeded = multipartUpload
 					? multiPartUpload(s3Client, bucketName, OriginalFilePath, originalFile)
 					: regularUpload(s3Client, bucketName, OriginalFilePath, originalFile);
-
-			Boolean downloadSuceeded = download(s3Client, bucketName, OriginalFilePath, localFile);
-			Boolean filesAreEqual = compareMD5(OriginalFilePath, localFilePath);
-			Boolean deleteFiles = (new File(OriginalFilePath)).delete() && localFile.delete();
-
-			if (uploadSuceeded == true)
+ 			if (uploadSuceeded == true)
 				System.out.println("Uploaded objects successfully");
 			else
+			{
 				System.out.println("Upload objects failed");
+				return false;
+			}
 
+			Boolean downloadSuceeded = download(s3Client, bucketName, OriginalFilePath, localFile);
 			if (downloadSuceeded == true)
 				System.out.println("Downloded objects successfully");
 			else
+			{
 				System.out.println("Download objects failed");
+				return false;
+            }
 
+			Boolean filesAreEqual = compareMD5(OriginalFilePath, localFilePath);
 			if (filesAreEqual == true)
 				System.out.println("Uploaded & Downloaded files are equal");
 			else
+			{
 				System.out.println("Uploaded & Downloaded files don't match");
+				return false;
+			}
+
+			Boolean deleteFiles = (new File(OriginalFilePath)).delete() && localFile.delete();
+			if (deleteFiles == true)
+			    System.out.println("Files are deleted successfully");
+			else
+			    System.out.println("Files are not deleted successfully");
 
 			return uploadSuceeded && downloadSuceeded && filesAreEqual;
 		} catch (AmazonServiceException e) {
@@ -121,9 +119,9 @@ public class ChunkedUploadApplication {
 
 	// configureS3Client configures s3Client to use noobaa endpoint and access keys
 	// and upload files using chunked upload
-	public static AmazonS3 configureS3Client(String endpoint, String ACCESS_KEY, String SECRET_KEY) {
+	public static AmazonS3 configureS3Client(String endpoint, String accessKey, String secretKey) {
 		EndpointConfiguration endpointConfiguration = new EndpointConfiguration(endpoint, "us-east-1");
-		BasicAWSCredentials credentials = new BasicAWSCredentials(ACCESS_KEY, SECRET_KEY);
+		BasicAWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
 		ClientConfiguration clientConfiguration = new ClientConfiguration();
 		clientConfiguration.setSignerOverride("AWSS3V4SignerType");
 
@@ -136,9 +134,9 @@ public class ChunkedUploadApplication {
 	}
 
 	// regularUpload uploads file to bucket using s3Client
-	public static Boolean regularUpload(AmazonS3 s3Client, String bucketName, String KEY, File originalFile) {
+	public static Boolean regularUpload(AmazonS3 s3Client, String bucketName, String key, File originalFile) {
 		try {
-			PutObjectRequest request = new PutObjectRequest(bucketName, KEY, originalFile);// new File(PATH));
+			PutObjectRequest request = new PutObjectRequest(bucketName, key, originalFile);
 			s3Client.putObject(request);
 			return true;
 		} catch (AmazonServiceException e) {
@@ -150,15 +148,14 @@ public class ChunkedUploadApplication {
 	}
 
 	// multiPartUpload uploads file to bucket using s3Client using multipartUpload
-	public static Boolean multiPartUpload(AmazonS3 s3Client, String bucketName, String KEY, File originalFile) {
-		// File file = new File(PATH);
+	public static Boolean multiPartUpload(AmazonS3 s3Client, String bucketName, String key, File originalFile) {
 		long contentLength = originalFile.length();
 		long partSize = 5 * 1024 * 1024; // Set part size to 5 MB.
 		try {
 			List<PartETag> partETags = new ArrayList<PartETag>();
 
 			// init request
-			InitiateMultipartUploadRequest initRequest = new InitiateMultipartUploadRequest(bucketName, KEY);
+			InitiateMultipartUploadRequest initRequest = new InitiateMultipartUploadRequest(bucketName, key);
 			InitiateMultipartUploadResult initResponse = s3Client.initiateMultipartUpload(initRequest);
 
 			// Upload the file parts
@@ -166,7 +163,7 @@ public class ChunkedUploadApplication {
 			for (int i = 1; filePosition < contentLength; i++) {
 				partSize = Math.min(partSize, (contentLength - filePosition)); // last part <= 5MB
 
-				UploadPartRequest uploadRequest = new UploadPartRequest().withBucketName(bucketName).withKey(KEY)
+				UploadPartRequest uploadRequest = new UploadPartRequest().withBucketName(bucketName).withKey(key)
 						.withUploadId(initResponse.getUploadId()).withPartNumber(i).withFileOffset(filePosition)
 						.withFile(originalFile).withPartSize(partSize);
 
@@ -176,7 +173,7 @@ public class ChunkedUploadApplication {
 			}
 
 			// Complete the multipart upload.
-			CompleteMultipartUploadRequest compRequest = new CompleteMultipartUploadRequest(bucketName, KEY,
+			CompleteMultipartUploadRequest compRequest = new CompleteMultipartUploadRequest(bucketName, key,
 					initResponse.getUploadId(), partETags);
 			s3Client.completeMultipartUpload(compRequest);
 		} catch (AmazonServiceException e) {
@@ -190,11 +187,11 @@ public class ChunkedUploadApplication {
 		return true;
 	}
 
-	// download download file from bucket using s3Client
-	public static Boolean download(AmazonS3 s3Client, String bucketName, String KEY, File localFile)
+	// download file from bucket using s3Client
+	public static Boolean download(AmazonS3 s3Client, String bucketName, String key, File localFile)
 			throws IOException {
 		try {
-			GetObjectRequest request = new GetObjectRequest(bucketName, KEY);
+			GetObjectRequest request = new GetObjectRequest(bucketName, key);
 			s3Client.getObject(request, localFile);
 		} catch (AmazonServiceException e) {
 			e.printStackTrace();
@@ -208,13 +205,13 @@ public class ChunkedUploadApplication {
 
 	// compareMD5 compares MD5s of file downloaded from bucket using s3Client and
 	// original file
-	public static boolean compareMD5(String PATH1, String PATH2) throws IOException, NoSuchAlgorithmException {
+	public static boolean compareMD5(String path1, String path2) throws IOException, NoSuchAlgorithmException {
 		MessageDigest md1 = MessageDigest.getInstance("MD5");
-		md1.update(Files.readAllBytes(Paths.get(PATH1)));
+		md1.update(Files.readAllBytes(Paths.get(path1)));
 		byte[] digest1 = md1.digest();
 
 		MessageDigest md2 = MessageDigest.getInstance("MD5");
-		md2.update(Files.readAllBytes(Paths.get(PATH2)));
+		md2.update(Files.readAllBytes(Paths.get(path2)));
 		byte[] digest2 = md2.digest();
 
 		return Arrays.toString(digest1).equals(Arrays.toString(digest2));
