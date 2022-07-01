@@ -500,6 +500,10 @@ NSFS_INTERFACE_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "ubi8.yaml")
 
 SERVICE_ACCOUNT_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "service_account.yaml")
 
+SERVICE_ACCOUNT_TOKEN_SECRET = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "serviceaccount_token_secret.yaml"
+)
+
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
