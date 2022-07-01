@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
     runs_on_provider,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
@@ -151,6 +152,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_managed_service
     def test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node(
         self,
         nodes,
@@ -202,11 +204,6 @@ class TestNodesRestart(ManageTest):
         - Check cluster and Ceph health
 
         """
-        # Use consumer cluster context if the platform is Managed Services
-        if self.is_managed_services_platform:
-            config.switch_to_consumer()
-        self.node_ops_cluster_type = "consumer"
-
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
             self.sanity_helpers.create_resources(
@@ -301,6 +298,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_managed_service
     def test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node(
         self,
         nodes,
@@ -330,11 +328,6 @@ class TestNodesRestart(ManageTest):
         - Start the worker node
         - Check cluster and Ceph health
         """
-        # Use consumer cluster context if the platform is Managed Services
-        if self.is_managed_services_platform:
-            config.switch_to_consumer()
-        self.node_ops_cluster_type = "consumer"
-
         if operation == "delete_resources":
             # Create resources that their deletion will be tested later
             self.sanity_helpers.create_resources(
