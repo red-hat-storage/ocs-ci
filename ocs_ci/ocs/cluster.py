@@ -856,20 +856,38 @@ class CephCluster(object):
             logger.error(err_msg)
             raise exceptions.CephHealthException(err_msg)
 
-    def delete_filesystem(self, fs_name):
+    def delete_filesystem(self):
         """
-        Delete a ceph filesystem - not the default one - from the cluster
+        Delete the ceph filesystem from the cluster, and wait until it recreated,
+        then create the subvolumegroup on it.
 
-        Args:
-            fs_name (str): the name of the filesystem to delete
         """
-        # Make sure the the default filesystem is not deleted.
-        if fs_name == "ocs-storagecluster-cephfilesystem":
-            return
+        fs_name = "ocs-storagecluster-cephfilesystem"
 
         # Delete the filesystem
-        self.CEPHFS.delete(resource_name=fs_name)
-        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+        try:
+            self.CEPHFS.delete(resource_name=fs_name)
+        except Exception as ex:
+            logger.warning(f"Cephfs filesystem deletion failed ({ex}).")
+
+        # The ceph filesystem is re-created automaticly
+        logger.info(f"Wait until the CephFS {fs_name} is re-created")
+        # wait 20 Sec. until the filesystem is fully created.
+        time.sleep(20)
+        try:
+            self.CEPHFS.wait_for_resource(
+                resource_name=fs_name,
+                timeout=120,
+                condition=constants.STATUS_READY,
+                column="PHASE",
+            )
+        except Exception as ex:
+            logger.warning(f"The CephFS filesystem failed to re-creste ({ex})")
+        logger.info(f"The CephFS {fs_name} re-created.")
+        logger.info(f"Try to re-create the subvolumegroup")
+        cmd = f"ceph fs subvolumegroup create {fs_name} csi"
+        self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        logger.info(f"The subvolumegroup was created.")
 
     def get_blockpool_status(self, poolname=None):
         """
