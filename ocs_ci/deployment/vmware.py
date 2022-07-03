@@ -595,15 +595,59 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info(cookie)
             verify_cert = False
             headers = {"Content-Type": "application/octet-stream"}
-            with open(f"{self.cluster_path}/{sno_image_name}", "rb") as file_data:
-                requests.put(
-                    http_url,
-                    params=params,
-                    data=file_data,
-                    headers=headers,
-                    cookies=cookie,
-                    verify=verify_cert,
-                )
+
+            def read_in_chunks(file_object, chunk_size=1024):
+                """Generator to read a file piece by piece.
+                Default chunk size: 1k."""
+                while True:
+                    data = file_object.read(chunk_size)
+                    if not data:
+                        break
+                    yield data
+
+            def upload_file(file, url, chunk_size):
+                content_name = str(file)
+                content_path = os.path.abspath(file)
+                content_size = os.stat(content_path).st_size
+
+                logger.info(f"{content_name, content_path, content_size}")
+
+                f = open(content_path, "rb")
+
+                index = 0
+                offset = 0
+                headers = {}
+
+                for chunk in read_in_chunks(f, chunk_size=chunk_size):
+                    offset = index + len(chunk)
+                    headers['Content-Type'] = 'application/octet-stream'
+                    headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' \
+                                            ' (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
+                    headers['Content-length'] = str(content_size)
+                    headers['Content-Range'] = 'bytes %s-%s/%s' % (index, offset, content_size)
+                    index = offset
+                    try:
+                        r = requests.put(url,
+                                         data=chunk,
+                                         headers=headers,
+                                         cookies=cookie,
+                                         verify=verify_cert,
+                                         stream=True)
+
+                        logger.info("r: %s, Content-Range: %s" % (r, headers['Content-Range']))
+                    except Exception as e:
+                        logger.error(e)
+
+            upload_file(f"{self.cluster_path}/{sno_image_name}", url=http_url, chunk_size=400000)
+            # with open(f"{self.cluster_path}/{sno_image_name}", "rb") as file_data:
+            #     requests.put(
+            #         http_url,
+            #         params=params,
+            #         data=read_in_chunks(file_data, chunk_size=400000),
+            #         headers=headers,
+            #         cookies=cookie,
+            #         verify=verify_cert,
+            #     )
             logger.info(f"{sno_image_name} uploaded successfully to the VsanDataStore")
             logger.info(f"Removing iso {sno_image_name} from {self.cluster_path}")
             full_sno_image_path = os.path.join(self.cluster_path, sno_image_name)
