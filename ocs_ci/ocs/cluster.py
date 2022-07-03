@@ -2094,6 +2094,20 @@ def is_ms_consumer_cluster():
     )
 
 
+def is_ms_provider_cluster():
+    """
+    Check if the cluster is a managed service provider cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service provider cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
