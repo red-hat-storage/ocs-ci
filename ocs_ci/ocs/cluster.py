@@ -884,10 +884,10 @@ class CephCluster(object):
         except Exception as ex:
             logger.warning(f"The CephFS filesystem failed to re-creste ({ex})")
         logger.info(f"The CephFS {fs_name} re-created.")
-        logger.info(f"Try to re-create the subvolumegroup")
+        logger.info("Try to re-create the subvolumegroup")
         cmd = f"ceph fs subvolumegroup create {fs_name} csi"
         self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
-        logger.info(f"The subvolumegroup was created.")
+        logger.info("The subvolumegroup was created.")
 
     def get_blockpool_status(self, poolname=None):
         """
