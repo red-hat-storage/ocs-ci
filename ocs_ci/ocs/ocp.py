@@ -767,7 +767,7 @@ class OCP(object):
             selector=selector,
         )
         # get the list of titles
-        titles = re.sub(r"\s{2,}", ",", resource)  # noqa: W605
+        titles = re.sub(r"\n", ",", re.sub(r"\s{2,}", ",", resource))  # noqa: W605
         titles = titles.split(",")
         # Get the index of column
         column_index = titles.index(column)
