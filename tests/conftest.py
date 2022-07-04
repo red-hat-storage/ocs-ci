@@ -957,6 +957,7 @@ def pvc_factory_fixture(request, project_factory):
             if (
                 pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
                 == constants.RECLAIM_POLICY_RETAIN
+                and pv_obj is not None
             ):
                 helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
                 pv_obj.delete()
@@ -1052,6 +1053,7 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
+                deploy_pod_status=status,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
@@ -5657,3 +5659,68 @@ def rdr_workload(request):
     workload.deploy_workload()
 
     return workload
+
+
+@pytest.fixture(scope="class")
+def lvm_storageclass_factory_class(request, storageclass_factory_class):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory_class)
+
+
+@pytest.fixture(scope="session")
+def lvm_storageclass_factory_session(request, storageclass_factory_session):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory_session)
+
+
+@pytest.fixture(scope="function")
+def lvm_storageclass_factory(request, storageclass_factory):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory)
+
+
+def lvm_storageclass_factory_fixture(request, storageclass_factory):
+    """
+    Create lvm storageclass, if volume binding mode is wffc it stays with the default storageclass,
+    if volume binding mode is Immediate it create a new storageclass
+
+    """
+    instances = []
+
+    def factory(
+        volume_binding=constants.IMMEDIATE_VOLUMEBINDINGMODE,
+    ):
+        """
+        Args:
+            volume_binding (str): The volume binding mode for the stoargeclass
+
+        """
+        sc_obj = None
+        if volume_binding == constants.WFFC_VOLUMEBINDINGMODE:
+            sc_ocp_obj = OCP(kind="StorageClass", resource_name=constants.LVM_SC)
+            sc_obj = OCS(**sc_ocp_obj.data)
+            log.info(f"Will return default storageclass {sc_obj.name}")
+        elif volume_binding == constants.IMMEDIATE_VOLUMEBINDINGMODE:
+            sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
+            sc_obj["metadata"]["name"] = create_unique_resource_name(
+                resource_description="immediate-test",
+                resource_type="storageclass",
+            )
+            sc_obj["volumeBindingMode"] = constants.IMMEDIATE_VOLUMEBINDINGMODE
+            sc_obj = storageclass_factory(custom_data=sc_obj)
+            log.info(f"Will return newly created storageclass {sc_obj.name}")
+            instances.append(sc_obj)
+        if sc_obj is not None:
+            return sc_obj
+        raise StorageclassNotCreated(
+            f"Could not create storageclass with {volume_binding}"
+        )
+
+    def finalizer():
+        """
+        Delete storageclass
+        """
+
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete(wait=True)
+
+    request.addfinalizer(finalizer)
+    return factory
