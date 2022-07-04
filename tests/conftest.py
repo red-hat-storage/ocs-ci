@@ -211,8 +211,9 @@ def pytest_collection_modifyitems(session, items):
             )
             if skipif_lvm_not_installed_marker and "lvm" in config.RUN:
                 if not config.RUN["lvm"]:
+                    log.info(f"Test {item} will be removed due to lvm not installed")
                     items.remove(item)
-                    log.info("Test will be removed due to lvm not installed")
+                    continue
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
