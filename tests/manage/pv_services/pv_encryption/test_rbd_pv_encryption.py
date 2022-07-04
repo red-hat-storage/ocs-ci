@@ -38,10 +38,10 @@ else:
     if config.ENV_DATA.get("vault_hcp"):
         argvalues = [
             pytest.param(
-                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-2585")
+                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3973")
             ),
             pytest.param(
-                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-2592")
+                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3974")
             ),
         ]
     else:
