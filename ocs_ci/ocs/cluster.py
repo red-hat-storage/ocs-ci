@@ -40,6 +40,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -2120,3 +2122,111 @@ class CephClusterExternal(CephCluster):
                 f"PVC {pvc_obj.name} is not Bound"
             }
             logger.info(f"PVC {pvc_obj.name} is in Bound state")
+
+
+class LVM(object):
+    """
+    class for lvm cluster
+
+    """
+
+    def __init__(self):
+        self.lvmcluster = self.get_lvmcluster()
+        self.version = self.get_lvm_version()
+
+    def get_lvmcluster(self):
+
+        lvmc_cop = OCP(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            kind="lvmcluster",
+            resource_name="lvmcluster",
+        )
+        lvmc_ocs = lvmc_cop.data
+        return lvmc_ocs
+
+    def get_lvm_version(self):
+        """
+        Get redhat-operators version (4.10, 4.11)
+        returns:
+            (str) lvmo version
+        """
+        redhat_operators_catalogesource_ocp = OCP(
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            kind="catalogsource",
+            resource_name="redhat-operators",
+        )
+        redhat_operators_catalogesource_ocs = OCS(
+            **redhat_operators_catalogesource_ocp.data
+        )
+        image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+        full_version = image.split(":")[1]
+        pattern = re.compile(r"([^\.]*\.[^\.]*)")
+        result = pattern.search(full_version)
+        short_ver = result.group(1)
+        return short_ver
+
+    def get_lvm_thin_pool_config_overprovision_ratio(self):
+        """
+        Get overprovisionRatio from lvmcluster
+        returns:
+            (int) overprovisionRatio
+
+        """
+
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "overprovisionRatio"
+        ]
+
+    def get_lvm_thin_pool_config_size_percent(self):
+        """
+        get sizePercent from lvmcluster
+        returns:
+            (int) sizePercent
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "sizePercent"
+        ]
+
+    def get_lvm_thin_pool(self):
+        """
+        get thinpool name.
+        returns:
+            (str) thinpool name
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "name"
+        ]
+
+
+def check_clusters():
+    """
+    Test if lvm or cephcluster is installed and set config.RUN values for conditions
+
+    """
+
+    try:
+        LVM()
+        config.RUN["lvm"] = True
+    except CommandFailed:
+        config.RUN["lvm"] = False
+    except FileNotFoundError:
+        logger.info(
+            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
+        )
+        if "install_lvmo" in config.DEPLOYMENT:
+            config.RUN["lvm"] = True
+        else:
+            config.RUN["lvm"] = False
+    try:
+        CephCluster()
+        config.RUN["cephcluster"] = True
+    except CommandFailed:
+        config.RUN["cephcluster"] = False
+    except FileNotFoundError:
+        logger.info(
+            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
+        )
+        if config.ENV_DATA["skip_ocs_deployment"]:
+            config.RUN["cephcluster"] = False
+        else:
+            config.RUN["cephcluster"] = True

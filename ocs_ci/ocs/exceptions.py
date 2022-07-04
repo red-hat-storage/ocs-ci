@@ -534,3 +534,7 @@ class ConnectivityFail(Exception):
 
 class ROSAProdAdminLoginFailedException(Exception):
     pass
+
+
+class Md5CheckFailed(Exception):
+    pass

@@ -30,6 +30,7 @@ TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
+TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
 TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
 TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
@@ -110,6 +111,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
+LVM_SC = "odf-lvm-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
@@ -147,6 +149,7 @@ CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
+LVMCLUSTER = "lvmcluster"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -243,6 +246,7 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -264,6 +268,7 @@ RECLAIM_POLICY_DELETE = "Delete"
 ACCESS_MODE_RWO = "ReadWriteOnce"
 ACCESS_MODE_ROX = "ReadOnlyMany"
 ACCESS_MODE_RWX = "ReadWriteMany"
+ACCESS_MODE_RWOP = "ReadWriteOncePod"
 
 # Pod names
 NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
@@ -353,9 +358,15 @@ CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "storageclass.y
 
 CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml")
 
+CSI_LVM_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "storageclass.yaml")
+
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     ROOK_CSI_CEPHFS_DIR, "storageclass.yaml"
 )
+
+WFFC_VOLUMEBINDINGMODE = "WaitForFirstConsumer"
+
+IMMEDIATE_VOLUMEBINDINGMODE = "Immediate"
 
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
@@ -388,7 +399,11 @@ CSI_CEPHFS_PVC_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc.yaml")
 
 CSI_CEPHFS_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-restore.yaml")
 
+CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml")
+
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
+
+CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
 
 CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml")
 
@@ -1246,6 +1261,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.rbd.csi.ceph.com",
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
+    "topolvm.cybozu.com",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
@@ -1565,6 +1581,7 @@ MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
 VOLUMESNAPSHOT = "volumesnapshot"
+LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
 
@@ -1788,3 +1805,4 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
 }
+LVM_PROVISIONER = "topolvm.cybozu.com"
