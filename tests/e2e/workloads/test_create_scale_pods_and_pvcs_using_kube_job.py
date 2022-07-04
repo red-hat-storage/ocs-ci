@@ -32,8 +32,9 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
     orig_index = None
 
     def teardown(self):
-        log.info("Switch back to the original context")
-        config.switch_ctx(self.orig_index)
+        if self.orig_index is not None:
+            log.info("Switch back to the original context")
+            config.switch_ctx(self.orig_index)
 
     @skipif_external_mode
     @ipi_deployment_required
@@ -92,15 +93,16 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     """
 
     def setup(self):
+        self.orig_index = None
         self.scale_count = min(constants.SCALE_PVC_ROUND_UP_VALUE)
         self.pvc_per_pod_count = 5
         self.expected_pod_num = int(self.scale_count / self.pvc_per_pod_count)
         self.consumer_i_per_fio_scale = {}
-        self.orig_index = None
 
     def teardown(self):
-        log.info("Switch back to the original context")
-        config.switch_ctx(self.orig_index)
+        if self.orig_index is not None:
+            log.info("Switch back to the original context")
+            config.switch_ctx(self.orig_index)
 
     def check_scale_pods_and_pvcs_created_on_consumers(self):
         for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
