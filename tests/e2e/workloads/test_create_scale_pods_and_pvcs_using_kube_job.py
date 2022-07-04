@@ -29,6 +29,12 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
     Test create scale pods and PVCs using a kube job
     """
 
+    orig_index = None
+
+    def teardown(self):
+        log.info("Switch back to the original context")
+        config.switch_ctx(self.orig_index)
+
     @skipif_external_mode
     @ipi_deployment_required
     def test_create_scale_pods_and_pvcs_using_kube_job(
@@ -55,6 +61,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         """
         Test create scale pods and PVCs using a kube job with managed service
         """
+        self.orig_index = config.cur_index
+
         config.switch_to_consumer()
         log.info("Start creating resources using kube job...")
         create_scale_pods_and_pvcs_using_kube_job()
@@ -88,6 +96,11 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         self.pvc_per_pod_count = 5
         self.expected_pod_num = int(self.scale_count / self.pvc_per_pod_count)
         self.consumer_i_per_fio_scale = {}
+        self.orig_index = None
+
+    def teardown(self):
+        log.info("Switch back to the original context")
+        config.switch_ctx(self.orig_index)
 
     def check_scale_pods_and_pvcs_created_on_consumers(self):
         for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
@@ -132,6 +145,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         """
         Test create scale pods and PVCs using a kube job with MS consumers
         """
+        self.orig_index = config.cur_index
+
         config.switch_to_provider()
         self.consumer_i_per_fio_scale = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
@@ -168,6 +183,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         """
         Test create and delete scale pods and PVCs using a kube job with MS consumers
         """
+        self.orig_index = config.cur_index
+
         config.switch_to_provider()
         self.consumer_i_per_fio_scale = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
