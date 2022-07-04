@@ -129,6 +129,9 @@ class PASTest(BaseTest):
                 still_going_down = True
         log.info("Storage usage was cleandup")
 
+        # Add delay of 15 sec. after each test.
+        time.sleep(10)
+
     def initialize_test_crd(self):
         """
         Initializing the test CRD file.
