@@ -2021,6 +2021,10 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     run_cmd(
         f"oc wait --for condition=ready pod "
@@ -2033,7 +2037,18 @@ def ceph_health_check_base(namespace=None):
         f"-o jsonpath='{{.items[0].metadata.name}}'",
         timeout=60,
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
+
+    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    try:
+        health = run_cmd(ceph_health_cmd)
+    except CommandFailed as ex:
+        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+            log.info("Patch the consumer rook-ceph-tools deployment")
+            patch_consumer_toolbox()
+            health = run_cmd(ceph_health_cmd)
+        else:
+            raise ex
+
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True

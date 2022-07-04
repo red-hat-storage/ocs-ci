@@ -2050,6 +2050,20 @@ def is_managed_service_cluster():
     return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
 
 
+def is_ms_consumer_cluster():
+    """
+    Check if the cluster is a managed service consumer cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service consumer cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
