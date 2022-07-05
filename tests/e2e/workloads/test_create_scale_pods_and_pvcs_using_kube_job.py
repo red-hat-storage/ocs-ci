@@ -1,5 +1,6 @@
 import logging
 from time import sleep
+import pytest
 
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.framework import config
@@ -29,6 +30,17 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
     Test create scale pods and PVCs using a kube job
     """
 
+    @pytest.fixture(autouse=True)
+    def setup(self, request):
+        self.orig_index = None
+
+        def finalizer():
+            if self.orig_index is not None:
+                log.info("Switch back to the original context")
+                config.switch_ctx(self.orig_index)
+
+        request.addfinalizer(finalizer)
+
     @skipif_external_mode
     @ipi_deployment_required
     def test_create_scale_pods_and_pvcs_using_kube_job(
@@ -55,6 +67,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         """
         Test create scale pods and PVCs using a kube job with managed service
         """
+        self.orig_index = config.cur_index
+
         config.switch_to_consumer()
         log.info("Start creating resources using kube job...")
         create_scale_pods_and_pvcs_using_kube_job()
@@ -84,6 +98,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     """
 
     def setup(self):
+        self.orig_index = None
         self.scale_count = min(constants.SCALE_PVC_ROUND_UP_VALUE)
         self.pvc_per_pod_count = 5
         self.expected_pod_num = int(self.scale_count / self.pvc_per_pod_count)
@@ -132,17 +147,16 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         """
         Test create scale pods and PVCs using a kube job with MS consumers
         """
-        config.switch_to_provider()
+        self.orig_index = config.cur_index
         self.consumer_i_per_fio_scale = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
                 scale_count=self.scale_count,
                 pvc_per_pod_count=self.pvc_per_pod_count,
             )
         )
-        assert (
-            config.cur_index == config.get_provider_index()
-        ), "The current index has changed"
+        assert config.cur_index == self.orig_index, "The current index has changed"
 
+        config.switch_to_provider()
         time_to_wait_for_io_running = 120
         log.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
@@ -168,17 +182,16 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
         """
         Test create and delete scale pods and PVCs using a kube job with MS consumers
         """
-        config.switch_to_provider()
+        self.orig_index = config.cur_index
         self.consumer_i_per_fio_scale = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
                 scale_count=self.scale_count,
                 pvc_per_pod_count=self.pvc_per_pod_count,
             )
         )
-        assert (
-            config.cur_index == config.get_provider_index()
-        ), "The current index has changed"
+        assert config.cur_index == self.orig_index, "The current index has changed"
 
+        config.switch_to_provider()
         time_to_wait_for_io_running = 120
         log.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
