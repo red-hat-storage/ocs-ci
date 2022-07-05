@@ -4,7 +4,7 @@ import pytest
 
 from time import sleep
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla, polarion_id
+from ocs_ci.framework.testlib import E2ETest, tier2, bugzilla, polarion_id
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +13,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @bugzilla("2075068")
 @polarion_id("OCS-3947")
 class TestKernelCrash(E2ETest):
