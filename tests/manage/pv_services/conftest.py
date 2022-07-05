@@ -17,7 +17,7 @@ def pytest_collection_modifyitems(items):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
             if "manage/pv_services/pvc_snapshot" in str(item.fspath):
-                log.info(
+                log.debug(
                     f"Test {item} is removed from the collected items. PVC snapshot is not supported on"
                     f" {config.ENV_DATA['platform'].lower()} due to the bug 2069367"
                 )

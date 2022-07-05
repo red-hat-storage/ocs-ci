@@ -219,7 +219,7 @@ def pytest_collection_modifyitems(session, items):
                 # skip_condition will be a tuple
                 # and condition will be first element in the tuple
                 if skipif_ocp_version(skip_condition[0]):
-                    log.info(
+                    log.debug(
                         f"Test: {item} will be skipped due to OCP {skip_condition}"
                     )
                     items.remove(item)
@@ -229,13 +229,13 @@ def pytest_collection_modifyitems(session, items):
                 # skip_condition will be a tuple
                 # and condition will be first element in the tuple
                 if skipif_ocs_version(skip_condition[0]):
-                    log.info(f"Test: {item} will be skipped due to {skip_condition}")
+                    log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
             if skipif_upgraded_from_marker:
                 skip_args = skipif_upgraded_from_marker.args
                 if skipif_upgraded_from(skip_args[0]):
-                    log.info(
+                    log.debug(
                         f"Test: {item} will be skipped because the OCS cluster is"
                         f" upgraded from one of these versions: {skip_args[0]}"
                     )
@@ -243,7 +243,7 @@ def pytest_collection_modifyitems(session, items):
             if skipif_no_kms_marker:
                 try:
                     if not is_kms_enabled(dont_raise=True):
-                        log.info(
+                        log.debug(
                             f"Test: {item} it will be skipped because the OCS cluster"
                             f" has not configured cluster-wide encryption with KMS"
                         )
@@ -255,7 +255,7 @@ def pytest_collection_modifyitems(session, items):
             if skipif_ui_not_support_marker:
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
-                    log.info(
+                    log.debug(
                         f"Test: {item} will be skipped due to UI test {skip_condition.args} is not available"
                     )
                     items.remove(item)
@@ -267,7 +267,7 @@ def pytest_collection_modifyitems(session, items):
     ):
         for item in items.copy():
             if "/ui/" in str(item.fspath):
-                log.info(
+                log.debug(
                     f"Test {item} is removed from the collected items"
                     f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
                 )
