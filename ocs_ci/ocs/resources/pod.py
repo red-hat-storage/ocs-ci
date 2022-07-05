@@ -2089,7 +2089,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
         osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
 
-    timeout = 300
+    timeout = 600
     try:
         is_completed = osd_removal_pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_COMPLETED,
@@ -2099,6 +2099,9 @@ def verify_osd_removal_job_completed_successfully(osd_id):
         )
     # Don't failed the test yet if the ocs-osd-removal pod job is not completed
     except TimeoutExpiredError:
+        logger.info(
+            f"Increased timeout from 300 to 600 seconds for ocs-osd-removal pod {osd_removal_pod_name} to get completed"
+        )
         is_completed = False
 
     ocp_pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)

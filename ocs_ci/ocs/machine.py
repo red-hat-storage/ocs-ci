@@ -916,13 +916,13 @@ def add_node(machine_set, count):
     return True
 
 
-def wait_for_new_node_to_be_ready(machine_set, timeout=600):
+def wait_for_new_node_to_be_ready(machine_set, timeout=900):
     """
     Wait for the new node to reach ready state
 
     Args:
         machine_set (str): Name of the machine set
-        timeout (int): Timeout in secs, default 10mins
+        timeout (int): Timeout in secs, default 15mins
 
     Raises:
         ResourceWrongStatusException: In case the new spun machine fails
@@ -939,7 +939,7 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=600):
                 break
     except TimeoutExpiredError:
         log.error(
-            "New spun node failed to reach ready state OR "
+            "New spun node failed to reach ready state even with increased timeout from 600 to 900 seconds OR "
             "Replica count didn't match ready replica count"
         )
         raise ResourceWrongStatusException(
