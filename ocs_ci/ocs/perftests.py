@@ -129,6 +129,9 @@ class PASTest(BaseTest):
                 still_going_down = True
         log.info("Storage usage was cleandup")
 
+        # Add delay of 15 sec. after each test.
+        time.sleep(10)
+
     def initialize_test_crd(self):
         """
         Initializing the test CRD file.
@@ -192,7 +195,7 @@ class PASTest(BaseTest):
         if self.interface == constants.CEPHBLOCKPOOL:
             self.ceph_cluster.delete_blockpool(pool_name=pool_name)
         elif self.interface == constants.CEPHFILESYSTEM:
-            self.ceph_cluster.delete_filesystem(fs_name=pool_name)
+            self.ceph_cluster.delete_filesystem()
 
         self.ceph_cluster.set_target_ratio(
             poolname="ocs-storagecluster-cephblockpool", ratio=0.49
