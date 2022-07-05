@@ -69,7 +69,11 @@ class ExternalCluster(object):
         # get ceph filesystem
         ceph_fs_name = self.get_ceph_fs()
 
-        params = f"--rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
+        rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+
+        params = (
+            f"--rbd-data-pool-name {rbd_name} --rgw-endpoint {rgw_endpoint_with_port}"
+        )
 
         if config.ENV_DATA["restricted-auth-permission"]:
             params = (
