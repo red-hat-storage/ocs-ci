@@ -268,7 +268,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
         )
-        self.do_click(locator=self.dep_loc[self.storage_class])
+        self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
