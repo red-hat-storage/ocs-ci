@@ -5,6 +5,7 @@ size is returned to backend pool
 import logging
 
 import pytest
+import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -63,6 +64,11 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
+
+        # Wait for 45 seconds for cluster load to pause effectively
+        wait_time = 45
+        logger.info(f"Waiting for {wait_time} seconds...")
+        time.sleep(wait_time)
         cbp_name = helpers.default_ceph_block_pool()
 
         # TODO: Get exact value of replica size
