@@ -1809,4 +1809,3 @@ LVMO_POD_LABEL = {
     },
 }
 LVM_PROVISIONER = "topolvm.cybozu.com"
-
