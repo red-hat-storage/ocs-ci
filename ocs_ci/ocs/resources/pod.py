@@ -1863,7 +1863,7 @@ def check_safe_to_destroy_status(osd_id):
     except Exception as e:
         logger.error(e)
         return False
-    return "are safe to destroy without reducing data durability" not in out
+    return "are safe to destroy without reducing data durability" in out
 
 
 def verify_osd_removal_job_completed_successfully(osd_id):
