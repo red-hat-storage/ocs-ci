@@ -4694,7 +4694,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                 )
 
     request.addfinalizer(finalizer)
-    return
+    return factory
 
 
 @pytest.fixture()
