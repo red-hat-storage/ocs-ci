@@ -10,7 +10,11 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disk_for_vsphere_platform,
+    create_optional_operators_catalogsource_non_ga,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -94,9 +98,16 @@ class DeploymentUI(PageNavigator):
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
-            self.do_click(
-                self.dep_loc["choose_local_storage_version"], enable_screenshot=True
-            )
+            ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
+            if ocp_ga_version:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
+                )
+            else:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version_non_ga"],
+                    enable_screenshot=True,
+                )
 
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"], enable_screenshot=True)
@@ -257,7 +268,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
         )
-        self.do_click(locator=self.dep_loc[self.storage_class])
+        self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
@@ -385,7 +396,7 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8", "4.9", "4.11"):
+        if self.ocp_version_semantic >= version.VERSION_4_7:
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -416,6 +427,7 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            create_optional_operators_catalogsource_non_ga()
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()

@@ -74,6 +74,10 @@ deployment = {
     "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
+    "choose_local_storage_version_non_ga": (
+        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 deployment_4_6 = {
@@ -161,9 +165,9 @@ deployment_4_11 = {
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
-    "512": ("//span[text()='0.5 TiB']", By.XPATH),
-    "2048": ("//span[text()='2 TiB']", By.XPATH),
-    "4096": ("//span[text()='4 TiB']", By.XPATH),
+    "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
+    "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
+    "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
