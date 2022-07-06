@@ -2176,7 +2176,8 @@ class LVM(object):
         lvmc_ocs = lvmc_cop.data
         return lvmc_ocs
 
-    def get_lvm_version(self):
+    @staticmethod
+    def get_lvm_version():
         """
         Get redhat-operators version (4.10, 4.11)
         returns:
@@ -2262,3 +2263,22 @@ def check_clusters():
             config.RUN["cephcluster"] = False
         else:
             config.RUN["cephcluster"] = True
+
+
+def get_lvm_full_version():
+    """
+    Get redhat-operators version (4.11-xxx)
+    returns:
+        (str) lvmo full version
+    """
+    redhat_operators_catalogesource_ocp = OCP(
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        kind="catalogsource",
+        resource_name="redhat-operators",
+    )
+    redhat_operators_catalogesource_ocs = OCS(
+        **redhat_operators_catalogesource_ocp.data
+    )
+    image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+    full_version = image.split(":")[1]
+    return full_version

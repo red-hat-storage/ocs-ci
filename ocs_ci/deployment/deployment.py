@@ -32,6 +32,7 @@ from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
     validate_pdb_creation,
     CephClusterExternal,
+    get_lvm_full_version,
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -1240,15 +1241,28 @@ class Deployment(object):
         lvmo_version_without_period = lvmo_version.replace(".", "")
         label_version = constants.LVMO_POD_LABEL
         create_catalog_source()
+        # this is a workaround for 2103818
+        lvm_full_version = get_lvm_full_version()
+        major, minor = lvm_full_version.split("-")
+        if int(minor) > 105 and major == "4.11.0":
+            lvmo_version_without_period = "411"
+        elif int(minor) < 105 and major == "4.11.0":
+            lvmo_version_without_period = "411-old"
+
+        file_version = lvmo_version_without_period
+        if "old" in file_version:
+            file_version = file_version.split("-")[0]
+
         cluster_config_file = os.path.join(
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
-            f"lvm-cluster-{lvmo_version_without_period}.yaml",
+            f"lvm-cluster-{file_version}.yaml",
         )
         # this is a workaround for 2101343
-        rolebinding_config_file = os.path.join(
-            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
-        )
-        run_cmd(f"oc create -f {rolebinding_config_file} -n default")
+        if 110 > int(minor) > 98 and major == "4.11.0":
+            rolebinding_config_file = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
+            )
+            run_cmd(f"oc create -f {rolebinding_config_file} -n default")
         # end of workaround
         bundle_config_file = os.path.join(
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
