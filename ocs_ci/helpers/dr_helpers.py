@@ -5,6 +5,8 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -299,3 +301,46 @@ def wait_for_vr_deletion(namespace, timeout=300):
     """
     wait_for_vr_state("secondary", namespace, timeout)
     wait_for_vr_count(0, namespace, timeout)
+
+
+def wait_for_workload_resource_creation(pvc_count, pod_count, namespace, timeout=120):
+    """
+    Wait for workload resources such as PVCs and Pods to be created
+
+    Args:
+        pvc_count (int): Expected number of PVCs
+        pod_count (int): Expected number of Pods
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource creation
+
+    """
+    logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
+    ocp.OCP(kind=constants.PVC, namespace=namespace).wait_for_resource(
+        condition=constants.STATUS_BOUND, resource_count=pvc_count, timeout=timeout
+    )
+    logger.info(
+        f"Waiting for {pod_count} pods to reach {constants.STATUS_RUNNING} state"
+    )
+    ocp.OCP(kind=constants.POD, namespace=namespace).wait_for_resource(
+        condition=constants.STATUS_RUNNING, resource_count=pod_count, timeout=timeout
+    )
+
+
+def wait_for_workload_resource_deletion(namespace, timeout=120):
+    """
+    Wait for workload resources to be deleted
+
+    Args:
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info("Waiting for all pods to be deleted")
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name, timeout=timeout)
+
+    logger.info("Waiting for all PVCs to be deleted")
+    all_pvcs = get_all_pvc_objs(namespace=namespace)
+    for pvc_obj in all_pvcs:
+        pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name, timeout=timeout)

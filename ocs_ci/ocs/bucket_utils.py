@@ -238,7 +238,7 @@ def copy_objects(
 
 
 def copy_random_individual_objects(
-    podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
+    podobj, file_dir, target, amount, pattern="test-obj-", s3_obj=None, **kwargs
 ):
     """
     Generates random objects and then copies them individually one after the other

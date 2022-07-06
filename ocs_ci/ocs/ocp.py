@@ -49,6 +49,7 @@ class OCP(object):
         selector=None,
         field_selector=None,
         cluster_kubeconfig="",
+        threading_lock=None,
     ):
         """
         Initializer function
@@ -63,6 +64,8 @@ class OCP(object):
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
             cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
+            threading_lock (threading.Lock): threading.Lock object that is used
+                for handling concurrent oc commands
         """
         self._api_version = api_version
         self._kind = kind
@@ -72,6 +75,7 @@ class OCP(object):
         self.selector = selector
         self.field_selector = field_selector
         self.cluster_kubeconfig = cluster_kubeconfig
+        self.threading_lock = threading_lock
 
     @property
     def api_version(self):
@@ -153,6 +157,7 @@ class OCP(object):
             secrets=secrets,
             timeout=timeout,
             ignore_error=ignore_error,
+            threading_lock=self.threading_lock,
             **kwargs,
         )
 
@@ -418,7 +423,9 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
+        if f'Now using project "{project_name}"' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         return False
 
@@ -439,7 +446,9 @@ class OCP(object):
 
         """
         command = f"oc delete project {project_name}"
-        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+        if f' "{project_name}" deleted' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         raise CommandFailed(f"{project_name} was not deleted")
 
@@ -456,7 +465,9 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
-        status = exec_cmd(command, secrets=[password])
+        status = exec_cmd(
+            command, secrets=[password], threading_lock=self.threading_lock
+        )
         # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
@@ -485,7 +496,7 @@ class OCP(object):
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
-        status = run_cmd(command)
+        status = run_cmd(command, threading_lock=self.threading_lock)
         return status
 
     def get_user_token(self):
@@ -767,7 +778,7 @@ class OCP(object):
             selector=selector,
         )
         # get the list of titles
-        titles = re.sub(r"\s{2,}", ",", resource)  # noqa: W605
+        titles = re.sub(r"\s", ",", re.sub(r"\s{2,}", ",", resource))  # noqa: W605
         titles = titles.split(",")
         # Get the index of column
         column_index = titles.index(column)

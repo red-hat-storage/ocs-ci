@@ -268,6 +268,10 @@ class ExternalClusterRGWEndPointPortMissing(Exception):
     pass
 
 
+class ExternalClusterCephfsMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -521,4 +525,16 @@ class UnsupportedWorkloadError(Exception):
 
 
 class RebootEventNotFoundException(Exception):
+    pass
+
+
+class ConnectivityFail(Exception):
+    pass
+
+
+class ROSAProdAdminLoginFailedException(Exception):
+    pass
+
+
+class Md5CheckFailed(Exception):
     pass

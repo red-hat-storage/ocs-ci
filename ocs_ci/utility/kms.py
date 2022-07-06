@@ -38,6 +38,7 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    get_ocp_version,
     encode,
 )
 
@@ -190,6 +191,11 @@ class Vault(KMS):
 
         if not self.vault_namespace_exists(self.vault_namespace):
             self.create_namespace(self.vault_namespace)
+
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = (
+                f"{constants.VAULT_HCP_NAMESPACE}/{self.vault_namespace}"
+            )
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
     def vault_namespace_exists(self, vault_namespace):
@@ -203,7 +209,10 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault namespace lookup {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace lookup -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace lookup {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
@@ -243,7 +252,10 @@ class Vault(KMS):
             VaultOperationError: If namespace is not created successfully
 
         """
-        cmd = f"vault namespace create {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace create -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace create {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -573,7 +585,10 @@ class Vault(KMS):
 
         """
         if self.vault_deploy_mode == "external":
-            vault_conf = load_auth_config()["vault"]
+            if config.ENV_DATA.get("use_vault_namespace"):
+                vault_conf = load_auth_config()["vault_hcp"]
+            else:
+                vault_conf = load_auth_config()["vault"]
             return vault_conf
 
     def get_vault_connection_info(self, resource_name=None):
@@ -722,7 +737,11 @@ class Vault(KMS):
         # Unset namespace from environment
         # else delete will look for namespace within namespace
         os.environ.pop("VAULT_NAMESPACE")
-        cmd = f"vault namespace delete {self.vault_namespace}/"
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = self.vault_namespace.replace("admin/", "")
+            cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
+        else:
+            cmd = f"vault namespace delete {self.vault_namespace}/"
         subprocess.check_output(shlex.split(cmd))
         if self.vault_namespace_exists(self.vault_namespace):
             raise KMSResourceCleaneupError(
@@ -1015,18 +1034,21 @@ class Vault(KMS):
         """
 
         # Get secret name from serviceaccount
-        logger.info("Retrieving secret name from serviceaccount ")
-        cmd = (
-            f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-        )
-        secrets = run_cmd(cmd=cmd).split()
-        secret_name = ""
-        for secret in secrets:
-            if "-token-" in secret and "docker" not in secret:
-                secret_name = secret
-        if not secret_name:
-            raise NotFoundError("Secret name not found")
+        if Version.coerce(get_ocp_version()) < Version.coerce("4.11"):
+            logger.info("Retrieving secret name from serviceaccount ")
+            cmd = (
+                f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
+                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            secrets = run_cmd(cmd=cmd).split()
+            secret_name = ""
+            for secret in secrets:
+                if "-token-" in secret and "docker" not in secret:
+                    secret_name = secret
+            if not secret_name:
+                raise NotFoundError("Secret name not found")
+        else:
+            secret_name = helpers.create_sa_token_secret(sa_name=token_reviewer_name)
 
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")

@@ -1,7 +1,6 @@
-import time
 import logging
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.helpers import helpers, performance_lib
@@ -13,9 +12,10 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import delete_pods
+from ocs_ci.ocs.resources import pod
 import ocs_ci.ocs.exceptions as ex
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def write_empty_files_to_bucket(
@@ -47,14 +47,14 @@ def write_empty_files_to_bucket(
     # Write all empty objects to the bucket
     sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
 
-    logger.info("Successfully created files.")
+    log.info("Successfully created files.")
 
     obj_set = set(obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name))
     test_set = set("test" + str(file_no + 1) for file_no in range(1000))
 
     if test_set != obj_set:
         raise ex.UnexpectedBehaviour("File name set does not match")
-    logger.info("File name set match")
+    log.info("File name set match")
 
     return obj_set
 
@@ -71,9 +71,9 @@ def measure_pod_to_pvc_attach_time(pod_objs):
 
     """
     pod_start_time_dict_list = []
-    for pod in pod_objs:
-        pod_start_time_dict_list.append(helpers.pod_start_time(pod))
-    logger.info(str(pod_start_time_dict_list))
+    for pod_obj in pod_objs:
+        pod_start_time_dict_list.append(helpers.pod_start_time(pod_obj))
+    log.info(str(pod_start_time_dict_list))
     time_measures = []
     for attach_time in pod_start_time_dict_list:
         if "my-container" in attach_time:
@@ -84,15 +84,15 @@ def measure_pod_to_pvc_attach_time(pod_objs):
             time_measures.append(attach_time["performance"])
     for index, start_time in enumerate(time_measures):
         if start_time <= 30:
-            logger.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
+            log.info(f"POD {pod_objs[index].name} attach time: {start_time} seconds")
         else:
-            logger.error(
+            log.error(
                 f"POD {pod_objs[index].name} attach time is {start_time},"
                 f"which is greater than 30 seconds"
             )
     if time_measures:
         average = statistics.mean(time_measures)
-        logger.info(
+        log.info(
             f"The average attach time for the sampled {len(time_measures)} pods is {average} seconds."
         )
 
@@ -119,18 +119,16 @@ def measure_pod_creation_time(namespace, num_of_pods):
     accepted_creation_time = 12
 
     for line in logs:
-        logger.info(line)
+        log.info(line)
         if "Scheduled" in line:
             scheduled_time = int(line.split()[0][:-1])
         elif "Created" in line:
             created_time = int(line.split()[0][:-1])
             creation_time = scheduled_time - created_time
             if creation_time <= accepted_creation_time:
-                logger.info(
-                    f"POD number {pod_no} was created in {creation_time} seconds."
-                )
+                log.info(f"POD number {pod_no} was created in {creation_time} seconds.")
             else:
-                logger.error(
+                log.error(
                     f"POD creation time is {creation_time} and is greater than "
                     f"{accepted_creation_time} seconds."
                 )
@@ -157,9 +155,9 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
         )
 
         if creation_time <= accepted_creation_time:
-            logger.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
+            log.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
         else:
-            logger.error(
+            log.error(
                 f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
                 f"{accepted_creation_time} seconds."
             )
@@ -193,14 +191,174 @@ def measure_pvc_deletion_time(interface, pvc_objs):
 
     for pv_name, deletion_time in pvc_deletion_time.items():
         if deletion_time <= accepted_deletion_time:
-            logger.info(
+            log.info(
                 f"PVC {pv_to_pvc[pv_name]} was deleted in {deletion_time} seconds."
             )
         else:
-            logger.error(
+            log.error(
                 f"PVC {pv_to_pvc[pv_name]} deletion time is {deletion_time} and is greater than "
                 f"{accepted_deletion_time} seconds."
             )
+
+
+def create_restore_verify_snapshots(
+    multi_snapshot_factory,
+    snapshot_restore_factory,
+    pod_factory,
+    pvc_objs,
+    namespace,
+    file_name,
+):
+    """
+    Creates snapshots from each PVC in the provided list of PVCs,
+    Restores new PVCs out of the created snapshots
+    and
+    Verifies data integrity by checking the existence and md5sum of file in the restored PVC.
+
+    Args:
+        multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
+        snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
+        pod_factory : Fixture to create new PODs.
+        pvc_objs (list) : List of PVC objects for which snapshots are to be created.
+        namespace (str) : Namespace in which the PVCs are created.
+        file_name (str) : Name of the file on which FIO is performed.
+
+    Returns:
+        tuple: A tuple of size 2 containing a list of restored PVC objects and a list of the pods attached to the
+                restored PVCs, respectively.
+
+    """
+    # Create Snapshots
+    log.info("Started creation of snapshots of the PVCs.")
+    snapshots = multi_snapshot_factory(pvc_obj=pvc_objs, snapshot_name_suffix=namespace)
+    log.info("Created snapshots from all the PVCs and snapshots are in Ready state.")
+
+    # Restore Snapshots
+    log.info("Started restoration of the snapshots created.")
+    restored_pvc_objs = list()
+    for snapshot_no in range(len(snapshots)):
+        restored_pvc_objs.append(
+            snapshot_restore_factory(
+                snapshot_obj=snapshots[snapshot_no],
+                volume_mode=pvc_objs[snapshot_no].get_pvc_vol_mode,
+                access_mode=pvc_objs[snapshot_no].get_pvc_access_mode,
+                timeout=600,
+            )
+        )
+    log.info("Restoration complete - Created new PVCs from all the snapshots.")
+
+    # Attach PODs to restored PVCs
+    restored_pod_objs = list()
+    for restored_pvc_obj in restored_pvc_objs:
+        if restored_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+            restored_pod_objs.append(
+                pod_factory(
+                    pvc=restored_pvc_obj,
+                    raw_block_pv=True,
+                    status=constants.STATUS_RUNNING,
+                    pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                )
+            )
+        else:
+            restored_pod_objs.append(
+                pod_factory(pvc=restored_pvc_obj, status=constants.STATUS_RUNNING)
+            )
+
+    # Verify that the fio exists and md5sum matches
+    pod.verify_data_integrity_for_multi_pvc_objs(restored_pod_objs, pvc_objs, file_name)
+
+    return restored_pvc_objs, restored_pod_objs
+
+
+def expand_verify_pvcs(pvc_objs, pod_objs, pvc_size_new, file_name, fio_size):
+    """
+    Expands size of each PVC in the provided list of PVCs,
+    Verifies data integrity by checking the existence and md5sum of file in the expanded PVC
+    and
+    Runs FIO on expanded PVCs and verifies results.
+
+    Args:
+        pvc_objs (list) : List of PVC objects which are to be expanded.
+        pod_objs (list) : List of POD objects attached to the PVCs.
+        pvc_size_new (int) : Size of the expanded PVC in GB.
+        file_name (str) : Name of the file on which FIO is performed.
+        fio_size (int) : Size in MB of FIO.
+
+    """
+    # Expand original PVCs
+    log.info("Started expansion of the PVCs.")
+    for pvc_obj in pvc_objs:
+        log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+        pvc_obj.resize_pvc(pvc_size_new, True)
+    log.info("Successfully expanded the PVCs.")
+
+    # Verify that the fio exists and md5sum matches
+    for pod_no in range(len(pod_objs)):
+        pod_obj = pod_objs[pod_no]
+        if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+            pod.verify_data_integrity_after_expansion_for_block_pvc(
+                pod_obj, pvc_objs[pod_no], fio_size
+            )
+        else:
+            pod.verify_data_integrity(pod_obj, file_name, pvc_objs[pod_no].md5sum)
+
+    # Run IO to utilize 50% of volume
+    log.info("Run IO on all pods to utilise 50% of the expanded PVC used space")
+    expanded_file_name = "fio_50"
+    for pod_obj in pod_objs:
+        log.info(f"Running IO on pod {pod_obj.name}")
+        log.info(f"File created during IO {expanded_file_name}")
+        fio_size = int(0.50 * pvc_size_new * 1000)
+        storage_type = (
+            "block"
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else "fs"
+        )
+        pod_obj.wl_setup_done = True
+        pod_obj.wl_obj = workload.WorkLoad(
+            "test_workload_fio",
+            pod_obj.get_storage_path(storage_type),
+            "fio",
+            storage_type,
+            pod_obj,
+            1,
+        )
+        pod_obj.run_io(
+            storage_type=storage_type,
+            size=f"{fio_size}M",
+            runtime=20,
+            fio_filename=expanded_file_name,
+            end_fsync=1,
+        )
+
+    log.info("Started IO on all pods to utilise 50% of PVCs")
+
+    for pod_obj in pod_objs:
+        # Wait for IO to finish
+        pod_obj.get_fio_results(3600)
+        log.info(f"IO finished on pod {pod_obj.name}")
+        is_block = (
+            True
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else False
+        )
+        expanded_file_name_pod = (
+            expanded_file_name
+            if not is_block
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+
+        # Verify presence of the file
+        expanded_file_path = (
+            expanded_file_name_pod
+            if is_block
+            else pod.get_file_path(pod_obj, expanded_file_name_pod)
+        )
+        log.info(f"Actual file path on the pod {expanded_file_path}")
+        assert pod.check_file_existence(
+            pod_obj, expanded_file_path
+        ), f"File {expanded_file_name_pod} does not exist"
+        log.info(f"File {expanded_file_name_pod} exists in {pod_obj.name}")
 
 
 def _multi_pvc_pod_lifecycle_factory(
@@ -220,19 +378,35 @@ def _multi_pvc_pod_lifecycle_factory(
     """
 
     def factory(
-        num_of_pvcs=100, pvc_size=2, bulk=False, namespace="stage-2", measure=True
+        num_of_pvcs=100,
+        pvc_size=2,
+        bulk=False,
+        project=None,
+        measure=True,
+        delete=True,
+        file_name=None,
+        fio_percentage=25,
+        verify_fio=False,
+        expand=False,
     ):
         """
         Args:
             num_of_pvcs (int) : Number of PVCs / PODs we want to create.
             pvc_size (int) : Size of each PVC in GB.
             bulk (bool) : True for bulk operations, False otherwise.
-            namespace (str) : Name of the namespace inside which the PODs/PVCs are created.
+            project (obj) : Project obj inside which the PODs/PVCs are created.
             measure (bool) : True if we want to measure the PVC creation/deletion time and POD to PVC attach time,
                                 False otherwise.
+            delete (bool) : True if we want to delete PVCs and PODs, False otherwise
+            file_name (str) : Name of the file on which FIO is performed.
+            fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
+            verify_fio (bool) : True if we want to verify FIO, False otherwise.
+            expand (bool) : True if we want to verify_fio for expansion of PVCs operation, False otherwise.
 
         """
-        project = project_factory(namespace)
+
+        if not project:
+            project = project_factory("longevity")
         pvc_objs = list()
         executor = ThreadPoolExecutor(max_workers=1)
         start_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -259,7 +433,7 @@ def _multi_pvc_pod_lifecycle_factory(
                     num_of_pvc=num_of_pvc,
                     wait_each=not bulk,
                 )
-                logger.info("PVC creation was successful.")
+                log.info("PVC creation was successful.")
                 pvc_objs.extend(pvc_objs_tmp)
 
                 if measure:
@@ -267,7 +441,7 @@ def _multi_pvc_pod_lifecycle_factory(
                     measure_pvc_creation_time(interface, pvc_objs_tmp, start_time)
 
             else:
-                logger.info(
+                log.info(
                     f"Num of PVCs of interface - {interface} = {num_of_pvc}. So no PVCs created."
                 )
 
@@ -311,8 +485,8 @@ def _multi_pvc_pod_lifecycle_factory(
                         pod_factory(pvc=pvc_obj, pod_dict_path=constants.PERF_POD_YAML)
                     )
 
-            logger.info(f"POD {pod_objs[-1].name} creation was successful.")
-        logger.info("All PODs are created.")
+            log.info(f"POD {pod_objs[-1].name} creation was successful.")
+        log.info("All PODs are created.")
 
         if bulk:
             for pod_obj in pod_objs:
@@ -322,9 +496,9 @@ def _multi_pvc_pod_lifecycle_factory(
                     constants.STATUS_RUNNING,
                     timeout=300,
                 )
-                logger.info(f"POD {pod_obj.name} reached Running State.")
+                log.info(f"POD {pod_obj.name} reached Running State.")
 
-            logger.info("All PODs reached Running State.")
+            log.info("All PODs reached Running State.")
 
         if measure:
             # Measure POD to PVC attach time
@@ -335,7 +509,7 @@ def _multi_pvc_pod_lifecycle_factory(
             teardown_factory(pod_obj)
 
         # Run FIO on PODs
-        fio_size = int(0.25 * pvc_size * 1024)
+        fio_size = int((fio_percentage / 100) * pvc_size * 1000)
         for pod_obj in pod_objs:
             storage_type = (
                 "block"
@@ -351,42 +525,101 @@ def _multi_pvc_pod_lifecycle_factory(
                 pod_obj,
                 1,
             )
-            pod_obj.run_io(storage_type, f"{fio_size}M")
-        logger.info("POD FIO was successful.")
+            if not file_name:
+                pod_obj.run_io(storage_type, f"{fio_size}M")
+            else:
+                pod_obj.run_io(
+                    storage_type=storage_type,
+                    size=f"{fio_size}M",
+                    runtime=20,
+                    fio_filename=file_name,
+                    end_fsync=1,
+                )
 
-        # Delete PODs
-        pod_delete = executor.submit(delete_pods, pod_objs, wait=not bulk)
-        pod_delete.result()
+        if verify_fio:
+            log.info(
+                "Waiting for IO to complete on all pods to utilise 25% of PVC used space"
+            )
 
-        logger.info("Verified: Pods are deleted.")
+            for pod_obj in pod_objs:
+                # Wait for IO to finish
+                pod_obj.get_fio_results(3600)
+                log.info(f"IO finished on pod {pod_obj.name}")
+                is_block = (
+                    True
+                    if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+                    else False
+                )
+                file_name_pod = (
+                    file_name
+                    if not is_block
+                    else pod_obj.get_storage_path(storage_type="block")
+                )
+                # Verify presence of the file
+                file_path = (
+                    file_name_pod
+                    if is_block
+                    else pod.get_file_path(pod_obj, file_name_pod)
+                )
+                log.info(f"Actual file path on the pod {file_path}")
+                assert pod.check_file_existence(
+                    pod_obj, file_path
+                ), f"File {file_name_pod} does not exist"
+                log.info(f"File {file_name_pod} exists in {pod_obj.name}")
 
-        # Delete PVCs
-        pvc_delete = executor.submit(delete_pvcs, pvc_objs, concurrent=bulk)
-        res = pvc_delete.result()
-        if not res:
-            raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
-        logger.info("PVC deletion was successful.")
-
-        # Validate PV Deletion
-        for pvc_obj in pvc_objs:
-            helpers.validate_pv_delete(pvc_obj.backed_pv)
-        logger.info("PV deletion was successful.")
-
-        if measure:
-            # Measure PVC Deletion Time
-            for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
-                if interface == constants.CEPHFILESYSTEM:
-                    measure_pvc_deletion_time(
-                        interface,
-                        pvc_objs[: num_of_pvcs // 2],
+                if expand and is_block:
+                    # Read IO from block PVCs using dd and calculate md5sum.
+                    # This dd command reads the data from the device, writes it to
+                    # stdout, and reads md5sum from stdin.
+                    pod_obj.pvc.md5sum = pod_obj.exec_sh_cmd_on_pod(
+                        command=(
+                            f"dd iflag=direct if={file_path} bs=10M "
+                            f"count={fio_size // 10} | md5sum"
+                        )
                     )
+                    log.info(f"md5sum of {file_name_pod}: {pod_obj.pvc.md5sum}")
                 else:
-                    measure_pvc_deletion_time(
-                        interface,
-                        pvc_objs[num_of_pvcs // 2 :],
-                    )
+                    # Calculate md5sum of the file
+                    pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name_pod)
 
-        logger.info(f"Successfully deleted {num_of_pvcs} PVCs")
+        log.info("POD FIO was successful.")
+
+        if delete:
+            # Delete PODs
+            pod_delete = executor.submit(delete_pods, pod_objs, wait=not bulk)
+            pod_delete.result()
+
+            log.info("Verified: Pods are deleted.")
+
+            # Delete PVCs
+            pvc_delete = executor.submit(delete_pvcs, pvc_objs, concurrent=bulk)
+            res = pvc_delete.result()
+            if not res:
+                raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
+            log.info("PVC deletion was successful.")
+
+            # Validate PV Deletion
+            for pvc_obj in pvc_objs:
+                helpers.validate_pv_delete(pvc_obj.backed_pv)
+            log.info("PV deletion was successful.")
+
+            if measure:
+                # Measure PVC Deletion Time
+                for interface in (constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL):
+                    if interface == constants.CEPHFILESYSTEM:
+                        measure_pvc_deletion_time(
+                            interface,
+                            pvc_objs[: num_of_pvcs // 2],
+                        )
+                    else:
+                        measure_pvc_deletion_time(
+                            interface,
+                            pvc_objs[num_of_pvcs // 2 :],
+                        )
+
+            log.info(f"Successfully deleted {num_of_pvcs} PVCs")
+        else:
+            return pvc_objs, pod_objs
 
     return factory
 
@@ -517,7 +750,7 @@ def _multi_obc_lifecycle_factory(
 
         # Delete OBCs
         for bucket in obc_objs:
-            logger.info(f"Deleting bucket: {bucket.name}")
+            log.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
 
         if measure:
@@ -525,66 +758,3 @@ def _multi_obc_lifecycle_factory(
             scale_noobaa_lib.measure_obc_deletion_time(obc_name_list=obc_names)
 
     return factory
-
-
-def stage2(
-    multi_pvc_pod_lifecycle_factory,
-    multi_obc_lifecycle_factory,
-    num_of_pvcs=100,
-    pvc_size=2,
-    num_of_obcs=20,
-    run_time=1440,
-    measure=True,
-    delay=600,
-):
-    """
-    Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and OBCs
-    and measurement of creation / deletion times of the mentioned resources.
-
-    Args:
-        multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
-                                            measure pvc creation/deletion time and pod attach time.
-        multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
-                                        measure their creation/deletion time.
-        num_of_pvcs (int) : Total Number of PVCs / PODs we want to create.
-        pvc_size (int) : Size of each PVC in GB.
-        num_of_obcs (int) : Number of OBCs we want to create of each type. (Total OBCs = num_of_obcs * 5)
-        run_time (int) : Total Run Time in minutes.
-        measure (bool) : True if we want to measure the performance metrics, False otherwise.
-        delay (int) : Delay time (in seconds) between sequential and bulk operations as well as between cycles.
-
-    """
-    end_time = datetime.now() + timedelta(minutes=run_time)
-    cycle_no = 0
-
-    while datetime.now() < end_time:
-        cycle_no += 1
-        logger.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
-
-        for bulk in (False, True):
-            current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
-            logger.info(f"#################[{current_ops}]#################")
-            multi_pvc_pod_lifecycle_factory(
-                num_of_pvcs=num_of_pvcs,
-                pvc_size=pvc_size,
-                bulk=bulk,
-                namespace=f"stage-2-cycle-{cycle_no}-{current_ops.lower()}",
-                measure=measure,
-            )
-            multi_obc_lifecycle_factory(
-                num_of_obcs=num_of_obcs, bulk=bulk, measure=False
-            )
-
-            # Delay between Sequential and Bulk Operations
-            if not bulk:
-                logger.info(
-                    f"#################[WAITING FOR {delay} SECONDS AFTER {current_ops}.]#################"
-                )
-                time.sleep(delay)
-
-        logger.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
-
-        logger.info(
-            f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
-        )
-        time.sleep(delay)

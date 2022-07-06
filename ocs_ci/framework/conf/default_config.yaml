@@ -100,6 +100,7 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  install_lvmo: False
 
 
 # Section for reporting configuration
@@ -125,6 +126,7 @@ ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
+  sno: false
   cluster_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
@@ -206,14 +208,17 @@ ENV_DATA:
   rhel8_template: 'rhel85_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
-  default_acm_unreleased_image: "2.5.0-DOWNSTREAM-2022-05-19-19-49-24"
+  default_acm_unreleased_image: "2.5.1-DOWNSTREAM-2022-06-21-19-23-07"
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.2'
+  rosa_cli_version: '1.2.3'
   appliance_mode: true
+
+  # used in external mode deployment
+  restricted-auth-permission: false
 
 # This section is related to upgrade
 UPGRADE:

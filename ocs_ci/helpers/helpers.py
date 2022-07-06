@@ -231,6 +231,7 @@ def create_pod(
         elif (
             pod_dict_path == constants.NGINX_POD_YAML
             or pod_dict == constants.CSI_RBD_POD_YAML
+            or pod_dict == constants.PERF_POD_YAML
         ):
             temp_dict = [
                 {
@@ -3795,3 +3796,27 @@ def get_cephfs_subvolumegroup():
         subvolume_group_name = "csi"
 
     return subvolume_group_name
+
+
+def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    """
+    Creates a serviceaccount token secret
+
+    Args:
+        sa_name (str): Name of the serviceaccount for which the secret has to be created
+        namespace (str) : Namespace in which the serviceaccount exists
+
+    Returns:
+        str : Name of the serviceaccount token secret
+
+    """
+    logger.info(f"Creating token secret for serviceaccount {sa_name}")
+    token_secret = templating.load_yaml(constants.SERVICE_ACCOUNT_TOKEN_SECRET)
+    token_secret["metadata"]["name"] = f"{sa_name}-token"
+    token_secret["metadata"]["namespace"] = namespace
+    token_secret["metadata"]["annotations"][
+        "kubernetes.io/service-account.name"
+    ] = sa_name
+    create_resource(**token_secret)
+    logger.info(f"Serviceaccount token secret {sa_name}-token created successfully")
+    return token_secret["metadata"]["name"]

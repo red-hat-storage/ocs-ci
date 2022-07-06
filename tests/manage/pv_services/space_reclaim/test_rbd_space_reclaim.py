@@ -111,6 +111,9 @@ class TestRbdSpaceReclaim(ManageTest):
                 raise
             log.info(f"Verified: File {file_path} deleted.")
 
+        # Wait for 15 seconds after deleting the file
+        time.sleep(15)
+
         # Create ReclaimSpaceJob
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
 
@@ -136,6 +139,8 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @polarion_id("OCS-2774")
     @tier1
+    @skipif_managed_service
+    @skipif_external_mode
     def test_rbd_space_reclaim_no_space(self):
         """
         Test to verify RBD space reclamation
@@ -190,6 +195,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @polarion_id("OCS-3733")
     @tier2
+    @skipif_external_mode
     def test_no_volume_mounted(self):
         """
         Test reclaimspace job with no volume mounted

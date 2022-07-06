@@ -12,11 +12,13 @@ import tempfile
 import time
 from pathlib import Path
 import base64
-
 import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+)
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
@@ -244,6 +246,13 @@ class Deployment(object):
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
             deploy_dr.deploy()
 
+    def do_deploy_lvmo(self):
+        """
+        call lvm deploy
+
+        """
+        self.deploy_lvmo()
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -282,7 +291,7 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             self.deploy_acm_hub()
-
+        self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
@@ -902,8 +911,8 @@ class Deployment(object):
             }
             if ocs_version >= version.VERSION_4_5:
                 cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                    "limits": {"cpu": "100m", "memory": "100Mi"},
-                    "requests": {"cpu": "100m", "memory": "100Mi"},
+                    "limits": {"cpu": 1, "memory": "500Mi"},
+                    "requests": {"cpu": 1, "memory": "500Mi"},
                 }
         else:
             local_storage = config.DEPLOYMENT.get("local_storage")
@@ -1060,11 +1069,7 @@ class Deployment(object):
         self.set_rook_log_level()
 
         # get external cluster details
-        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
-            "ip_address"
-        ]
-        user = config.EXTERNAL_MODE["login"]["username"]
-        password = config.EXTERNAL_MODE["login"]["password"]
+        host, user, password = get_external_cluster_client()
         external_cluster = ExternalCluster(host, user, password)
         external_cluster.get_external_cluster_details()
 
@@ -1221,6 +1226,72 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+
+    def deploy_lvmo(self):
+        """
+        deploy lvmo for platform specific (for now only vsphere)
+        """
+        if not config.DEPLOYMENT["install_lvmo"]:
+            logger.warning("LVMO deployment will be skipped")
+            return
+
+        logger.info(f"Installing lvmo version {config.ENV_DATA['ocs_version']}")
+        lvmo_version = config.ENV_DATA["ocs_version"]
+        lvmo_version_without_period = lvmo_version.replace(".", "")
+        label_version = constants.LVMO_POD_LABEL
+        create_catalog_source()
+        cluster_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
+            f"lvm-cluster-{lvmo_version_without_period}.yaml",
+        )
+        # this is a workaround for 2101343
+        rolebinding_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
+        )
+        run_cmd(f"oc create -f {rolebinding_config_file} -n default")
+        # end of workaround
+        bundle_config_file = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
+        )
+        run_cmd(f"oc create -f {bundle_config_file} -n {self.namespace}")
+        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "controller_manager_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period][
+                "topolvm-controller_label"
+            ],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["topolvm-node_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=label_version[lvmo_version_without_period]["vg-manager_label"],
+            resource_count=1,
+            timeout=300,
+        )
+        catalgesource = run_cmd(
+            "oc -n openshift-marketplace get  "
+            "catalogsources.operators.coreos.com redhat-operators -o json"
+        )
+        json_cts = json.loads(catalgesource)
+        logger.info(
+            f"LVMO installed successfully from image {json_cts['spec']['image']}"
+        )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

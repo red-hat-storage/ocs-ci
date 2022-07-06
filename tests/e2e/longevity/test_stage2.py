@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.ocs.longevity_stage2 import stage2
+from ocs_ci.ocs.longevity import Longevity
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,10 @@ class TestLongevityStage2(E2ETest):
     """
 
     def test_longevity_stage2(
-        self, multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory
+        self,
+        project_factory,
+        multi_pvc_pod_lifecycle_factory,
+        multi_obc_lifecycle_factory,
     ):
         """
         Tests Longevity Testing - Stage 2
@@ -31,6 +34,11 @@ class TestLongevityStage2(E2ETest):
 
         # Num of OBCs is set as 0 owing to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2090968. As soon as the
         # issue gets resolved we will set it back to default.
-        stage2(
-            multi_pvc_pod_lifecycle_factory, multi_obc_lifecycle_factory, num_of_obcs=0
+        long = Longevity()
+        long.stage_2(
+            project_factory,
+            multi_pvc_pod_lifecycle_factory,
+            multi_obc_lifecycle_factory,
+            num_of_obcs=0,
+            run_time=180,
         )

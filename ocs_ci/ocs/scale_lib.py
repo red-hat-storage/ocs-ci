@@ -57,6 +57,7 @@ class FioPodScale(object):
         self._set_dc_deployment()
         self.namespace_list = list()
         self.kube_job_pvc_list, self.kube_job_pod_list = ([], [])
+        self.is_cleanup = False
 
     @property
     def kind(self):
@@ -239,6 +240,7 @@ class FioPodScale(object):
         io_runtime=None,
         pvc_size=None,
         max_pvc_size=105,
+        obj_name_prefix="obj",
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes
@@ -255,6 +257,7 @@ class FioPodScale(object):
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
             max_pvc_size (int): The max size of the pvc
+            obj_name_prefix (str): The prefix of the object name. The default value is 'obj'
 
         """
 
@@ -335,7 +338,7 @@ class FioPodScale(object):
                 rbd_pvc, fs_pvc, pod_running = self.create_multi_pvc_pod(
                     pvc_count=min_pvc_count,
                     pvcs_per_pod=pvc_per_pod_count,
-                    obj_name=f"obj{actual_itr_counter}",
+                    obj_name=f"{obj_name_prefix}{actual_itr_counter}",
                     start_io=start_io,
                     io_runtime=io_runtime,
                     pvc_size=pvc_size,
@@ -417,6 +420,8 @@ class FioPodScale(object):
         if self.ms_name:
             for name in self.ms_name:
                 machine.delete_custom_machineset(name)
+
+        self.is_cleanup = True
 
 
 def delete_objs_parallel(obj_list, namespace, kind):

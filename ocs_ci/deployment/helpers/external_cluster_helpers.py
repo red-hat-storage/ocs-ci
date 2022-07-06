@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
     ExternalClusterObjectStoreUserCreationFailed,
+    ExternalClusterCephfsMissing,
 )
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
@@ -65,7 +66,17 @@ class ExternalCluster(object):
         rgw_endpoint = get_rgw_endpoint()
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
+        # get ceph filesystem
+        ceph_fs_name = self.get_ceph_fs()
+
         params = f"--rbd-data-pool-name {defaults.RBD_NAME} --rgw-endpoint {rgw_endpoint_with_port}"
+
+        if config.ENV_DATA["restricted-auth-permission"]:
+            params = (
+                f"{params} --cluster-name {config.ENV_DATA['cluster_name']} --cephfs-filesystem-name "
+                f"{ceph_fs_name} --restricted-auth-permission true"
+            )
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
@@ -259,6 +270,24 @@ class ExternalCluster(object):
             user_details["keys"][0]["secret_key"],
         )
 
+    def get_ceph_fs(self):
+        """
+        Fetches the ceph filesystem name
+
+        Returns:
+            str: ceph filesystem name
+
+        Raises:
+            ExternalClusterCephfsMissing: in case of ceph filesystem doesn't exist
+
+        """
+        cmd = "ceph fs ls --format json"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        ceph_fs_list = json.loads(out)
+        if not ceph_fs_list:
+            raise ExternalClusterCephfsMissing
+        return ceph_fs_list[0]["name"]
+
 
 def generate_exporter_script():
     """
@@ -324,3 +353,20 @@ def get_rgw_endpoint():
             return rgw_endpoint
     if not rgw_endpoint:
         raise ExternalClusterRGWEndPointMissing
+
+
+def get_external_cluster_client():
+    """
+    Finding the client role node IP address.
+
+    Returns:
+        tuple: IP address, user, password of the client
+    """
+    user = config.EXTERNAL_MODE["login"]["username"]
+    password = config.EXTERNAL_MODE["login"]["password"]
+    nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
+    for each in nodes.values():
+        if "client" in each["role"]:
+            return (each["ip_address"], user, password)
+    logger.warning("No client role defined, using node1 address!")
+    return (nodes["node1"]["ip_address"], user, password)
