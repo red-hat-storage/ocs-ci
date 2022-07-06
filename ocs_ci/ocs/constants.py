@@ -1804,5 +1804,11 @@ LVMO_POD_LABEL = {
         "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
+    "411-old": {
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
+        "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
+        "vg-manager_label": "app.lvm.openshift.io=vg-manager",
+    },
 }
 LVM_PROVISIONER = "topolvm.cybozu.com"
