@@ -1222,8 +1222,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 if len(upgrade_history) > 1:
                     is_cluster_upgraded = True
                     original_installed_ocp_version = upgrade_history[-1]
+                    original_installed_ocp_version_major_minor = str(
+                        version.get_semantic_version(
+                            original_installed_ocp_version, only_major_minor=True
+                        )
+                    )
                     installer_release_branch = (
-                        f"release-{original_installed_ocp_version[0:3]}"
+                        f"release-{original_installed_ocp_version_major_minor}"
                     )
                     clone_repo(
                         constants.VSPHERE_INSTALLER_REPO,
