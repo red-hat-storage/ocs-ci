@@ -680,6 +680,13 @@ add_capacity = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+add_capacity_4_11 = {
+    "thin_sc": ("thin-link", By.ID),
+    "gp2_sc": ("gp2-link", By.ID),
+    "gp2-csi_sc": ("gp2-csi-link", By.ID),
+    "gp3-csi_sc": ("gp3-csi-link", By.ID),
+}
+
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -962,6 +969,7 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "add_capacity": {**add_capacity, **add_capacity_4_11},
     },
     "4.10": {
         "login": login,
