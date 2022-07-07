@@ -5052,13 +5052,14 @@ def nsfs_bucket_factory_fixture(
         # Let the account propagate through the system
         time.sleep(15)
         # Create a boto3 S3 resource for commmunication with the NSFS bucket
-        nsfs_s3_client = boto3.resource(
+        nsfs_s3_resource = boto3.resource(
             "s3",
             verify=False,
             endpoint_url=nsfs_obj.s3_creds["endpoint"],
             aws_access_key_id=nsfs_obj.s3_creds["access_key_id"],
             aws_secret_access_key=nsfs_obj.s3_creds["access_key"],
         )
+        nsfs_obj.s3_client = nsfs_s3_resource.meta.client
         # Create a new NSFS bucket
         # Follow this flow if the bucket should be created on top of an existing directory
         if nsfs_obj.mount_existing_dir:
@@ -5111,7 +5112,7 @@ def nsfs_bucket_factory_fixture(
         else:
             nsfs_obj.bucket_name = retry(CommandFailed, tries=4, delay=10)(
                 bucket_factory
-            )(s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health)[0].name
+            )(s3resource=nsfs_s3_resource, verify_health=nsfs_obj.verify_health)[0].name
         nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
 
     def nsfs_bucket_factory_cleanup():
