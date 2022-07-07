@@ -27,6 +27,10 @@ BMO_LABEL = "kernel-cache-dropper"
 
 
 class BenchmarkOperatorFIO(object):
+    """
+    Benchmark Operator FIO Class
+    """
+
     def setup_benchmark_fio(
         self,
         total_size=2,
@@ -53,12 +57,12 @@ class BenchmarkOperatorFIO(object):
         self.ns_obj = OCP(kind="namespace")
 
     def calc_number_servers_file_size(self):
-        if self.total_size < 30:
+        if self.total_size < 20:
             servers = self.total_size
             file_size = 1
         else:
-            servers = 30
-            file_size = int(self.total_size / 30)
+            file_size = int(self.total_size / 20)
+            servers = 21
         self.crd_data["spec"]["workload"]["args"]["filesize"] = f"{file_size}GiB"
         self.crd_data["spec"]["workload"]["args"][
             "storagesize"
@@ -83,6 +87,7 @@ class BenchmarkOperatorFIO(object):
                 log.warning("Labeling nodes failed, Not all workers node are labeled !")
 
     def clone_benchmark_operator(self):
+        log.info(f"Clone {BMO_REPO} Repo to local dir {self.local_repo}")
         git.Repo.clone_from(BMO_REPO, self.local_repo)
 
     def deploy(self):
@@ -90,6 +95,7 @@ class BenchmarkOperatorFIO(object):
         Deploy the benchmark-operator
 
         """
+        log.info("Run make deploy command")
         run("make deploy", shell=True, check=True, cwd=self.local_repo)
 
         sample = TimeoutSampler(
@@ -178,11 +184,15 @@ class BenchmarkOperatorFIO(object):
         )
 
 
-def get_file_size(expected_capacity_percent):
+def get_file_size(expected_used_capacity_percent):
     ceph_cluster = CephCluster()
     ceph_capacity = ceph_cluster.get_ceph_capacity()
     used_capcity_percent = get_percent_used_capacity()
-    expected_used_capacity_percent = expected_capacity_percent
-    return int(
-        (expected_used_capacity_percent - used_capcity_percent) / 100 * ceph_capacity
+    return (
+        int(
+            (expected_used_capacity_percent - used_capcity_percent)
+            / 100
+            * ceph_capacity
+        )
+        + 1
     )

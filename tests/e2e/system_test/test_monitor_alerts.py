@@ -14,7 +14,7 @@ class TestFullClusterMonitoring(E2ETest):
     def test_full_cluster_monitoring(
         self, benchmark_fio_factory_fixture, teardown_project_factory
     ):
-        size = get_file_size(50)
+        size = get_file_size(100)
         benchmark_fio_factory_fixture(total_size=size)
         prometheus = PrometheusAPI()
         log.info("Logging of all prometheus alerts started")
