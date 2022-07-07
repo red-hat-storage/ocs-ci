@@ -1,12 +1,19 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    skipif_ocs_version,
+    tier2,
+)
 from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("<4.9")
+@tier2
 class TestS3WithJavaSDK:
     @bugzilla("2064304")
     @polarion_id("OCS-3964")
