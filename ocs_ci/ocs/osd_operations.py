@@ -159,6 +159,7 @@ def osd_device_replacement(nodes):
                 constants.STATUS_RELEASED,
                 constants.STATUS_FAILED,
             ]
+
         assert (
             osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses
         ), logger.warning(
