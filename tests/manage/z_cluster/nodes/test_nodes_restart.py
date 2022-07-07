@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_no_lso,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @ignore_leftovers
 @skipif_vsphere_ipi
+@skipif_managed_service
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
