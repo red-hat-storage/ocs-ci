@@ -777,17 +777,28 @@ class OCP(object):
             wait=wait,
             selector=selector,
         )
+        resource = re.split(r"\s{2,}", resource)
+
         # get the list of titles
-        titles = re.sub(r"\s", ",", re.sub(r"\s{2,}", ",", resource))  # noqa: W605
-        titles = titles.split(",")
-        # Get the index of column
-        column_index = titles.index(column)
-        resource = shlex.split(resource)
+        titles = [
+            i for i in resource if (i.isupper() and i not in ("RWO", "RWX", "ROX"))
+        ]
+
         # Get the values from the output including access modes in capital
         # letters
         resource_info = [
             i for i in resource if (not i.isupper() or i in ("RWO", "RWX", "ROX"))
         ]
+        temp_list = shlex.split(resource_info[0])
+        for i in temp_list:
+            if i.isupper():
+                titles.append(i)
+            else:
+                resource_info[0] = i
+
+        # Get the index of column
+        column_index = titles.index(column)
+
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
