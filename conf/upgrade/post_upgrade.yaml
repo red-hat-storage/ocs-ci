@@ -1,0 +1,5 @@
+# Use this config file for execution done post upgrade. This will allow us to
+# report the post-upgrade in the mail subject.
+---
+REPORTING:
+  post_upgrade: true
