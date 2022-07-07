@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.pytest_customization.marks import (
@@ -44,7 +43,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @pre_upgrade
 @brown_squad
@@ -59,7 +58,7 @@ def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_i
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @post_upgrade
 @brown_squad
