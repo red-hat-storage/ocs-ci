@@ -21,6 +21,7 @@ from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers, performance_lib
@@ -51,8 +52,6 @@ class TestPvcSnapshotPerformance(PASTest):
         self,
         interface_iterate,
         storageclass_factory,
-        pvc_factory,
-        pod_factory,
         pvc_size,
     ):
         """
@@ -62,8 +61,6 @@ class TestPvcSnapshotPerformance(PASTest):
             interface_iterate: A fixture to iterate over ceph interfaces
             storageclass_factory: A fixture to create everything needed for a
                 storageclass
-            pvc_factory: A fixture to create new pvc
-            pod_factory: A fixture to create new pod
             pvc_size: The size of the PVC in Gi
 
         """
@@ -77,13 +74,28 @@ class TestPvcSnapshotPerformance(PASTest):
         elif self.interface == constants.CEPHBLOCKPOOL_THICK:
             self.sc = "RBD-Thick"
 
-        self.pvc_obj = pvc_factory(
-            interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
-        )
+        self.create_test_project()
 
-        self.pod_object = pod_factory(
-            interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name, size=pvc_size + "Gi", namespace=self.namespace
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
+
+        # Create a POD and attach it the the PVC
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise ex.PodNotCreated("Pod on PVC was not created.")
 
     def setup(self):
         """
@@ -248,6 +260,7 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.all_results["creation_speed"] = []
         self.full_results.all_results["restore_time"] = []
         self.full_results.all_results["restore_speed"] = []
+        self.full_results.all_results["restore_csi_time"] = []
         for test_num in range(self.tests_numbers):
             test_results = {
                 "test_num": test_num + 1,
@@ -337,7 +350,8 @@ class TestPvcSnapshotPerformance(PASTest):
             if self.interface == constants.CEPHFILESYSTEM:
                 restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
-            log.info("Resorting the PVC from Snapshot")
+            csi_start_time = self.get_time("csi")
+            log.info("Restoring the PVC from Snapshot")
             restore_pvc_obj = pvc.create_restore_pvc(
                 sc_name=sc_name,
                 snap_name=self.snap_obj.name,
@@ -364,12 +378,18 @@ class TestPvcSnapshotPerformance(PASTest):
             log.info(f'Snapshot restore time is : {test_results["restore"]["time"]}')
             log.info(f'restore speed is : {test_results["restore"]["speed"]} MB/sec')
 
+            test_results["restore"]["csi_time"] = performance_lib.csi_pvc_time_measure(
+                self.interface, restore_pvc_obj, "create", csi_start_time
+            )
+            log.info(
+                f'Snapshot csi restore time is : {test_results["restore"]["csi_time"]}'
+            )
+
             # Step 5. Attach a new pod to the restored PVC
             restore_pod_object = helpers.create_pod(
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
                 namespace=self.snap_obj.namespace,
-                pod_dict_path=constants.NGINX_POD_YAML,
             )
 
             # Confirm that the pod is running
@@ -404,8 +424,15 @@ class TestPvcSnapshotPerformance(PASTest):
 
             all_results.append(test_results)
 
+        # clean the enviroment
+        self.pod_object.delete()
+        self.pvc_obj.delete()
+        self.delete_test_project()
+
         # logging the test summary, all info in one place for easy log reading
-        c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime = (0 for i in range(5))
+        c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime, r_csi_runtime = (
+            0 for i in range(6)
+        )
 
         log.info("Test summary :")
         for tst in all_results:
@@ -414,6 +441,8 @@ class TestPvcSnapshotPerformance(PASTest):
             c_csi_runtime += tst["create"]["csi_time"]
             r_speed += tst["restore"]["speed"]
             r_runtime += tst["restore"]["time"]
+            r_csi_runtime += tst["restore"]["csi_time"]
+
             self.full_results.all_results["creation_time"].append(tst["create"]["time"])
             self.full_results.all_results["csi_creation_time"].append(
                 tst["create"]["csi_time"]
@@ -424,6 +453,9 @@ class TestPvcSnapshotPerformance(PASTest):
             self.full_results.all_results["restore_time"].append(tst["restore"]["time"])
             self.full_results.all_results["restore_speed"].append(
                 tst["restore"]["speed"]
+            )
+            self.full_results.all_results["restore_csi_time"].append(
+                tst["restore"]["csi_time"]
             )
             self.full_results.all_results["dataset_inMiB"] = tst["dataset"]
             log.info(
@@ -439,11 +471,13 @@ class TestPvcSnapshotPerformance(PASTest):
         avg_snap_c_speed = c_speed / self.tests_numbers
         avg_snap_r_time = r_runtime / self.tests_numbers
         avg_snap_r_speed = r_speed / self.tests_numbers
+        avg_snap_r_csi_time = r_csi_runtime / self.tests_numbers
         log.info(f" Average snapshot creation time is {avg_snap_c_time} sec.")
         log.info(f" Average csi snapshot creation time is {avg_snap_csi_c_time} sec.")
         log.info(f" Average snapshot creation speed is {avg_snap_c_speed} MiB/sec")
         log.info(f" Average snapshot restore time is {avg_snap_r_time} sec.")
         log.info(f" Average snapshot restore speed is {avg_snap_r_speed} MiB/sec")
+        log.info(f" Average snapshot restore csi time is {avg_snap_r_csi_time} sec.")
 
         self.full_results.add_key("avg_snap_creation_time_insecs", avg_snap_c_time)
         self.full_results.add_key(
@@ -452,6 +486,9 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.add_key("avg_snap_creation_speed", avg_snap_c_speed)
         self.full_results.add_key("avg_snap_restore_time_insecs", avg_snap_r_time)
         self.full_results.add_key("avg_snap_restore_speed", avg_snap_r_speed)
+        self.full_results.add_key(
+            "avg_snap_restore_csi_time_insecs", avg_snap_r_csi_time
+        )
 
         # Write the test results into the ES server
         log.info("writing results to elastic search server")
@@ -690,9 +727,9 @@ class TestPvcSnapshotPerformance(PASTest):
         log.info(f"Full test report for {interface}:")
         log.info(
             f"Test ran {self.tests_numbers} times, "
-            f"All snapshot creation results are {creation_times}"
+            f"All snapshot creation results are {creation_times} seconds"
         )
-        log.info(f"The average snapshot creation time is : {avg_c_time}")
+        log.info(f"The average snapshot creation time is : {avg_c_time} seconds")
         log.info(
             f"Test ran {self.tests_numbers} times, "
             f"All snapshot csi creation results are {csi_creation_times}"
