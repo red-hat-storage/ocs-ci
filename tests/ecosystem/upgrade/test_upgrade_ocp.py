@@ -164,4 +164,4 @@ class TestUpgradeOCP(ManageTest):
         # Increased timeout because of this bug:
         # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
         new_ceph_cluster.wait_for_rebalance(timeout=3000)
-        ceph_health_check(tries=90, delay=30)
+        ceph_health_check(tries=160, delay=30)
