@@ -1662,6 +1662,12 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
         try:
             for load_status in TimeoutSampler(300, 3, config.RUN.get, "load_status"):
                 if load_status in ["paused", "reduced"]:
+                    # Wait for 45 seconds for cluster load to pause/reduce effectively
+                    wait_time = 45
+                    log.info(
+                        f"Waiting for {wait_time} seconds for cluster load to pause/reduce..."
+                    )
+                    time.sleep(wait_time)
                     break
         except TimeoutExpiredError:
             log.error(
