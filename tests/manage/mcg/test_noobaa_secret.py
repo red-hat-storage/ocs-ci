@@ -122,7 +122,7 @@ class TestNoobaaSecrets:
         ), "Backingstores are not getting reconciled after changing linked secret credentials!"
         logger.info("Backingstores getting reconciled!")
 
-    def test_noobaa_secret_deletion(self, teardown_factory, mcg_obj):
+    def test_noobaa_secret_deletion_m1(self, teardown_factory, mcg_obj):
 
         # create secret
         try:
@@ -149,7 +149,6 @@ class TestNoobaaSecrets:
         aws_client.create_uls(name=first_uls_name, region="eu-central-1")
 
         # create backingstore using CLI and passing secret credentials
-        logger.info(f"Secret dict: {secret_dict}")
         access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
         secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
         first_bs_name = create_unique_resource_name(
@@ -170,7 +169,7 @@ class TestNoobaaSecrets:
             name=first_bs_name,
             method="cli",
             type="cloud",
-            uls_name=first_bs_name,
+            uls_name=first_uls_name,
             mcg_obj=mcg_obj,
         )
         teardown_factory(first_bs_obj)
@@ -223,4 +222,117 @@ class TestNoobaaSecrets:
         ), "[Not expected] Secret got deleted along when backingstores deleted!!"
         logger.info(
             "Secret remains even after the linked backingstores are deleted, as expected!"
+        )
+
+    def test_noobaa_secret_deletion_m2(self, teardown_factory, mcg_obj):
+
+        # create ULS names
+        try:
+            logger.info(
+                "Trying to load credentials from ocs-ci-data. "
+                "This flow is only relevant when running under OCS-QE environments."
+            )
+            secret_dict = update_config_from_s3().get("AUTH")
+        except (AttributeError, EndpointConnectionError):
+            logger.warning(
+                "Failed to load credentials from ocs-ci-data.\n"
+                "Your local AWS credentials might be misconfigured.\n"
+                "Trying to load credentials from local auth.yaml instead"
+            )
+            secret_dict = load_auth_config().get("AUTH", {})
+        cloud = "aws"
+        first_uls_name = create_unique_resource_name(
+            resource_description="uls", resource_type=cloud.lower()
+        )
+        second_uls_name = create_unique_resource_name(
+            resource_description="uls", resource_type=cloud.lower()
+        )
+        aws_client = S3Client(auth_dict=secret_dict["AWS"])
+        aws_client.create_uls(name=first_uls_name, region="eu-central-1")
+
+        # delete the secret created during the creation of ULS
+        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").delete(
+            resource_name=aws_client.secret.name
+        )
+        OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind="secret"
+        ).wait_for_delete(resource_name=aws_client.secret.name)
+
+        # create backingstore through CLI passing secret credentials
+        access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
+        secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+        first_bs_name = create_unique_resource_name(
+            resource_description="backingstore", resource_type=cloud.lower()
+        )
+        create_bs_using_cli(
+            mcg_obj=mcg_obj,
+            backingstore_name=first_bs_name,
+            access_key=access_key,
+            secret_key=secret_key,
+            uls_name=first_uls_name,
+            region="eu-central-1",
+        )
+        mcg_obj.check_backingstore_state(
+            backingstore_name=first_bs_name, desired_state=constants.BS_OPTIMAL
+        )
+        first_bs_obj = BackingStore(
+            name=first_bs_name,
+            method="cli",
+            type="cloud",
+            uls_name=first_uls_name,
+            mcg_obj=mcg_obj,
+        )
+        teardown_factory(first_bs_obj)
+
+        # create second backingstore using CLI and pass the secret credentials
+        aws_client.create_uls(name=second_uls_name, region="eu-central-1")
+        second_bs_name = create_unique_resource_name(
+            resource_description="backingstore", resource_type=cloud.lower()
+        )
+        create_bs_using_cli(
+            mcg_obj=mcg_obj,
+            backingstore_name=second_bs_name,
+            access_key=access_key,
+            secret_key=secret_key,
+            uls_name=second_uls_name,
+            region="eu-central-1",
+        )
+        mcg_obj.check_backingstore_state(
+            backingstore_name=second_bs_name, desired_state=constants.BS_OPTIMAL
+        )
+        second_bs_obj = BackingStore(
+            name=second_bs_name,
+            method="cli",
+            type="cloud",
+            uls_name=second_uls_name,
+            mcg_obj=mcg_obj,
+        )
+        teardown_factory(second_bs_obj)
+
+        secret_name = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
+        ).get(resource_name=second_bs_name)["spec"]["awsS3"]["secret"]["name"]
+
+        # delete first backingstore
+        first_bs_obj.delete()
+        logger.info(f"First backingstore {first_bs_name} deleted!")
+        assert (
+            OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").get(
+                resource_name=secret_name, dont_raise=True
+            )
+            is not None
+        ), "[Not expected] Secret got deleted along when first backingstore deleted!!"
+        logger.info("Secret exists after the first backingstore deletion!")
+
+        # delete second backingstore
+        second_bs_obj.delete()
+        logger.info(f"Second backingstore {second_bs_name} deleted!")
+        assert (
+            OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").get(
+                resource_name=secret_name, dont_raise=True
+            )
+            is None
+        ), "[Not expected] Secret still exists even after all backingstores linked are deleted!"
+        logger.info(
+            "Secret got deleted after the all the linked backingstores are deleted!"
         )
