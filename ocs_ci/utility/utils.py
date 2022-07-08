@@ -557,6 +557,9 @@ def exec_cmd(
     """
     Run an arbitrary command locally
 
+    If the command is grep and matching pattern is not found, then this function
+    returns "command terminated with exit code 1" in stderr.
+
     Args:
         cmd (str): command to run
         secrets (list): A list of secrets to be masked with asterisks
@@ -609,10 +612,16 @@ def exec_cmd(
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
-        raise CommandFailed(
-            f"Error during execution of command: {masked_cmd}."
-            f"\nError is {masked_stderr}"
-        )
+        if (
+            "grep" in masked_cmd
+            and b"command terminated with exit code 1" in completed_process.stderr
+        ):
+            log.info(f"No results found for grep command: {masked_cmd}")
+        else:
+            raise CommandFailed(
+                f"Error during execution of command: {masked_cmd}."
+                f"\nError is {masked_stderr}"
+            )
     return completed_process
 
 
