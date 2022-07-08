@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
@@ -62,11 +61,6 @@ class TestRbdSpaceReclaim(ManageTest):
         7. Verify the decreased used size of the RBD pool
         8. Verify the presence of other files in the folder
         """
-
-        # Wait for 45 seconds for cluster load to pause effectively
-        wait_time = 45
-        log.info(f"Waiting for {wait_time} seconds...")
-        time.sleep(wait_time)
 
         pvc_obj = self.pvc[0]
         pod_obj = self.pod[0]
