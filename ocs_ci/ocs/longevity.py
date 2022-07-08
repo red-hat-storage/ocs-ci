@@ -634,7 +634,9 @@ class Longevity(object):
 
         while datetime.now() < end_time:
             cycle_no += 1
-            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[STARTING STAGE2 CYCLE:{cycle_no}]#################"
+            )
 
             for bulk in (False, True):
                 current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
@@ -659,10 +661,12 @@ class Longevity(object):
                     )
                     time.sleep(delay)
 
-            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[ENDING STAGE2 CYCLE:{cycle_no}]#################"
+            )
 
             log.info(
-                f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
+                f"#################[WAITING FOR {delay} SECONDS AFTER STAGE2 {cycle_no} CYCLE.]#################"
             )
             time.sleep(delay)
 
@@ -700,7 +704,7 @@ class Longevity(object):
             log.info(f"Current time is {datetime.now()}")
             log.info(f"End time is {end_time}")
             log.info(
-                f"##############[STARTING CYCLE:{cycle_count}]####################"
+                f"##############[STARTING STAGE3 CYCLE:{cycle_count}]####################"
             )
             namespace = f"{STAGE_3_PREFIX}{cycle_count}"
             project_factory(project_name=namespace)
@@ -773,11 +777,11 @@ class Longevity(object):
                 )
 
             log.info(
-                f"##############[COMPLETED CYCLE:{cycle_count}]####################"
+                f"##############[COMPLETED STAGE3 CYCLE:{cycle_count}]####################"
             )
             cycle_count += 1
             log.info(
-                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT CYCLE]###########"
+                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT STAGE3 CYCLE]###########"
             )
 
     def stage_4(
@@ -826,7 +830,9 @@ class Longevity(object):
 
         while datetime.now() < end_time:
             cycle_no += 1
-            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[STARTING STGAE4 CYCLE:{cycle_no}]#################"
+            )
 
             for concurrent in (False, True):
                 current_ops = (
@@ -965,7 +971,9 @@ class Longevity(object):
                     raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
                 log.info("PVC deletion was successful.")
 
-            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[ENDING STAGE4 CYCLE:{cycle_no}]#################"
+            )
 
 
 def start_app_workload(
