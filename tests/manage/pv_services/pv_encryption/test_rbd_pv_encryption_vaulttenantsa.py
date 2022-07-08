@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     kms_config_required,
     skipif_managed_service,
+    config,
 )
 from ocs_ci.helpers.helpers import (
     create_pods,
@@ -23,6 +24,20 @@ from ocs_ci.utility import kms
 
 log = logging.getLogger(__name__)
 
+# Set the arg values based on whether HCP Vault is being used
+if config.ENV_DATA.get("vault_hcp"):
+    argvalues = [
+        pytest.param("v1", True, True, marks=pytest.mark.polarion_id("OCS-3839")),
+        pytest.param("v2", True, True, marks=pytest.mark.polarion_id("OCS-3968")),
+        pytest.param("v1", False, True, marks=pytest.mark.polarion_id("OCS-3840")),
+        pytest.param("v2", False, True, marks=pytest.mark.polarion_id("OCS-3967")),
+    ]
+else:
+    argvalues = [
+        pytest.param("v1", True, False, marks=pytest.mark.polarion_id("OCS-2799")),
+        pytest.param("v2", True, False, marks=pytest.mark.polarion_id("OCS-2800")),
+    ]
+
 
 @aws_platform_required
 @skipif_ocs_version("<4.9")
@@ -32,10 +47,7 @@ log = logging.getLogger(__name__)
 @skipif_proxy_cluster
 @pytest.mark.parametrize(
     argnames=["kv_version", "use_auth_path", "use_vault_namespace"],
-    argvalues=[
-        pytest.param("v1", True, False, marks=pytest.mark.polarion_id("OCS-2799")),
-        pytest.param("v2", True, False, marks=pytest.mark.polarion_id("OCS-2800")),
-    ],
+    argvalues=argvalues,
 )
 class TestRbdPvEncryptionVaultTenantSA(ManageTest):
     """

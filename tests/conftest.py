@@ -102,6 +102,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
+    get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
     get_system_architecture,
@@ -4411,9 +4412,12 @@ def pv_encryption_vault_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[new_kmsid] = vdict.pop(old_key)
+            vdict[new_kmsid][
+                "VAULT_ADDR"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
             if use_vault_namespace:
-                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault.vault_namespace
             vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
@@ -4708,8 +4712,8 @@ def vault_tenant_sa_setup_factory(request):
 
     def factory(
         kv_version,
-        use_auth_path=False,
-        use_vault_namespace=True,
+        use_auth_path=True,
+        use_vault_namespace=False,
         use_backend=False,
     ):
         """
@@ -4751,12 +4755,12 @@ def vault_tenant_sa_setup_factory(request):
         vault.create_token_reviewer_resources()
         if use_auth_path and use_vault_namespace:
             vault.vault_kube_auth_setup(
-                auth_path=vault_resource_name, auth_namespace=vault_resource_name
+                auth_path=vault_resource_name, auth_namespace=vault.vault_namespace
             )
         elif use_auth_path:
             vault.vault_kube_auth_setup(auth_path=vault_resource_name)
         elif use_vault_namespace:
-            vault.vault_kube_auth_setup(auth_namespace=vault_resource_name)
+            vault.vault_kube_auth_setup(auth_namespace=vault.vault_namespace)
         else:
             vault.vault_kube_auth_setup()
 
@@ -4770,10 +4774,31 @@ def vault_tenant_sa_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[vault.kmsid] = vdict.pop(old_key)
+            vdict[vault.kmsid][
+                "vaultAddress"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                vdict[vault.kmsid][
+                    "vaultClientCertFromSecret"
+                ] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_CERT",
+                    defaults.VAULT_DEFAULT_CLIENT_CERT,
+                )
+                vdict[vault.kmsid][
+                    "vaultClientCertKeyFromSecret"
+                ] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_KEY",
+                    defaults.VAULT_DEFAULT_CLIENT_KEY,
+                )
+            else:
+                vdict[vault.kmsid].pop("vaultClientCertFromSecret")
+                vdict[vault.kmsid].pop("vaultClientCertKeyFromSecret")
             if use_vault_namespace:
-                vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
-                vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
+                vdict[vault.kmsid]["vaultNamespace"] = vault.vault_namespace
+                vdict[vault.kmsid]["vaultAuthNamespace"] = vault.vault_namespace
             else:
                 vdict[vault.kmsid].pop("vaultNamespace")
                 vdict[vault.kmsid].pop("vaultAuthNamespace")
