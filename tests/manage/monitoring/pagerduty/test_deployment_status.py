@@ -65,11 +65,9 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     # get incidents from time when osd deployment was scaled down
     incidents = measure_stop_ceph_osd.get("pagerduty_incidents")
 
-    # check that incidents CephOSDDisdNotResponding and CephClusterWarningState
-    # alert are correctly raised
+    # check that incident CephOSDDisdUnavailable is correctly raised
     for target_label in [
         constants.ALERT_OSDDISKUNAVAILABLE,
-        constants.ALERT_CLUSTERWARNINGSTATE,
     ]:
         assert pagerduty.check_incident_list(
             summary=target_label,
