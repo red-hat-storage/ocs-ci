@@ -117,6 +117,7 @@ def process_ocsci_conf(arguments):
             "4.8",
             "4.8-eus",
             "4.9",
+            "4.99",
             "4.10",
             "4.11",
         ],
