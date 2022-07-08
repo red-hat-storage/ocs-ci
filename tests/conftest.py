@@ -1,4 +1,5 @@
 import base64
+import concurrent.futures
 import copy
 import logging
 import os
@@ -715,18 +716,18 @@ def storageclass_factory_fixture(
 
 
 @pytest.fixture(scope="class")
-def project_factory_class(request):
-    return project_factory_fixture(request)
+def project_factory_class(request, finalizer_thread_factory_class):
+    return project_factory_fixture(request, finalizer_thread_factory_class)
 
 
 @pytest.fixture(scope="session")
-def project_factory_session(request):
-    return project_factory_fixture(request)
+def project_factory_session(request, finalizer_thread_factory_session):
+    return project_factory_fixture(request, finalizer_thread_factory_session)
 
 
 @pytest.fixture()
-def project_factory(request):
-    return project_factory_fixture(request)
+def project_factory(request, finalizer_thread_factory):
+    return project_factory_fixture(request, finalizer_thread_factory)
 
 
 @pytest.fixture()
@@ -738,7 +739,7 @@ def project(project_factory):
     return project_obj
 
 
-def project_factory_fixture(request):
+def project_factory_fixture(request, finalizer_thread_factory):
     """
     Create a new project factory.
     Calling this fixture creates new project.
@@ -758,7 +759,7 @@ def project_factory_fixture(request):
         return proj_obj
 
     def finalizer():
-        delete_projects(instances)
+        finalizer_thread_factory(instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -834,24 +835,27 @@ def delete_projects(instances):
 
 
 @pytest.fixture(scope="class")
-def pvc_factory_class(request, project_factory_class):
-    return pvc_factory_fixture(request, project_factory_class)
-
-
-@pytest.fixture(scope="session")
-def pvc_factory_session(request, project_factory_session):
-    return pvc_factory_fixture(request, project_factory_session)
-
-
-@pytest.fixture(scope="function")
-def pvc_factory(request, project_factory):
+def pvc_factory_class(request, project_factory_class, finalizer_thread_factory_class):
     return pvc_factory_fixture(
-        request,
-        project_factory,
+        request, project_factory_class, finalizer_thread_factory_class
     )
 
 
-def pvc_factory_fixture(request, project_factory):
+@pytest.fixture(scope="session")
+def pvc_factory_session(
+    request, project_factory_session, finalizer_thread_factory_session
+):
+    return pvc_factory_fixture(
+        request, project_factory_session, finalizer_thread_factory_session
+    )
+
+
+@pytest.fixture(scope="function")
+def pvc_factory(request, project_factory, finalizer_thread_factory):
+    return pvc_factory_fixture(request, project_factory, finalizer_thread_factory)
+
+
+def pvc_factory_fixture(request, project_factory, finalizer_thread_factory):
     """
     Create a persistent Volume Claim factory. Calling this fixture creates new
     PVC. For custom PVC provide 'storageclass' parameter.
@@ -943,48 +947,36 @@ def pvc_factory_fixture(request, project_factory):
         """
         Delete the PVC
         """
-        pv_objs = []
-
-        # Get PV form PVC instances and delete PVCs
-        for instance in instances:
-            if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
-
+        pv_objs = finalizer_thread_factory(instances=instances)
         # Wait for PVs to delete
         # If they have ReclaimPolicy set to Retain then delete them manually
-        for pv_obj in pv_objs:
-            if (
-                pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
-                == constants.RECLAIM_POLICY_RETAIN
-            ):
-                helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
-                pv_obj.delete()
-                pv_obj.ocp.wait_for_delete(pv_obj.name)
-            else:
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+        finalizer_thread_factory(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
 
 
 @pytest.fixture(scope="class")
-def pod_factory_class(request, pvc_factory_class):
-    return pod_factory_fixture(request, pvc_factory_class)
+def pod_factory_class(request, pvc_factory_class, finalizer_thread_factory_class):
+    return pod_factory_fixture(
+        request, pvc_factory_class, finalizer_thread_factory_class
+    )
 
 
 @pytest.fixture(scope="session")
-def pod_factory_session(request, pvc_factory_session):
-    return pod_factory_fixture(request, pvc_factory_session)
+def pod_factory_session(request, pvc_factory_session, finalizer_thread_factory_session):
+    return pod_factory_fixture(
+        request, pvc_factory_session, finalizer_thread_factory_session
+    )
 
 
 @pytest.fixture(scope="function")
-def pod_factory(request, pvc_factory):
-    return pod_factory_fixture(request, pvc_factory)
+def pod_factory(request, pvc_factory, finalizer_thread_factory):
+    return pod_factory_fixture(request, pvc_factory, finalizer_thread_factory)
 
 
-def pod_factory_fixture(request, pvc_factory):
+def pod_factory_fixture(request, pvc_factory, finalizer_thread_factory):
     """
     Create a Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
@@ -1077,9 +1069,7 @@ def pod_factory_fixture(request, pvc_factory):
         """
         Delete the Pod or the DeploymentConfig
         """
-        for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(instance.name)
+        finalizer_thread_factory(instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3545,21 +3535,21 @@ def namespace_store_factory_session(
 
 
 @pytest.fixture(scope="session")
-def snapshot_factory_session(request):
-    return snapshot_factory_fixture(request)
+def snapshot_factory_session(request, finalizer_thread_factory_session):
+    return snapshot_factory_fixture(request, finalizer_thread_factory_session)
 
 
 @pytest.fixture(scope="class")
-def snapshot_factory_class(request):
-    return snapshot_factory_fixture(request)
+def snapshot_factory_class(request, finalizer_thread_factory_class):
+    return snapshot_factory_fixture(request, finalizer_thread_factory_class)
 
 
 @pytest.fixture(scope="function")
-def snapshot_factory(request):
-    return snapshot_factory_fixture(request)
+def snapshot_factory(request, finalizer_thread_factory):
+    return snapshot_factory_fixture(request, finalizer_thread_factory)
 
 
-def snapshot_factory_fixture(request):
+def snapshot_factory_fixture(request, finalizer_thread_factory):
     """
     Snapshot factory. Calling this fixture creates a volume snapshot from the
     specified PVC
@@ -3587,23 +3577,14 @@ def snapshot_factory_fixture(request):
         Delete the snapshots
 
         """
-        snapcontent_objs = []
 
         # Get VolumeSnapshotContent form VolumeSnapshots and delete
         # VolumeSnapshots
-        for instance in instances:
-            if not instance.is_deleted:
-                snapcontent_objs.append(
-                    helpers.get_snapshot_content_obj(snap_obj=instance)
-                )
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+        trailing_snapcontent_obj = finalizer_thread_factory(instances=instances)
 
         # Wait for VolumeSnapshotContents to be deleted
-        for snapcontent_obj in snapcontent_objs:
-            snapcontent_obj.ocp.wait_for_delete(
-                resource_name=snapcontent_obj.name, timeout=240
-            )
+        if len(trailing_snapcontent_obj) > 0:
+            finalizer_thread_factory(instances=trailing_snapcontent_obj)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3645,21 +3626,21 @@ def multi_snapshot_factory(snapshot_factory):
 
 
 @pytest.fixture(scope="class")
-def snapshot_restore_factory_class(request):
-    return snapshot_restore_factory_fixture(request)
+def snapshot_restore_factory_class(request, finalizer_thread_factory_class):
+    return snapshot_restore_factory_fixture(request, finalizer_thread_factory_class)
 
 
 @pytest.fixture(scope="session")
-def snapshot_restore_factory_session(request):
-    return snapshot_restore_factory_fixture(request)
+def snapshot_restore_factory_session(request, finalizer_thread_factory_session):
+    return snapshot_restore_factory_fixture(request, finalizer_thread_factory_session)
 
 
 @pytest.fixture(scope="function")
-def snapshot_restore_factory(request):
-    return snapshot_restore_factory_fixture(request)
+def snapshot_restore_factory(request, finalizer_thread_factory):
+    return snapshot_restore_factory_fixture(request, finalizer_thread_factory)
 
 
-def snapshot_restore_factory_fixture(request):
+def snapshot_restore_factory_fixture(request, finalizer_thread_factory):
     """
     Snapshot restore factory. Calling this fixture creates new PVC out of the
     specified VolumeSnapshot.
@@ -3755,17 +3736,13 @@ def snapshot_restore_factory_fixture(request):
         Delete the PVCs
 
         """
-        pv_objs = []
 
         # Get PV form PVC instances and delete PVCs
-        for instance in instances:
-            if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+        pv_objs = finalizer_thread_factory(instances=instances)
 
         # Wait for PVs to delete
-        helpers.wait_for_pv_delete(pv_objs)
+        if len(pv_objs) > 0:
+            helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3959,21 +3936,21 @@ def nb_ensure_endpoint_count(request):
 
 
 @pytest.fixture(scope="class")
-def pvc_clone_factory_class(request):
-    return pvc_clone_factory_fixture(request)
+def pvc_clone_factory_class(request, finalizer_thread_factory_class):
+    return pvc_clone_factory_fixture(request, finalizer_thread_factory_class)
 
 
 @pytest.fixture(scope="session")
-def pvc_clone_factory_session(request):
-    return pvc_clone_factory_fixture(request)
+def pvc_clone_factory_session(request, finalizer_thread_factory_session):
+    return pvc_clone_factory_fixture(request, finalizer_thread_factory_session)
 
 
 @pytest.fixture(scope="function")
-def pvc_clone_factory(request):
-    return pvc_clone_factory_fixture(request)
+def pvc_clone_factory(request, finalizer_thread_factory):
+    return pvc_clone_factory_fixture(request, finalizer_thread_factory)
 
 
-def pvc_clone_factory_fixture(request):
+def pvc_clone_factory_fixture(request, finalizer_thread_factory):
     """
     Calling this fixture creates a clone from the specified PVC
 
@@ -4052,17 +4029,13 @@ def pvc_clone_factory_fixture(request):
         Delete the cloned PVCs
 
         """
-        pv_objs = []
 
         # Get PV form PVC instances and delete PVCs
-        for instance in instances:
-            if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+        pv_objs = finalizer_thread_factory(instances=instances)
 
         # Wait for PVs to delete
-        helpers.wait_for_pv_delete(pv_objs)
+        if len(pv_objs) > 0:
+            helpers.wait_for_pv_delete(pv_objs)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4255,10 +4228,7 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         Delete the list of pod objects created
 
         """
-        for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+        finalizer_thread_factory(instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -5682,3 +5652,80 @@ def rdr_workload(request):
     workload.deploy_workload()
 
     return workload
+
+
+@pytest.fixture(scope="session")
+def finalizer_thread_factory_session(request):
+    return finalizer_thread_factory_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def finalizer_thread_factory_class(request):
+    return finalizer_thread_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
+def finalizer_thread_factory(request):
+    return finalizer_thread_factory_fixture(request)
+
+
+def finalizer_thread_factory_fixture(request):
+    """
+    Function can be called from finalizers to parallel the deletion of same objects
+
+    """
+
+    def factory(instances):
+
+        futures = []
+        instances_results = []
+        trailing_instances = []
+        if len(instances) > 0:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(instances))
+            for instance in instances:
+                if not instance.delete:
+                    kind = instance.kind
+
+                    def operation(instance_o):
+                        instance_o.delete(wait=True)
+
+                    if kind == constants.VOLUMESNAPSHOT:
+
+                        def operation(instance_o):
+                            trailing_instances.append(
+                                helpers.get_snapshot_content_obj(snap_obj=instance_o)
+                            )
+                            instance_o.delete(wait=True)
+
+                    if kind == constants.PVC:
+
+                        def operation(instance_o):
+                            trailing_instances.append(instance_o.backed_pv)
+                            instance_o.delete(wait=True)
+
+                    if kind == constants.PV:
+
+                        def operation(instance_o):
+                            if (
+                                instance_o.data.get("spec").get(
+                                    "persistentVolumeReclaimPolicy"
+                                )
+                                == constants.RECLAIM_POLICY_RETAIN
+                            ):
+                                helpers.wait_for_resource_state(
+                                    instance_o, constants.STATUS_RELEASED
+                                )
+                            instance_o.delete(wait=True)
+
+                    if kind == constants.NAMESPACE:
+
+                        def operation(instance_o):
+                            delete_projects(instance_o)
+
+                    futures.append(executor.submit(operation, instance))
+            for future in futures:
+                instances_results.append(concurrent.futures.as_completed(future))
+
+        return trailing_instances
+
+    return factory
