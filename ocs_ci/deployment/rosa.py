@@ -84,6 +84,7 @@ class ROSAOCP(BaseOCPDeployment):
                     "creating admin account for cluster in production environment with "
                     "appliance mode deployment is not supported"
                 )
+                return
             else:
                 rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
                 rosa_prod_cluster.create_admin_and_login()
