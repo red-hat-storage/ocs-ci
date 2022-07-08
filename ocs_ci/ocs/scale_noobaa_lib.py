@@ -73,6 +73,9 @@ def check_all_obc_reached_bound_state_in_kube_job(
         job_get_output = kube_job_obj.get(namespace=namespace).get("items")
         if job_get_output is not None and len(job_get_output) == no_of_obc:
             for i in range(no_of_obc):
+                log.info(f"-------I value-{i}----------")
+                log.info(f"-------no of obc value-{no_of_obc}----------")
+                log.info(f"------- job_get_output-{job_get_output}----------")
                 status = job_get_output[i].get("status").get("phase")
                 log.info(
                     f"obc {job_get_output[i].get('metadata').get('name')} status {status}"
