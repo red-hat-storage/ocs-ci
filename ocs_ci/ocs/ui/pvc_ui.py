@@ -65,7 +65,7 @@ class PvcUI(PageNavigator):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if (
             not self.ocp_version_full == version.VERSION_4_6
-            and ocs_version == version.VERSION_4_6
+            and not ocs_version == version.VERSION_4_6
         ):
             if (
                 sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
