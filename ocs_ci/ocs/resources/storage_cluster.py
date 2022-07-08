@@ -41,7 +41,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
-from ocs_ci.helpers.helpers import get_secret_names
+from ocs_ci.helpers.helpers import get_secret_names, get_cephfs_name
 from ocs_ci.utility import (
     localstorage,
     utils,
@@ -322,9 +322,12 @@ def ocs_install_verification(
                 config.DEPLOYMENT["external_mode"]
                 and config.ENV_DATA["restricted-auth-permission"]
             ):
-                rbd_node_secret = f"{constants.RBD_NODE_SECRET}-{cluster_name}-rbd"
+                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                rbd_node_secret = (
+                    f"{constants.RBD_NODE_SECRET}-{cluster_name}-{rbd_name}"
+                )
                 rbd_provisioner_secret = (
-                    f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-rbd"
+                    f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-{rbd_name}"
                 )
                 assert (
                     sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -359,12 +362,11 @@ def ocs_install_verification(
                 config.DEPLOYMENT["external_mode"]
                 and config.ENV_DATA["restricted-auth-permission"]
             ):
+                cephfs_name = get_cephfs_name()
                 cephfs_node_secret = (
-                    f"{constants.CEPHFS_NODE_SECRET}-{cluster_name}-cephfs"
+                    f"{constants.CEPHFS_NODE_SECRET}-{cluster_name}-{cephfs_name}"
                 )
-                cephfs_provisioner_secret = (
-                    f"{constants.CEPHFS_PROVISIONER_SECRET}-{cluster_name}-cephfs"
-                )
+                cephfs_provisioner_secret = f"{constants.CEPHFS_PROVISIONER_SECRET}-{cluster_name}-{cephfs_name}"
                 assert (
                     sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
                     == cephfs_node_secret
@@ -446,13 +448,12 @@ def ocs_install_verification(
     log.info("Verify CSI users and caps for external cluster")
     if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
         if config.ENV_DATA["restricted-auth-permission"]:
-            ceph_csi_users = []
-            for csi_user in defaults.ceph_csi_users:
-                csi_user_type = csi_user.split("-")[1]
-                csi_user_with_auth_permission = (
-                    f"{csi_user}-{cluster_name}-{csi_user_type}"
-                )
-                ceph_csi_users.append(csi_user_with_auth_permission)
+            ceph_csi_users = [
+                f"client.csi-cephfs-node-{cluster_name}-{cephfs_name}",
+                f"client.csi-cephfs-provisioner-{cluster_name}-{cephfs_name}",
+                f"client.csi-rbd-node-{cluster_name}-{rbd_name}",
+                f"client.csi-rbd-provisioner-{cluster_name}-{rbd_name}",
+            ]
             log.debug(f"CSI users for restricted auth permissions are {ceph_csi_users}")
             expected_csi_users = copy.deepcopy(ceph_csi_users)
         else:
