@@ -6,7 +6,7 @@ import random
 import time
 import tempfile
 import threading
-from concurrent.futures.thread import ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from datetime import datetime
 from math import floor
 from shutil import copyfile
@@ -363,9 +363,12 @@ def secret_factory_fixture(request):
         """
         Delete the RBD secrets
         """
-        for instance in instances:
+
+        def operation(instance):
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -583,9 +586,12 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
         """
         Delete the Ceph block pool
         """
-        for instance in instances:
+
+        def operation(instance):
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -706,9 +712,12 @@ def storageclass_factory_fixture(
         """
         Delete the storageclass
         """
-        for instance in instances:
+
+        def operation(instance):
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -806,7 +815,8 @@ def delete_projects(instances):
     instances (list): list of OCP objects (kind is Project)
 
     """
-    for instance in instances:
+
+    def operation(instance):
         try:
             ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
             events = ocp_event.get()
@@ -831,6 +841,8 @@ def delete_projects(instances):
         ocp.switch_to_default_rook_cluster_project()
         instance.delete(resource_name=instance.namespace)
         instance.wait_for_delete(instance.namespace, timeout=300)
+
+    thread_operation(operation, instances=instances)
 
 
 @pytest.fixture(scope="class")
@@ -943,28 +955,22 @@ def pvc_factory_fixture(request, project_factory):
         """
         Delete the PVC
         """
-        pv_objs = []
 
-        # Get PV form PVC instances and delete PVCs
-        for instance in instances:
+        def operation(instance):
             if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+                pv_obj = instance.backed_pv_obj
+                instance.delete(wait=True)
+                if (
+                    pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
+                    == constants.RECLAIM_POLICY_RETAIN
+                ):
+                    helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
+                    pv_obj.delete()
+                    pv_obj.ocp.wait_for_delete(pv_obj.name)
+                else:
+                    pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-        # Wait for PVs to delete
-        # If they have ReclaimPolicy set to Retain then delete them manually
-        for pv_obj in pv_objs:
-            if (
-                pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
-                == constants.RECLAIM_POLICY_RETAIN
-                and pv_obj is not None
-            ):
-                helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
-                pv_obj.delete()
-                pv_obj.ocp.wait_for_delete(pv_obj.name)
-            else:
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -1079,9 +1085,12 @@ def pod_factory_fixture(request, pvc_factory):
         """
         Delete the Pod or the DeploymentConfig
         """
-        for instance in instances:
+
+        def operation(instance):
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -1130,7 +1139,8 @@ def teardown_factory_fixture(request):
         """
         Delete the resources created in the test
         """
-        for instance in instances[::-1]:
+
+        def operation(instance):
             if not instance.is_deleted:
                 try:
                     if (instance.kind == constants.PVC) and (instance.reclaim_policy):
@@ -1149,6 +1159,8 @@ def teardown_factory_fixture(request):
                         f"Resource is already in deleted state, skipping this step"
                         f"Error: {ex}"
                     )
+
+        thread_operation(operation, instances=instances[::-1])
 
     request.addfinalizer(finalizer)
     return factory
@@ -1219,12 +1231,15 @@ def service_account_factory_fixture(request):
         """
         Delete the service account
         """
-        for instance in instances:
+
+        def operation(instance):
             helpers.remove_scc_policy(
                 sa_name=instance.name, namespace=instance.namespace
             )
             instance.delete()
             instance.ocp.wait_for_delete(resource_name=instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -1308,8 +1323,11 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         """
         Delete dc pods
         """
-        for instance in instances:
+
+        def operation(instance):
             delete_deploymentconfig_pods(instance)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -2041,11 +2059,13 @@ def cld_mgr(request, rgw_endpoint):
     cld_mgr = CloudManager()
 
     def finalizer():
-        for client in vars(cld_mgr):
+        def operation(client):
             try:
                 getattr(cld_mgr, client).secret.delete()
             except AttributeError:
                 log.info(f"{client} secret not found")
+
+        thread_operation(operation, instances=vars(cld_mgr))
 
     request.addfinalizer(finalizer)
 
@@ -2352,11 +2372,17 @@ def verify_rgw_restart_count_fixture(request):
 
         def finalizer():
             rgw_pods = get_rgw_pods()
-            for rgw_pod in rgw_pods:
+
+            def operation(rgw_pod):
                 rgw_pod.reload()
+
+            thread_operation(operation, rgw_pods)
             log.info("Verifying whether RGW pods changed after executing the test")
-            for rgw_pod in rgw_pods:
+
+            def operation1(rgw_pod):
                 assert rgw_pod.restart_count in initial_counts, "RGW pod restarted"
+
+            thread_operation(operation1, rgw_pods)
 
         request.addfinalizer(finalizer)
 
@@ -3589,23 +3615,17 @@ def snapshot_factory_fixture(request):
         Delete the snapshots
 
         """
-        snapcontent_objs = []
-
         # Get VolumeSnapshotContent form VolumeSnapshots and delete
         # VolumeSnapshots
-        for instance in instances:
+        def operation(instance):
             if not instance.is_deleted:
-                snapcontent_objs.append(
-                    helpers.get_snapshot_content_obj(snap_obj=instance)
+                snapcontent_obj = helpers.get_snapshot_content_obj(snap_obj=instance)
+                instance.delete(wait=True)
+                snapcontent_obj.ocp.wait_for_delete(
+                    resource_name=snapcontent_obj.name, timeout=240
                 )
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
 
-        # Wait for VolumeSnapshotContents to be deleted
-        for snapcontent_obj in snapcontent_objs:
-            snapcontent_obj.ocp.wait_for_delete(
-                resource_name=snapcontent_obj.name, timeout=240
-            )
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3757,17 +3777,16 @@ def snapshot_restore_factory_fixture(request):
         Delete the PVCs
 
         """
-        pv_objs = []
 
         # Get PV form PVC instances and delete PVCs
-        for instance in instances:
+        def operation(instance):
             if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
+                pv_obj = instance.backed_pv_obj
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+                helpers.wait_for_pv_delete([pv_obj])
 
-        # Wait for PVs to delete
-        helpers.wait_for_pv_delete(pv_objs)
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4054,17 +4073,22 @@ def pvc_clone_factory_fixture(request):
         Delete the cloned PVCs
 
         """
-        pv_objs = []
 
-        # Get PV form PVC instances and delete PVCs
-        for instance in instances:
+        def operation(instance):
             if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+                pv_obj = instance.backed_pv_obj
+                instance.delete(wait=True)
+                if (
+                    pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
+                    == constants.RECLAIM_POLICY_RETAIN
+                ):
+                    helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
+                    pv_obj.delete()
+                    pv_obj.ocp.wait_for_delete(pv_obj.name)
+                else:
+                    pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-        # Wait for PVs to delete
-        helpers.wait_for_pv_delete(pv_objs)
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4257,10 +4281,13 @@ def multiple_snapshot_and_clone_of_postgres_pvc_factory(
         Delete the list of pod objects created
 
         """
-        for instance in instances:
+
+        def operation(instance):
             if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(instance.name)
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4589,12 +4616,12 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
         Delete the cephblockpool from ui and if fails from cli
         """
 
-        for instance in instances:
+        def operation(instance):
             try:
                 instance.get()
             except CommandFailed:
                 log.warning("Pool is already deleted")
-                continue
+                return
             blockpool_ui_obj = BlockPoolUI(setup_ui)
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
@@ -4602,6 +4629,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
                     f"Could not delete block pool {instances.name} from UI."
                     f" Deleted from CLI"
                 )
+            thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4685,12 +4713,12 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             return sc_obj
 
     def finalizer():
-        for instance in instances:
+        def operation(instance):
             try:
                 instance.get()
             except CommandFailed:
                 log.warning("Storageclass is already deleted")
-                continue
+                return
             storageclass_ui_obj = StorageClassUI(setup_ui)
             if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
                 instance.delete()
@@ -4698,6 +4726,8 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                     f"Could not delete storageclass {instances.name} from UI."
                     f"Deleted from CLI"
                 )
+
+        thread_operation(operation, instances=instances)
 
     request.addfinalizer(finalizer)
     return factory
@@ -5147,10 +5177,13 @@ def nsfs_bucket_factory_fixture(
         Delete the NSFS mounting DeploymentConfig
 
         """
-        for rpc_bucket_name in created_rpc_buckets:
+
+        def operation(rpc_bucket_name):
             mcg_obj_session.send_rpc_query(
                 "bucket_api", "delete_bucket", {"name": rpc_bucket_name}
             )
+
+        thread_operation(operation, instances=created_rpc_buckets)
 
     request.addfinalizer(nsfs_bucket_factory_cleanup)
     return nsfs_bucket_factory_implementation
@@ -5657,11 +5690,14 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 
     def finalizer():
         log.info("Cleaning the fio_scale instances")
-        for consumer_i, fio_scale in consumer_index_per_fio_scale_dict.items():
+        # for consumer_i, fio_scale in consumer_index_per_fio_scale_dict.items():
+
+        def operation(consumer_i, fio_scale):
             config.switch_ctx(consumer_i)
             if not fio_scale.is_cleanup:
                 fio_scale.cleanup()
 
+        thread_operation(operation, instances=consumer_index_per_fio_scale_dict.items())
         if orig_index is not None:
             config.switch_ctx(orig_index)
 
@@ -5749,3 +5785,20 @@ def lvm_storageclass_factory_fixture(request, storageclass_factory):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def thread_operation(operation, instances):
+    """
+    Function can be called from finalizers to parallel the deletion of same objects
+    Args:
+        operation (func): a function that do the steps for one instance to delete it.
+        instances (list): list of objects to apply the function we got in operation.
+    """
+
+    futures = []
+    if len(instances) > 0:
+        executor = ThreadPoolExecutor(max_workers=len(instances))
+        for instance in instances:
+            futures.append(executor.submit(operation, instance=instance))
+        for future in futures:
+            as_completed(future.result())
