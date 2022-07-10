@@ -901,6 +901,7 @@ BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 SNO_BOOTSTRAP_IGN = "bootstrap-in-place-for-live-iso.ign"
+SNO_SSH_IGN = "ssh.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
@@ -1896,6 +1897,7 @@ FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/fsync.py")
 
 # Sno and lvmo constants
 SNO_NODE_NAME = "sno-edge-0"
+SNO_ADDITIONAL_WORKERS_NAME = "compute"
 LVMO_POD_LABEL = {
     "410": {
         "controller_manager_label": "control-plane=controller-manager",

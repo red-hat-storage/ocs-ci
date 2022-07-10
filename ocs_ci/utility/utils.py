@@ -2656,6 +2656,21 @@ def convert_yaml2tfvars(yaml):
             if key == "vm_dns_addresses":
                 fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
+            if key == "compute_ip_addresses":
+                new_val = "[{0}]".format(", ".join(map(str, val)))
+                new1 = new_val.replace("[", "")
+                new2 = new1.replace("]", "")
+                str_to_print = "["
+                last = len(val)
+                for ip in new2.split(","):
+                    last -= 1
+                    if last == 0:
+                        str_to_print += f"\"{ip.strip(' ')}\"]"
+                    else:
+                        str_to_print += f"\"{ip.strip(' ')}\","
+                log.info(str_to_print)
+                fd.write(f"compute_ip_addresses = {str_to_print}\n")
+                continue
 
             fd.write(key)
             fd.write(" = ")

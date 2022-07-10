@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 import inspect
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
@@ -3922,6 +3922,16 @@ def create_reclaim_space_cronjob(
         job_data["spec"]["schedule"] = "@" + schedule
     ocs_obj = create_resource(**job_data)
     return ocs_obj
+
+
+def parallel_func(operation, parameters_list):
+    if len(parameters_list) > 0:
+        futures = []
+        executor = ThreadPoolExecutor(max_workers=len(parameters_list))
+        for parameter_list in parameters_list:
+            futures.append(executor.submit(operation, parameter_list))
+        for future in futures:
+            as_completed(future.result())
 
 
 def get_cephfs_subvolumegroup():

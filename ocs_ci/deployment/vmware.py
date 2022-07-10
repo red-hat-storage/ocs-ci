@@ -19,6 +19,7 @@ import shutil
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
+from ocs_ci.helpers.helpers import parallel_func
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
@@ -508,6 +509,21 @@ class VSPHEREUPI(VSPHEREBASE):
             if config.ENV_DATA.get("sync_time_with_host"):
                 sync_time_with_host(vm_file, True)
 
+        def create_ssh_only_ign(self):
+
+            with open(
+                f"{constants.TEMPLATE_DEPLOYMENT_DIR_LVMO}/{constants.SNO_SSH_IGN}", "r"
+            ) as fn:
+                ign_data = json.load(fn)
+            ssh_file = open(f"{os.path.expanduser('~')}/.ssh/openshift-dev.pub", "r")
+            lines = ssh_file.readlines()
+            line = lines[0].strip()
+            ign_data["passwd"]["users"][0]["sshAuthorizedKeys"].append(line)
+            with open(
+                f"{self.cluster_path}/{constants.SNO_SSH_IGN}", "w"
+            ) as new_ssh_ign:
+                json.dump(ign_data, new_ssh_ign)
+
         def create_sno_iso_and_upload(self):
             """
             Creating iso file with values for SNO deployment
@@ -521,7 +537,43 @@ class VSPHEREUPI(VSPHEREBASE):
             config.ENV_DATA["vm_ip_address"] = ipam.assign_ip(
                 f"{constants.SNO_NODE_NAME}.{config.ENV_DATA['cluster_name']}", subnet
             )
-            logger.info(f"IP from ipam: {config.ENV_DATA['vm_ip_address']}")
+            logger.info(f"IP from ipam for SNO: {config.ENV_DATA['vm_ip_address']}")
+            if config.ENV_DATA["additional_worker"]:
+                config.ENV_DATA["compute_ip_addresses"] = []
+
+                config.ENV_DATA["workers_names"] = dict()
+                # config.ENV_DATA["worker_names"] = dict
+                for worker_num in range(0, int(config.ENV_DATA["additional_worker"])):
+                    config.ENV_DATA[
+                        f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}-ip"
+                    ] = ipam.assign_ip(
+                        f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}"
+                        f".{config.ENV_DATA['cluster_name']}",
+                        subnet,
+                    )
+                    config.ENV_DATA["compute_ip_addresses"].append(
+                        config.ENV_DATA[
+                            f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}-ip"
+                        ]
+                    )
+                    # full_worker_name = (
+                    #     f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}."
+                    #     f"{config.ENV_DATA['cluster_name']}"
+                    # )
+                    worker_name = (
+                        f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}"
+                    )
+                    config.ENV_DATA["workers_names"].update(
+                        {
+                            worker_name: config.ENV_DATA[
+                                f"{constants.SNO_ADDITIONAL_WORKERS_NAME}-{worker_num}-ip"
+                            ]
+                        }
+                    )
+
+                    logger.info(
+                        f"Ip from IPAM for {worker_name} is {config.ENV_DATA['workers_names'][worker_name]}"
+                    )
             self.change_ignition_ip_and_hostname(config.ENV_DATA["vm_ip_address"])
             os.chdir(self.cluster_path)
             iso_url_data = run_cmd(f"{self.installer} coreos print-stream-json")
@@ -530,8 +582,17 @@ class VSPHEREUPI(VSPHEREBASE):
                 "iso"
             ]["disk"]["location"]
             sno_image_name = f"{self.cluster_name}.iso"
+            worker_image_name = f"{self.cluster_name}-worker.iso"
             logger.info(f"Downloading rh-cos is {iso_url}")
             run_cmd(f"curl -L -o {sno_image_name} {iso_url}")
+            # copyfile(
+            #     "/home/srozen/cluster_path/cluster_path505037/srozen7-jul3-411.iso",
+            #     sno_image_name,
+            # )
+
+            if config.ENV_DATA["additional_worker"]:
+                worker_image_name = f"{self.cluster_name}-worker.iso"
+                copyfile(sno_image_name, worker_image_name)
 
             # Installing and compiling coreos-installer with prereq
             run_cmd(f"curl -o {self.cluster_path}/rustup.sh {constants.RUST_URL} -sSf")
@@ -557,12 +618,17 @@ class VSPHEREUPI(VSPHEREBASE):
             coreos_installer_exec = (
                 f"{constants.EXTERNAL_DIR}/coreos-install/usr/bin/coreos-installer"
             )
-            logger.info("coreos-installler installed successfully")
+            logger.info("coreos-installer installed successfully")
             run_cmd(
                 f"{coreos_installer_exec} iso ignition embed -fi iso.ign {sno_image_name}"
             )
+            if config.ENV_DATA["additional_worker"]:
+                self.create_ssh_only_ign()
+                run_cmd(
+                    f"{coreos_installer_exec} iso ignition embed -fi {constants.SNO_SSH_IGN} {worker_image_name}"
+                )
 
-            # connecteing to vsanDataStore and uploading iso file
+            # connecting to vsanDataStore and uploading iso file
             vsphere = VSPHERE(
                 config.ENV_DATA["vsphere_server"],
                 config.ENV_DATA["vsphere_user"],
@@ -572,15 +638,14 @@ class VSPHEREUPI(VSPHEREBASE):
             vsphere_content = vsphere.get_content
             client_cookie = vsphere_content.propertyCollector._stub.soapStub.cookie
             logger.info(f"this is the client cookie {client_cookie}")
-            remote_file = sno_image_name
-            resource = "/folder/ISO/" + remote_file
+            if config.ENV_DATA["additional_worker"]:
+                remote_file = [sno_image_name, worker_image_name]
+            else:
+                remote_file = [sno_image_name]
             params = {
                 "dsName": config.ENV_DATA["vsphere_datastore"],
                 "dcPath": config.ENV_DATA["vsphere_datacenter"],
             }
-            http_url = (
-                "https://" + config.ENV_DATA["vsphere_server"] + ":443" + resource
-            )
             cookie_name = client_cookie.split("=", 1)[0]
             cookie_value = client_cookie.split("=", 1)[1].split(";", 1)[0]
             cookie_path = (
@@ -594,21 +659,45 @@ class VSPHEREUPI(VSPHEREBASE):
             cookie = dict()
             cookie[cookie_name] = cookie_text
             logger.info(cookie)
-            verify_cert = False
-            headers = {"Content-Type": "application/octet-stream"}
-            with open(f"{self.cluster_path}/{sno_image_name}", "rb") as file_data:
-                requests.put(
-                    http_url,
-                    params=params,
-                    data=file_data,
-                    headers=headers,
-                    cookies=cookie,
-                    verify=verify_cert,
+
+            def upload_files(param_list):
+
+                remote_file_, params_, cookie_ = param_list
+                logger.info(f"uploading file {remote_file_}")
+                resource = "/folder/ISO/" + remote_file_
+                http_url = (
+                    "https://" + config.ENV_DATA["vsphere_server"] + ":443" + resource
                 )
-            logger.info(f"{sno_image_name} uploaded successfully to the VsanDataStore")
-            logger.info(f"Removing iso {sno_image_name} from {self.cluster_path}")
-            full_sno_image_path = os.path.join(self.cluster_path, sno_image_name)
-            os.remove(full_sno_image_path)
+                verify_cert = False
+                headers = {"Content-Type": "application/octet-stream"}
+                # with open(f"{self.cluster_path}/{remote_file_}", "rb") as file_data:
+                #     requests.put(
+                #         http_url,
+                #         params=params_,
+                #         data=file_data,
+                #         headers=headers,
+                #         cookies=cookie_,
+                #         verify=verify_cert,
+                #     )
+                # logger.info(
+                #     f"{remote_file_} uploaded successfully to the VsanDataStore"
+                # )
+                # logger.info(f"Removing iso {remote_file_} from {self.cluster_path}")
+                # full_image_path = os.path.join(self.cluster_path, remote_file_)
+                # os.remove(full_image_path)
+
+            if config.ENV_DATA["additional_worker"]:
+                upload_params = [
+                    [remote_file[0], params, cookie],
+                    [remote_file[1], params, cookie],
+                ]
+            else:
+                upload_params = [[remote_file[0], params, cookie]]
+            parallel_func(
+                upload_files,
+                upload_params,
+            )
+            logger.info(f"ISO is uploaded {remote_file}")
 
         def change_ignition_ip_and_hostname(self, ip_address):
             """
@@ -726,7 +815,6 @@ class VSPHEREUPI(VSPHEREBASE):
                 ConnectivityFail: Incase after the change we ping the ip_address. If it doesn't reply we raise.
 
             """
-
             # Connect to Vcenter
             vsphere = VSPHERE(
                 config.ENV_DATA["vsphere_server"],
@@ -1814,7 +1902,16 @@ def generate_terraform_vars_with_folder():
         config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
     if config.ENV_DATA["sno"]:
         config.ENV_DATA["iso_file"] = f"ISO/{config.ENV_DATA['cluster_name']}.iso"
+        config.ENV_DATA[
+            "worker_iso_file"
+        ] = f"ISO/{config.ENV_DATA['cluster_name']}-worker.iso"
         config.ENV_DATA["vm_template"] = "sno_template1"
+        if "additional_worker" in config.ENV_DATA:
+            config.ENV_DATA["worker_replicas"] = config.ENV_DATA["additional_worker"]
+            compute_ignition_path = os.path.join(
+                config.ENV_DATA["cluster_path"], constants.WORKER_IGN
+            )
+            config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
 
         create_terraform_var_file("terraform_4_5_sno.tfvars.j2")
     else:
@@ -1834,6 +1931,8 @@ def create_terraform_var_file(terraform_var_template):
     terraform_config_str = _templating.render_template(
         terraform_var_template_path, config.ENV_DATA
     )
+    # terraform_config_str = terraform_config_str.replace('"[', "[")
+    # terraform_config_str = terraform_config_str.replace(']"', "]")
 
     terraform_var_yaml = os.path.join(
         config.ENV_DATA["cluster_path"],
