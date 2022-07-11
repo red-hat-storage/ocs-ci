@@ -28,6 +28,7 @@ from ocs_ci.ocs.cluster import (
     is_ms_provider_cluster,
     is_ms_consumer_cluster,
 )
+from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
@@ -41,12 +42,27 @@ class TestNodesRestartMS(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def init_sanity(self):
+    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
-        Initialize Sanity instance
+        Initialize Sanity instance, and create pods and PVCs factory
 
         """
         self.sanity_helpers = Sanity()
+        self.create_pods_and_pvcs_factory = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        )
+
+    def create_resources(self):
+        """
+        Create resources on the consumers and run IO
+
+        """
+        if is_ms_consumer_cluster():
+            consumer_indexes = [config.cur_index]
+        else:
+            consumer_indexes = config.get_consumer_indexes_list()
+
+        self.create_pods_and_pvcs_factory(consumer_indexes=consumer_indexes)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -82,6 +98,8 @@ class TestNodesRestartMS(ManageTest):
         if is_ms_consumer_cluster():
             pytest.skip("The test will not run on a consumer cluster")
 
+        self.create_pods_and_pvcs_factory()
+
         osd_node_name = random.choice(get_osd_running_nodes())
         osd_node = get_node_objs([osd_node_name])[0]
 
@@ -110,12 +128,13 @@ class TestNodesRestartMS(ManageTest):
     @tier4a
     def test_nodes_restart(self, nodes):
         """
-        Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
+        Test nodes restart (from the platform layer)
 
         """
         ocp_nodes = get_node_objs()
         nodes.restart_nodes(nodes=ocp_nodes, wait=True)
         self.sanity_helpers.health_check()
+        self.create_pods_and_pvcs_factory()
 
     @tier4b
     @bugzilla("1754287")
@@ -129,3 +148,5 @@ class TestNodesRestartMS(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+
+        self.create_pods_and_pvcs_factory()
