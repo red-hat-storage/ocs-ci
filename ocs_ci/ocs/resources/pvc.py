@@ -153,6 +153,16 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
 
+    @property
+    def get_pv_volume_handle_name(self):
+        """
+        Fetch volume handle name from PV
+
+        Returns:
+            str: volume handle name from pv
+        """
+        return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
+
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC

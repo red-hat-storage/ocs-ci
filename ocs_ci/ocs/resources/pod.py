@@ -390,7 +390,8 @@ class Pod(OCS):
             self.io_params["filename"] = fio_filename
         self.io_params["iodepth"] = depth
         self.io_params["rate"] = rate
-        self.io_params["rate_process"] = rate_process
+        if rate_process is not None:
+            self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
         self.io_params["direct"] = direct
         if buffer_compress_percentage:
