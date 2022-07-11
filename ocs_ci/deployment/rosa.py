@@ -13,10 +13,18 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    get_ocp_version,
+    TimeoutSampler,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
+from ocs_ci.ocs.managedservice import (
+    update_non_ga_version,
+    update_pull_secret,
+    patch_consumer_toolbox,
+)
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -221,8 +229,12 @@ class ROSA(CloudDeploymentBase):
                 timeout=600,
             )
 
-        if config.DEPLOYMENT.get("pullsecret_workaround"):
+        if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
+            "not_ga_wa"
+        ):
             update_pull_secret()
+        if config.DEPLOYMENT.get("not_ga_wa"):
+            update_non_ga_version()
         if config.ENV_DATA.get("cluster_type") == "consumer":
             patch_consumer_toolbox()
 
