@@ -2044,6 +2044,19 @@ def check_ceph_health_after_add_capacity(
     ), "Data re-balance failed to complete"
 
 
+def change_ceph_backfillfull_ratio(backfillfull_ratio):
+    """
+    Change Ceph Backfillfull Ratio
+
+    Args:
+        backfillfull_ratio (int): backfillfull_ratio
+
+    """
+    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio/100))}"
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+
 def validate_existence_of_blocking_pdb():
     """
     Validate creation of PDBs for OSDs.

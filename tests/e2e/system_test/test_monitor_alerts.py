@@ -1,21 +1,35 @@
 import logging
 import time
+import pytest
 
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
+from ocs_ci.ocs.cluster import change_ceph_backfillfull_ratio
+from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
 
 class TestFullClusterMonitoring(E2ETest):
-    def test_full_cluster_monitoring(
-        self, benchmark_fio_factory_fixture, teardown_project_factory
-    ):
+    @pytest.fixture()
+    def monitor_teardown(self, request):
+        self.benchmark_obj = BenchmarkOperatorFIO()
+
+        def teardown():
+            self.benchmark_obj.cleanup()
+
+        request.addfinalizer(teardown)
+
+    def test_full_cluster_monitoring(self, teardown_project_factory):
+        log.info("Full fill the cluster")
         size = get_file_size(100)
-        benchmark_fio_factory_fixture(total_size=size)
+        self.benchmark_obj = BenchmarkOperatorFIO()
+        self.benchmark_obj.setup_benchmark_fio(size)
+        self.benchmark_obj.deploy()
         prometheus = PrometheusAPI()
         log.info("Logging of all prometheus alerts started")
         alerts_response = prometheus.get(
@@ -52,4 +66,48 @@ class TestFullClusterMonitoring(E2ETest):
         )
         helpers.wait_for_resource_state(
             resource=pvc_obj_fs, state=constants.STATUS_PENDING
+        )
+
+        change_ceph_backfillfull_ratio(95)
+        self.benchmark_obj.cleanup()
+
+        helpers.wait_for_resource_state(
+            resource=pvc_obj_blk, state=constants.STATUS_RUNNING
+        )
+        helpers.wait_for_resource_state(
+            resource=pvc_obj_fs, state=constants.STATUS_RUNNING
+        )
+
+        snap_blk_obj = pvc.create_pvc_snapshot(
+            pvc_name=pvc_obj_blk.name,
+            snap_yaml=constants.CSI_RBD_SNAPSHOT_YAML,
+            snap_name=f"snap-{pvc_obj_blk.name}",
+            namespace=pvc_obj_blk.namespace,
+            sc_name=constants.CEPHBLOCKPOOL_SC,
+            wait=False,
+        )
+
+        snap_fs_obj = pvc.create_pvc_snapshot(
+            pvc_name=pvc_obj_fs.name,
+            snap_yaml=constants.CSI_CEPHFS_SNAPSHOT_YAML,
+            snap_name=f"snap-{pvc_obj_fs.name}",
+            namespace=pvc_obj_fs.namespace,
+            sc_name=constants.CEPHFILESYSTEM_SC,
+            wait=False,
+        )
+
+        time.sleep(20)
+
+        snap_blk_obj.ocp.wait_for_resource(
+            condition="false",
+            resource_name=snap_blk_obj.name,
+            column=constants.STATUS_READYTOUSE,
+            timeout=60,
+        )
+
+        snap_blk_obj.ocp.wait_for_resource(
+            condition="false",
+            resource_name=snap_fs_obj.name,
+            column=constants.STATUS_READYTOUSE,
+            timeout=60,
         )
