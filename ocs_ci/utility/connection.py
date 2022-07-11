@@ -15,7 +15,7 @@ class Connection(object):
     A class that connects to remote server
     """
 
-    def __init__(self, host, user=None, private_key=None, password=None):
+    def __init__(self, host, user=None, private_key=None, password=None, stdout=False):
         """
         Initialize all required variables
 
@@ -24,12 +24,14 @@ class Connection(object):
             user (str): User name to connect
             private_key (str): Private key  to connect to load balancer
             password (password): Password for host
+            stdout (bool): output stdout to console
 
         """
         self.host = host
         self.user = user
         self.private_key = private_key
         self.password = password
+        self.stdout = stdout
         self.client = self._connect()
 
     def _connect(self):
@@ -79,6 +81,9 @@ class Connection(object):
         stdout = out.read().decode("ascii").strip("\n")
         stderr = err.read().decode("ascii").strip("\n")
         logger.debug(f"retcode: {retcode}")
-        logger.debug(f"stdout: {stdout}")
+        logger.info(f"stdout: {stdout}") if self.stdout else logger.debug(
+            f"stdout: {stdout}"
+        )
+        logger.info(f"stdout: {stdout}")
         logger.debug(f"stderr: {stderr}")
         return (retcode, stdout, stderr)

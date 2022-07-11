@@ -89,12 +89,13 @@ class TestLvmSnapshot(ManageTest):
         self.pod_obj.run_io(
             self.fs,
             size="5g",
-            rate="1500m",
+            rate="1500M",
             runtime=0,
             invalidate=0,
-            buffer_compress_percentage=60,
+            rate_process=None,
+            direct=1,
             buffer_pattern="0xdeadface",
-            bs="1024K",
+            bs="100M",
             jobs=1,
             readwrite="readwrite",
         )
@@ -164,12 +165,13 @@ class TestLvmSnapshot(ManageTest):
         restored_pod_obj.run_io(
             self.fs,
             size="1g",
-            rate="1500m",
+            rate="1500M",
             runtime=0,
             invalidate=0,
-            buffer_compress_percentage=60,
+            direct=1,
+            rate_process=None,
             buffer_pattern="0xdeadface",
-            bs="1024K",
+            bs="100M",
             jobs=1,
             readwrite="readwrite",
         )

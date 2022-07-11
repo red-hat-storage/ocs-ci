@@ -7,13 +7,17 @@ functional and proper configurations are made for interaction.
 """
 
 import base64
+import json
 import logging
 import random
 import re
 import threading
 import yaml
 import time
+import os
+
 from semantic_version import Version
+from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import (
@@ -21,6 +25,7 @@ from ocs_ci.ocs.exceptions import (
     PoolSizeWrong,
     PoolCompressionWrong,
     CommandFailed,
+    LvDataPercentSizeWrong,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -35,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
+from ocs_ci.ocs.node import get_node_ip_addresses
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
@@ -42,6 +48,8 @@ from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.utility.connection import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -2163,8 +2171,22 @@ class LVM(object):
     """
 
     def __init__(self):
-        self.lvmcluster = self.get_lvmcluster()
-        self.version = self.get_lvm_version()
+        self.lv_data = None
+        self.lvmcluster = None
+        self.pv_data = None
+        self.version = None
+        self.ip = None
+        self.vg_data = None
+        func_list = [
+            self.cluster_ip(),
+            self.get_lvmcluster(),
+            self.get_lvm_version(),
+            self.get_and_parse_pvs(),
+            self.get_and_parse_lvs(),
+            self.get_and_parse_vgs(),
+        ]
+
+        thread_init_class(func_list, shutdown=0)
 
     def get_lvmcluster(self):
 
@@ -2174,10 +2196,9 @@ class LVM(object):
             resource_name="lvmcluster",
         )
         lvmc_ocs = lvmc_cop.data
-        return lvmc_ocs
+        self.lvmcluster = lvmc_ocs
 
-    @staticmethod
-    def get_lvm_version():
+    def get_lvm_version(self):
         """
         Get redhat-operators version (4.10, 4.11)
         returns:
@@ -2196,7 +2217,7 @@ class LVM(object):
         pattern = re.compile(r"([^\.]*\.[^\.]*)")
         result = pattern.search(full_version)
         short_ver = result.group(1)
-        return short_ver
+        self.version = short_ver
 
     def get_lvm_thin_pool_config_overprovision_ratio(self):
         """
@@ -2230,6 +2251,262 @@ class LVM(object):
             "name"
         ]
 
+    def get_and_parse_pvs(self):
+        """
+        get "pvs --reportformat json" from server and parse some data, sets self.pv_data
+
+        """
+        cmd = "sudo pvs --reportformat json"
+        pvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+
+        pvs_json = json.loads(pvs_output)
+        items = pvs_json["report"][0]["pv"]
+        self.pv_data = {"pv_number": len(items)}
+        char_to_replace_in_size = {"<": "", "g": ""}
+        self.pv_data["pv_list"] = []
+        for pv in items:
+            size = pv["pv_size"].translate(str.maketrans(char_to_replace_in_size))
+            self.pv_data[pv["pv_name"]] = {"pv_size": size, "vg_name": pv["vg_name"]}
+            self.pv_data["pv_list"].append(pv["pv_name"])
+
+    def get_and_parse_lvs(self):
+        """
+        get "lvs --reportformat json" from server and parse some data, sets self.lv_data
+
+        """
+        cmd = "sudo lvs --reportformat json"
+        lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+        lvs_json = json.loads(lvs_output)
+        items = lvs_json["report"][0]["lv"]
+        self.lv_data = {"lv_number": len(items)}
+        char_to_replace_in_size = {"<": "", "g": ""}
+        self.lv_data["lv_list"] = []
+        for lv in items:
+            size = lv["lv_size"].translate(str.maketrans(char_to_replace_in_size))
+            self.lv_data[lv["lv_name"]] = {
+                "lv_size": size,
+                "vg_name": lv["vg_name"],
+                "lv_attr": lv["lv_attr"],
+                "pool_lv": lv["pool_lv"],
+                "origin": lv["origin"],
+                "data_percent": lv["data_percent"],
+                "metadata_percent": lv["metadata_percent"],
+                "move_pv": lv["move_pv"],
+                "mirror_log": lv["mirror_log"],
+                "copy_percent": lv["copy_percent"],
+                "convert_lv": lv["convert_lv"],
+            }
+            self.lv_data["lv_list"].append(lv["lv_name"])
+
+    def get_thin_pool_metadata(self):
+        """
+        Get thin pool metdata percent
+        Returns:
+            (str) metadata percent
+
+        """
+        self.get_and_parse_lvs()
+        return self.lv_data["thin-pool-1"]["metadata_percent"]
+
+    def get_and_parse_vgs(self):
+        """
+        get "vgs --reportformat json" from server and parse some data, sets self.vg_data
+
+        """
+        cmd = "sudo vgs --reportformat json"
+        lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+        lvs_json = json.loads(lvs_output)
+        char_to_replace_in_size = {"<": "", "g": ""}
+        items = lvs_json["report"][0]["vg"]
+        self.vg_data = {}
+        for vg in items:
+            vg_size = vg["vg_size"].translate(str.maketrans(char_to_replace_in_size))
+            vg_free = vg["vg_free"].translate(str.maketrans(char_to_replace_in_size))
+            self.vg_data[vg["vg_name"]] = {
+                "pv_count": vg["pv_count"],
+                "lv_count": vg["lv_count"],
+                "snap_count": vg["snap_count"],
+                "vg_attr": vg["vg_attr"],
+                "vg_size": vg_size,
+                "vg_free": vg_free,
+            }
+
+    def get_vg_size(self):
+        """
+        gets vgs size
+        Returns:
+            (str) vg_size
+
+        """
+        self.get_and_parse_vgs()
+        return self.vg_data["vg1"]["vg_size"]
+
+    def get_vg_free(self):
+        """
+        gets vg free
+        Returns:
+            (str) vg_free
+
+        """
+        self.get_and_parse_vgs()
+        return self.vg_data["vg1"]["vg_free"]
+
+    def get_lv_data_percent_of_pvc(self, pvc_obj):
+        """
+        Get lv data percent by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): data percent of lv under pvc
+        """
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+        pv_volume_handle = ""
+        if type(pvc_obj) is PVC:
+            pv_volume_handle = pvc_obj.get_pv_volume_handle_name
+        elif type(pvc_obj) is OCS:
+            pv_volume_handle_dummy = self.get_lv_name_from_snapshot(pvc_obj)
+            pv_volume_handle = self.lv_data[pv_volume_handle_dummy]["origin"]
+
+        return self.lv_data[pv_volume_handle]["data_percent"]
+
+    def get_lv_size_of_pvc(self, pvc_obj):
+        """
+        Get lv size by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): size of lv under pvc
+        """
+
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+        pv_volume_handle = ""
+        if type(pvc_obj) is PVC:
+            pv_volume_handle = pvc_obj.get_pv_volume_handle_name
+        elif type(pvc_obj) is OCS:
+            pv_volume_handle_dummy = self.get_lv_name_from_snapshot(pvc_obj)
+            pv_volume_handle = self.lv_data[pv_volume_handle_dummy]["origin"]
+        return self.lv_data[pv_volume_handle]["lv_size"]
+
+    def get_thin_pool1_size(self):
+        """
+        gets thin-pool size
+        Returns:
+            (str) thin pool size
+
+        """
+        return self.lv_data["thin-pool-1"]["lv_size"]
+
+    def get_thin_pool1_data_percent(self):
+        self.get_and_parse_lvs()
+        return self.lv_data["thin-pool-1"]["data_percent"]
+
+    def get_lv_name_from_pvc(self, pvc_obj):
+        """
+        Get lv name by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): lv name under pvc
+
+        """
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+
+        return pvc_obj.get_pv_volume_handle_name
+
+    @staticmethod
+    def get_lv_name_from_snapshot(snap_obj):
+        """
+        Get lv name by snapshot obj
+        Args:
+            snap_obj (OCS): snapshot to find lv name
+        Returns:
+            (str): lv name
+
+        """
+
+        snapcontent_name = snap_obj.data["status"]["boundVolumeSnapshotContentName"]
+        snapcontent = OCP(
+            kind=constants.VOLUMESNAPSHOTCONTENT, resource_name=snapcontent_name
+        )
+        return snapcontent.data["status"]["snapshotHandle"]
+
+    def compare_percent_data_from_pvc(self, pvc_obj, data_size):
+        """
+        Compare data percentage from data send to lv data measure in lvs
+        Args:
+            pvc_obj (PVC, OCS): pvc or snaphost or restored pvc
+            data_size (float): the expected data to have on the pvc
+        Raise:
+            (exception): LvDataPercentSizeWrong
+
+
+        """
+        pvc_data_percent_float = self.get_lv_data_percent_of_pvc(pvc_obj=pvc_obj)
+        pvc_size = 0
+        if type(pvc_obj) is PVC:
+            raw_size = pvc_obj.data["spec"]["resources"]["requests"]["storage"]
+            if raw_size.isdigit():
+
+                pvc_size = (
+                    float(pvc_obj.data["spec"]["resources"]["requests"]["storage"])
+                    / 1024
+                    / 1024
+                    / 1024
+                )
+            else:
+                pvc_size = float("".join([i for i in raw_size if i.isdigit()]))
+        if type(pvc_obj) is OCS:
+            snapcontent_name = pvc_obj.data["status"]["boundVolumeSnapshotContentName"]
+            snapcontent = OCP(
+                kind=constants.VOLUMESNAPSHOTCONTENT, resource_name=snapcontent_name
+            )
+            sp_content_restored_size = snapcontent.data["status"]["restoreSize"]
+            pvc_size = sp_content_restored_size / 1024 / 1024 / 1024
+        pvc_expected_data_percent = data_size / pvc_size * 100
+
+        pvc_data_percent = float(pvc_data_percent_float)
+        if abs(pvc_expected_data_percent - pvc_data_percent) > 0.5:
+            failed_lv_name = self.get_lv_name_from_pvc(pvc_obj=pvc_obj)
+            raise LvDataPercentSizeWrong(
+                f"❌ Written percent data for pvc {pvc_obj.name} should be "
+                f"{pvc_expected_data_percent} but is lv {failed_lv_name} data percent"
+                f"is {pvc_data_percent}"
+            )
+        else:
+            logger.info(
+                f"✅ Pvc {pvc_obj.name} utilization is {pvc_data_percent} and expected is {pvc_expected_data_percent}"
+            )
+
+    def cluster_ip(self):
+        """
+        Get cluster ip address for ssh connections, sets self.ip
+
+        """
+        node_ip_dict = get_node_ip_addresses(ipkind="InternalIP")
+        self.ip = node_ip_dict[constants.SNO_NODE_NAME]
+
+    def exec_cmd_on_cluster_node(self, cmd):
+        """
+        Exec cmd on SNO node with ssh
+        Args:
+            cmd (str): command to send to server
+        Return:
+            (str) output from server.
+        """
+        node_ssh = Connection(
+            host=self.ip,
+            user="core",
+            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+            stdout=True,
+        )
+
+        return_output = node_ssh.exec_cmd(cmd=cmd)
+        return_stdout = return_output[1]
+        return return_stdout
+
 
 def check_clusters():
     """
@@ -2238,7 +2515,7 @@ def check_clusters():
     """
 
     try:
-        LVM()
+        OCP(kind="lvmcluster", resource_name="lvmcluster")
         config.RUN["lvm"] = True
     except CommandFailed:
         config.RUN["lvm"] = False
