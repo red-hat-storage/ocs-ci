@@ -1,16 +1,15 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_lvm_not_installed
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_lvm_not_installed,
+    acceptance,
+)
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
-
-from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.cluster import LVM
-from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.exceptions import Md5CheckFailed
 
@@ -54,18 +53,8 @@ class TestLvmSnapshot(ManageTest):
         self.proj = self.proj_obj.namespace
 
     @pytest.fixture()
-    def storageclass(self, volume_binding_mode, storageclass_factory_class):
-        if volume_binding_mode == constants.WFFC_VOLUMEBINDINGMODE:
-            sc_ocp_obj = OCP(kind="StorageClass", resource_name=constants.LVM_SC)
-            self.sc_obj = OCS(**sc_ocp_obj.data)
-        elif volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-            sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
-            sc_obj["metadata"]["name"] = create_unique_resource_name(
-                resource_description="immediate-test",
-                resource_type="storageclass",
-            )
-            sc_obj["volumeBindingMode"] = constants.IMMEDIATE_VOLUMEBINDINGMODE
-            self.sc_obj = storageclass_factory_class(custom_data=sc_obj)
+    def storageclass(self, lvm_storageclass_factory_class, volume_binding_mode):
+        self.sc_obj = lvm_storageclass_factory_class(volume_binding=volume_binding_mode)
 
     @pytest.fixture()
     def pvc(self, pvc_factory_class, volume_mode, volume_binding_mode):
@@ -99,7 +88,7 @@ class TestLvmSnapshot(ManageTest):
 
         self.pod_obj.run_io(
             self.fs,
-            size="25g",
+            size="5g",
             rate="1500m",
             runtime=0,
             invalidate=0,
@@ -123,6 +112,7 @@ class TestLvmSnapshot(ManageTest):
         )
 
     @tier1
+    @acceptance
     @skipif_lvm_not_installed
     @skipif_ocs_version("<4.10")
     def test_create_clone_from_pvc(
@@ -173,7 +163,7 @@ class TestLvmSnapshot(ManageTest):
 
         restored_pod_obj.run_io(
             self.fs,
-            size="10g",
+            size="1g",
             rate="1500m",
             runtime=0,
             invalidate=0,
