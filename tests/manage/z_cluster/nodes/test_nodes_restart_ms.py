@@ -8,10 +8,8 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
     ManageTest,
-    cloud_platform_required,
     bugzilla,
     managed_service_required,
-    skipif_ms_consumer,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -25,7 +23,11 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.cluster import ceph_health_check, is_ms_provider_cluster
+from ocs_ci.ocs.cluster import (
+    ceph_health_check,
+    is_ms_provider_cluster,
+    is_ms_consumer_cluster,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,6 @@ class TestNodesRestartMS(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier4a
-    @skipif_ms_consumer
     def test_osd_node_restart_and_check_osd_pods_status(self, nodes):
         """
         1) Restart one of the osd nodes.
@@ -77,6 +78,10 @@ class TestNodesRestartMS(ManageTest):
         3) Wait for the node to reach Ready state.
         3) Check that the new osd pods with the same ids start on the same node.
         """
+        # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
+        if is_ms_consumer_cluster():
+            pytest.skip("The test will not run on a consumer cluster")
+
         osd_node_name = random.choice(get_osd_running_nodes())
         osd_node = get_node_objs([osd_node_name])[0]
 
@@ -103,23 +108,13 @@ class TestNodesRestartMS(ManageTest):
         )
 
     @tier4a
-    @pytest.mark.parametrize(
-        argnames=["force"],
-        argvalues=[
-            pytest.param(*[True], marks=pytest.mark.polarion_id("OCS-894")),
-            pytest.param(
-                *[False],
-                marks=[pytest.mark.polarion_id("OCS-895"), cloud_platform_required],
-            ),
-        ],
-    )
-    def test_nodes_restart(self, nodes, force):
+    def test_nodes_restart(self, nodes):
         """
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
 
         """
         ocp_nodes = get_node_objs()
-        nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
+        nodes.restart_nodes(nodes=ocp_nodes, wait=True)
         self.sanity_helpers.health_check()
 
     @tier4b
