@@ -1531,7 +1531,7 @@ def clone_openshift_installer():
     if Version.coerce(ocp_version) >= Version.coerce("4.5"):
         if config.ENV_DATA["sno"]:
             constants.VSPHERE_INSTALLER_REPO = (
-                "https://github.com/shyRozen/installer.git"
+                "https://gitlab.cee.redhat.com/srozen/installer.git"
             )
             clone_repo(
                 url=constants.VSPHERE_INSTALLER_REPO,

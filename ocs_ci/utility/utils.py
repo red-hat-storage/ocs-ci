@@ -2127,8 +2127,8 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         if "coreos" not in location:
             installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
             remote_output = run_cmd(f"git -C {installer_dir} remote -v")
-            if (("shyRozen" in remote_output) and ("openshift" in url)) or (
-                ("openshift" in remote_output) and ("shyRozen" in url)
+            if (("srozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("srozen" in url)
             ):
                 shutil.rmtree(installer_dir)
                 log.info(
