@@ -5,7 +5,6 @@ import logging
 from ocs_ci.utility import utils, nfs_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
-from functools import partial
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -101,21 +100,6 @@ class TestNfsEnable(ManageTest):
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.test_folder = "test_nfs"
-
-        pod_functions = {
-            "cephfsplugin": partial(
-                pod.get_plugin_pods, interface=constants.CEPHBLOCKPOOL
-            ),
-            "cephfsplugin_provisioner": partial(pod.get_cephfsplugin_provisioner_pods),
-        }
-
-        # Get number of pods of type 'cephfs plugin' and 'cephfs plugin provisioner' pods
-        self.num_of_cephfsplugin_pods = len(pod_functions["cephfsplugin"]())
-        log.info(f"number of pods, {self.num_of_cephfsplugin_pods}")
-        self.num_of_cephfsplugin_provisioner_pods = len(
-            pod_functions["cephfsplugin_provisioner"]()
-        )
-        log.info(f"number of pods, {self.num_of_cephfsplugin_provisioner_pods}")
         utils.exec_cmd(cmd="mkdir -p " + self.test_folder)
 
         # Enable nfs feature
@@ -124,8 +108,6 @@ class TestNfsEnable(ManageTest):
             self.storage_cluster_obj,
             self.config_map_obj,
             self.pod_obj,
-            self.num_of_cephfsplugin_pods,
-            self.num_of_cephfsplugin_provisioner_pods,
             self.namespace,
         )
 

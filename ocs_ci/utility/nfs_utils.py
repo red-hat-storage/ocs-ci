@@ -10,6 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 
+
 log = logging.getLogger(__name__)
 
 
@@ -17,8 +18,6 @@ def nfs_enable(
     storage_cluster_obj,
     config_map_obj,
     pod_obj,
-    num_of_cephfsplugin_pods,
-    num_of_cephfsplugin_provisioner_pods,
     namespace,
 ):
     """
@@ -60,7 +59,6 @@ def nfs_enable(
 
     # Check csi-nfsplugin and csi-nfsplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
-        resource_count=num_of_cephfsplugin_pods,
         condition=constants.STATUS_RUNNING,
         selector="app=csi-nfsplugin",
         dont_allow_other_resources=True,
@@ -68,7 +66,6 @@ def nfs_enable(
     )
 
     assert pod_obj.wait_for_resource(
-        resource_count=num_of_cephfsplugin_provisioner_pods,
         condition=constants.STATUS_RUNNING,
         selector="app=csi-nfsplugin-provisioner",
         dont_allow_other_resources=True,
