@@ -431,7 +431,12 @@ class PageNavigator(BaseUI):
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
-        self.do_click(locator=self.page_nav["overview_page"])
+        if Version.coerce(self.ocp_version) <= Version.coerce("4.8"):
+            self.do_click(locator=self.page_nav["overview_page"])
+        else:
+            logger.info("Navigating to ODF tab")
+            self.do_click(locator=self.page_nav["odf_tab"])
+            self.page_has_loaded()
 
     def navigate_odf_overview_page(self):
         """
@@ -670,9 +675,26 @@ class PageNavigator(BaseUI):
         Navigate to block pools page
 
         """
-        logger.info("Navigate to block pools page")
-        self.navigate_to_ocs_operator_page()
-        self.do_click(locator=self.page_nav["block_pool_link"])
+        if self.ocp_version_full <= version.VERSION_4_8:
+            logger.info("Navigate to block pools page")
+            self.navigate_to_ocs_operator_page()
+            self.do_click(locator=self.page_nav["block_pool_link"])
+        else:
+            self.navigate_odf_overview_page()
+            logger.info("Navigating to Storage System")
+            validation_4_9 = locators[get_ocp_version()]["validation"]
+            self.do_click(
+                validation_4_9["storage_systems"],
+                enable_screenshot=False,
+            )
+            self.do_click(
+                validation_4_9["ocs-storagecluster-storagesystem"],
+                enable_screenshot=False,
+            )
+            self.do_click(
+                validation_4_9["blockpools"],
+                enable_screenshot=False,
+            )
 
     def wait_for_namespace_selection(self, project_name):
         """

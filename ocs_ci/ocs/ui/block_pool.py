@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class BlockPoolUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         ocp_version = get_ocp_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.bp_loc = locators[ocp_version]["block_pool"]
         self.sc_loc = locators[ocp_version]["storageclass"]
 
@@ -72,9 +74,16 @@ class BlockPoolUI(PageNavigator):
         self.navigate_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
-        pool_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR), pool_name, 5
-        )
+        if self.ocp_version_full >= version.VERSION_4_9:
+            pool_existence = self.wait_until_expected_text_is_found(
+                (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
+            )
+        else:
+            pool_existence = self.wait_until_expected_text_is_found(
+                (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR),
+                pool_name,
+                5,
+            )
         logger.info(f"Pool name {pool_name} existence is {pool_existence}")
         return pool_existence
 
@@ -89,16 +98,20 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is not found in pool list, otherwise false
 
         """
-
         self.navigate_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
-        self.do_click((f"{pool_name}", By.LINK_TEXT))
+        if self.ocp_version_full <= version.VERSION_4_8:
+            self.do_click((f"{pool_name}", By.LINK_TEXT))
+        else:
+            self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
+
         self.do_click(self.bp_loc["actions_inside_pool"])
         self.do_click(self.bp_loc["delete_pool_inside_pool"])
         self.do_click(self.bp_loc["confirm_delete_inside_pool"])
         # wait for pool to deleted
         time.sleep(2)
+        logger.info(f"Checking if {pool_name} exists in the Block Pools UI list.")
         return not self.check_pool_existence(pool_name)
 
     def edit_pool_parameters(self, pool_name, replica=3, compression=True):
@@ -173,3 +186,22 @@ class BlockPoolUI(PageNavigator):
                     raise PoolStateIsUnknow(
                         f"pool {pool_name} is in unexpected state {pool_state}"
                     )
+
+    def pool_raw_capacity_loaded(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is loaded
+        or returns False if the capacity is not loaded.
+        """
+        self.navigate_overview_page()
+        self.navigate_block_pool_page()
+        self.page_has_loaded()
+        if self.ocp_version_full <= version.VERSION_4_8:
+            self.do_click((f"{pool_name}", By.LINK_TEXT))
+        else:
+            self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
+        time.sleep(5)
+        raw_capacity_loaded = self.check_element_text(
+            (f"//div[@class='ceph-raw-card-legend__title']", By.XPATH),
+            "Available",
+        )
+        return raw_capacity_loaded

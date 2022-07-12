@@ -861,6 +861,15 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
+    "volume_binding_mode": (
+        "button[id='storage-class-volume-binding-mode']",
+        By.CSS_SELECTOR,
+    ),
+    "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
+    "storage_class_breadcrumb": (
+        "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
+        By.XPATH,
+    ),
 }
 
 storageclass_4_9 = {
@@ -1177,6 +1186,7 @@ locators = {
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "storageclass": {**storageclass, **storageclass_4_9},
+        "block_pool": block_pool,
     },
     "4.8": {
         "login": login,

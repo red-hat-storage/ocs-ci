@@ -324,6 +324,10 @@ class PoolCephValueNotMatch(Exception):
     pass
 
 
+class BlockPoolRawCapacityNotLoaded(Exception):
+    pass
+
+
 class StorageClassNotDeletedFromUI(Exception):
     pass
 
