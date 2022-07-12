@@ -25,7 +25,7 @@ class TestUserInterfaceValidation(object):
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class):
         """
-        Validate User Interface
+        Validate User Interface of OCS/ODF dashboard
 
         Args:
             setup_ui_class: login function on conftest file

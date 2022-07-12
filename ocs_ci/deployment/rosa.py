@@ -8,14 +8,23 @@ import logging
 import os
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
+from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    get_ocp_version,
+    TimeoutSampler,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
+from ocs_ci.ocs.managedservice import (
+    update_non_ga_version,
+    update_pull_secret,
+    patch_consumer_toolbox,
+)
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -59,7 +68,7 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         if (
-            config.ENV_DATA["appliance_mode"]
+            config.ENV_DATA.get("appliance_mode", False)
             and config.ENV_DATA.get("cluster_type", "") == "provider"
         ):
             rosa.appliance_mode_cluster(self.cluster_name)
@@ -69,11 +78,27 @@ class ROSAOCP(BaseOCPDeployment):
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
-        ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
         password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
-        ocm.get_kubeadmin_password(self.cluster_name, password_path)
+
+        # generate kubeconfig and kubeadmin-password files
+        if config.ENV_DATA["ms_env_type"] == "staging":
+            ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
+            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+        if config.ENV_DATA["ms_env_type"] == "production":
+            if config.ENV_DATA.get("appliance_mode"):
+                logger.info(
+                    "creating admin account for cluster in production environment with "
+                    "appliance mode deployment is not supported"
+                )
+                return
+            else:
+                rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
+                rosa_prod_cluster.create_admin_and_login()
+                rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
+                rosa_prod_cluster.generate_kubeadmin_password_file()
+
         self.test_cluster()
 
     def destroy(self, log_level="DEBUG"):
@@ -86,10 +111,13 @@ class ROSAOCP(BaseOCPDeployment):
         """
         cluster_details = ocm.get_cluster_details(self.cluster_name)
         cluster_id = cluster_details.get("id")
-        ocm.destroy_cluster(self.cluster_name)
+        delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
+        if not delete_status:
+            ocm.destroy_cluster(self.cluster_name)
+        logger.info("Waiting for ROSA cluster to be uninstalled")
         sample = TimeoutSampler(
-            timeout=1000,
-            sleep=20,
+            timeout=7200,
+            sleep=30,
             func=self.cluster_present,
             cluster_name=self.cluster_name,
         )
@@ -201,8 +229,12 @@ class ROSA(CloudDeploymentBase):
                 timeout=600,
             )
 
-        if config.DEPLOYMENT.get("pullsecret_workaround"):
+        if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
+            "not_ga_wa"
+        ):
             update_pull_secret()
+        if config.DEPLOYMENT.get("not_ga_wa"):
+            update_non_ga_version()
         if config.ENV_DATA.get("cluster_type") == "consumer":
             patch_consumer_toolbox()
 

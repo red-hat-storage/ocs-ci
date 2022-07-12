@@ -1,7 +1,11 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_resource,
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -351,7 +355,11 @@ def template_pvc(
     pvc_data["metadata"]["namespace"] = namespace
     pvc_data["spec"]["accessModes"] = [access_mode]
     pvc_data["spec"]["resources"]["requests"]["storage"] = size
-    pvc_data["spec"]["storageClassName"] = storageclass
+    pvc_data["spec"]["storageClassName"] = (
+        constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        if storagecluster_independent_check()
+        else storageclass
+    )
     return pvc_data
 
 

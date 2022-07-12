@@ -641,28 +641,36 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                     pv_name = pvc_name[i].backed_pv
                     if op in ["all", "create"]:
                         if re.search(f"provision.*{name}.*started", line):
-                            results[name]["create"][
-                                "start"
-                            ] = extruct_timestamp_from_log(line)
+                            if results[name]["create"]["start"] is None:
+                                results[name]["create"][
+                                    "start"
+                                ] = extruct_timestamp_from_log(line)
                         if re.search(f"provision.*{name}.*succeeded", line):
-                            results[name]["create"]["end"] = extruct_timestamp_from_log(
-                                line
-                            )
-                            results[name]["create"]["time"] = calculate_operation_time(
-                                name, results[name]["create"]
-                            )
+                            if results[name]["create"]["end"] is None:
+                                results[name]["create"][
+                                    "end"
+                                ] = extruct_timestamp_from_log(line)
+                                results[name]["create"][
+                                    "time"
+                                ] = calculate_operation_time(
+                                    name, results[name]["create"]
+                                )
                     if op in ["all", "delete"]:
                         if re.search(f'delete "{pv_name}": started', line):
-                            results[name]["delete"][
-                                "start"
-                            ] = extruct_timestamp_from_log(line)
+                            if results[name]["delete"]["start"] is None:
+                                results[name]["delete"][
+                                    "start"
+                                ] = extruct_timestamp_from_log(line)
                         if re.search(f'delete "{pv_name}": succeeded', line):
-                            results[name]["delete"]["end"] = extruct_timestamp_from_log(
-                                line
-                            )
-                            results[name]["delete"]["time"] = calculate_operation_time(
-                                name, results[name]["delete"]
-                            )
+                            if results[name]["delete"]["end"] is None:
+                                results[name]["delete"][
+                                    "end"
+                                ] = extruct_timestamp_from_log(line)
+                                results[name]["delete"][
+                                    "time"
+                                ] = calculate_operation_time(
+                                    name, results[name]["delete"]
+                                )
 
     # Getting times from CSI log - if needed
     del_pv_names = []
@@ -680,33 +688,37 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         del_pv_names[i] = line.split("(")[1].split(")")[0]
                     if op in ["all", "create"]:
                         if f"Req-ID: {pv_name} GRPC call:" in line:
-                            results[name]["csi_create"][
-                                "start"
-                            ] = extruct_timestamp_from_log(line)
+                            if results[name]["csi_create"]["start"] is None:
+                                results[name]["csi_create"][
+                                    "start"
+                                ] = extruct_timestamp_from_log(line)
                         if f"Req-ID: {pv_name} GRPC response:" in line:
-                            results[name]["csi_create"][
-                                "end"
-                            ] = extruct_timestamp_from_log(line)
-                            results[name]["csi_create"][
-                                "time"
-                            ] = calculate_operation_time(
-                                name, results[name]["csi_create"]
-                            )
+                            if results[name]["csi_create"]["end"] is None:
+                                results[name]["csi_create"][
+                                    "end"
+                                ] = extruct_timestamp_from_log(line)
+                                results[name]["csi_create"][
+                                    "time"
+                                ] = calculate_operation_time(
+                                    name, results[name]["csi_create"]
+                                )
                     if op in ["all", "delete"]:
                         if del_pv_names[i]:
                             if f"Req-ID: {del_pv_names[i]} GRPC call:" in line:
-                                results[name]["csi_delete"][
-                                    "start"
-                                ] = extruct_timestamp_from_log(line)
+                                if results[name]["csi_delete"]["start"] is None:
+                                    results[name]["csi_delete"][
+                                        "start"
+                                    ] = extruct_timestamp_from_log(line)
                             if f"Req-ID: {del_pv_names[i]} GRPC response:" in line:
-                                results[name]["csi_delete"][
-                                    "end"
-                                ] = extruct_timestamp_from_log(line)
-                                results[name]["csi_delete"][
-                                    "time"
-                                ] = calculate_operation_time(
-                                    name, results[name]["csi_delete"]
-                                )
+                                if results[name]["csi_delete"]["end"] is None:
+                                    results[name]["csi_delete"][
+                                        "end"
+                                    ] = extruct_timestamp_from_log(line)
+                                    results[name]["csi_delete"][
+                                        "time"
+                                    ] = calculate_operation_time(
+                                        name, results[name]["csi_delete"]
+                                    )
 
     logger.debug(f"All results are : {json.dumps(results, indent=3)}")
     return results

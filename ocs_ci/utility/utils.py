@@ -14,6 +14,7 @@ import subprocess
 import time
 import traceback
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -438,7 +439,9 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
@@ -451,6 +454,8 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -458,7 +463,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (str) Decoded stdout of command
     """
-    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    completed_process = exec_cmd(
+        cmd, secrets, timeout, ignore_error, threading_lock, **kwargs
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -544,7 +551,9 @@ def run_cmd_multicluster(
     return completed_process
 
 
-def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def exec_cmd(
+    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+):
     """
     Run an arbitrary command locally
 
@@ -556,6 +565,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -573,6 +584,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -581,6 +594,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -1925,7 +1940,9 @@ def get_testrun_name():
         )
         if baremetal_config:
             testrun_name = f"LSO {baremetal_config} {testrun_name}"
-
+        post_upgrade = config.REPORTING.get("post_upgrade", "")
+        if post_upgrade:
+            post_upgrade = "post-upgrade"
         testrun_name = (
             f"{testrun_name}"
             f"{get_az_count()}AZ "
@@ -1933,7 +1950,7 @@ def get_testrun_name():
             f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
-            f"{markers}"
+            f"{markers} {post_upgrade}".rstrip()
         )
     testrun_name = (
         f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
@@ -2006,6 +2023,10 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     run_cmd(
         f"oc wait --for condition=ready pod "
@@ -2018,7 +2039,18 @@ def ceph_health_check_base(namespace=None):
         f"-o jsonpath='{{.items[0].metadata.name}}'",
         timeout=60,
     )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
+
+    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    try:
+        health = run_cmd(ceph_health_cmd)
+    except CommandFailed as ex:
+        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+            log.info("Patch the consumer rook-ceph-tools deployment")
+            patch_consumer_toolbox()
+            health = run_cmd(ceph_health_cmd)
+        else:
+            raise ex
+
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
@@ -2085,6 +2117,24 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         git_params = ""
     else:
         raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("shyRozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("shyRozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
 
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)

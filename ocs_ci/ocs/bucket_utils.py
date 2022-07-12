@@ -238,7 +238,7 @@ def copy_objects(
 
 
 def copy_random_individual_objects(
-    podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
+    podobj, file_dir, target, amount, pattern="test-obj-", s3_obj=None, **kwargs
 ):
     """
     Generates random objects and then copies them individually one after the other
@@ -640,7 +640,8 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"]["pvPool"]["resources"]["requests"]["storage"] = str(size) + "Gi"
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
-    bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    if storage_class:
+        bs_data["spec"]["pvPool"]["storageClass"] = storage_class
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -658,10 +659,13 @@ def cli_create_pv_backingstore(
         storage_class (str): which storage class to use
 
     """
-    mcg_obj.exec_mcg_cmd(
+    cmd = (
         f"backingstore create pv-pool {backingstore_name} --num-volumes "
-        f"{vol_num} --pv-size-gb {size} --storage-class {storage_class}"
+        f"{vol_num} --pv-size-gb {size}"
     )
+    if storage_class:
+        cmd += f" --storage-class {storage_class}"
+    mcg_obj.exec_mcg_cmd(cmd)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
 
@@ -677,7 +681,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=240,
+        timeout=300,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,

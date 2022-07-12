@@ -40,6 +40,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -315,10 +317,6 @@ class CephCluster(object):
                 and version.get_semantic_ocs_version_from_config()
                 == version.VERSION_4_9
                 and config.DEPLOYMENT.get("live_deployment")
-                and version.get_semantic_version(
-                    config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
-                )
-                == version.VERSION_4_10
             ):
                 logger.info("skipping noobaa health check due to bug 2075422")
                 return
@@ -856,20 +854,38 @@ class CephCluster(object):
             logger.error(err_msg)
             raise exceptions.CephHealthException(err_msg)
 
-    def delete_filesystem(self, fs_name):
+    def delete_filesystem(self):
         """
-        Delete a ceph filesystem - not the default one - from the cluster
+        Delete the ceph filesystem from the cluster, and wait until it recreated,
+        then create the subvolumegroup on it.
 
-        Args:
-            fs_name (str): the name of the filesystem to delete
         """
-        # Make sure the the default filesystem is not deleted.
-        if fs_name == "ocs-storagecluster-cephfilesystem":
-            return
+        fs_name = "ocs-storagecluster-cephfilesystem"
 
         # Delete the filesystem
-        self.CEPHFS.delete(resource_name=fs_name)
-        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+        try:
+            self.CEPHFS.delete(resource_name=fs_name)
+        except Exception as ex:
+            logger.warning(f"Cephfs filesystem deletion failed ({ex}).")
+
+        # The ceph filesystem is re-created automaticly
+        logger.info(f"Wait until the CephFS {fs_name} is re-created")
+        # wait 20 Sec. until the filesystem is fully created.
+        time.sleep(20)
+        try:
+            self.CEPHFS.wait_for_resource(
+                resource_name=fs_name,
+                timeout=120,
+                condition=constants.STATUS_READY,
+                column="PHASE",
+            )
+        except Exception as ex:
+            logger.warning(f"The CephFS filesystem failed to re-creste ({ex})")
+        logger.info(f"The CephFS {fs_name} re-created.")
+        logger.info("Try to re-create the subvolumegroup")
+        cmd = f"ceph fs subvolumegroup create {fs_name} csi"
+        self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        logger.info("The subvolumegroup was created.")
 
     def get_blockpool_status(self, poolname=None):
         """
@@ -2054,6 +2070,20 @@ def is_managed_service_cluster():
     return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
 
 
+def is_ms_consumer_cluster():
+    """
+    Check if the cluster is a managed service consumer cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service consumer cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
@@ -2124,3 +2154,131 @@ class CephClusterExternal(CephCluster):
                 f"PVC {pvc_obj.name} is not Bound"
             }
             logger.info(f"PVC {pvc_obj.name} is in Bound state")
+
+
+class LVM(object):
+    """
+    class for lvm cluster
+
+    """
+
+    def __init__(self):
+        self.lvmcluster = self.get_lvmcluster()
+        self.version = self.get_lvm_version()
+
+    def get_lvmcluster(self):
+
+        lvmc_cop = OCP(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            kind="lvmcluster",
+            resource_name="lvmcluster",
+        )
+        lvmc_ocs = lvmc_cop.data
+        return lvmc_ocs
+
+    @staticmethod
+    def get_lvm_version():
+        """
+        Get redhat-operators version (4.10, 4.11)
+        returns:
+            (str) lvmo version
+        """
+        redhat_operators_catalogesource_ocp = OCP(
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            kind="catalogsource",
+            resource_name="redhat-operators",
+        )
+        redhat_operators_catalogesource_ocs = OCS(
+            **redhat_operators_catalogesource_ocp.data
+        )
+        image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+        full_version = image.split(":")[1]
+        pattern = re.compile(r"([^\.]*\.[^\.]*)")
+        result = pattern.search(full_version)
+        short_ver = result.group(1)
+        return short_ver
+
+    def get_lvm_thin_pool_config_overprovision_ratio(self):
+        """
+        Get overprovisionRatio from lvmcluster
+        returns:
+            (int) overprovisionRatio
+
+        """
+
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "overprovisionRatio"
+        ]
+
+    def get_lvm_thin_pool_config_size_percent(self):
+        """
+        get sizePercent from lvmcluster
+        returns:
+            (int) sizePercent
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "sizePercent"
+        ]
+
+    def get_lvm_thin_pool(self):
+        """
+        get thinpool name.
+        returns:
+            (str) thinpool name
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "name"
+        ]
+
+
+def check_clusters():
+    """
+    Test if lvm or cephcluster is installed and set config.RUN values for conditions
+
+    """
+
+    try:
+        LVM()
+        config.RUN["lvm"] = True
+    except CommandFailed:
+        config.RUN["lvm"] = False
+    except FileNotFoundError:
+        logger.info(
+            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
+        )
+        if "install_lvmo" in config.DEPLOYMENT:
+            config.RUN["lvm"] = True
+        else:
+            config.RUN["lvm"] = False
+    try:
+        CephCluster()
+        config.RUN["cephcluster"] = True
+    except CommandFailed:
+        config.RUN["cephcluster"] = False
+    except FileNotFoundError:
+        logger.info(
+            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
+        )
+        if config.ENV_DATA["skip_ocs_deployment"]:
+            config.RUN["cephcluster"] = False
+        else:
+            config.RUN["cephcluster"] = True
+
+
+def get_lvm_full_version():
+    """
+    Get redhat-operators version (4.11-xxx)
+    returns:
+        (str) lvmo full version
+    """
+    redhat_operators_catalogesource_ocp = OCP(
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        kind="catalogsource",
+        resource_name="redhat-operators",
+    )
+    redhat_operators_catalogesource_ocs = OCS(
+        **redhat_operators_catalogesource_ocp.data
+    )
+    image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+    full_version = image.split(":")[1]
+    return full_version

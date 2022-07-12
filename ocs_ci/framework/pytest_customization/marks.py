@@ -379,7 +379,7 @@ skipif_ui_not_support = pytest.mark.skipif_ui_not_support
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
-
+skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms

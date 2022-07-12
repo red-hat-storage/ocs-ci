@@ -71,20 +71,38 @@ def create_cluster(cluster_name, version, region):
     cluster_type = config.ENV_DATA.get("cluster_type", "")
     provider_name = config.ENV_DATA.get("provider_name", "")
     rosa_mode = config.ENV_DATA.get("rosa_mode", "")
+    private_link = config.ENV_DATA.get("private_link", False)
+    machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--compute-nodes {compute_nodes} --compute-machine-type "
-        f"{compute_machine_type}  --version {rosa_ocp_version} {multi_az}--sts --yes"
+        f"--machine-cidr {machine_cidr} --compute-nodes {compute_nodes} "
+        f"--compute-machine-type {compute_machine_type} "
+        f"--version {rosa_ocp_version} {multi_az}--sts --yes"
     )
     if rosa_mode == "auto":
         cmd += " --mode auto"
-    if cluster_type.lower() == "consumer" and config.ENV_DATA.get("provider_name", ""):
+
+    if (
+        config.ENV_DATA.get("appliance_mode", False)
+        and config.ENV_DATA.get("cluster_type", "") == "consumer"
+    ):
+        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
+            "private_subnet"
+        ]
+        if not private_link:
+            subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
+        cmd = f"{cmd} --subnet-ids {subnet_ids}"
+
+    elif cluster_type.lower() == "consumer" and config.ENV_DATA.get(
+        "provider_name", ""
+    ):
         aws = AWSUtil()
         subnet_id = config.ENV_DATA.get("subnet_ids") or ",".join(
             aws.get_cluster_subnet_ids(provider_name)
         )
         cmd = f"{cmd} --subnet-ids {subnet_id}"
-
+    if private_link:
+        cmd += " --private-link "
     utils.run_cmd(cmd, timeout=1200)
     if rosa_mode != "auto":
         logger.info(
@@ -131,11 +149,12 @@ def appliance_mode_cluster(cluster_name):
     addon_name = config.ENV_DATA.get("addon_name", "")
     size = config.ENV_DATA["size"]
     public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
-    subnet_ids = config.ENV_DATA["subnet_ids"]
     notification_email_0 = config.REPORTING.get("notification_email_0")
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
     region = config.ENV_DATA.get("region", "")
+    private_link = config.ENV_DATA.get("private_link", False)
+    machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
     if not public_key:
         raise ConfigurationError(
             "Public key for Managed Service not defined.\n"
@@ -145,11 +164,20 @@ def appliance_mode_cluster(cluster_name):
             '  public_key: "..."'
         )
     public_key_only = remove_header_footer_from_key(public_key)
+
+    subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
+        "private_subnet"
+    ]
+    if not private_link:
+        subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
     cmd = (
         f"rosa create service --type {addon_name} --name {cluster_name} "
-        f"--size {size} --onboarding-validation-key {public_key_only} "
+        f"--machine-cidr {machine_cidr} --size {size} "
+        f"--onboarding-validation-key {public_key_only} "
         f"--subnet-ids {subnet_ids}"
     )
+    if private_link:
+        cmd += " --private-link "
     if notification_email_0:
         cmd = cmd + f" --notification-email-0 {notification_email_0}"
     if notification_email_1:
@@ -190,9 +218,12 @@ def appliance_mode_cluster(cluster_name):
                 logger.info(f"Addon {addon_name} is installed")
                 break
             if "failed" in addon_info:
-                raise ManagedServiceAddonDeploymentError(
-                    f"Addon {addon_name} failed to be installed"
-                )
+                logger.warning(f"Addon {addon_name} failed to be installed")
+        addon_info = get_addon_info(cluster_name, addon_name)
+        if "failed" in addon_info:
+            raise ManagedServiceAddonDeploymentError(
+                f"Addon {addon_name} failed to be installed"
+            )
         logger.info("Waiting for ROSA service ready status")
     for service_status in utils.TimeoutSampler(
         7200, 30, get_rosa_service_details, cluster_name
@@ -201,10 +232,18 @@ def appliance_mode_cluster(cluster_name):
             logger.info(f"service {cluster_name} is ready")
             break
         elif "failed" in service_status:
-            logger.info(f"service {cluster_name} is ready")
+            logger.info(f"service {cluster_name} is failed")
             break
         else:
             logger.info(f"Current service creation status: {service_status}")
+    # Create metadata file to store the cluster name
+    cluster_info = ocm.get_cluster_details(cluster_name)
+    cluster_info["clusterName"] = cluster_name
+    cluster_info["clusterID"] = cluster_info["id"]
+    cluster_path = config.ENV_DATA["cluster_path"]
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file, "w+") as f:
+        json.dump(cluster_info, f)
 
 
 def get_rosa_service_details(cluster):
@@ -394,7 +433,9 @@ def install_odf_addon(cluster):
         public_key_only = remove_header_footer_from_key(public_key)
         cmd += f' --onboarding-validation-key "{public_key_only}"'
 
-    if cluster_type.lower() == "consumer" and provider_name:
+    if cluster_type.lower() == "consumer" and (
+        provider_name or config.ENV_DATA.get("appliance_mode", False)
+    ):
         storage_provider_endpoint = get_storage_provider_endpoint(provider_name)
         cmd += f' --storage-provider-endpoint "{storage_provider_endpoint}"'
         onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
@@ -414,9 +455,13 @@ def install_odf_addon(cluster):
             logger.info(f"Addon {addon_name} was installed")
             break
         if "failed" in addon_info:
-            raise ManagedServiceAddonDeploymentError(
-                f"Addon {addon_name} failed to be installed"
-            )
+            logger.warning(f"Addon {addon_name} is failed")
+
+    addon_info = get_addon_info(cluster, addon_name)
+    if "failed" in addon_info:
+        raise ManagedServiceAddonDeploymentError(
+            f"Addon {addon_name} failed to be installed"
+        )
 
 
 def delete_odf_addon(cluster):
@@ -427,6 +472,16 @@ def delete_odf_addon(cluster):
         cluster (str): cluster name or cluster id
 
     """
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    if cluster_type.lower() == "provider" and config.ENV_DATA.get("appliance_mode"):
+        logger.info(
+            "Addon uninstallation is not allowed for appliance mode"
+            " managed service. It can be changed after fix of "
+            "https://issues.redhat.com/browse/SDA-6011"
+        )
+        # TODO : Update rosa delete service addon command after completion of jira SDA-6011
+        return
+
     addon_name = config.ENV_DATA["addon_name"]
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
@@ -452,6 +507,63 @@ def delete_operator_roles(cluster_id):
     """
     cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
+
+
+def get_rosa_cluster_service_id(cluster):
+    """
+    Get service id of cluster
+
+    Args:
+        cluster (str): cluster name
+
+    Returns:
+        str: service id of cluster. If not found, it returns None.
+
+    """
+    cmd = "rosa list service"
+    cmd_out = utils.run_cmd(cmd)
+    line = [line for line in cmd_out.splitlines() if re.search(f"{cluster}$", line)]
+    cluster_service_info = line[0].split()[0] if line else None
+    return cluster_service_info
+
+
+def destroy_appliance_mode_cluster(cluster):
+    """
+    Delete rosa cluster if appliance mode
+
+    Args:
+        cluster: name of the cluster
+
+    Returns:
+        bool: True if appliance mode and cluster delete initiated
+              else False
+    """
+    service_id = get_rosa_cluster_service_id(cluster)
+    if not service_id:
+        logger.info(
+            f"Cluster does not exist in rosa list service. "
+            f"The cluster '{cluster}' is not appliance mode cluster. "
+        )
+        return False
+
+    delete_service_cmd = f"rosa delete service --id={service_id} --yes"
+    utils.run_cmd(delete_service_cmd, timeout=1200)
+    logger.info("Waiting for ROSA cluster state changed to uninstalling")
+    for cluster_info in utils.TimeoutSampler(
+        1000, 90, ocm.get_cluster_details, cluster
+    ):
+        status = cluster_info["status"]["state"]
+        logger.info(f"Cluster uninstalling status: {status}")
+        if status == "uninstalling":
+            logger.info(f"Cluster '{cluster}' is uninstalling")
+            break
+    for service_status in utils.TimeoutSampler(
+        1000, 30, get_rosa_service_details, cluster
+    ):
+        if "deleting service" in service_status:
+            logger.info("Rosa service status is 'deleting service'")
+            break
+    return True
 
 
 def delete_oidc_provider(cluster_id):

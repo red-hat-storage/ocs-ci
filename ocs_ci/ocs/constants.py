@@ -26,9 +26,11 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
+TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
 TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
 TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
@@ -109,6 +111,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
+LVM_SC = "odf-lvm-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
@@ -145,6 +148,8 @@ DRPC = "DRPlacementControl"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
+RECLAIMSPACECRONJOB = "reclaimspacecronjob"
+LVMCLUSTER = "lvmcluster"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -241,6 +246,7 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -262,6 +268,7 @@ RECLAIM_POLICY_DELETE = "Delete"
 ACCESS_MODE_RWO = "ReadWriteOnce"
 ACCESS_MODE_ROX = "ReadOnlyMany"
 ACCESS_MODE_RWX = "ReadWriteMany"
+ACCESS_MODE_RWOP = "ReadWriteOncePod"
 
 # Pod names
 NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
@@ -310,6 +317,7 @@ MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 S3CLI_LABEL = "app=s3cli"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
+PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -351,9 +359,15 @@ CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "storageclass.y
 
 CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml")
 
+CSI_LVM_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "storageclass.yaml")
+
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     ROOK_CSI_CEPHFS_DIR, "storageclass.yaml"
 )
+
+WFFC_VOLUMEBINDINGMODE = "WaitForFirstConsumer"
+
+IMMEDIATE_VOLUMEBINDINGMODE = "Immediate"
 
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
@@ -386,7 +400,11 @@ CSI_CEPHFS_PVC_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc.yaml")
 
 CSI_CEPHFS_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-restore.yaml")
 
+CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml")
+
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
+
+CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
 
 CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml")
 
@@ -470,6 +488,8 @@ NGINX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nginx.yaml")
 
 PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
+PERF_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_block.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
@@ -498,6 +518,10 @@ NSFS_INTERFACE_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "ubi8.yaml")
 
 SERVICE_ACCOUNT_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "service_account.yaml")
 
+SERVICE_ACCOUNT_TOKEN_SECRET = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "serviceaccount_token_secret.yaml"
+)
+
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
@@ -506,6 +530,10 @@ GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
 CSI_RBD_RECLAIM_SPACE_JOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacejob.yaml"
+)
+
+CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
 OC_MIRROR_IMAGESET_CONFIG = os.path.join(
@@ -821,11 +849,12 @@ AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
+SNO_BOOTSTRAP_IGN = "bootstrap-in-place-for-live-iso.ign"
 
 # terraform provider constants
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
-# Minimum storage needed for vSphere Datastore in bytes
+# Minimum storage needed for vSphere Datastore in bytes.
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
@@ -861,6 +890,8 @@ SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
 SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
     SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
 )
+RUST_URL = "https://sh.rustup.rs"
+COREOS_INSTALLER_REPO = "https://github.com/coreos/coreos-installer.git"
 
 # v4-scaleup
 CLUSTER_LAUNCHER_VSPHERE_DIR = os.path.join(
@@ -1007,6 +1038,7 @@ EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
     "external-", "noobaa", "ceph-objectstore-user"
 )
 OCS_SECRET = "ocs-secret"
+AZURE_NOOBAA_SECRET = "noobaa-azure-container-creds"
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
 MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
@@ -1232,6 +1264,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.rbd.csi.ceph.com",
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
+    "topolvm.cybozu.com",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
@@ -1352,6 +1385,7 @@ SCALE_LABEL = "scale-label=app-scale"
 # bm dict value is based on each worker BM machine of config 40CPU and 256G/184G RAM
 # azure dict value is based on assumption similar to vmware vms min worker config of 12CPU and 64G RAM
 SCALE_WORKER_DICT = {
+    40: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     80: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     240: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
     1500: {"aws": 3, "vmware": 3, "bm": 2, "azure": 3, "rhv": 3},
@@ -1362,6 +1396,7 @@ SCALE_WORKER_DICT = {
 }
 SCALE_MAX_PVCS_PER_NODE = 500
 SCALE_PVC_ROUND_UP_VALUE = {
+    40: 40,
     80: 80,
     240: 240,
     1500: 1520,
@@ -1542,12 +1577,14 @@ VAULT_CWD_KMS_SA_NAME = "odf-vault-auth"
 VAULT_TOKEN_AUTH = "token"
 VAULT_KUBERNETES_AUTH = "kubernetes"
 VAULT_KUBERNETES_AUTH_ROLE = "odf-rook-ceph-op"
+VAULT_HCP_NAMESPACE = "admin"
 # min and max Noobaa endpoints
 MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT = 1
 MCG_TESTS_MIN_NB_ENDPOINT_COUNT = 2
 MAX_NB_ENDPOINT_COUNT = 2
 
 VOLUMESNAPSHOT = "volumesnapshot"
+LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
 
@@ -1755,3 +1792,26 @@ SPACE = " "
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+# Sno and lvmo constants
+SNO_NODE_NAME = "sno-edge-0"
+LVMO_POD_LABEL = {
+    "410": {
+        "controller_manager_label": "control-plane=controller-manager",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
+        "topolvm-node_label": "app=topolvm-node",
+        "vg-manager_label": "app=vg-manager",
+    },
+    "411": {
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
+        "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
+        "vg-manager_label": "app.kubernetes.io/name=vg-manager",
+    },
+    "411-old": {
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
+        "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
+        "vg-manager_label": "app.lvm.openshift.io=vg-manager",
+    },
+}
+LVM_PROVISIONER = "topolvm.cybozu.com"

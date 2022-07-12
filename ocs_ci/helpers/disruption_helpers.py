@@ -103,6 +103,31 @@ class Disruptions:
         if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
+        if self.resource == "ocs_operator":
+            self.resource_obj = [pod.get_ocs_operator_pod()]
+            self.selector = constants.OCS_OPERATOR_LABEL
+        if self.resource == "alertmanager_managed_ocs_alertmanager":
+            self.resource_obj = pod.get_alertmanager_managed_ocs_alertmanager_pods()
+            self.selector = constants.MANAGED_ALERTMANAGER_LABEL
+        if self.resource == "ocs_osd_controller_manager":
+            self.resource_obj = [pod.get_ocs_osd_controller_manager_pod()]
+            self.selector = constants.MANAGED_CONTROLLER_LABEL
+            # Setting resource_count because odf-operator-controller-manager pod also have the same label.
+            resource_count = len(
+                pod.get_pods_having_label(
+                    constants.MANAGED_CONTROLLER_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
+                )
+            )
+        if self.resource == "prometheus_managed_ocs_prometheus":
+            self.resource_obj = [pod.get_prometheus_managed_ocs_prometheus_pod()]
+            self.selector = constants.MANAGED_PROMETHEUS_LABEL
+        if self.resource == "prometheus_operator":
+            self.resource_obj = [pod.get_prometheus_operator_pod()]
+            self.selector = constants.PROMETHEUS_OPERATOR_LABEL
+        if self.resource == "ocs_provider_server":
+            self.resource_obj = [pod.get_ocs_provider_server_pod()]
+            self.selector = constants.PROVIDER_SERVER_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 
