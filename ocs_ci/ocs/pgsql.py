@@ -795,11 +795,11 @@ class Postgresql(BenchmarkOperator):
 
         The steps include:
         1. Create table <table_name> and insert <total_rows> number of records.
-        2. Repeat below steps in order for specified <run_time> duration.
-            a. Insert <num_of_ops> number of rows into the table.
-            b. Update <num_of_ops> number of rows into the table.
-            c. Update random number of rows based on matching year in the date column of records.
-            d. Delete <num_of_ops> number of rows from the table.
+        2. Repeat below steps in order for specified <run_time> duration:
+        a. Insert <num_of_ops> number of rows into the table.
+        b. Update <num_of_ops> number of rows into the table.
+        c. Update random number of rows based on matching year in the date column of records.
+        d. Delete <num_of_ops> number of rows from the table.
 
         Args:
             postgres_pod (POD) : POD object on which postgres is running.
