@@ -880,7 +880,7 @@ def get_device_path(pod_obj):
     )
 
 
-def cal_md5sum(pod_obj, file_name, block=False):
+def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
     """
     Calculates the md5sum of the file
 
@@ -889,15 +889,18 @@ def cal_md5sum(pod_obj, file_name, block=False):
         file_name (str): The name of the file for which md5sum to be calculated
         block (bool): True if the volume mode of PVC used on pod is 'Block'.
             file_name will be the devicePath in this case.
+        raw_path (bool): True if file_name includes the filepath and should be used as-is
+                         i.e. - a pod without a PVC attached to it
 
     Returns:
         str: The md5sum of the file
     """
-
-    if block:
-        file_path = get_device_path(pod_obj)
+    if raw_path is False:
+        file_path = (
+            get_device_path(pod_obj) if block else get_file_path(pod_obj, file_name)
+        )
     else:
-        file_path = get_file_path(pod_obj, file_name)
+        file_path = file_name
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
     )
