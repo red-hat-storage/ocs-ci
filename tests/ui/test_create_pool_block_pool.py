@@ -10,14 +10,15 @@ from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
+    BlockPoolRawCapacityNotLoaded,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class TestPoolUserInterface(ManageTest):
         storage,
         pvc,
         pod,
+        setup_ui,
     ):
         """
         test create delete pool have the following workflow
@@ -110,8 +112,15 @@ class TestPoolUserInterface(ManageTest):
             readwrite="readwrite",
         )
 
+        # Checking the raw capcity is loaded on the UI or not.
+        blockpool_ui_object = BlockPoolUI(setup_ui)
+        if not blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name):
+            raise BlockPoolRawCapacityNotLoaded(
+                f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
+            )
+
         # Getting IO results
-        get_fio_rw_iops(self.pod_obj)
+        self.pod_obj.get_fio_results()
 
         # Checking Results for compression and replication
         if compression:

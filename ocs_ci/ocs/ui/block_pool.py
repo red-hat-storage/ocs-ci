@@ -192,6 +192,7 @@ class BlockPoolUI(PageNavigator):
         Takes pool name and returns True if the raw capacity of the block pool is loaded
         or returns False if the capacity is not loaded.
         """
+        logger.info("Checking if the Block Pool Raw Capacity has loaded in UI")
         self.navigate_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
@@ -201,7 +202,11 @@ class BlockPoolUI(PageNavigator):
             self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
         time.sleep(5)
         raw_capacity_loaded = self.check_element_text(
-            (f"//div[@class='ceph-raw-card-legend__title']", By.XPATH),
             "Available",
+            "div[@class='ceph-raw-card-legend__title']",
         )
+        if raw_capacity_loaded:
+            logger.info("Block Pool Raw Capacity has loaded in UI")
+        else:
+            logger.warning("Block Pool Raw Capacity has not loaded in UI")
         return raw_capacity_loaded

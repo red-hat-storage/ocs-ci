@@ -681,6 +681,7 @@ class PageNavigator(BaseUI):
             self.do_click(locator=self.page_nav["block_pool_link"])
         else:
             self.navigate_odf_overview_page()
+            self.page_has_loaded(retries=10)
             logger.info("Navigating to Storage System")
             validation_4_9 = locators[get_ocp_version()]["validation"]
             self.do_click(
