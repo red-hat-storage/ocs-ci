@@ -436,7 +436,7 @@ class PageNavigator(BaseUI):
         else:
             logger.info("Navigating to ODF tab")
             self.do_click(locator=self.page_nav["odf_tab"])
-            self.page_has_loaded()
+            self.page_has_loaded(retries=10)
 
     def navigate_odf_overview_page(self):
         """

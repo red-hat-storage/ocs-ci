@@ -111,6 +111,8 @@ class TestPoolUserInterface(ManageTest):
             jobs=5,
             readwrite="readwrite",
         )
+        # Getting IO results
+        self.pod_obj.get_fio_results()
 
         # Checking the raw capcity is loaded on the UI or not.
         blockpool_ui_object = BlockPoolUI(setup_ui)
@@ -118,9 +120,6 @@ class TestPoolUserInterface(ManageTest):
             raise BlockPoolRawCapacityNotLoaded(
                 f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
             )
-
-        # Getting IO results
-        self.pod_obj.get_fio_results()
 
         # Checking Results for compression and replication
         if compression:

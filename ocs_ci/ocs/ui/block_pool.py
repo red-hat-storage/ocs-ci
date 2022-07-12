@@ -73,7 +73,7 @@ class BlockPoolUI(PageNavigator):
         """
         self.navigate_overview_page()
         self.navigate_block_pool_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=10)
         if self.ocp_version_full >= version.VERSION_4_9:
             pool_existence = self.wait_until_expected_text_is_found(
                 (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
