@@ -5,7 +5,9 @@ import logging
 import random
 import time
 from prettytable import PrettyTable
-from datetime import datetime
+import string
+import re
+from datetime import datetime, timedelta
 
 from ocs_ci.ocs.benchmark_operator import BenchmarkOperator, BMO_NAME
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -665,3 +667,192 @@ class Postgresql(BenchmarkOperator):
         pgbench_pods = self.get_pgbench_pods()
         # Validate pgbench run and parse logs
         self.validate_pgbench_run(pgbench_pods)
+
+    def generate_random_date(self, min_year=1900, max_year=datetime.now().year):
+        """
+        Function to generate a random date in yyyy-mm-dd format.
+
+        Args:
+            min_year (int) : The minimum year for which the date can be generated.
+            max_year (int) : The maximum year for which the date can be generated.
+
+        Returns:
+            str : Random date in yyyy-mm-dd format.
+        """
+        start = datetime(min_year, 1, 1, 00, 00, 00)
+        years = max_year - min_year + 1
+        end = start + timedelta(days=365 * years)
+        return (start + (end - start) * random.random()).strftime("%Y-%m-%d")
+
+    def generate_random_string(self, length):
+        """
+        Function to generate a random string of given length.
+
+        Args:
+            length (int) : The length of the string that needs to be generated.
+
+        Returns:
+            str : Random string of given length.
+        """
+        return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+    def run_pgsql_command(self, postgres_pod, command, select=False):
+        """
+        Function to run any pgsql command on the postgres POD
+
+        Args:
+            postgres_pod (POD) : POD object on which postgres is running.
+            command (str) : The pgsql command that we want to run.
+            select (bool) : True if the command is of type select, False otherwise.
+
+        Returns:
+            res (str) : Output of the select query.
+        """
+
+        res = postgres_pod.exec_cmd_on_pod(f'psql -U postgres -c "{command}" ')
+        if select:
+            ind = res.index("-")
+            result = list()
+            result.append("\n" + res[:ind])
+            result.append("-" * len(result[0]))
+            result.extend(
+                re.findall(r"\d+\s\|\s[A-Z0-9]+\s\|\s\d{4}-\d{2}-\d{2}\s", res)
+            )
+            result.append("-" * len(result[0]))
+            log.info("\n".join(result))
+            return res
+        log.info(res)
+
+    def run_insert_operation(self, num_of_ops, postgres_pod, row_index, table_name):
+        """
+        Function to insert num_of_ops number of rows in the table.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be inserted.
+            postgres_pod (POD) : POD object on which postgres is running.
+            row_index (int) : Starting index of the rows to be inserted.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} insert operations.")
+        res = ""
+        for row_num in range(row_index + 1, row_index + num_of_ops + 1):
+            random_username = self.generate_random_string(50)
+            res += f"({row_num}, '{random_username}', '{self.generate_random_date()}'),"
+        self.run_pgsql_command(
+            postgres_pod,
+            f"INSERT INTO {table_name} VALUES {res[:-1]};",
+        )
+
+    def run_update_operation(self, num_of_ops, postgres_pod, max_row_index, table_name):
+        """
+        Function to update num_of_ops number of rows in the table.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be updated.
+            postgres_pod (POD) : POD object on which postgres is running.
+            max_row_index (int) : Maximum index of the row currently present in the table.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} update operations.")
+        self.run_pgsql_command(
+            postgres_pod,
+            (
+                f"UPDATE {table_name} SET username='{self.generate_random_string(50)}' "
+                f"WHERE row_id in {tuple(random.sample(range(1, max_row_index), num_of_ops))};"
+            ),
+        )
+
+    def run_delete_operation(self, num_of_ops, postgres_pod, max_row_index, table_name):
+        """
+        Function to delete num_of_ops number of rows from the table.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be deleted.
+            postgres_pod (POD) : POD object on which postgres is running.
+            max_row_index (int) : Maximum index of the row currently present in the table.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} delete operations.")
+        self.run_pgsql_command(
+            postgres_pod,
+            f"DELETE FROM {table_name} WHERE row_id in {tuple(random.sample(range(1, max_row_index), num_of_ops))};",
+        )
+
+    def run_pgsql_workload(
+        self,
+        postgres_pod,
+        table_name,
+        total_rows,
+        num_of_ops,
+        run_time,
+        drop_table=True,
+    ):
+        """
+        Function to run the pgsql workload without using pgbench.
+
+        The steps include:
+        1. Create table <table_name> and insert <total_rows> number of records.
+        2. Repeat below steps in order for specified <run_time> duration.
+            a. Insert <num_of_ops> number of rows into the table.
+            b. Update <num_of_ops> number of rows into the table.
+            c. Update random number of rows based on matching year in the date column of records.
+            d. Delete <num_of_ops> number of rows from the table.
+
+        Args:
+            postgres_pod (POD) : POD object on which postgres is running.
+            table_name (str) : Name of the table that we want to create.
+            total_rows (int) : Total number of records that should be there inside the table.
+            num_of_ops (int) : Total number of records we want to be inserted/deleted/updated in each operation
+                                respectively.
+            run_time (int) : Total Run Time in minutes.
+            drop_table (bool) : True if we want to delete the table, False otherwise.
+
+        Returns:
+            last_valid_state (str)  : A string containing the last valid state of the table.
+        """
+
+        row_index = 0
+        last_valid_state = ""
+        self.run_pgsql_command(
+            postgres_pod,
+            f"CREATE TABLE {table_name} (row_id INT PRIMARY KEY, username VARCHAR (50) NOT NULL, date DATE NOT NULL);",
+        )
+        self.run_insert_operation(total_rows, postgres_pod, 0, table_name)
+        row_index += total_rows
+        self.run_pgsql_command(postgres_pod, f"SELECT * FROM {table_name};", True)
+
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        while datetime.now() < end_time:
+            for sql_operation in range(0, 4):
+                if sql_operation == 0:
+                    self.run_insert_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                    row_index += num_of_ops
+                elif sql_operation == 1:
+                    self.run_update_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                elif sql_operation == 2:
+                    self.run_pgsql_command(
+                        postgres_pod,
+                        (
+                            f"UPDATE {table_name} SET date='{self.generate_random_date()}' "
+                            f"WHERE EXTRACT(YEAR FROM date) = {str(random.randint(1900, datetime.now().year))};"
+                        ),
+                    )
+                else:
+                    self.run_delete_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                last_valid_state = self.run_pgsql_command(
+                    postgres_pod, f"SELECT * FROM {table_name};", True
+                )
+
+        if drop_table:
+            self.run_pgsql_command(postgres_pod, f"DROP TABLE {table_name};")
+
+        return last_valid_state
