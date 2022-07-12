@@ -288,13 +288,14 @@ class ROSA(CloudDeploymentBase):
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#
+        machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
         rules = [
             {
                 "FromPort": 6800,
                 "ToPort": 7300,
                 "IpProtocol": "tcp",
                 "IpRanges": [
-                    {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
+                    {"CidrIp": machine_cidr, "Description": "Ceph OSDs"},
                 ],
             },
             {
@@ -302,7 +303,7 @@ class ROSA(CloudDeploymentBase):
                 "ToPort": 3300,
                 "IpProtocol": "tcp",
                 "IpRanges": [
-                    {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule1"}
                 ],
             },
             {
@@ -310,7 +311,7 @@ class ROSA(CloudDeploymentBase):
                 "ToPort": 6789,
                 "IpProtocol": "tcp",
                 "IpRanges": [
-                    {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule2"},
                 ],
             },
             {
@@ -318,7 +319,7 @@ class ROSA(CloudDeploymentBase):
                 "ToPort": 9283,
                 "IpProtocol": "tcp",
                 "IpRanges": [
-                    {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
+                    {"CidrIp": machine_cidr, "Description": "Ceph Manager"},
                 ],
             },
             {
@@ -326,7 +327,7 @@ class ROSA(CloudDeploymentBase):
                 "ToPort": 31659,
                 "IpProtocol": "tcp",
                 "IpRanges": [
-                    {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
+                    {"CidrIp": machine_cidr, "Description": "API Server"},
                 ],
             },
         ]
