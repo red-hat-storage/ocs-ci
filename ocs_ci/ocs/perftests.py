@@ -866,7 +866,7 @@ class PASTest(BaseTest):
         """
         Creating new project (namespace) for performance test
         """
-        self.namespace = "pas-test-namespace"
+        self.namespace = helpers.create_unique_resource_name("pas-test", "namespace")
         log.info(f"Creating new namespace ({self.namespace}) for the test")
         try:
             self.proj = helpers.create_project(project_name=self.namespace)
