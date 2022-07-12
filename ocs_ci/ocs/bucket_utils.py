@@ -1199,7 +1199,7 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
 
 def setup_base_objects(awscli_pod, original_dir, amount=2):
     """
-    Prepares two directories and populate one of them with objects
+    Create a directory and populates it with random objects
 
      Args:
         awscli_pod (Pod): A pod running the AWS CLI tools
