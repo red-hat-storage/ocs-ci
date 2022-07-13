@@ -29,7 +29,6 @@ setup(
         "munch==2.5.0",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
-        'dataclasses==0.7;python_version < "3.7"',
         "pytest-html==3.1.1",
         "pytest-metadata==1.11.0",
         "bs4==0.0.1",
