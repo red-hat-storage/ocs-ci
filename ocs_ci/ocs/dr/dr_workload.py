@@ -8,6 +8,8 @@ import os
 from subprocess import TimeoutExpired
 from time import sleep
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -24,6 +26,8 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import clone_repo, run_cmd
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -264,3 +268,84 @@ class BusyBox(DRWorkload):
         finally:
             config.switch_acm_ctx()
             run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        dr_helpers.wait_for_workload_resource_deletion(self.workload_namespace)
+
+    def data_integrity_check(self, workload_namespace=None, workload_pattern=None):
+        """
+        Data integrity check for busybox workload
+        In this case ocs-ci doesn't have to know how to check data integrity,
+        instead we will call DATA_INTEGRITY_SCRIPT variable available through resource
+        based on return value of script we just pass back the result to the caller
+
+        We will find the target pods based on few criterion, if only workload_namespace
+        is passed as argument then we will fetch all the pods from that namespace and run integrity
+        check only on those pods, if only workload_pattern is specified then we will fetch all the pods from
+        all the namespaces which matches the label workload_pattern and run integrity check.
+        If both namespace and pattern are null then we will fetch a list of all the pods from all the workload
+        namespaces and run integrity check on all of them.
+
+        Args:
+            workload_namespace (str): Namespace in which workload has been deployed
+            workload_pattern (list): workload patterns like ["workloadpattern=simple_io", "workloadpattern=fio"]
+                                    etc which will be label
+
+        Returns:
+            3 tuple: (constants.DR_WORKLOAD_PASS/FAIL, output/exception, pod)
+
+        """
+        pod_list = []
+        if workload_namespace:
+            if workload_pattern:
+                # Get all pods matching pattern in the current namespace
+                for pattern in workload_pattern:
+                    matching_pods = pod.get_pods_having_label(
+                        pattern, workload_namespace
+                    )
+                    pod_objs = [pod.Pod(**mpod) for mpod in matching_pods]
+                    pod_list.extend(pod_objs)
+            else:
+                pod_list.extend(
+                    pod.get_all_pods(
+                        namespace=workload_namespace, selector_label="workloadpattern"
+                    )
+                )
+        else:
+            # Get all the namespaces which has label 'rdrworkload'
+            # and find all the workload pods in those namespaces
+            wl_namespaces = OCP(
+                kind=constants.NAMESPACE,
+                selector=constants.DR_WORKLOAD_NAMESPACE_LABEL_ID,
+            )
+            for namespace in wl_namespaces:
+                pod_list.extend(
+                    pod.get_all_pods(
+                        namespace=namespace, selector=constants.DR_WORKLOAD_POD_LABEL_ID
+                    )
+                )
+
+        future_to_pods = {}
+        # List of 3 tuple (retval(0 for pass , 1 for fail) flag, exception/output, pod)
+        integrity_check_result = []
+        with ThreadPoolExecutor(
+            max_workers=constants.DR_TP_EXECUTOR_WORKERS
+        ) as executor:
+            for _pod in pod_list:
+                future_to_pods.update(
+                    {
+                        executor.submit(
+                            pod.exec_cmd_on_pod,
+                            constants.DR_DATA_INTEGRITY_CHECK_SCRIPT,
+                        ): _pod
+                    }
+                )
+
+        for future in as_completed(future_to_pods):
+            _pod = future_to_pods[future]
+            try:
+                out = future.result()
+            except Exception as ex:
+                integrity_check_result.append((constants.DR_WORKLOAD_FAIL, ex, _pod))
+            else:
+                integrity_check_result.append((constants.DR_WORKLOAD_PASS, out, _pod))
+        return integrity_check_result
