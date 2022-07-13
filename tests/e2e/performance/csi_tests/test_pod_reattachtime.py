@@ -13,7 +13,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
+from ocs_ci.ocs.exceptions import PodNotCreated
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class TestPodReattachTimePerformance(PASTest):
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
-        self, pvc_factory, storageclass_factory, copies, timeout, total_time_limit
+        self, storageclass_factory, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
@@ -117,7 +117,7 @@ class TestPodReattachTimePerformance(PASTest):
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
 
-        samples_num = 10
+        samples_num = 7
         if self.dev_mode:
             samples_num = 3
 
