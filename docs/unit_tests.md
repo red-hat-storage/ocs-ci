@@ -12,7 +12,7 @@ for each pull request created for this repository.
 
 ## How to run the unit tests myself?
 
-Make sure you have python 3.7 and tox installed from binary packages of your
+Make sure you have python 3.8 and tox installed from binary packages of your
 distribution.
 
 Then in root directory of the repository just run:
