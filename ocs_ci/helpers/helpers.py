@@ -44,6 +44,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     update_container_with_mirrored_image,
 )
+from ocs_ci.utility.utils import convert_device_size
 
 
 logger = logging.getLogger(__name__)
@@ -3820,3 +3821,54 @@ def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESP
     create_resource(**token_secret)
     logger.info(f"Serviceaccount token secret {sa_name}-token created successfully")
     return token_secret["metadata"]["name"]
+
+
+def get_mon_db_size_in_kb(mon_pod_obj):
+    """
+    Get mon db size and returns the size in KB
+    The output of 'du -sh' command contains the size of the directory and its path as string
+    e.g. "67M\t/var/lib/ceph/mon/ceph-c/store.db"
+    The size is extracted by splitting the string with '\t'.
+    The size format for example: 1K, 234M, 2G
+    For uniformity, this test uses KB
+
+    Args:
+        mon_pod_obj (obj): Mon pod resource object
+
+    Returns:
+        convert_device_size (int): Converted Mon db size in KB
+
+    """
+    mon_pod_label = pod.get_mon_label(mon_pod_obj=mon_pod_obj)
+    logger.info(f"Getting the current mon db size for mon-{mon_pod_label}")
+    size = mon_pod_obj.exec_cmd_on_pod(
+        f"du -sh /var/lib/ceph/mon/ceph-{mon_pod_label}/store.db",
+        out_yaml_format=False,
+    )
+    size = re.split("\t+", size)
+    assert len(size) > 0, f"Failed to get mon-{mon_pod_label} db size"
+    size = size[0]
+    mon_db_size_kb = convert_device_size(size + "i", "KB")
+    logger.info(f"mon-{mon_pod_label} DB size: {mon_db_size_kb} KB")
+    return mon_db_size_kb
+
+
+def get_noobaa_db_used_space():
+    """
+    Get noobaa db size
+
+    Returns:
+        df_out (str): noobaa_db used space
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    logger.info(
+        f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
+    )
+    return df_out[-4]
