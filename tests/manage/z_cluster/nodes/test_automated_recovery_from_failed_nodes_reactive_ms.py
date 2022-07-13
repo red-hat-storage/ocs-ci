@@ -35,7 +35,6 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
     wait_for_new_worker_node_ipi,
 )
-from ocs_ci.ocs.cephfs_workload import LogReaderWriterParallel
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
@@ -219,6 +218,24 @@ FAILURE_TYPE_FUNC_CALL_DICT = {
 @managed_service_required
 class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
     @pytest.fixture(autouse=True)
+    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+        """
+        Initialize the create pods and PVCs factory, save the original index
+
+        """
+        self.orig_index = config.cur_index
+        self.create_pods_and_pvcs_factory = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        )
+
+    def create_resources(self):
+        """
+        Create resources on the consumers and run IO
+
+        """
+        self.create_pods_and_pvcs_factory()
+
+    @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         def finalizer():
             config.switch_to_provider()
@@ -234,9 +251,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             log.info("Verify again that the ceph health is OK")
             ceph_health_check()
 
-            config.switch_to_consumer()
-            log.info("Verify that the ceph health is OK on consumer")
-            ceph_health_check()
+            config.switch_ctx(self.orig_index)
 
         request.addfinalizer(finalizer)
 
@@ -252,8 +267,6 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         self,
         nodes,
         failure,
-        project,
-        tmp_path,
     ):
         """
         We have 3 test cases to check when running IO in the background:
@@ -261,10 +274,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             B) Automated recovery from termination of a worker node
             C) Automated recovery from unschedule and reschedule a worker node.
         """
-        config.switch_to_consumer()
-        ceph_health_check()
-        log_read_write = LogReaderWriterParallel(project, tmp_path)
-        log_read_write.log_reader_writer_parallel()
+        self.create_resources()
 
         config.switch_to_provider()
         log.info("Start executing the node test function on the provider...")
@@ -279,9 +289,8 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         log.info("Checking that the ceph health is ok on the provider")
         ceph_health_check()
 
-        config.switch_to_consumer()
-        log.info("Validate the data on the consumer")
-        log_read_write.fetch_and_validate_data()
-
-        log.info("Checking that the ceph health is ok on the consumer")
-        ceph_health_check()
+        log.info("Checking that the ceph health is ok on the consumers")
+        consumer_indexes = config.get_consumer_indexes_list()
+        for i in consumer_indexes:
+            config.switch_ctx(i)
+            ceph_health_check()
