@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     managed_service_required,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -20,6 +21,8 @@ from ocs_ci.ocs.node import (
     wait_for_osd_ids_come_up_on_node,
     wait_for_nodes_status,
     verify_worker_nodes_security_groups,
+    get_worker_nodes,
+    get_master_nodes,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -62,7 +65,9 @@ class TestNodesRestartMS(ManageTest):
         else:
             consumer_indexes = config.get_consumer_indexes_list()
 
-        self.create_pods_and_pvcs_factory(consumer_indexes=consumer_indexes)
+        self.create_pods_and_pvcs_factory(
+            consumer_indexes=consumer_indexes, scale_count=20
+        )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -87,6 +92,7 @@ class TestNodesRestartMS(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier4a
+    @runs_on_provider
     def test_osd_node_restart_and_check_osd_pods_status(self, nodes):
         """
         1) Restart one of the osd nodes.
@@ -94,11 +100,7 @@ class TestNodesRestartMS(ManageTest):
         3) Wait for the node to reach Ready state.
         3) Check that the new osd pods with the same ids start on the same node.
         """
-        # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
-        if is_ms_consumer_cluster():
-            pytest.skip("The test will not run on a consumer cluster")
-
-        self.create_pods_and_pvcs_factory()
+        self.create_resources()
 
         osd_node_name = random.choice(get_osd_running_nodes())
         osd_node = get_node_objs([osd_node_name])[0]
@@ -126,27 +128,51 @@ class TestNodesRestartMS(ManageTest):
         )
 
     @tier4a
-    def test_nodes_restart(self, nodes):
+    @pytest.mark.parametrize(
+        argnames=["node_type"],
+        argvalues=[
+            pytest.param(constants.WORKER_MACHINE),
+            pytest.param(constants.MASTER_MACHINE),
+        ],
+    )
+    def test_nodes_restart(self, nodes, node_type):
         """
         Test nodes restart (from the platform layer)
 
         """
-        ocp_nodes = get_node_objs()
-        nodes.restart_nodes(nodes=ocp_nodes, wait=True)
+        if node_type == constants.WORKER_MACHINE:
+            node_names = get_worker_nodes()
+        else:
+            node_names = get_master_nodes()
+
+        ocp_nodes = get_node_objs(node_names=node_names)
+        nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         self.sanity_helpers.health_check()
-        self.create_pods_and_pvcs_factory()
+        self.create_resources()
 
     @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
-    def test_rolling_nodes_restart(self, nodes):
+    @pytest.mark.parametrize(
+        argnames=["node_type"],
+        argvalues=[
+            pytest.param(constants.WORKER_MACHINE),
+            pytest.param(constants.MASTER_MACHINE),
+        ],
+    )
+    def test_rolling_nodes_restart(self, nodes, node_type):
         """
         Test restart nodes one after the other and check health status in between
 
         """
-        ocp_nodes = get_node_objs()
+        if node_type == constants.WORKER_MACHINE:
+            node_names = get_worker_nodes()
+        else:
+            node_names = get_master_nodes()
+
+        ocp_nodes = get_node_objs(node_names=node_names)
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
 
-        self.create_pods_and_pvcs_factory()
+        self.create_resources()
