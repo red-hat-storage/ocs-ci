@@ -468,6 +468,10 @@ class ManagedServiceAddonDeploymentError(Exception):
     pass
 
 
+class ManagedServiceSecurityGroupNotFound(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 
