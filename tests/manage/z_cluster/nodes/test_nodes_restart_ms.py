@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     managed_service_required,
-    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -28,7 +27,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
-    is_ms_provider_cluster,
     is_ms_consumer_cluster,
 )
 from ocs_ci.framework import config
@@ -65,9 +63,7 @@ class TestNodesRestartMS(ManageTest):
         else:
             consumer_indexes = config.get_consumer_indexes_list()
 
-        self.create_pods_and_pvcs_factory(
-            consumer_indexes=consumer_indexes, scale_count=20
-        )
+        self.create_pods_and_pvcs_factory(consumer_indexes=consumer_indexes)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -81,25 +77,23 @@ class TestNodesRestartMS(ManageTest):
             for n in ocp_nodes:
                 recover_node_to_ready_state(n)
 
-            if is_ms_provider_cluster():
-                logger.info(
-                    "Verify the worker nodes security groups on the provider..."
-                )
-                assert verify_worker_nodes_security_groups()
-
             ceph_health_check()
 
         request.addfinalizer(finalizer)
 
     @tier4a
-    @runs_on_provider
     def test_osd_node_restart_and_check_osd_pods_status(self, nodes):
         """
         1) Restart one of the osd nodes.
         2) Check that the osd pods associated with the node should change to a Terminating state.
         3) Wait for the node to reach Ready state.
-        3) Check that the new osd pods with the same ids start on the same node.
+        4) Check that the new osd pods with the same ids start on the same node.
+        5) Check the worker nodes security groups
         """
+        # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
+        if is_ms_consumer_cluster():
+            pytest.skip("The test will not run on a consumer cluster")
+
         self.create_resources()
 
         osd_node_name = random.choice(get_osd_running_nodes())
@@ -126,6 +120,9 @@ class TestNodesRestartMS(ManageTest):
         logger.info(
             f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
         )
+
+        logger.info("Verify the worker nodes security groups on the provider...")
+        assert verify_worker_nodes_security_groups()
 
     @tier4a
     @pytest.mark.parametrize(
