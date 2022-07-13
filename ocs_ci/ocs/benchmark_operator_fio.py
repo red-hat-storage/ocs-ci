@@ -99,7 +99,7 @@ class BenchmarkOperatorFIO(object):
         run("make deploy", shell=True, check=True, cwd=self.local_repo)
 
         sample = TimeoutSampler(
-            timeout=40,
+            timeout=100,
             sleep=5,
             func=self.pods_expected_status,
             pattern="benchmark-controller-manager",
@@ -118,7 +118,7 @@ class BenchmarkOperatorFIO(object):
 
     def wait_for_wl_to_start(self):
         sample = TimeoutSampler(
-            timeout=100,
+            timeout=400,
             sleep=10,
             func=self.pods_expected_status,
             pattern="fio-server",
