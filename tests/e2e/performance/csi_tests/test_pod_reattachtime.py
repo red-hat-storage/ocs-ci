@@ -30,8 +30,23 @@ class TestPodReattachTimePerformance(PASTest):
         Setting up test parameters
         """
         logger.info("Starting the test setup")
+        # Run the test in its own project (namespace)
+        self.create_test_project()
+        self.pvc_list = []
+
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+        logger.info("Starting the test cleanup")
+
+        # Deleting the namespace used by the test
+        self.delete_test_project()
+
+        super(TestPodReattachTimePerformance, self).teardown()
 
     def init_full_results(self, full_results):
         """
@@ -91,7 +106,7 @@ class TestPodReattachTimePerformance(PASTest):
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
-        self, pvc_factory, copies, timeout, total_time_limit
+        self, pvc_factory, storageclass_factory, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
@@ -127,27 +142,23 @@ class TestPodReattachTimePerformance(PASTest):
             [],
             [],
         )
+
+        self.sc_obj = storageclass_factory(self.interface)
         for sample_index in range(1, samples_num + 1):
-            # Create a PVC
-            accessmode = constants.ACCESS_MODE_RWX
-            if self.interface == constants.CEPHBLOCKPOOL:
-                accessmode = constants.ACCESS_MODE_RWO
+
             csi_start_time = self.get_time("csi")
-            try:
-                pvc_obj = pvc_factory(
-                    interface=self.interface,
-                    access_mode=accessmode,
-                    status=constants.STATUS_BOUND,
-                    size="100",
-                )
-            except Exception as e:
-                logger.error(f"The PVC sample was not created, exception {str(e)}")
-                raise PVCNotCreated("PVC did not reach BOUND state.")
+
+            logger.info(f"Start creating PVC number {sample_index}.")
+            pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name, size="100Gi", namespace=self.namespace
+            )
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
 
             # Create a pod on one node
             logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
             pvc_obj.reload()
+            self.pvc_list.append(pvc_obj)
 
             try:
                 pod_obj1 = helpers.create_pod(
