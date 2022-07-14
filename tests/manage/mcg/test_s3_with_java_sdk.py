@@ -3,9 +3,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
-    polarion_id,
     skipif_ocs_version,
-    tier2,
+    tier1,
 )
 from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk
 
@@ -13,15 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_ocs_version("<4.9")
-@tier2
 class TestS3WithJavaSDK:
     @bugzilla("2064304")
-    @polarion_id("OCS-3964")
     @pytest.mark.parametrize(
         argnames=["is_multipart"],
         argvalues=[
-            pytest.param(*[False]),
-            pytest.param(*[True]),
+            pytest.param(*[False], marks=[tier1, pytest.mark.polarion_id("OCS-3964")]),
+            pytest.param(*[True], marks=[tier1, pytest.mark.polarion_id("OCS-3978")]),
         ],
     )
     def test_s3_upload_with_java(

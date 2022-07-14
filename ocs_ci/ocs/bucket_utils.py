@@ -267,8 +267,19 @@ def copy_random_individual_objects(
 
 def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=False):
     """
-    Runs upload operation using java s3 pod
+    Performs upload operation using java s3 pod
+
+    Args:
+        javas3_pod: java s3 sdk pod session
+        s3_obj: MCG object
+        bucket_name: bucket on which objects are uploaded
+        is_multipart: By default False, set to True if you want
+                      to perform multipart upload
+    Returns:
+          Output of the command execution
+
     """
+
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
     endpoint = s3_obj.s3_internal_endpoint
