@@ -1211,13 +1211,13 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         # If not bound adding those PVCs to pvc_not_bound_list
         job_get_output = kube_job_obj.get(namespace=namespace)
         for i in range(no_of_pvc):
-            status = job_get_output.get("items")[i].get("status").get("phase")
+            status = job_get_output["items"][i]["status"]["phase"]
             logger.info(
-                f"pvc {job_get_output.get('items')[i].get('metadata').get('name')} status {status}"
+                f"pvc {job_get_output['items'][i]['metadata']['name']} status {status}"
             )
             if status != "Bound":
                 pvc_not_bound_list.append(
-                    job_get_output.get("items")[i].get("metadata").get("name")
+                    job_get_output["items"][i]["metadata"]["name"]
                 )
 
         # Check the length of pvc_not_bound_list to decide either all PVCs reached Bound state
@@ -1236,9 +1236,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             continue
         elif not len(pvc_not_bound_list):
             for i in range(no_of_pvc):
-                pvc_bound_list.append(
-                    job_get_output.get("items")[i].get("metadata").get("name")
-                )
+                pvc_bound_list.append(job_get_output["items"][i]["metadata"]["name"])
             logger.info("All PVCs in Bound state")
             break
     return pvc_bound_list
