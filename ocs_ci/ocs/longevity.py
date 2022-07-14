@@ -288,6 +288,8 @@ class Longevity(object):
         self.create_stage_builder_kube_job(
             kube_job_obj_list=pvc_job_file_list, namespace=namespace
         )
+        # Wait 60 secs to ensure the PVC on the list has status field populated
+        time.sleep(60)
         # Validate PVCs in kube job reached BOUND state
         self.validate_pvc_in_kube_job_reached_bound_state(
             kube_job_obj_list=pvc_job_file_list,
@@ -511,6 +513,8 @@ class Longevity(object):
         self.create_stage_builder_kube_job(
             kube_job_obj_list=obc_job_file, namespace=namespace
         )
+        # Wait 60 secs to ensure the obc on the list has status field populated
+        time.sleep(60)
         # Validate OBCs in kube job reached BOUND state
         self.validate_obcs_in_kube_job_reached_running_state(
             kube_job_obj=obc_job_file[0],
