@@ -24,7 +24,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
-def setup(pod_obj, bucket_factory, test_directory_setup):
+def setup(pod_obj, bucket_factory, test_directory_setup, bucketclass=None):
     """
     Setup function
 
@@ -33,12 +33,13 @@ def setup(pod_obj, bucket_factory, test_directory_setup):
         bucket_factory: Calling this fixture creates a new bucket(s)
         test_directory_setup: Calling this fixture will create origin and result
                               directories under the test directory of awscli pod
+        bucketclass: bucketclass defining the type of the bucket to create
 
     Returns:
         Tuple: Returns tuple containing the params used in this test case
 
     """
-    bucket = bucket_factory(amount=1, interface="OC")[0].name
+    bucket = bucket_factory(amount=1, interface="OC", bucketclass=bucketclass)[0].name
     object_key = "ObjKey-" + str(uuid.uuid4().hex)
     origin_dir = test_directory_setup.origin_dir
     res_dir = test_directory_setup.result_dir
@@ -61,14 +62,38 @@ class TestS3MultipartUpload(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1387")
     @tier1
+    @pytest.mark.parametrize(
+        argnames=["bucketclass"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"rgw": [(1, None)]},
+                }
+            ),
+            pytest.param(*[None]),
+        ],
+        ids=[
+            "rgw",
+            "noobaa-default",
+        ],
+    )
     def test_multipart_upload_operations(
-        self, mcg_obj, awscli_pod_session, bucket_factory, test_directory_setup
+        self,
+        mcg_obj,
+        awscli_pod_session,
+        bucket_factory,
+        test_directory_setup,
+        bucketclass,
     ):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object
         """
         bucket, key, origin_dir, res_dir, object_path, parts = setup(
-            awscli_pod_session, bucket_factory, test_directory_setup
+            awscli_pod_session,
+            bucket_factory,
+            test_directory_setup,
+            bucketclass=bucketclass,
         )
 
         # Abort all Multipart Uploads for this Bucket (optional, for starting over)
