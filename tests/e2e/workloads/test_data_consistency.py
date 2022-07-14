@@ -109,7 +109,7 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # BZ 1989301, but we need to be sure here)
     number_of_fetches = 120
     # if given fetch fail, we will ignore the failure unless the number of
-    # failures is too high (this has no direct impact of feature under test,
+    # failures is too high (this has no direct impact on feature under test,
     # we should be able to detect the bug even with 10% of rsync failures,
     # since data corruption doesn't simply go away ...)
     number_of_failures = 0
