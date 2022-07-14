@@ -317,6 +317,7 @@ MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
+RBD_MIRROR_APP_LABEL = "app=rook-ceph-rbd-mirror"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -718,6 +719,7 @@ RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
+RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1727,6 +1729,8 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 )
 
 # Submariner constants
+SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"
+SUBMARINER_GATEWAY_APP_LABEL = "app=submariner-gateway"
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
 
 # Multicluster related
