@@ -1404,7 +1404,7 @@ def health_checker(request, tier_marks_name):
             try:
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                ceph_cluster_installed = config.RUN["cephcluster"]
+                ceph_cluster_installed = config.RUN.get("cephcluster")
                 if not (
                     teardown
                     or skip_ocs_deployment
@@ -3365,12 +3365,12 @@ def ceph_toolbox(request):
     This fixture initiates ceph toolbox pod for manually created deployment
     and if it does not already exist.
     """
-    if "cephcluster" not in config.RUN:
+    teardown = config.RUN["cli_params"].get("teardown")
+    if "cephcluster" not in config.RUN and not teardown:
         check_clusters()
     deploy = config.RUN["cli_params"]["deploy"]
-    teardown = config.RUN["cli_params"].get("teardown")
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
-    ceph_cluster = config.RUN["cephcluster"]
+    ceph_cluster = config.RUN.get("cephcluster")
     no_ocs = ceph_cluster or skip_ocs
     deploy_teardown = deploy or teardown
     managed_platform = (
