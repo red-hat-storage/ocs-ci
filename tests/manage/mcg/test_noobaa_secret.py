@@ -1,5 +1,7 @@
+import pytest
 import json
 import logging
+import boto3
 
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -8,6 +10,7 @@ from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from botocore.exceptions import EndpointConnectionError
@@ -28,20 +31,58 @@ def create_bs_using_cli(
     )
 
 
+@pytest.fixture(scope="function")
+def cleanup(request):
+    """
+    Clean up function for the backinstores created using CLI
+    where we can't use teardown_factory()
+
+    """
+    instances = []
+
+    def factory(resource_obj):
+
+        if isinstance(resource_obj, list):
+            instances.extend(resource_obj)
+        else:
+            instances.append(resource_obj)
+
+    def finalizer():
+        for instance in instances[::-1]:
+            try:
+                instance.delete()
+            except CommandFailed as ex:
+                if "not found" in str(ex).lower():
+                    logger.warning(
+                        f"Resource {instance.name} could not be found in cleanup."
+                        "\nSkipping deletion."
+                    )
+                else:
+                    raise
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 class TestNoobaaSecrets:
 
     """
     Objectives of these tests are:
-        1) Create a secret with the same credentials and see if the duplicates are allowed
+        1)
         2) Delete any of the BS and see if the ownerReference for that particular resource is
          removed from secret (only created through CLI)
-        3) Modify the existing secret credentials see if the owned BS/NS is getting reconciled
+        3)
     """
 
     def test_duplicate_noobaa_secrets(
         self, backingstore_factory, cloud_uls_factory, mcg_obj, teardown_factory
     ):
+        """
+        Objective of this test is:
+            1) Create a secret with the same credentials and see if the duplicates are allowed when BS created
+            2) Modify the existing secret credentials see if the owned BS/NS is getting reconciled
 
+        """
         # create secret with the same credentials to check if duplicates are allowed
         first_bs_obj = backingstore_factory(
             method="oc", uls_dict={"aws": [(1, "eu-central-1")]}
@@ -88,7 +129,7 @@ class TestNoobaaSecrets:
         second_bs_obj = create_resource(**bs_data)
         teardown_factory(second_bs_obj)
 
-        # check if the duplicate secrets are allowed
+        # Check if the duplicate secrets are allowed
         first_bs_dict = OCP(
             namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
         ).get(resource_name=first_bs_obj.name)
@@ -103,7 +144,7 @@ class TestNoobaaSecrets:
             "Duplicate secrets are not allowed! only the first secret is being referred"
         )
 
-        # edit the secret credentials to wrong one and see if the backingstores get rejected
+        # Modify the secret credentials to wrong one and see if the backingstores get rejected
         first_secret_name = first_bs_dict["spec"]["awsS3"]["secret"]["name"]
         wrong_access_key_patch = {"data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}}
         OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").patch(
@@ -118,105 +159,43 @@ class TestNoobaaSecrets:
             resource_name=first_bs_obj.name,
             condition="Creating",
             column="PHASE",
-            error_condition="Ready",
         ), "Backingstores are not getting reconciled after changing linked secret credentials!"
         logger.info("Backingstores getting reconciled!")
 
-    def test_noobaa_secret_deletion_m1(self, teardown_factory, mcg_obj):
+    def test_noobaa_secret_deletion_m1(
+        self, backingstore_factory, teardown_factory, mcg_obj, cleanup
+    ):
+        """
+        Objectives of this test is:
+            1) create the secret using AWS credentials first
+            2) create a backingstore using CLI and passing the secret name
+            3) create second backingstore created using oc with the same secret
+            4) make sure deleting both the backinstores won't affect the secret
 
-        # create secret
-        try:
-            logger.info(
-                "Trying to load credentials from ocs-ci-data. "
-                "This flow is only relevant when running under OCS-QE environments."
-            )
-            secret_dict = update_config_from_s3().get("AUTH")
-        except (AttributeError, EndpointConnectionError):
-            logger.warning(
-                "Failed to load credentials from ocs-ci-data.\n"
-                "Your local AWS credentials might be misconfigured.\n"
-                "Trying to load credentials from local auth.yaml instead"
-            )
-            secret_dict = load_auth_config().get("AUTH", {})
-        aws_client = S3Client(auth_dict=secret_dict["AWS"])
-        teardown_factory(aws_client.secret)
-
-        # create ULS
-        cloud = "aws"
-        first_uls_name = create_unique_resource_name(
-            resource_description="uls", resource_type=cloud.lower()
-        )
-        aws_client.create_uls(name=first_uls_name, region="eu-central-1")
-
-        # create backingstore using CLI and passing secret credentials
-        access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
-        secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
-        first_bs_name = create_unique_resource_name(
-            resource_description="backingstore", resource_type=cloud.lower()
-        )
-        create_bs_using_cli(
-            mcg_obj=mcg_obj,
-            backingstore_name=first_bs_name,
-            access_key=access_key,
-            secret_key=secret_key,
-            uls_name=first_uls_name,
-            region="eu-central-1",
-        )
-        mcg_obj.check_backingstore_state(
-            backingstore_name=first_bs_name, desired_state=constants.BS_OPTIMAL
-        )
-        first_bs_obj = BackingStore(
-            name=first_bs_name,
-            method="cli",
-            type="cloud",
-            uls_name=first_uls_name,
-            mcg_obj=mcg_obj,
-        )
-        teardown_factory(first_bs_obj)
+        """
+        # create secret and first backingstore using CLI
+        first_bs_obj = backingstore_factory(
+            method="cli", uls_dict={"aws": [(1, "eu-central-1")]}
+        )[0]
         first_bs_dict = OCP(
             namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
         ).get(resource_name=first_bs_obj.name)
-        assert (
-            first_bs_dict["spec"]["awsS3"]["secret"]["name"] == aws_client.secret.name
-        ), f"Backingstore isn't using the already existing secret {aws_client.secret.name}!!"
-        logger.info(
-            f"Backingstore {first_bs_name} is using already existing secret {aws_client.secret.name}!!"
-        )
+
+        secret_name = first_bs_dict["spec"]["awsS3"]["secret"]["name"]
 
         # create the second backingstore using yaml and passing the secret name
-        second_uls_name = create_unique_resource_name(
-            resource_description="uls", resource_type=cloud.lower()
-        )
-        aws_client.create_uls(name=second_uls_name, region="eu-central-1")
-        second_bs_name = create_unique_resource_name(
-            resource_description="backingstore",
-            resource_type=cloud.lower(),
-        )
-        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
-        bs_data["metadata"]["name"] = second_bs_name
-        bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-        bs_data["spec"] = {
-            "type": "aws-s3",
-            "awsS3": {
-                "targetBucket": second_uls_name,
-                "region": "eu-central-1",
-                "secret": {
-                    "name": aws_client.secret.name,
-                    "namespace": bs_data["metadata"]["namespace"],
-                },
-            },
-        }
-        second_bs_obj = create_resource(**bs_data)
-        teardown_factory(second_bs_obj)
+        second_bs_obj = backingstore_factory(
+            method="oc", uls_dict={"aws": [(1, "eu-central-1")]}
+        )[0]
 
         # Delete both the Backingstores and verify that the secret still exists
         first_bs_obj.delete()
-        logger.info(f"First backingstore {first_bs_name} deleted!")
+        logger.info(f"First backingstore {first_bs_obj.name} deleted!")
         second_bs_obj.delete()
-        logger.info(f"Second backingstore {second_bs_name} deleted!")
+        logger.info(f"Second backingstore {second_bs_obj.name} deleted!")
         assert (
             OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").get(
-                resource_name=aws_client.secret.name, dont_raise=True
+                resource_name=secret_name, dont_raise=True
             )
             is not None
         ), "[Not expected] Secret got deleted along when backingstores deleted!!"
@@ -224,9 +203,19 @@ class TestNoobaaSecrets:
             "Secret remains even after the linked backingstores are deleted, as expected!"
         )
 
-    def test_noobaa_secret_deletion_m2(self, teardown_factory, mcg_obj):
+    def test_noobaa_secret_deletion_m2(self, teardown_factory, mcg_obj, cleanup):
+        """
+        Objectives of this tests are:
+            1) create first backingstore using CLI passing credentials, which creates secret as well
+            2) create second backingstore using CLI passing credentials, which recognizes the duplicates
+               and uses the secret created above
+            3) delete the first backingstore and make sure secret is deleted
+            4) check for the ownerReference see if its removed for the above backingstore deletion
+            5) delete the second backingstore and make sure secret is now deleted
 
-        # create ULS names
+        """
+
+        # create ULS
         try:
             logger.info(
                 "Trying to load credentials from ocs-ci-data. "
@@ -240,29 +229,24 @@ class TestNoobaaSecrets:
                 "Trying to load credentials from local auth.yaml instead"
             )
             secret_dict = load_auth_config().get("AUTH", {})
-        cloud = "aws"
-        first_uls_name = create_unique_resource_name(
-            resource_description="uls", resource_type=cloud.lower()
-        )
-        second_uls_name = create_unique_resource_name(
-            resource_description="uls", resource_type=cloud.lower()
-        )
-        aws_client = S3Client(auth_dict=secret_dict["AWS"])
-        aws_client.create_uls(name=first_uls_name, region="eu-central-1")
-
-        # delete the secret created during the creation of ULS
-        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").delete(
-            resource_name=aws_client.secret.name
-        )
-        OCP(
-            namespace=config.ENV_DATA["cluster_namespace"], kind="secret"
-        ).wait_for_delete(resource_name=aws_client.secret.name)
-
-        # create backingstore through CLI passing secret credentials
         access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
         secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+        first_uls_name = create_unique_resource_name(
+            resource_description="uls", resource_type="aws"
+        )
+        client = boto3.resource(
+            "s3",
+            verify=True,
+            endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        client.create_bucket(
+            Bucket=first_uls_name,
+            CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+        )
         first_bs_name = create_unique_resource_name(
-            resource_description="backingstore", resource_type=cloud.lower()
+            resource_description="backingstore", resource_type="aws"
         )
         create_bs_using_cli(
             mcg_obj=mcg_obj,
@@ -282,12 +266,18 @@ class TestNoobaaSecrets:
             uls_name=first_uls_name,
             mcg_obj=mcg_obj,
         )
-        teardown_factory(first_bs_obj)
+        cleanup(first_bs_obj)
 
         # create second backingstore using CLI and pass the secret credentials
-        aws_client.create_uls(name=second_uls_name, region="eu-central-1")
+        second_uls_name = create_unique_resource_name(
+            resource_description="uls", resource_type="aws"
+        )
+        client.create_bucket(
+            Bucket=second_uls_name,
+            CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+        )
         second_bs_name = create_unique_resource_name(
-            resource_description="backingstore", resource_type=cloud.lower()
+            resource_description="backingstore", resource_type="aws"
         )
         create_bs_using_cli(
             mcg_obj=mcg_obj,
@@ -307,7 +297,7 @@ class TestNoobaaSecrets:
             uls_name=second_uls_name,
             mcg_obj=mcg_obj,
         )
-        teardown_factory(second_bs_obj)
+        cleanup(second_bs_obj)
 
         secret_name = OCP(
             namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"

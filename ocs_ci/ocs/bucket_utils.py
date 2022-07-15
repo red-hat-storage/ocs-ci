@@ -455,8 +455,7 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     """
     mcg_obj.exec_mcg_cmd(
         f"backingstore create aws-s3 {backingstore_name} "
-        f"--access-key {cld_mgr.aws_client.access_key} "
-        f"--secret-key {cld_mgr.aws_client.secret_key} "
+        f"--secret-name {cld_mgr.aws_client.secret.name} "
         f"--target-bucket {uls_name} --region {region}",
         use_yes=True,
     )
