@@ -35,7 +35,6 @@ class StorageClassUI(PageNavigator):
             sc_name (str): the name of the storageclass created, otherwise return None.
 
         """
-
         self.navigate_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
@@ -123,78 +122,78 @@ class StorageClassUI(PageNavigator):
                 sc_name (str) if the storage class creation is successful, returns False otherwise
         """
 
-        self.ocp_version = version.get_semantic_ocp_version_from_config()
-        pvc_loc = locators[self.ocp_version]["storage_class"]
+        # self.ocp_version = version.get_semantic_ocp_version_from_config()
+        # self.sc_loc = locators[self.ocp_version]["storageclass"]
 
         self.navigate_storageclasses_page()
         logger.info("Create Storage Class")
-        self.do_click(pvc_loc["create-sc"])
+        self.do_click(self.sc_loc["create-sc"])
         logger.info("Storage Class Name")
         sc_name = create_unique_resource_name(
             resource_description="test", resource_type="storageclass"
         )
-        self.do_send_keys(pvc_loc["sc-name"], f"{sc_name}")
+        self.do_send_keys(self.sc_loc["sc-name"], f"{sc_name}")
         logger.info("Storage Class Description")
-        self.do_send_keys(pvc_loc["sc-description"], "this is a test storage class")
+        self.do_send_keys(self.sc_loc["sc-description"], "this is a test storage class")
         logger.info("Storage Class Reclaim Policy")
-        self.do_click(pvc_loc["reclaim-policy"])
+        self.do_click(self.sc_loc["reclaim-policy"])
         if reclaim_policy == "Delete":
-            self.do_click(pvc_loc["reclaim-policy-delete"])
+            self.do_click(self.sc_loc["reclaim-policy-delete"])
         elif reclaim_policy == "Retain":
-            self.do_click(pvc_loc["reclaim-policy-retain"])
+            self.do_click(self.sc_loc["reclaim-policy-retain"])
 
         if self.ocp_version >= "4.9":
             logger.info("Volume binding mode")
-            self.do_click(pvc_loc["volume_binding_mode"])
+            self.do_click(self.sc_loc["volume_binding_mode"])
             if vol_binding_mode == "WaitForFirstConsumer":
                 logger.info("select WaitForFirstConsumer")
-                self.do_click(pvc_loc["wait_for_first_consumer"])
+                self.do_click(self.sc_loc["wait_for_first_consumer"])
             elif vol_binding_mode == "Immediate":
                 logger.info("select Immediate")
-                self.do_click(pvc_loc["immediate"])
+                self.do_click(self.sc_loc["immediate"])
 
         logger.info("Storage Class Provisioner")
-        self.do_click(pvc_loc["provisioner"])
+        self.do_click(self.sc_loc["provisioner"])
         if provisioner == "rbd":
-            self.do_click(pvc_loc["rbd-provisioner"])
+            self.do_click(self.sc_loc["rbd-provisioner"])
         elif provisioner == "cephfs":
-            self.do_click(pvc_loc["cephfs-provisioner"])
+            self.do_click(self.sc_loc["cephfs-provisioner"])
         logger.info("Storage Class Storage Pool")
-        self.do_click(pvc_loc["storage-pool"])
-        self.do_click(pvc_loc["ceph-block-pool"])
+        self.do_click(self.sc_loc["storage-pool"])
+        self.do_click(self.sc_loc["ceph-block-pool"])
 
         logger.info("Storage Class with Encryption")
-        self.do_click(pvc_loc["encryption"])
+        self.do_click(self.sc_loc["encryption"])
         logger.info("Checking if 'Change connection details' option is available")
         conn_details = self.check_element_text(
             expected_text="Change connection details"
         )
         if conn_details:
             logger.info("Click on Change Connection Details")
-            self.do_click(pvc_loc["connections-details"])
+            self.do_click(self.sc_loc["connections-details"])
         if self.ocp_version >= "4.9":
             logger.info("Click on Create new KMS connection")
-            self.do_click(pvc_loc["new_kms"])
-        logger.info("Storage Class Service Name")
-        self.do_clear(pvc_loc["service-name"])
-        self.do_send_keys(pvc_loc["service-name"], service_name)
-        logger.info("Storage Class Address")
-        self.do_clear(pvc_loc["kms-address"])
-        self.do_send_keys(pvc_loc["kms-address"], kms_address)
-        logger.info("Storage Class Port")
-        self.do_clear(pvc_loc["kms-port"])
-        self.do_send_keys(pvc_loc["kms-port"], "8200")
+            self.do_click(self.sc_loc["new_kms"])
+        logger.info("KMS Service Name")
+        self.do_clear(self.sc_loc["service-name"])
+        self.do_send_keys(self.sc_loc["service-name"], service_name)
+        logger.info("Vault Node Address")
+        self.do_clear(self.sc_loc["kms-address"])
+        self.do_send_keys(self.sc_loc["kms-address"], kms_address)
+        logger.info("Vault Port")
+        self.do_clear(self.sc_loc["kms-port"])
+        self.do_send_keys(self.sc_loc["kms-port"], "8200")
         logger.info("Click on Advanced Settings")
-        self.do_click(pvc_loc["advanced-settings"])
+        self.do_click(self.sc_loc["advanced-settings"])
         logger.info("Enter Backend Path")
-        self.do_clear(pvc_loc["backend-path"])
-        self.do_send_keys(pvc_loc["backend-path"], backend_path)
+        self.do_clear(self.sc_loc["backend-path"])
+        self.do_send_keys(self.sc_loc["backend-path"], backend_path)
         logger.info("Enter TLS Server Name")
-        self.do_clear(pvc_loc["tls-server-name"])
-        self.do_send_keys(pvc_loc["tls-server-name"], tls_server_name)
+        self.do_clear(self.sc_loc["tls-server-name"])
+        self.do_send_keys(self.sc_loc["tls-server-name"], tls_server_name)
         logger.info("Enter Vault Enterprise Namespace")
-        self.do_clear(pvc_loc["vault-enterprise-namespace"])
-        self.do_send_keys(pvc_loc["vault-enterprise-namespace"], vault_namespace)
+        self.do_clear(self.sc_loc["vault-enterprise-namespace"])
+        self.do_send_keys(self.sc_loc["vault-enterprise-namespace"], vault_namespace)
         logger.info("Selecting CA Certificate")
         ca_cert_pem = self.driver.find_element(By.XPATH, "(//input[@type='file'])[1]")
         ca_cert_pem.send_keys(os.path.abspath(constants.VAULT_CA_CERT_PEM))
@@ -210,23 +209,23 @@ class StorageClassUI(PageNavigator):
         client_private_key_pem.send_keys(os.path.abspath(constants.VAULT_PRIVKEY_PEM))
         self.take_screenshot()
         logger.info("Saving Key Management Service Advanced Settings")
-        self.do_click(pvc_loc["save-advanced-settings"], enable_screenshot=True)
+        self.do_click(self.sc_loc["save-advanced-settings"], enable_screenshot=True)
         time.sleep(1)
         logger.info("Save Key Management Service details")
-        self.do_click(pvc_loc["save-service-details"], enable_screenshot=True)
+        self.do_click(self.sc_loc["save-service-details"], enable_screenshot=True)
         time.sleep(1)
         logger.info("Creating Storage Class with Encryption")
-        self.do_click(pvc_loc["create"])
+        self.do_click(self.sc_loc["create"])
         time.sleep(1)
         logger.info("Verifying if Storage Class is created or not")
         self.navigate_storageclasses_page()
         logger.info("Click on Dropdown and Select Name")
-        self.do_click(pvc_loc["sc-dropdown"])
-        self.do_click(pvc_loc["name-from-dropdown"])
+        self.do_click(self.sc_loc["sc-dropdown"])
+        self.do_click(self.sc_loc["name-from-dropdown"])
         logger.info("Search Storage Class with Name")
-        self.do_send_keys(pvc_loc["sc-search"], text=sc_name)
+        self.do_send_keys(self.sc_loc["sc-search"], text=sc_name)
         logger.info("Click and Select Storage Class")
-        self.do_click(format_locator(pvc_loc["select-sc"], sc_name))
+        self.do_click(format_locator(self.sc_loc["select-sc"], sc_name))
         # Verifying Storage Class Details via UI
         logger.info("Verifying Storage Class Details via UI")
         sc_check = self.check_element_text(expected_text=sc_name)

@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
     argnames=["kv_version"],
     argvalues=[
         pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
-        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+        # pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
 class TestPVEncryption(ManageTest):
@@ -68,12 +68,15 @@ class TestPVEncryption(ManageTest):
                 self.vault.create_ocs_vault_cert_resources()
 
         # Create vault namespace, backend path and policy in vault
-        logger.info("Create vault namespace, backend path and policy in vault")
+        logger.info("Create unique resource name")
         self.vault_resource_name = create_unique_resource_name("test", "vault")
-        self.vault.vault_create_namespace(namespace=self.vault_resource_name)
+        # logger.info("Create vault namespace")
+        # self.vault.vault_create_namespace(namespace=self.vault_resource_name)
+        logger.info("Create backend path")
         self.vault.vault_create_backend_path(
             backend_path=self.vault_resource_name, kv_version=kv_version
         )
+        logger.info("Create policy in vault")
         self.vault.vault_create_policy(policy_name=self.vault_resource_name)
         logger.info("Vault setup successful")
 
@@ -85,7 +88,7 @@ class TestPVEncryption(ManageTest):
         # Delete the resources in vault
         self.vault.remove_vault_backend_path()
         self.vault.remove_vault_policy()
-        self.vault.remove_vault_namespace()
+        # self.vault.remove_vault_namespace()
 
     @tier1
     @skipif_ocs_version("<4.8")
