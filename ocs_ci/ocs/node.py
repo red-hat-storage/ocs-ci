@@ -354,7 +354,7 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
     # wait for the new node to come to ready state
     log.info("Waiting for the new node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name)
+    machine.wait_for_new_node_to_be_ready(machineset_name, timeout=900)
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = get_worker_nodes()
