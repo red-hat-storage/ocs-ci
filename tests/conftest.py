@@ -2153,9 +2153,12 @@ def rgw_endpoint(request):
         log.info("RGW service is not available")
 
 
-@pytest.fixture()
-def mcg_obj(request):
-    return mcg_obj_fixture(request)
+@pytest.fixture(scope="session")
+def mcg_obj(request, mcg_obj_session):
+    # Used as a legacy fixture for backwards compatibility
+    # with tests who rely on the function-scope
+    # without the need for a wide refactor
+    return mcg_obj_session
 
 
 @pytest.fixture(scope="session")

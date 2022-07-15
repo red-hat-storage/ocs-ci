@@ -2,13 +2,14 @@ import base64
 import json
 import logging
 import os
-import stat
+import pathlib
 import tempfile
 from time import sleep
 
 import boto3
 import requests
 from botocore.client import ClientError
+from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -27,15 +28,18 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    exec_cmd,
+    get_attr_chain,
+    get_ocs_build_number,
+)
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
-    calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
     wait_for_resource_state,
 )
@@ -881,90 +885,65 @@ class MCG:
     )
     def retrieve_noobaa_cli_binary(self):
         """
-        Copy the NooBaa CLI binary from the operator pod
-        if it wasn't found locally, or if the hashes between
-        the two don't match.
-
-        Raises:
-            NoobaaCliChecksumFailedException: If checksum doesn't match.
-            AssertionError: In the case CLI binary doesn't exist.
+        Retrieve the MCG CLI container from Quay and extract the CLI binary
+        from the redistributable RPM
 
         """
 
-        def _compare_cli_hashes():
-            """
-            Verify that the remote and local CLI binaries are the same
-            in order to make sure the local bin is up to date
-
-            Returns:
-                bool: Whether the local and remote hashes are identical
-
-            """
-            remote_cli_bin_md5 = cal_md5sum(
-                self.operator_pod, constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            logger.info(f"Remote noobaa cli md5 hash: {remote_cli_bin_md5}")
-            local_cli_bin_md5 = calc_local_file_md5_sum(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            logger.info(f"Local noobaa cli md5 hash: {local_cli_bin_md5}")
-            return remote_cli_bin_md5 == local_cli_bin_md5
-
-        if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or not _compare_cli_hashes()
-        ):
-            logger.info(
-                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                " attempting to copy it from the MCG operator pod"
-            )
-            local_mcg_cli_dir = os.path.dirname(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            remote_mcg_cli_basename = os.path.basename(
-                constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            # The MCG CLI retrieval process is known to be flaky
-            # and there's an active BZ regardaing it -
-            # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
-            # rsync should be more reliable than cp, thus the use of oc rsync.
-            if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
-                cmd = (
-                    f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
-                    f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f" {local_mcg_cli_dir}"
+        # Retrieve the pull-secret from the cluster for access to Quay
+        with tempfile.NamedTemporaryFile(
+            delete=True, mode="wb", buffering=0
+        ) as registry_config:
+            registry_config.write(
+                base64.b64decode(
+                    OCP(
+                        kind="secret", namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
+                    ).get(resource_name=constants.CLUSTER_REGISTRY_CONFIG_SECRET)[
+                        "data"
+                    ][
+                        ".dockerconfigjson"
+                    ]
                 )
-                exec_cmd(cmd)
-                os.rename(
-                    os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-                    constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                )
-            else:
-                cmd = (
-                    f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                    f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-                )
-                proc = subprocess.run(cmd, shell=True, capture_output=True)
-                logger.info(
-                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
-                )
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC,
             )
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            assert os.access(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
-            ), "The MCG CLI binary does not have execution permissions"
-            if not _compare_cli_hashes():
-                raise NoobaaCliChecksumFailedException(
-                    "Binary hash doesn't match the one on the operator pod"
+            # Retrieve the OCS version to find the appropriate MCG CLI by tag
+            ocs_ver = get_ocs_build_number()
+            registry_config_and_image_url = (
+                f"--registry-config={registry_config.name} quay.io/rhceph-dev/mcg-cli:"
+            )
+            # Check whether the exact tag could be found
+            try:
+                exec_cmd(f"oc image info {registry_config_and_image_url}{ocs_ver}")
+            except CommandFailed:
+                # Otherwise, use the appropriate stable- tag
+                logger.warn(f"Could not find an exact match for {ocs_ver}")
+                ocs_ver = Version(ocs_ver)
+                ocs_ver = f"{ocs_ver.major}.{ocs_ver.minor}"
+                logger.warn(f"Trying latest-{ocs_ver}")
+                exec_cmd(
+                    f"oc image info {registry_config_and_image_url}latest-{ocs_ver}"
+                )
+            # Create a temporary directory for image extraction
+            with tempfile.TemporaryDirectory() as temp_cli_dir:
+                # Extract the CLI image
+                exec_cmd(
+                    f"oc image extract {registry_config_and_image_url + ocs_ver} --path=/:{temp_cli_dir}"
+                )
+                # Find the full name of the redistributable RPM
+                redist_rpm_name = list(
+                    pathlib.Path(f"{temp_cli_dir}/RPMS").glob("*redist*")
+                )[0].name
+                # Extract only the Linux binary from the RPM - the binary is statically linked,
+                # so there shouldn't be a problem in that regard
+                exec_cmd(
+                    [
+                        f"(cd {temp_cli_dir} && rpm2cpio {temp_cli_dir}/RPMS/{redist_rpm_name} "
+                        "| cpio -idmv ./usr/share/mcg/linux/noobaa)"
+                    ],
+                    shell=True,
+                )
+                # Move the binary to the ocs-ci/data/ folder for future use
+                exec_cmd(
+                    f"mv {temp_cli_dir}/usr/share/mcg/linux/noobaa {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
                 )
 
     @property
