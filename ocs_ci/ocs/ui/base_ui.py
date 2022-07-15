@@ -426,17 +426,15 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Overview Page")
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+        if Version.coerce(self.ocp_version) > Version.coerce("4.8"):
             self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        else:
-            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
-        if Version.coerce(self.ocp_version) <= Version.coerce("4.8"):
-            self.do_click(locator=self.page_nav["overview_page"])
-        else:
             logger.info("Navigating to ODF tab")
             self.do_click(locator=self.page_nav["odf_tab"])
             self.page_has_loaded(retries=10)
+        else:
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+            self.do_click(locator=self.page_nav["overview_page"])
 
     def navigate_odf_overview_page(self):
         """
