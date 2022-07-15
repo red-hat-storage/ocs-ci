@@ -998,6 +998,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+S3CLI_APP_LABEL = "s3cli"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
