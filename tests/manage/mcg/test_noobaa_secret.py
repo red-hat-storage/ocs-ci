@@ -65,15 +65,6 @@ def cleanup(request):
 
 
 class TestNoobaaSecrets:
-
-    """
-    Objectives of these tests are:
-        1)
-        2) Delete any of the BS and see if the ownerReference for that particular resource is
-         removed from secret (only created through CLI)
-        3)
-    """
-
     def test_duplicate_noobaa_secrets(
         self, backingstore_factory, cloud_uls_factory, mcg_obj, teardown_factory
     ):
