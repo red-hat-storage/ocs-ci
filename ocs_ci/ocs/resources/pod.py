@@ -194,6 +194,24 @@ class Pod(OCS):
             else None,
         )
 
+    def copy_to_pod(self, src_path, target_path, container=None):
+        """
+        Copies to pod path from the local path
+
+        Args:
+            src_path (str): local path
+            target_path (str): path within pod where you want to copy
+            container (str): if multi-container pod you can specify the container name, by default its None
+
+        Returns:
+            str: stdout of the command
+
+        """
+        cmd = f"rsync {src_path} {self.name}:/{target_path}"
+        if container:
+            cmd = cmd + f" -c {container}"
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+
     def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
@@ -2633,3 +2651,39 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
         if len(osd_pods) == len(osd_ids):
             logger.info(f"Found all the osd pods with the ids: {osd_ids}")
             return osd_pods
+
+
+def pod_resource_utilization_raw_output_from_adm_top(
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Gets the pod's memory utilization using adm top command.
+
+    Args:
+        namespace (str) : The pod's namespace where the adm top command has to be run
+
+    Returns:
+        str : Raw output of adm top pods command
+
+    """
+    obj = ocp.OCP()
+    resource_utilization_all_pods = obj.exec_oc_cmd(
+        command=f"adm top pods -n {namespace}", out_yaml_format=False
+    )
+    logger.info("Command RAW output of adm top pods")
+    logger.info(f"{resource_utilization_all_pods}")
+    return resource_utilization_all_pods
+
+
+def get_mon_label(mon_pod_obj):
+    """
+    Gets the mon pod label
+
+    Args:
+        mon_pod_obj (Pod): The pod object
+
+    Returns:
+        str: The mon pod label (eg: a)
+
+    """
+    return mon_pod_obj.get().get("metadata").get("labels").get("mon")

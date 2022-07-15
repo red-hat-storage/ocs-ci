@@ -265,6 +265,37 @@ def copy_random_individual_objects(
         logger.info(f"Copied {src_obj}")
 
 
+def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=False):
+    """
+    Performs upload operation using java s3 pod
+
+    Args:
+        javas3_pod: java s3 sdk pod session
+        s3_obj: MCG object
+        bucket_name: bucket on which objects are uploaded
+        is_multipart: By default False, set to True if you want
+                      to perform multipart upload
+    Returns:
+          Output of the command execution
+
+    """
+
+    access_key = s3_obj.access_key_id
+    secret_key = s3_obj.access_key
+    endpoint = s3_obj.s3_internal_endpoint
+
+    # compile the src code
+    javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
+
+    # execute the upload application
+    command = (
+        'mvn exec:java -Dexec.mainClass=amazons3.s3test.ChunkedUploadApplication -Dexec.args="'
+        + f"{endpoint} {access_key} {secret_key} {bucket_name} {is_multipart}"
+        + '" -Dmaven.test.skip=true package'
+    )
+    return javas3_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
     """
     Syncs objects between a target and source directories

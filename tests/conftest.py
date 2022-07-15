@@ -122,6 +122,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
+
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -2247,6 +2248,39 @@ def awscli_pod_fixture(request, scope_name):
     request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
+
+
+@pytest.fixture(scope="session")
+def javasdk_pod_session(request):
+    return javasdk_pod_fixture(request, scope_name="session")
+
+
+def javasdk_pod_fixture(request, scope_name):
+    """
+    Creates a new javasdk pod for executing s3 commands through java application
+    """
+    javas3_pod_dict = templating.load_yaml(constants.JAVA_SDK_S3_POD_YAML)
+    javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
+    javas3_pod_dict["metadata"]["name"] = javas3_pod_name
+    update_container_with_mirrored_image(javas3_pod_dict)
+    javas3_pod_obj = Pod(**javas3_pod_dict)
+
+    assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
+    helpers.wait_for_resource_state(javas3_pod_obj, constants.STATUS_RUNNING)
+
+    # push java code to the pod created
+    java_src_code_path = constants.JAVA_SRC_CODE_PATH
+    target_path = "/app/"
+    assert javas3_pod_obj.copy_to_pod(
+        src_path=java_src_code_path, target_path=target_path
+    ), "Failed to copy java source code!!"
+
+    def _javas3_pod_cleanup():
+        javas3_pod_obj.delete()
+
+    request.addfinalizer(_javas3_pod_cleanup)
+
+    return javas3_pod_obj
 
 
 @pytest.fixture()

@@ -19,7 +19,11 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ManagedServiceSecurityGroupNotFound,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.managedservice import (
     update_non_ga_version,
     update_pull_secret,
@@ -271,7 +275,14 @@ class ROSA(CloudDeploymentBase):
         worker_pattern = f"{infrastructure_id}-worker*"
         worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
         security_groups = worker_instances[0]["security_groups"]
-        sg_id = security_groups[0]["GroupId"]
+        sg_id = None
+        for security_group in security_groups:
+            if "terraform" in security_group["GroupName"]:
+                sg_id = security_group["GroupId"]
+                break
+        if not sg_id:
+            raise ManagedServiceSecurityGroupNotFound
+
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#

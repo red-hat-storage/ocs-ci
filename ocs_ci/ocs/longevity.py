@@ -1,6 +1,8 @@
 import time
+from pathlib import Path
 import logging
 import pathlib
+import os
 
 from datetime import datetime, timedelta
 
@@ -21,7 +23,12 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.ocs.cosbench import Cosbench
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    get_mon_db_size_in_kb,
+    get_noobaa_db_used_space,
+    get_current_test_name,
+)
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
 from ocs_ci.ocs.resources.pod import delete_pods
@@ -37,6 +44,22 @@ from ocs_ci.ocs.longevity_helpers import (
 )
 from ocs_ci.utility.deployment_openshift_logging import install_logging
 from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    get_mon_pods,
+    pod_resource_utilization_raw_output_from_adm_top,
+)
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    get_osd_utilization,
+    get_percent_used_capacity,
+)
+from ocs_ci.ocs.node import (
+    get_node_resource_utilization_from_adm_top,
+    get_node_resource_utilization_from_oc_describe,
+    check_for_zombie_process_on_node,
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +67,7 @@ supported_app_workloads = ["pgsql", "couchbase", "cosbench"]
 supported_ocp_workloads = ["logging", "monitoring", "registry"]
 
 STAGE_2_PREFIX = "stage-2-cycle-"
+STAGE_3_PREFIX = "stage-3-cycle-"
 STAGE_4_PREFIX = "stage-4-cycle-"
 
 
@@ -57,7 +81,13 @@ class Longevity(object):
         Initializer function
         """
         lcl = locals()
+        self.ceph_obj = CephCluster()
         self.tmp_path = pathlib.Path(ocsci_log_path())
+        self.cluster_sanity_check_dir = os.path.join(
+            self.tmp_path,
+            get_current_test_name(),
+            "cluster_sanity_outputs",
+        )
         self.pvc_size = None
         self.pvc_count = None
         self.pod_count = None
@@ -266,7 +296,6 @@ class Longevity(object):
             If None, random size pvc will be created
 
         Returns:
-            pvc_bound_list (list): List of all PVCs in Bound state
             pvc_job_file_list (list): List of all PVC.yaml dicts
 
         Raises:
@@ -288,14 +317,39 @@ class Longevity(object):
         self.create_stage_builder_kube_job(
             kube_job_obj_list=pvc_job_file_list, namespace=namespace
         )
+        # Wait 60 secs to ensure the PVC on the list has status field populated
+        time.sleep(60)
         # Validate PVCs in kube job reached BOUND state
-        pvc_bound_list = self.validate_pvc_in_kube_job_reached_bound_state(
+        self.validate_pvc_in_kube_job_reached_bound_state(
             kube_job_obj_list=pvc_job_file_list,
             namespace=namespace,
             pvc_count=num_of_pvc,
         )
 
-        return pvc_bound_list, pvc_job_file_list
+        return pvc_job_file_list
+
+    def get_pvc_bound_list(self, pvc_job_file_list, namespace, pvc_count):
+        """
+        Get the pvcs which are in Bound state from the given pvc job file list
+
+        Args:
+            pvc_job_file_list (list): List of all PVC.yaml dicts
+            namespace (str): Namespace where the resource has to be created
+            pvc_count (int): Bulk PVC count; If not specified the count will be
+            fetched from the kube job pvc yaml dict
+
+        Returns:
+            list: List of all PVCs in Bound state
+
+        Raises:
+            AssertionError: If not all PVCs reached to Bound state
+
+        """
+        return self.validate_pvc_in_kube_job_reached_bound_state(
+            kube_job_obj_list=pvc_job_file_list,
+            namespace=namespace,
+            pvc_count=pvc_count,
+        )
 
     def construct_stage_builder_bulk_pod_creation_yaml(self, pvc_list, namespace):
         """
@@ -382,7 +436,12 @@ class Longevity(object):
         return running_pods_list
 
     def create_stagebuilder_pods_with_all_pvc_types(
-        self, num_of_pvc, namespace, pvc_size
+        self,
+        num_of_pvc,
+        namespace,
+        pvc_size,
+        pvc_kube_job_name="all_pvc_for_pod_attach_job_profile",
+        pod_kube_job_name="all_pods_job_profile",
     ):
         """
         Create stagebuilder pods with all supported PVC types and access modes
@@ -410,11 +469,16 @@ class Longevity(object):
 
         """
         # Create stage builder PVCs of all supported types and access modes
-        pvc_bound_list, pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
+        pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
             num_of_pvc=num_of_pvc,
             namespace=namespace,
             pvc_size=pvc_size,
-            kube_job_name="all_pvc_for_pod_attach_job_profile",
+            kube_job_name=pvc_kube_job_name,
+        )
+        pvc_bound_list = self.get_pvc_bound_list(
+            pvc_job_file_list=pvc_job_file_list,
+            namespace=namespace,
+            pvc_count=num_of_pvc,
         )
         # Construct bulk POD creation yaml for kube job
         pods_dict_list = self.construct_stage_builder_bulk_pod_creation_yaml(
@@ -424,7 +488,7 @@ class Longevity(object):
         pod_job_file_list = self.construct_stage_builder_kube_job(
             obj_dict_list=pods_dict_list,
             namespace=namespace,
-            kube_job_name="all_pods_job_profile",
+            kube_job_name=pod_kube_job_name,
         )
         # Create stage builder for POD kube job
         self.create_stage_builder_kube_job(
@@ -439,7 +503,11 @@ class Longevity(object):
         return pod_pvc_job_file_list
 
     def create_stagebuilder_obc(
-        self, num_of_obcs, namespace, sc_name=constants.NOOBAA_SC
+        self,
+        num_of_obcs,
+        namespace,
+        sc_name=constants.NOOBAA_SC,
+        obc_kube_job_name="obc_job_profile",
     ):
         """
         Create stagebuilder OBC
@@ -468,12 +536,14 @@ class Longevity(object):
         obc_job_file = self.construct_stage_builder_kube_job(
             obj_dict_list=[obc_dict_list],
             namespace=namespace,
-            kube_job_name="obc_job_profile",
+            kube_job_name=obc_kube_job_name,
         )
         # Create stage builder for OBC kube job
         self.create_stage_builder_kube_job(
             kube_job_obj_list=obc_job_file, namespace=namespace
         )
+        # Wait 60 secs to ensure the obc on the list has status field populated
+        time.sleep(60)
         # Validate OBCs in kube job reached BOUND state
         self.validate_obcs_in_kube_job_reached_running_state(
             kube_job_obj=obc_job_file[0],
@@ -496,10 +566,10 @@ class Longevity(object):
             fetched from the kube job obc yaml dict
 
         Returns:
-        obc_bound_list (list): List of all OBCs which is in Bound state.
+            obc_bound_list (list): List of all OBCs which is in Bound state.
 
         Raises:
-        AssertionError: If not all OBC reached to Bound state
+            AssertionError: If not all OBC reached to Bound state
 
         """
         log.info("validate that all the OBCs in the kube job list reached BOUND state")
@@ -521,6 +591,135 @@ class Longevity(object):
         log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
         return obc_bound_list
+
+    def cluster_sanity_check(
+        self,
+        cluster_health=True,
+        db_usage=True,
+        resource_utilization=True,
+        disk_utilization=True,
+    ):
+        """
+        Cluster sanity checks
+
+        Args:
+            cluster_health (bool): Checks the cluster health if set to True
+            db_usage (bool): Get the mon and noobaa db usage if set to True
+            resource_utilization (bool): Get the Memory, CPU utilization of nodes and pods if set to True
+            disk_utilization (bool): Get the osd and total cluster disk utilization if set to True
+
+        Returns:
+            cluster_sanity_check_dict (dict): Returns cluster sanity checks outputs in a nested dictionary
+
+        """
+        log.info("Starting Cluster Sanity checks....")
+        cluster_sanity_check_dict = {}
+        # Check if there are Zombie process on the nodes
+        check_for_zombie_process_on_node()
+
+        if cluster_health:
+            # Cluster health
+            log.info("Checking the overall health of the cluster")
+            self.ceph_obj.cluster_health_check()
+            log.info("Checking storage pods status")
+            # Validate storage pods are running
+            wait_for_pods_to_be_running(timeout=600)
+
+        if db_usage:
+            mon_db_usage = []
+            cluster_sanity_check_dict["db_usage"] = {}
+            # Check mon db usage
+            mon_pods = get_mon_pods()
+            for mon_pod in mon_pods:
+                # Get mon db size
+                mon_db_usage.append(
+                    f"{mon_pod.name} DB usage: {get_mon_db_size_in_kb(mon_pod)}KB"
+                )
+            cluster_sanity_check_dict["db_usage"]["mon_db_usage"] = mon_db_usage
+            # Check Noobaa db usage
+            cluster_sanity_check_dict["db_usage"][
+                "noobaa_db_usage"
+            ] = get_noobaa_db_used_space()
+
+        if resource_utilization:
+            res_util_list = []
+            cluster_sanity_check_dict["resource_utilization"] = {}
+            # Get the cpu and memory of each nodes from adm top
+            master_top_dict_out = get_node_resource_utilization_from_adm_top(
+                node_type="master", print_table=True
+            )
+            res_util_list.append(master_top_dict_out)
+            worker_top_dict_out = get_node_resource_utilization_from_adm_top(
+                node_type="worker", print_table=True
+            )
+            res_util_list.append(worker_top_dict_out)
+            cluster_sanity_check_dict["resource_utilization"][
+                "adm_top_nodes_res_util"
+            ] = res_util_list
+            # Get the cpu and memory from describe of nodes
+            master_describe_dict_out = get_node_resource_utilization_from_oc_describe(
+                node_type="master", print_table=True
+            )
+            res_util_list.clear()
+            res_util_list.append(master_describe_dict_out)
+            worker_describe_dict_out = get_node_resource_utilization_from_oc_describe(
+                node_type="worker", print_table=True
+            )
+            res_util_list.append(worker_describe_dict_out)
+            cluster_sanity_check_dict["resource_utilization"][
+                "oc_describe_nodes_res_util"
+            ] = res_util_list
+
+            # Get the resource utilization of the pods in openshift-storage namespace
+            pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+            cluster_sanity_check_dict["resource_utilization"][
+                "adm_top_pods_res_util"
+            ] = pod_raw_adm_out
+
+        if disk_utilization:
+            cluster_sanity_check_dict["disk_utilization"] = {}
+            # Get OSD utilization
+            osd_filled_dict = get_osd_utilization()
+            log.info(f"OSD Utilization: {osd_filled_dict}")
+            cluster_sanity_check_dict["disk_utilization"][
+                "osd_disk_utilization"
+            ] = osd_filled_dict
+            # Get the percentage of the total used capacity in the cluster
+            total_used_capacity = get_percent_used_capacity()
+            log.info(
+                f"The percentage of the total used capacity in the cluster: {total_used_capacity}"
+            )
+            cluster_sanity_check_dict["disk_utilization"][
+                "cluster_total_used_capacity"
+            ] = total_used_capacity
+
+        log.info("Completed Cluster Sanity Checks")
+
+        return cluster_sanity_check_dict
+
+    def collect_cluster_sanity_checks_outputs(self, dir_name=None):
+        """
+        Collect cluster sanity checks outputs and store the outputs in ocs-ci log directory
+
+        Args:
+            dir_name (str):  By default the cluster sanity checks outputs are stored in
+            ocs-ci-log_path/cluster_sanity_outputs directory.
+            when dir_name input is provided, a new directory with that name gets created under
+            ocs-ci-log_path/cluster_sanity_outputs/<dir_name> and the outputs gets collected inside it
+
+        """
+        destination_dir = (
+            f"{self.cluster_sanity_check_dir}/{dir_name}"
+            if dir_name
+            else self.cluster_sanity_check_dir
+        )
+        if not os.path.isdir(destination_dir):
+            Path(destination_dir).mkdir(parents=True, exist_ok=True)
+        cluster_sanity_out_dict = self.cluster_sanity_check()
+        for key1 in cluster_sanity_out_dict:
+            with open(f"{destination_dir}/{key1}", "w") as f:
+                for key2, value in cluster_sanity_out_dict[key1].items():
+                    f.write(f"{key2} : {value}\n\n")
 
     def stage_0(
         self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True
@@ -597,7 +796,9 @@ class Longevity(object):
 
         while datetime.now() < end_time:
             cycle_no += 1
-            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[STARTING STAGE2 CYCLE:{cycle_no}]#################"
+            )
 
             for bulk in (False, True):
                 current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
@@ -622,12 +823,128 @@ class Longevity(object):
                     )
                     time.sleep(delay)
 
-            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[ENDING STAGE2 CYCLE:{cycle_no}]#################"
+            )
 
             log.info(
-                f"#################[WAITING FOR {delay} SECONDS AFTER {cycle_no} CYCLE.]#################"
+                f"#################[WAITING FOR {delay} SECONDS AFTER STAGE2 {cycle_no} CYCLE.]#################"
             )
             time.sleep(delay)
+
+    def stage3(
+        self,
+        project_factory,
+        num_of_pvc,
+        num_of_obc,
+        pvc_size=None,
+        delay=60,
+        run_time=1440,
+    ):
+        """
+        Concurrent bulk operations of following
+            PVC creation - all supported types  (RBD, CephFS, RBD-block)
+            PVC deletion - all supported types  (RBD, CephFS, RBD-block)
+            OBC creation
+            OBC deletion
+            APP pod creation - all supported types  (RBD, CephFS, RBD-block)
+            APP pod deletion - all supported types  (RBD, CephFS, RBD-block)
+
+        Args:
+            project_factory : Fixture to create a new Project.
+            num_of_pvc (int): Bulk PVC count
+            num_of_obc (int): Bulk OBC count
+            pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
+            If None, random size pvc will be created
+            delay (int): Delay in seconds before starting the next cycle
+            run_time (int): The amount of time the particular stage has to run (in minutes)
+
+        """
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        cycle_count = 1
+        while datetime.now() < end_time:
+            log.info(f"Current time is {datetime.now()}")
+            log.info(f"End time is {end_time}")
+            log.info(
+                f"##############[STARTING STAGE3 CYCLE:{cycle_count}]####################"
+            )
+            namespace = f"{STAGE_3_PREFIX}{cycle_count}"
+            project_factory(project_name=namespace)
+            log.info(
+                "Creating the initial resources required for PVC/OBC/POD deletion operations concurrently"
+            )
+            resource_to_delete = [
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                    kube_job_name="delete_all_pvc_job_profile",
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_obc,
+                    num_of_obc,
+                    namespace,
+                    obc_kube_job_name="delete_obc_job_profile",
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_pods_with_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                    pvc_kube_job_name="delete_all_pvc_for_pod_attach_job_profile",
+                    pod_kube_job_name="delete_all_pods_job_profile",
+                ),
+            ]
+            resource_to_delete_job_file = []
+            # waiting for the resource thread to complete
+            log.info("Waiting for the resource thread to complete")
+            for resource in resource_to_delete:
+                resource_to_delete_job_file.append(resource.result())
+
+            log.info(
+                "Starting concurrent bulk creation and deletion requests of PVC, OBC and APP pod"
+            )
+            bulk_create_delete = [
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_obc, num_of_obc, namespace
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.create_stagebuilder_pods_with_all_pvc_types,
+                    num_of_pvc,
+                    namespace,
+                    pvc_size,
+                ),
+            ]
+            for job_file in resource_to_delete_job_file:
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.delete_stage_builder_kube_job, job_file, namespace
+                )
+
+            bulk_create_delete_job_file = []
+            # waiting for the bulk create delete thread to complete
+            log.info("Waiting for the bulk create delete thread to complete")
+            for thread in bulk_create_delete:
+                bulk_create_delete_job_file.append(thread.result())
+            # Delete all the created resources in the bulk create delete thread
+            for job_file in bulk_create_delete_job_file:
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.delete_stage_builder_kube_job, job_file, namespace
+                )
+
+            log.info(
+                f"##############[COMPLETED STAGE3 CYCLE:{cycle_count}]####################"
+            )
+            cycle_count += 1
+            log.info(
+                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT STAGE3 CYCLE]###########"
+            )
 
     def stage_4(
         self,
@@ -675,7 +992,9 @@ class Longevity(object):
 
         while datetime.now() < end_time:
             cycle_no += 1
-            log.info(f"#################[STARTING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[STARTING STGAE4 CYCLE:{cycle_no}]#################"
+            )
 
             for concurrent in (False, True):
                 current_ops = (
@@ -814,7 +1133,9 @@ class Longevity(object):
                     raise ex.UnexpectedBehaviour("Deletion of PVCs failed")
                 log.info("PVC deletion was successful.")
 
-            log.info(f"#################[ENDING CYCLE:{cycle_no}]#################")
+            log.info(
+                f"#################[ENDING STAGE4 CYCLE:{cycle_no}]#################"
+            )
 
 
 def start_app_workload(
@@ -855,6 +1176,9 @@ def start_app_workload(
         if not support_check:
             raise UnsupportedWorkloadError("Found Unsupported app workloads list")
         log.info("APP Workloads support check is Successful")
+        log.info("Cluster sanity checks at the beginning of the stage")
+        long = Longevity()
+        long.collect_cluster_sanity_checks_outputs(dir_name="Beginning_of_the_stage")
         cycle_count = 1
         end_time = datetime.now() + timedelta(minutes=run_time)
         while datetime.now() < end_time:
@@ -909,6 +1233,7 @@ def start_app_workload(
                 cleanup()
             threads.clear()
             workloads.clear()
+            long.collect_cluster_sanity_checks_outputs(dir_name=f"cycle-{cycle_count}")
             log.info(
                 f"##############[COMPLETED CYCLE:{cycle_count}]####################"
             )
@@ -953,7 +1278,9 @@ def start_ocp_workload(workloads_list, run_in_bg=True):
     if not support_check:
         raise UnsupportedWorkloadError("Found Unsupported ocp workloads list")
     log.info("OCP Workloads support check is Successful")
-
+    log.info("Cluster sanity checks at the beginning of the stage")
+    long = Longevity()
+    long.collect_cluster_sanity_checks_outputs(dir_name="Beginning_of_the_stage")
     for workload in workloads_list:
         if workload == "monitoring":
             if not check_if_monitoring_stack_exists():

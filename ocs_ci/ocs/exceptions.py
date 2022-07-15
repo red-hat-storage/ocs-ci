@@ -468,6 +468,10 @@ class ManagedServiceAddonDeploymentError(Exception):
     pass
 
 
+class ManagedServiceSecurityGroupNotFound(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 
@@ -537,4 +541,8 @@ class ROSAProdAdminLoginFailedException(Exception):
 
 
 class Md5CheckFailed(Exception):
+    pass
+
+
+class ZombieProcessFoundException(Exception):
     pass
