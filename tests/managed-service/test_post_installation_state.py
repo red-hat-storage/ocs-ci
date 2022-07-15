@@ -32,7 +32,7 @@ class TestPostInstallationState(ManageTest):
         storage_cluster.ocs_install_verification()
 
     @acceptance
-    @ms_consumer_required
+    @managed_service_required
     def test_post_onboarding(self):
         post_onboarding_verification()
 

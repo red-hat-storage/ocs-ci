@@ -287,40 +287,49 @@ def get_admin_key_from_provider():
 def post_onboarding_verification():
     """
     Check that after onboarding consumer the relevant resources
-    were created in the provider cluster and then switch back to the consumer cluster:
+    were created in the provider cluster and then switch back to the original cluster:
     1. StorageConsumer with the correct id exists and all its CephResources
     are in Ready status
     2. CephBlockPool and Subvolumegroup with the correct id are in Ready status
     """
     if config.multicluster:
         restore_ctx_index = config.cur_index
-        #  oc get ClusterVersion version -o yaml | grep clusterID
-        clusterversion_yaml = ocp.OCP(
-            kind="ClusterVersion",
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            resource_name="version",
-        )
-        current_consumer = clusterversion_yaml.get().get("spec")["clusterID"]
-        logger.info(f"Current consumer's ID is {current_consumer}")
+
+        consumer_ids = []
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "consumer":
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                clusterversion_yaml = ocp.OCP(
+                    kind="ClusterVersion",
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    resource_name="version",
+                )
+                version_spec = clusterversion_yaml.get()["spec"]
+                logger.info(f"{version_spec}")
+                current_consumer = clusterversion_yaml.get()["spec"]["clusterID"]
+                logger.info(f"Current consumer's ID is {current_consumer}")
+                consumer_ids.append(f"storageconsumer-{current_consumer}")
+        logger.info(f"Consumer ids from consumer clusters: {consumer_ids}")
         config.switch_to_provider()
         all_consumer_names = get_consumer_names()
-        if current_consumer not in all_consumer_names:
-            raise ResourceNotFoundError(
-                f"{current_consumer} StorageConsumer not found in the provider cluster"
-            )
-        for resource in {
-            constants.CEPHBLOCKPOOL.lower(),
-            constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
-        }:
-            resource_name = resource + "-" + current_consumer
-            resource_yaml = ocp.OCP(
-                kind=resource,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                resource_name=resource_name,
-            )
-            if resource_yaml.get()["status"]["phase"] != "Ready":
-                raise ResourceWrongStatusException(
-                    f"{resource_name} is in Status {resource_yaml.get()['status']['phase']}. Status should be Ready"
+        logger.info(f"Consumers found in provider cluster: {all_consumer_names}")
+        for consumer in consumer_ids:
+            if consumer not in all_consumer_names:
+                raise ResourceNotFoundError(
+                    f"{consumer} StorageConsumer not found in the provider cluster"
                 )
-
+            for resource in {
+                constants.CEPHBLOCKPOOL.lower(),
+                constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+            }:
+                resource_name = resource + "-" + consumer
+                resource_yaml = ocp.OCP(
+                    kind=resource,
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    resource_name=resource_name,
+                )
+                if resource_yaml.get()["status"]["phase"] != "Ready":
+                    raise ResourceWrongStatusException(
+                        f"{resource_name} is in Status {resource_yaml.get()['status']['phase']}. Status should be Ready"
+                    )
         config.switch_ctx(restore_ctx_index)
