@@ -82,6 +82,7 @@ class TestNodesRestartMS(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier4a
+    @pytest.mark.polarion_id("OCS-3980")
     def test_osd_node_restart_and_check_osd_pods_status(self, nodes):
         """
         1) Restart one of the osd nodes.
@@ -128,8 +129,12 @@ class TestNodesRestartMS(ManageTest):
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
-            pytest.param(constants.WORKER_MACHINE),
-            pytest.param(constants.MASTER_MACHINE),
+            pytest.param(
+                *[constants.WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-3982")
+            ),
+            pytest.param(
+                *[constants.MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-3981")
+            ),
         ],
     )
     def test_nodes_restart(self, nodes, node_type):
@@ -140,7 +145,7 @@ class TestNodesRestartMS(ManageTest):
         if node_type == constants.WORKER_MACHINE:
             node_names = get_worker_nodes()
         else:
-            node_names = get_master_nodes()
+            node_names = get_master_nodes()[0:2]
 
         ocp_nodes = get_node_objs(node_names=node_names)
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
