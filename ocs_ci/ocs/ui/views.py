@@ -837,7 +837,7 @@ storageclass = {
     ),
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
     "tls-server-name": ("#kms-service-tls", By.CSS_SELECTOR),
-    "vault-enterprise-namespace": ("#kms-service-namespace", By.CSS_SELECTOR),
+    "vault-enterprise-namespace": ("//input[@id='kms-service-namespace']", By.XPATH),
     "browse-ca-certificate": ("(//input[@type='file'])[1]", By.XPATH),
     "browse-client-certificate": ("(//input[@type='file'])[2]", By.XPATH),
     "browse-client-private-key": ("(//input[@type='file'])[3]", By.XPATH),

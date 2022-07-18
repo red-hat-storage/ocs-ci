@@ -110,7 +110,7 @@ class StorageClassUI(PageNavigator):
         Test for creation of storage class with encryption via UI
         Args:
                 backend_path (str): name of the vault backend path
-                vault_namespace (str): name of the vault namespace
+                # vault_namespace (str): name of the vault namespace
                 reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
                 provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
                 vol_binding_mode (str): value of the volume binding mode,
@@ -191,9 +191,10 @@ class StorageClassUI(PageNavigator):
         logger.info("Enter TLS Server Name")
         self.do_clear(self.sc_loc["tls-server-name"])
         self.do_send_keys(self.sc_loc["tls-server-name"], tls_server_name)
-        logger.info("Enter Vault Enterprise Namespace")
+        logger.info("Clear Existing Vault Enterprise Namespace if any")
+        time.sleep(1)
         self.do_clear(self.sc_loc["vault-enterprise-namespace"])
-        self.do_send_keys(self.sc_loc["vault-enterprise-namespace"], vault_namespace)
+        # self.do_send_keys(self.sc_loc["vault-enterprise-namespace"], vault_namespace)
         logger.info("Selecting CA Certificate")
         ca_cert_pem = self.driver.find_element(By.XPATH, "(//input[@type='file'])[1]")
         ca_cert_pem.send_keys(os.path.abspath(constants.VAULT_CA_CERT_PEM))

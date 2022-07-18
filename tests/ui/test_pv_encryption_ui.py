@@ -70,6 +70,7 @@ class TestPVEncryption(ManageTest):
         # Create vault namespace, backend path and policy in vault
         logger.info("Create unique resource name")
         self.vault_resource_name = create_unique_resource_name("test", "vault")
+        logger.info(f"Unique resource name created is {self.vault_resource_name}")
         # logger.info("Create vault namespace")
         # self.vault.vault_create_namespace(namespace=self.vault_resource_name)
         logger.info("Create backend path")
@@ -120,7 +121,7 @@ class TestPVEncryption(ManageTest):
         logger.info("Creating Storage Class via UI")
         sc_name = sc_obj.create_encrypted_storage_class_ui(
             backend_path=self.vault_resource_name,
-            vault_namespace=self.vault_resource_name,
+            # vault_namespace=self.vault_resource_name,
             reclaim_policy="Delete",
             provisioner="rbd",
             vol_binding_mode="WaitForFirstConsumer",
