@@ -550,6 +550,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 shutil.rmtree(f"{constants.EXTERNAL_DIR}/coreos-install")
             os.mkdir(f"{constants.EXTERNAL_DIR}/coreos-install")
             os.chdir(f"{constants.EXTERNAL_DIR}/coreos-installer/")
+            run_cmd("git checkout tags/v0.14.0")
             run_cmd("make")
             run_cmd(f"make install DESTDIR={constants.EXTERNAL_DIR}/coreos-install/")
             os.chdir(f"{self.cluster_path}")
