@@ -20,8 +20,7 @@ from ocs_ci.ocs.node import (
     wait_for_osd_ids_come_up_on_node,
     wait_for_nodes_status,
     verify_worker_nodes_security_groups,
-    get_worker_nodes,
-    get_master_nodes,
+    get_nodes,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -89,7 +88,7 @@ class TestNodesRestartMS(ManageTest):
         2) Check that the osd pods associated with the node should change to a Terminating state.
         3) Wait for the node to reach Ready state.
         4) Check that the new osd pods with the same ids start on the same node.
-        5) Check the worker nodes security groups
+        5) Check the worker nodes security groups.
         """
         # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
         if is_ms_consumer_cluster():
@@ -143,11 +142,10 @@ class TestNodesRestartMS(ManageTest):
 
         """
         if node_type == constants.WORKER_MACHINE:
-            node_names = get_worker_nodes()
+            ocp_nodes = get_nodes(node_type=node_type)
         else:
-            node_names = get_master_nodes()[0:2]
+            ocp_nodes = get_nodes(node_type=node_type, num_of_nodes=2)
 
-        ocp_nodes = get_node_objs(node_names=node_names)
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         self.sanity_helpers.health_check()
         self.create_resources()
@@ -167,12 +165,7 @@ class TestNodesRestartMS(ManageTest):
         Test restart nodes one after the other and check health status in between
 
         """
-        if node_type == constants.WORKER_MACHINE:
-            node_names = get_worker_nodes()
-        else:
-            node_names = get_master_nodes()
-
-        ocp_nodes = get_node_objs(node_names=node_names)
+        ocp_nodes = get_nodes(node_type=node_type)
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
