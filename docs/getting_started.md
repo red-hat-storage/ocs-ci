@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-1. Python version >= 3.7
+1. Python version >= 3.8
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel (or similar packages for ubuntu).
 3. Configure AWS Account credentials when testing with AWS platforms,
@@ -81,11 +81,11 @@ necessary dependencies
     [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
     via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
 2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python 3.7 virtual environment. This is actually quite easy to do
+3. Setup a python 3.8 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configuration in tox.
 
-    * `python3.7 -m venv <path/to/venv>`
+    * `python3.8 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
