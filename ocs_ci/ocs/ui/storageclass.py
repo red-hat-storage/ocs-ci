@@ -76,7 +76,7 @@ class StorageClassUI(PageNavigator):
             self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 5
+            (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 15
         )
         return sc_existence
 
