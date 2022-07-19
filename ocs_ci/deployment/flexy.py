@@ -469,7 +469,7 @@ class FlexyBase(object):
         exec_cmd(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        exec_cmd(rsync_cmd, timeout=1200)
+        exec_cmd(rsync_cmd, timeout=3600)
 
         # mirror install-dir to cluster path (auth directory, metadata.json
         # file and other files)
