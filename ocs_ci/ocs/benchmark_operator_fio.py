@@ -96,7 +96,7 @@ class BenchmarkOperatorFIO(object):
 
         """
         log.info("Run make deploy command")
-        run("make deploy", shell=True, check=True, cwd=self.local_repo)
+        run("make deploy IMG=quay.io/ocsci/benchmark-operator:testing", shell=True, check=True, cwd=self.local_repo)
 
         sample = TimeoutSampler(
             timeout=100,
