@@ -109,7 +109,7 @@ def nfs_disable(
         format_type="merge",
     ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
 
-    # Enable ROOK_CSI_ENABLE_NFS via patch request
+    # Disable ROOK_CSI_ENABLE_NFS via patch request
     assert config_map_obj.patch(
         resource_name="rook-ceph-operator-config",
         params=rook_csi_config_disable,

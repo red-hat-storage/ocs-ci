@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-# from ocs_ci.utility.utils import exec_cmd
+
 from ocs_ci.utility import utils, nfs_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
@@ -15,7 +15,6 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
 )
 
-# from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources import pod, ocs
 
 from ocs_ci.utility.retry import retry
@@ -240,9 +239,11 @@ class TestNfsEnable(ManageTest):
         6:- Verify presence of the file
         7:- Create /var/lib/www/html/index.html file
         8:- Connect the external client using the share path and ingress address
-        9:- Verify able to access exported volume
-        10:- unmount
-        11:- Deletion of Pods and PVCs
+        9:- Verify able to read exported volume
+        10:- Verify able to write to the exported volume from external client
+        11:- Able to read updated /var/lib/www/html/index.html file from inside the pod
+        12:- unmount
+        13:- Deletion of Pods and PVCs
 
         """
 
@@ -331,12 +332,37 @@ class TestNfsEnable(ManageTest):
         )(utils.exec_cmd(cmd=export_nfs_external_cmd))
         assert result.returncode == 0
 
-        # Verify able to access exported volume
+        # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"
         result = utils.exec_cmd(cmd=command)
         stdout = result.stdout.decode().rstrip()
         log.info(stdout)
         assert stdout == "hello world"
+
+        command = f"sudo chmod 666 {self.test_folder}/index.html"
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
+
+        # Verify able to write to the exported volume
+        command = (
+            f"bash -c " + '"echo ' + "'test_writing'" + '  >> test_nfs/index.html"'
+        )
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
+
+        command = f"cat {self.test_folder}/index.html"
+        result = utils.exec_cmd(cmd=command)
+        stdout = result.stdout.decode().rstrip()
+        log.info(stdout)
+        assert stdout == "hello world" + """\n""" + "test_writing"
+
+        # Able to read updated /var/lib/www/html/index.html file from inside the pod
+        command = f"bash -c " + '"cat ' + ' /var/lib/www/html/index.html"'
+        result = pod_obj.exec_cmd_on_pod(
+            command=command,
+            out_yaml_format=False,
+        )
+        assert result.rstrip() == "hello world" + """\n""" + "test_writing"
 
         # unmount
         result = retry(
@@ -628,6 +654,146 @@ class TestNfsEnable(ManageTest):
             ), f"Pod {pod_obj.name} is not deleted"
 
         log.info("Deleting PVCs")
+        nfs_pvc_obj.delete()
+        nfs_pvc_obj.ocp.wait_for_delete(
+            resource_name=nfs_pvc_obj.name
+        ), f"PVC {nfs_pvc_obj.name} is not deleted"
+        log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+    def test_external_nfs_client_can_write_read_new_file(
+        self,
+        pod_factory,
+    ):
+        """
+        This test is to validate external client can write and read back a new file,
+        and the pods can read the external client's written content.
+
+        Steps:
+        1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        2:- Create nginx pod with nfs pvcs mounted
+        3:- Fetch sharing details for the nfs pvc
+        4:- Run IO
+        5:- Wait for IO completion
+        6:- Verify presence of the file
+        7:- Connect the external client using the share path and ingress address
+        8:- Verify able to write new file in exported volume by external client
+        9:- Able to read the external client's written content from inside the pod
+        10:- unmount
+        11:- Deletion of Pods and PVCs
+
+        """
+
+        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        nfs_pvc_obj = helpers.create_pvc(
+            sc_name=self.nfs_sc,
+            namespace=self.namespace,
+            size="5Gi",
+            do_reload=True,
+            access_mode=constants.ACCESS_MODE_RWX,
+            volume_mode="Filesystem",
+        )
+
+        # Create nginx pod with nfs pvcs mounted
+        pod_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=nfs_pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        # Fetch sharing details for the nfs pvc
+        fetch_vol_name_cmd = (
+            "get pvc " + nfs_pvc_obj.name + " --output jsonpath='{.spec.volumeName}'"
+        )
+        vol_name = self.pvc_obj.exec_oc_cmd(fetch_vol_name_cmd)
+        log.info(f"For pvc {nfs_pvc_obj.name} volume name is, {vol_name}")
+        fetch_pv_share_cmd = (
+            "get pv "
+            + vol_name
+            + " --output jsonpath='{.spec.csi.volumeAttributes.share}'"
+        )
+        share_details = self.pv_obj.exec_oc_cmd(fetch_pv_share_cmd)
+        log.info(f"Share details is, {share_details}")
+
+        file_name = pod_obj.name
+        # Run IO
+        pod_obj.run_io(
+            storage_type="fs",
+            size="4G",
+            fio_filename=file_name,
+            runtime=60,
+        )
+        log.info("IO started on all pods")
+
+        # Wait for IO completion
+        fio_result = pod_obj.get_fio_results()
+        log.info("IO completed on all pods")
+        err_count = fio_result.get("jobs")[0].get("error")
+        assert err_count == 0, (
+            f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+        )
+        # Verify presence of the file
+        file_path = pod.get_file_path(pod_obj, file_name)
+        log.info(f"Actual file path on the pod {file_path}")
+        assert pod.check_file_existence(
+            pod_obj, file_path
+        ), f"File {file_name} doesn't exist"
+        log.info(f"File {file_name} exists in {pod_obj.name}")
+
+        # Connect the external client using the share path and ingress address
+        export_nfs_external_cmd = (
+            "sudo mount -t nfs4 -o proto=tcp "
+            + self.hostname_add
+            + ":"
+            + share_details
+            + " "
+            + self.test_folder
+        )
+
+        result = retry(
+            (CommandFailed),
+            tries=200,
+            delay=10,
+        )(utils.exec_cmd(cmd=export_nfs_external_cmd))
+        assert result.returncode == 0
+
+        # Verify able to write new file in exported volume by external client
+        command = (
+            f"bash -c "
+            + '"echo '
+            + "'written from external client'"
+            + '  > test_nfs/test.html"'
+        )
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
+
+        command = f"sudo chmod 666 {self.test_folder}/test.html"
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
+
+        # Able to read the external client's written content from inside the pod
+        command = f"bash -c " + '"cat ' + ' /var/lib/www/html/test.html"'
+        result = pod_obj.exec_cmd_on_pod(
+            command=command,
+            out_yaml_format=False,
+        )
+        assert result.rstrip() == "written from external client"
+
+        # unmount
+        result = retry(
+            (CommandFailed),
+            tries=300,
+            delay=10,
+        )(utils.exec_cmd(cmd="sudo umount -l " + self.test_folder))
+        assert result.returncode == 0
+
+        # Deletion of Pods and PVCs
+        log.info(f"Deleting pod")
+        pod_obj.delete()
+        pod_obj.ocp.wait_for_delete(
+            pod_obj.name, 180
+        ), f"Pod {pod_obj.name} is not deleted"
+
+        log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
