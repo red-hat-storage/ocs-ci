@@ -1363,6 +1363,12 @@ AUTH_CONFIG_DOCS = (
 # Conversions
 TP_CONVERSION = {" B/s": 0.000000976562, " KiB/s": 0.000976562, " MiB/s": 1}
 
+BYTES_IN_KB = 1024
+BYTES_IN_MB = 1024**2
+BYTES_IN_GB = 1024**3
+BYTES_IN_TB = 1024**4
+
+
 # LSO
 ROOT_DISK_NAME = "sda"
 RDM = "RDM"
@@ -1822,3 +1828,18 @@ LVMO_POD_LABEL = {
     },
 }
 LVM_PROVISIONER = "topolvm.cybozu.com"
+TOPOLVM_METRICS = [
+    "topolvm_thinpool_data_percent",
+    "topolvm_thinpool_metadata_percent",
+    "topolvm_thinpool_size_bytes",
+    "topolvm_volumegroup_available_bytes",
+    "topolvm_volumegroup_size_bytes",
+]
+TOPOLVM_ALERTS = {
+    "vg_data_75_precent": "VolumeGroupUsageAtThresholdNearFull",
+    "vg_data_85_precent": "VolumeGroupUsageAtThresholdCritical",
+    "tp_data_75_precent": "ThinPoolDataUsageAtThresholdNearFull",
+    "tp_data_85_precent": "ThinPoolDataUsageAtThresholdCritical",
+    "metadata_75_precent": "ThinPoolMetaDataUsageAtThresholdNearFull",
+    "metadata_85_precent": "ThinPoolMetaDataUsageAtThresholdCritical",
+}
