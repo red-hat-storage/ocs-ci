@@ -546,3 +546,19 @@ class Md5CheckFailed(Exception):
 
 class ZombieProcessFoundException(Exception):
     pass
+
+
+class LvSizeWrong(Exception):
+    pass
+
+
+class LvDataPercentSizeWrong(Exception):
+    pass
+
+
+class LvThinUtilNotChanged(Exception):
+    pass
+
+
+class ThinPoolUtilityWrong(Exception):
+    pass
