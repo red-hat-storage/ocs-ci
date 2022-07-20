@@ -2043,19 +2043,15 @@ def ceph_health_check_base(namespace=None):
         f"-n {namespace} "
         f"--timeout=120s"
     )
-    tools_pod = run_cmd(
-        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
-        f"-o jsonpath='{{.items[0].metadata.name}}'",
-        timeout=60,
-    )
-
-    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    ceph_health_cmd = create_ceph_health_cmd(namespace)
     try:
         health = run_cmd(ceph_health_cmd)
     except CommandFailed as ex:
         if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
             log.info("Patch the consumer rook-ceph-tools deployment")
             patch_consumer_toolbox()
+            # get the new tool box pod since patching creates the new tool box pod
+            ceph_health_cmd = create_ceph_health_cmd(namespace)
             health = run_cmd(ceph_health_cmd)
         else:
             raise ex
@@ -2065,6 +2061,26 @@ def ceph_health_check_base(namespace=None):
         return True
     else:
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+
+
+def create_ceph_health_cmd(namespace):
+    """
+    Forms the ceph health command
+
+    Args:
+        namespace (str): Namespace of OCS
+
+    Returns:
+        str: ceph health command
+
+    """
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l '{constants.TOOL_APP_LABEL}' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'",
+        timeout=60,
+    )
+    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    return ceph_health_cmd
 
 
 def get_rook_repo(branch="master", to_checkout=None):
