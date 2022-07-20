@@ -12,6 +12,7 @@ from jsonschema import validate
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
@@ -49,6 +50,7 @@ from ocs_ci.utility import (
     kms as KMS,
     version,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -763,7 +765,15 @@ def osd_encryption_verification():
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
         lsblk_cmd = f"oc debug node/{worker_node} -- chroot /host lsblk"
-        lsblk_out = run_cmd(lsblk_cmd)
+        # It happens from time to time that we see this error:
+        # error: unable to create the debug pod "node-name-internal-debug
+        # Hence we need to add some re-try logic here
+        lsblk_out = retry(
+            (CommandFailed),
+            tries=3,
+            delay=60,
+            text_in_exception="unable to create the debug pod",
+        )(run_cmd)(lsblk_cmd)
         log.info(f"the output of lsblk command on node {worker_node} is:\n {lsblk_out}")
         osd_node_names[worker_node].append(lsblk_out)
 
