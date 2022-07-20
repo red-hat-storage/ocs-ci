@@ -200,7 +200,7 @@ class TestNoobaaSecrets:
             1) create first backingstore using CLI passing credentials, which creates secret as well
             2) create second backingstore using CLI passing credentials, which recognizes the duplicates
                and uses the secret created above
-            3) delete the first backingstore and make sure secret is deleted
+            3) delete the first backingstore and make sure secret is not deleted
             4) check for the ownerReference see if its removed for the above backingstore deletion
             5) delete the second backingstore and make sure secret is now deleted
 
@@ -304,6 +304,19 @@ class TestNoobaaSecrets:
             is not None
         ), "[Not expected] Secret got deleted along when first backingstore deleted!!"
         logger.info("Secret exists after the first backingstore deletion!")
+
+        # check for the owner reference
+        secret_owner_ref = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind="secret"
+        ).get(resource_name=secret_name)["metadata"]["ownerReferences"]
+        for owner in secret_owner_ref:
+            assert owner["name"] != first_bs_name, (
+                f"Owner reference for {first_bs_name} still exists in the secret {secret_name} "
+                f"even after backingstore {first_bs_name} got deleted!"
+            )
+        logger.info(
+            f"Owner reference for first backingstore {first_bs_name} is deleted in {secret_name} !!"
+        )
 
         # delete second backingstore
         second_bs_obj.delete()
