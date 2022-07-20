@@ -315,6 +315,7 @@ OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
+S3CLI_LABEL = "app=s3cli"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
 
@@ -510,6 +511,8 @@ AWSCLI_SERVICE_CA_YAML = os.path.join(
 AWSCLI_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli.yaml")
 
 AWSCLI_MULTIARCH_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli_multiarch.yaml")
+
+S3CLI_MULTIARCH_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "s3cli-sts.yaml")
 
 JAVA_SDK_S3_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "java_sdk_s3_pod.yaml")
 
@@ -999,6 +1002,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+S3CLI_APP_LABEL = "s3cli"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
