@@ -2057,6 +2057,19 @@ def change_ceph_backfillfull_ratio(backfillfull_ratio):
     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
 
+def change_ceph_full_ratio(full_ratio):
+    """
+    Change Ceph full_ratio
+
+    Args:
+        full_ratio (int): backfillfull_ratio
+
+    """
+    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio/100))}"
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+
 def validate_existence_of_blocking_pdb():
     """
     Validate creation of PDBs for OSDs.

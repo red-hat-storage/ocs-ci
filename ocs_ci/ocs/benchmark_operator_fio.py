@@ -149,13 +149,14 @@ class BenchmarkOperatorFIO(object):
             )
             raise TimeoutExpiredError
 
-    def run_fio_benchmark_operator(self):
+    def run_fio_benchmark_operator(self, is_completed=True):
         self.label_worker_nodes()
         self.clone_benchmark_operator()
         self.deploy()
         self.create_benchmark_operator()
         self.wait_for_wl_to_start()
-        self.wait_for_wl_to_complete()
+        if is_completed:
+            self.wait_for_wl_to_complete()
 
     def cleanup(self):
         """
