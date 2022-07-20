@@ -305,7 +305,7 @@ class TestNfsEnable(ManageTest):
 
         # Create /var/lib/www/html/index.html file inside the pod
         command = (
-            f"bash -c "
+            "bash -c "
             + '"echo '
             + "'hello world'"
             + '  > /var/lib/www/html/index.html"'
@@ -345,7 +345,10 @@ class TestNfsEnable(ManageTest):
 
         # Verify able to write to the exported volume
         command = (
-            f"bash -c " + '"echo ' + "'test_writing'" + '  >> test_nfs/index.html"'
+            "bash -c "
+            + '"echo '
+            + "'test_writing'"
+            + f'  >> {self.test_folder}/index.html"'
         )
         result = utils.exec_cmd(cmd=command)
         assert result.returncode == 0
@@ -357,7 +360,7 @@ class TestNfsEnable(ManageTest):
         assert stdout == "hello world" + """\n""" + "test_writing"
 
         # Able to read updated /var/lib/www/html/index.html file from inside the pod
-        command = f"bash -c " + '"cat ' + ' /var/lib/www/html/index.html"'
+        command = "bash -c " + '"cat ' + ' /var/lib/www/html/index.html"'
         result = pod_obj.exec_cmd_on_pod(
             command=command,
             out_yaml_format=False,
@@ -470,7 +473,7 @@ class TestNfsEnable(ManageTest):
 
             # Create /var/lib/www/html/index.html file inside the pod
             command = (
-                f"bash -c "
+                "bash -c "
                 + '"echo '
                 + "'hello world'"
                 + '  > /var/lib/www/html/index.html"'
@@ -580,42 +583,31 @@ class TestNfsEnable(ManageTest):
         )
 
         for pod_obj in pod_objs:
-            file_name = pod_obj.name
-            # Run IO
-            pod_obj.run_io(
-                storage_type="fs",
-                size="2G",
-                fio_filename=file_name,
-                runtime=60,
-            )
-            log.info("IO started on all pods")
-
-            # Wait for IO completion
-            fio_result = pod_obj.get_fio_results()
-            log.info("IO completed on all pods")
-            err_count = fio_result.get("jobs")[0].get("error")
-            assert err_count == 0, (
-                f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
-            )
-            # Verify presence of the file
-            file_path = pod.get_file_path(pod_obj, file_name)
-            log.info(f"Actual file path on the pod {file_path}")
-            assert pod.check_file_existence(
-                pod_obj, file_path
-            ), f"File {file_name} doesn't exist"
-            log.info(f"File {file_name} exists in {pod_obj.name}")
-
-            # Create /var/lib/www/html/index.html file inside the pod
+            pod_names = []
+            # Create /var/lib/www/html/shared_file.html file inside the pod
             command = (
-                f"bash -c "
+                "bash -c "
                 + '"echo '
-                + "'hello world'"
-                + '  > /var/lib/www/html/index.html"'
+                + f"'I am pod, {pod_obj.name}'"
+                + '  >> /var/lib/www/html/shared_file.html"'
             )
-            pod_obj.exec_cmd_on_pod(
+            result = pod_obj.exec_cmd_on_pod(
                 command=command,
                 out_yaml_format=False,
             )
+            log.info(result)
+            pod_names.append(pod_obj.name)
+
+        for pod_obj in pod_objs:
+            command = f"cat /var/lib/www/html/shared_file.html"
+            result = pod_obj.exec_cmd_on_pod(
+                command=command,
+                out_yaml_format=False,
+            )
+            log.info(result)
+            for pod_name in pod_names:
+                assert_str = f"I am pod, {pod_name}"
+                assert assert_str in result
 
         # Connect the external client using the share path and ingress address
         export_nfs_external_cmd = (
@@ -635,11 +627,12 @@ class TestNfsEnable(ManageTest):
         assert result.returncode == 0
 
         # Verify able to access exported volume
-        command = f"cat {self.test_folder}/index.html"
+        command = f"cat {self.test_folder}/shared_file.html"
         result = utils.exec_cmd(cmd=command)
         stdout = result.stdout.decode().rstrip()
-        log.info(stdout)
-        assert stdout == "hello world"
+        for pod_name in pod_names:
+            assert_str = f"I am pod, {pod_name}"
+            assert assert_str in stdout
 
         # unmount
         result = utils.exec_cmd(cmd="sudo umount -l " + self.test_folder)
@@ -758,10 +751,10 @@ class TestNfsEnable(ManageTest):
 
         # Verify able to write new file in exported volume by external client
         command = (
-            f"bash -c "
+            "bash -c "
             + '"echo '
             + "'written from external client'"
-            + '  > test_nfs/test.html"'
+            + f'  > {self.test_folder}/test.html"'
         )
         result = utils.exec_cmd(cmd=command)
         assert result.returncode == 0
@@ -771,7 +764,7 @@ class TestNfsEnable(ManageTest):
         assert result.returncode == 0
 
         # Able to read the external client's written content from inside the pod
-        command = f"bash -c " + '"cat ' + ' /var/lib/www/html/test.html"'
+        command = "bash -c " + '"cat ' + ' /var/lib/www/html/test.html"'
         result = pod_obj.exec_cmd_on_pod(
             command=command,
             out_yaml_format=False,
