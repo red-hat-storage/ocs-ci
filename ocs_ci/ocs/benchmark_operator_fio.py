@@ -131,7 +131,7 @@ class BenchmarkOperatorFIO(object):
             expected_status=constants.STATUS_RUNNING,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("fio-server pods did not move to running state after 100 sec.")
+            log.error("fio-server pods did not move to running state after 100 sec")
             raise TimeoutExpiredError
 
     def wait_for_wl_to_complete(self):
