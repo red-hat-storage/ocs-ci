@@ -5,7 +5,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size
 from ocs_ci.utility.prometheus import PrometheusAPI
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.resources import pvc
@@ -26,10 +26,13 @@ class TestClusterFullAndRecovery(E2ETest):
     """
 
     def teardown(self):
+        if self.banchmark_operator_teardown:
+            change_ceph_full_ratio(95)
+            self.benchmark_obj.cleanup()
+            change_ceph_backfillfull_ratio(95)
+            ceph_health_check(tries=30, delay=60)
         change_ceph_backfillfull_ratio(80)
         change_ceph_full_ratio(85)
-        if self.banchmark_operator_teardown:
-            self.benchmark_obj.cleanup()
 
     def test_cluster_full_and_recovery(self, teardown_project_factory):
         """
@@ -80,7 +83,7 @@ class TestClusterFullAndRecovery(E2ETest):
         log.info(
             "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
         )
-        size = get_file_size(87)
+        size = get_file_size(88)
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
@@ -201,6 +204,7 @@ class TestClusterFullAndRecovery(E2ETest):
             column=constants.STATUS_READYTOUSE,
             timeout=60,
         )
+        a = 1
 
     def verify_used_capacity_greater_than_expected(self, expected_used_capacity):
         """
