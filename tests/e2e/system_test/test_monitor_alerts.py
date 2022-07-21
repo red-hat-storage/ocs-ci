@@ -19,16 +19,41 @@ from ocs_ci.ocs.cluster import (
 log = logging.getLogger(__name__)
 
 
-class TestFullClusterMonitoring(E2ETest):
+class TestClusterFullAndRecovery(E2ETest):
+    """
+    Test Cluster Full And Recovery
+
+    """
+
     def teardown(self):
         change_ceph_backfillfull_ratio(80)
         change_ceph_full_ratio(85)
+        if self.banchmark_operator_teardown:
+            self.benchmark_obj.cleanup()
 
-    def test_full_cluster_monitoring(self, teardown_project_factory):
+    def test_cluster_full_and_recovery(self, teardown_project_factory):
+        """
+        1.Create PVC1 [FS + RBD]
+        2.Verify new PVC1 [FS + RBD] on Bound state
+        3.Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator
+        4.Verify Alerts are seen ["CephClusterCriticallyFull", "CephOSDNearFull"]
+        5.Create PVC2 [FS + RBD]
+        6.Verify PVC2 [FS + RBD] are in Pending state
+        7.Create snapshot from PVC1
+        8.Verify snapshots on false state
+        9.Change Ceph full_ratiofrom from 85% to 95%
+        10.Delete  benchmark-operator PVCs
+        11.Change Ceph backfillfull_ratio from 80% to 95%
+        12.Verify PVC2 [FS + RBD]  are moved to Bound state
+        13.Verify snapshots moved from false state to true state
+
+        """
+        self.banchmark_operator_teardown = False
         project_name = "test755"
         project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(project_obj)
 
+        log.info("Create PVC1 [FS + RBD]")
         pvc_obj_blk1 = helpers.create_pvc(
             sc_name=constants.CEPHBLOCKPOOL_SC,
             namespace=project_name,
@@ -43,6 +68,8 @@ class TestFullClusterMonitoring(E2ETest):
             do_reload=False,
             access_mode=constants.ACCESS_MODE_RWO,
         )
+
+        log.info("Verify new PVC1 [FS + RBD] on Bound state")
         helpers.wait_for_resource_state(
             resource=pvc_obj_blk1, state=constants.STATUS_BOUND
         )
@@ -50,22 +77,29 @@ class TestFullClusterMonitoring(E2ETest):
             resource=pvc_obj_fs1, state=constants.STATUS_BOUND
         )
 
-        log.info("Full fill the cluster")
+        log.info(
+            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
+        )
         size = get_file_size(87)
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
+        self.banchmark_operator_teardown = True
+
+        log.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
-            timeout=900,
+            timeout=1800,
             sleep=40,
-            func=self.verify_cluster_percent_used_capacity,
+            func=self.verify_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("after 900 seconds")
+            log.error("The after 900 seconds")
             raise TimeoutExpiredError
 
-        log.info("")
+        log.info(
+            "Verify Alerts are seen 'CephClusterCriticallyFull' and 'CephOSDNearFull'"
+        )
         prometheus = PrometheusAPI()
         log.info("Logging of all prometheus alerts started")
         alerts_response = prometheus.get(
@@ -80,6 +114,7 @@ class TestFullClusterMonitoring(E2ETest):
                 expected_alert in actual_alerts
             ), f"Alert {expected_alert} not found!!"
 
+        log.info("Verify PVC2 [FS + RBD] are in Pending state")
         pvc_obj_blk2 = helpers.create_pvc(
             sc_name=constants.CEPHBLOCKPOOL_SC,
             namespace=project_name,
@@ -94,6 +129,7 @@ class TestFullClusterMonitoring(E2ETest):
             do_reload=False,
             access_mode=constants.ACCESS_MODE_RWO,
         )
+        log.info("Waiting 20 sec to verify PVC2 [FS + RBD] are in Pending state.")
         time.sleep(20)
         helpers.wait_for_resource_state(
             resource=pvc_obj_blk2, state=constants.STATUS_PENDING
@@ -102,6 +138,7 @@ class TestFullClusterMonitoring(E2ETest):
             resource=pvc_obj_fs2, state=constants.STATUS_PENDING
         )
 
+        log.info("Create snapshot from PVC1 and verify snapshots on false state")
         snap_blk_obj = pvc.create_pvc_snapshot(
             pvc_name=pvc_obj_blk1.name,
             snap_yaml=constants.CSI_RBD_SNAPSHOT_YAML,
@@ -110,7 +147,6 @@ class TestFullClusterMonitoring(E2ETest):
             sc_name=constants.CEPHBLOCKPOOL_SC,
             wait=False,
         )
-
         snap_fs_obj = pvc.create_pvc_snapshot(
             pvc_name=pvc_obj_fs1.name,
             snap_yaml=constants.CSI_CEPHFS_SNAPSHOT_YAML,
@@ -119,16 +155,13 @@ class TestFullClusterMonitoring(E2ETest):
             sc_name=constants.CEPHFILESYSTEM_SC,
             wait=False,
         )
-
         time.sleep(20)
-
         snap_blk_obj.ocp.wait_for_resource(
             condition="false",
             resource_name=snap_blk_obj.name,
             column=constants.STATUS_READYTOUSE,
             timeout=60,
         )
-
         snap_blk_obj.ocp.wait_for_resource(
             condition="false",
             resource_name=snap_fs_obj.name,
@@ -136,12 +169,17 @@ class TestFullClusterMonitoring(E2ETest):
             timeout=60,
         )
 
+        log.info("Change Ceph full_ratiofrom from 85% to 95%")
         change_ceph_full_ratio(95)
 
+        log.info("Delete  benchmark-operator PVCs")
         self.benchmark_obj.cleanup()
+        self.banchmark_operator_teardown = False
 
+        log.info("Change Ceph full_ratio from from 85% to 95%")
         change_ceph_backfillfull_ratio(95)
 
+        log.info("Verify PVC2 [FS + RBD]  are moved to Bound state")
         helpers.wait_for_resource_state(
             resource=pvc_obj_blk2, state=constants.STATUS_BOUND
         )
@@ -149,6 +187,7 @@ class TestFullClusterMonitoring(E2ETest):
             resource=pvc_obj_fs2, state=constants.STATUS_BOUND
         )
 
+        log.info("Verify snapshots moved from false state to true state")
         snap_blk_obj.ocp.wait_for_resource(
             condition="true",
             resource_name=snap_blk_obj.name,
@@ -163,9 +202,16 @@ class TestFullClusterMonitoring(E2ETest):
             timeout=60,
         )
 
-    def verify_cluster_percent_used_capacity(self, expected_used_capacity):
+    def verify_used_capacity_greater_than_expected(self, expected_used_capacity):
+        """
+        Verify cluster percent used capacity
+
+        Args:
+            expected_used_capacity (int): expected used capacity
+
+        Returns:
+             bool: True if used_capacity greater than expected_used_capacity, False otherwise
+
+        """
         used_capacity = get_percent_used_capacity()
-        if used_capacity > expected_used_capacity:
-            return True
-        else:
-            return False
+        return used_capacity > expected_used_capacity
