@@ -16,12 +16,13 @@ log = logging.getLogger(__name__)
 @tier1
 @bugzilla("2075068")
 @polarion_id("OCS-3947")
+@polarion_id("OCS-2597")
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash
     """
 
-    result_dir = constants.MOUNT_POINT + "/mydir"
+    result_dir = constants.FLEXY_MNT_CONTAINER_DIR + "/mydir"
     END = 125
 
     def creates_files(self, pod_obj):
@@ -50,7 +51,7 @@ class TestKernelCrash(E2ETest):
         ],
     )
     def test_node_kernel_crash_ceph_fsync(
-        self, pvc_factory, teardown_factory, pod_factory, interface_type
+        self, pvc_factory, teardown_factory, dc_pod_factory, interface_type
     ):
         """
         1. Create 1GiB PVC
@@ -67,17 +68,13 @@ class TestKernelCrash(E2ETest):
             interface=interface_type,
         )
 
-        # Set interface argument for reference
-        pvc_obj.interface = interface_type
-
         # Create a pod on a particular node
         selected_node = random.choice(worker_nodes_list)
         log.info(f"Creating a pod on node: {selected_node} with pvc {pvc_obj.name}")
 
-        pod_obj = pod_factory(
+        pod_obj = dc_pod_factory(
             interface=interface_type,
             pvc=pvc_obj,
-            pod_dict_path=constants.NGINX_POD_YAML,
         )
 
         file = constants.FSYNC
@@ -85,13 +82,8 @@ class TestKernelCrash(E2ETest):
         helpers.run_cmd(cmd=cmd)
         log.info("Files copied successfully ")
 
-        commands = [
-            f"mkdir {self.result_dir}",
-            "apt-get update",
-        ]
-        for cmd in commands:
-            pod_obj.exec_cmd_on_pod(command=cmd)
-        pod_obj.exec_sh_cmd_on_pod(command="apt-get install python -y")
+        command = f"mkdir {self.result_dir}"
+        pod_obj.exec_cmd_on_pod(command=command)
         log.info("Starting creation and deletion of files on volume")
 
         # Create and delete files on mount point
@@ -114,6 +106,6 @@ class TestKernelCrash(E2ETest):
             )
 
         except ResourceWrongStatusException:
-            log.info("Node in Ready status found, hence TC is Passed.")
+            log.info(f"(No kernel panic observed on {selected_node})")
         else:
-            assert "Node in NotReady status found due to it gets panic, hence TC is failed."
+            assert f"({selected_node} is in Not Ready state)"
