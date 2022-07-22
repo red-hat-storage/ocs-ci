@@ -10,13 +10,11 @@ import os
 import re
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
     ConfigurationError,
-)
-from ocs_ci.ocs.managedservice import (
-    post_onboarding_verification,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
@@ -600,3 +598,59 @@ def is_odf_addon_installed(cluster_name=None):
         return True
     else:
         return False
+
+
+def post_onboarding_verification():
+    """
+    Check that after onboarding consumer the relevant resources
+    were created in the provider cluster and then switch back to the original cluster:
+    1. StorageConsumer with the correct id exists and all its CephResources
+    are in Ready status
+    2. CephBlockPool and Subvolumegroup with the correct id are in Ready status
+    """
+    if config.multicluster:
+        restore_ctx_index = config.cur_index
+
+        consumer_ids = []
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "consumer":
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                clusterversion_yaml = ocp.OCP(
+                    kind="ClusterVersion",
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    resource_name="version",
+                )
+                version_spec = clusterversion_yaml.get()["spec"]
+                logger.info(f"{version_spec}")
+                current_consumer = clusterversion_yaml.get()["spec"]["clusterID"]
+                logger.info(f"Current consumer's ID is {current_consumer}")
+                consumer_ids.append(f"storageconsumer-{current_consumer}")
+        logger.info(f"Consumer ids from consumer clusters: {consumer_ids}")
+        config.switch_to_provider()
+        for consumer in consumer_ids:
+            consumer_yaml = ocp.OCP(
+                kind="StorageConsumer",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=consumer,
+            )
+            ceph_resources = consumer_yaml.get().get("status")["cephResources"]
+            for resource in ceph_resources:
+                if resource["status"] != "Ready":
+                    raise ResourceWrongStatusException(
+                        f"{resource['name']} of {consumer} is in status {resource['status']}. Status should be Ready"
+                    )
+            for resource in {
+                constants.CEPHBLOCKPOOL.lower(),
+                constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+            }:
+                resource_name = resource + "-" + consumer
+                resource_yaml = ocp.OCP(
+                    kind=resource,
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    resource_name=resource_name,
+                )
+                if resource_yaml.get()["status"]["phase"] != "Ready":
+                    raise ResourceWrongStatusException(
+                        f"{resource_name} is in Status {resource_yaml.get()['status']['phase']}. Status should be Ready"
+                    )
+        config.switch_ctx(restore_ctx_index)

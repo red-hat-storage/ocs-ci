@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     bugzilla,
 )
-from ocs_ci.ocs.managedservice import (
+from ocs_ci.utility.rosa import (
     post_onboarding_verification,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
