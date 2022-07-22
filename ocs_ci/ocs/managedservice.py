@@ -6,10 +6,6 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import (
-    ResourceNotFoundError,
-    ResourceWrongStatusException,
-)
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label, Pod

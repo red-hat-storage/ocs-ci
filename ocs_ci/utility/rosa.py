@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
     ConfigurationError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
