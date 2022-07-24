@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_lvm_not_installed,
-    acceptance,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
 from ocs_ci.ocs import constants
@@ -112,7 +111,6 @@ class TestLvmSnapshot(ManageTest):
         )
 
     @tier1
-    @acceptance
     @skipif_lvm_not_installed
     @skipif_ocs_version("<4.10")
     def test_create_clone_from_pvc(
