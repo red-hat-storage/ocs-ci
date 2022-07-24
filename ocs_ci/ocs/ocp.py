@@ -50,6 +50,7 @@ class OCP(object):
         field_selector=None,
         cluster_kubeconfig="",
         threading_lock=None,
+        silent=False,
     ):
         """
         Initializer function
@@ -66,6 +67,7 @@ class OCP(object):
             cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
             threading_lock (threading.Lock): threading.Lock object that is used
                 for handling concurrent oc commands
+            silent (bool): If True will silent errors from the server, default false
         """
         self._api_version = api_version
         self._kind = kind
@@ -76,6 +78,7 @@ class OCP(object):
         self.field_selector = field_selector
         self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
+        self.silent = silent
 
     @property
     def api_version(self):
@@ -94,10 +97,12 @@ class OCP(object):
         return self._resource_name
 
     @property
-    def data(self):
+    def data(self, silent=False):
         if self._data:
             return self._data
-        self._data = self.get()
+        if self.silent:
+            silent = True
+        self._data = self.get(silent=silent)
         return self._data
 
     def reload_data(self):
@@ -113,6 +118,7 @@ class OCP(object):
         secrets=None,
         timeout=600,
         ignore_error=False,
+        silent=False,
         **kwargs,
     ):
         """
@@ -129,6 +135,7 @@ class OCP(object):
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
+            silent (bool): If True will silent errors from the server, default false
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -158,6 +165,7 @@ class OCP(object):
             timeout=timeout,
             ignore_error=ignore_error,
             threading_lock=self.threading_lock,
+            silent=silent,
             **kwargs,
         )
 
@@ -209,6 +217,7 @@ class OCP(object):
         retry=0,
         wait=3,
         dont_raise=False,
+        silent=False,
         field_selector=None,
     ):
         """
@@ -252,15 +261,17 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command)
+                return self.exec_oc_cmd(command, silent=silent)
             except CommandFailed as ex:
-                log.warning(
-                    f"Failed to get resource: {resource_name} of kind: "
-                    f"{self.kind}, selector: {selector}, Error: {ex}"
-                )
+                if not silent:
+                    log.warning(
+                        f"Failed to get resource: {resource_name} of kind: "
+                        f"{self.kind}, selector: {selector}, Error: {ex}"
+                    )
                 retry -= 1
                 if not retry:
-                    log.warning("Number of attempts to get resource reached!")
+                    if not silent:
+                        log.warning("Number of attempts to get resource reached!")
                     if not dont_raise:
                         raise
                     else:
