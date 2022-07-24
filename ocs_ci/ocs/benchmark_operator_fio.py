@@ -191,6 +191,13 @@ class BenchmarkOperatorFIO(object):
 
 
 def get_file_size(expected_used_capacity_percent):
+    """
+    Get the file size based on expected used capacity percent
+
+    Args:
+       expected_used_capacity_percent (int): expected used capacity percent
+
+    """
     ceph_cluster = CephCluster()
     ceph_capacity = ceph_cluster.get_ceph_capacity()
     used_capcity_percent = get_percent_used_capacity()
