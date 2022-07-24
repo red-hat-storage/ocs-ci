@@ -1422,7 +1422,7 @@ def health_checker(request, tier_marks_name):
     node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name and config.RUN["cephcluster"]:
+        if mark.name in tier_marks_name and config.RUN.get("cephcluster"):
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
@@ -1489,7 +1489,9 @@ def cluster(
     else:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
-    if not config.ENV_DATA["skip_ocs_deployment"] and config.RUN["cephcluster"]:
+    if "cephcluster" not in config.RUN.keys():
+        check_clusters()
+    if not config.ENV_DATA["skip_ocs_deployment"] and config.RUN.get("cephcluster"):
         record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
@@ -3365,7 +3367,7 @@ def ceph_toolbox(request):
     and if it does not already exist.
     """
     teardown = config.RUN["cli_params"].get("teardown")
-    if "cephcluster" not in config.RUN and not teardown:
+    if "cephcluster" not in config.RUN.keys() and not teardown:
         check_clusters()
     deploy = config.RUN["cli_params"]["deploy"]
     skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
