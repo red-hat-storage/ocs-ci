@@ -34,7 +34,7 @@ class TestClusterFullAndRecovery(E2ETest):
         change_ceph_full_ratio(85)
 
     def test_cluster_full_and_recovery(
-        self, teardown_project_factory, snapshot_factory
+        self, teardown_project_factory, snapshot_factory, pvc_factory
     ):
         """
         1.Create PVC1 [FS + RBD]
@@ -53,32 +53,22 @@ class TestClusterFullAndRecovery(E2ETest):
 
         """
         self.banchmark_operator_teardown = False
-        project_name = "test773"
+        project_name = "test774"
         project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(project_obj)
 
         log.info("Create PVC1 [FS + RBD]")
-        pvc_obj_blk1 = helpers.create_pvc(
-            sc_name=constants.CEPHBLOCKPOOL_SC,
-            namespace=project_name,
-            size="2Gi",
-            do_reload=False,
-            access_mode=constants.ACCESS_MODE_RWO,
+        pvc_obj_blk1 = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_BOUND,
         )
-        pvc_obj_fs1 = helpers.create_pvc(
-            sc_name=constants.CEPHFILESYSTEM_SC,
-            namespace=project_name,
-            size="1Gi",
-            do_reload=False,
-            access_mode=constants.ACCESS_MODE_RWO,
-        )
-
-        log.info("Verify new PVC1 [FS + RBD] on Bound state")
-        helpers.wait_for_resource_state(
-            resource=pvc_obj_blk1, state=constants.STATUS_BOUND
-        )
-        helpers.wait_for_resource_state(
-            resource=pvc_obj_fs1, state=constants.STATUS_BOUND
+        pvc_obj_fs1 = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_BOUND,
         )
 
         log.info(
@@ -117,19 +107,17 @@ class TestClusterFullAndRecovery(E2ETest):
             raise TimeoutExpiredError
 
         log.info("Verify PVC2 [FS + RBD] are in Pending state")
-        pvc_obj_blk2 = helpers.create_pvc(
-            sc_name=constants.CEPHBLOCKPOOL_SC,
-            namespace=project_name,
-            size="1Gi",
-            do_reload=False,
-            access_mode=constants.ACCESS_MODE_RWO,
+        pvc_obj_blk2 = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_PENDING,
         )
-        pvc_obj_fs2 = helpers.create_pvc(
-            sc_name=constants.CEPHFILESYSTEM_SC,
-            namespace=project_name,
-            size="1Gi",
-            do_reload=False,
-            access_mode=constants.ACCESS_MODE_RWO,
+        pvc_obj_fs2 = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_PENDING,
         )
 
         log.info("Waiting 20 sec to verify PVC2 [FS + RBD] are in Pending state.")
@@ -209,7 +197,7 @@ class TestClusterFullAndRecovery(E2ETest):
         Verify cluster percent used capacity
 
         Args:
-            expected_used_capacity (int): expected used capacity
+            expected_used_capacity (float): expected used capacity
 
         Returns:
              bool: True if used_capacity greater than expected_used_capacity, False otherwise
@@ -239,5 +227,6 @@ class TestClusterFullAndRecovery(E2ETest):
             actual_alerts.append(alert.get("labels").get("alertname"))
         for expected_alert in expected_alerts:
             if expected_alert not in actual_alerts:
+                log.error(f"{expected_alert} alert does not exist in alerts list")
                 return False
         return True
