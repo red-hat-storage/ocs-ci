@@ -390,6 +390,7 @@ skipif_ibm_flash = pytest.mark.skipif(
 )
 
 # Squad marks
+aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
 blue_squad = pytest.mark.blue_squad
 brown_squad = pytest.mark.brown_squad
