@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     LvDataPercentSizeWrong,
     ThinPoolUtilityWrong,
+    TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -2202,7 +2203,7 @@ class LVM(object):
                 self.compare_thin_pool_data_percent(
                     data_percent=0,
                     sampler=True,
-                    timeout=30,
+                    timeout=15,
                     fail=True,
                     diff_allowed=0,
                 ),
@@ -2212,8 +2213,8 @@ class LVM(object):
                 self.fstrim(),
                 self.compare_thin_pool_data_percent(
                     data_percent=0,
-                    sampler=True,
-                    timeout=30,
+                    sampler=False,
+                    timeout=1,
                     fail=False,
                     diff_allowed=0,
                 ),
@@ -2222,9 +2223,9 @@ class LVM(object):
             extend_func_list = [
                 self.compare_thin_pool_data_percent(
                     data_percent=0,
-                    sampler=True,
-                    timeout=30,
-                    fail=True,
+                    sampler=False,
+                    timeout=1,
+                    fail=False,
                     diff_allowed=0,
                 ),
             ]
@@ -2233,7 +2234,7 @@ class LVM(object):
                 self.compare_thin_pool_data_percent(
                     data_percent=0,
                     sampler=True,
-                    timeout=30,
+                    timeout=15,
                     fail=True,
                     diff_allowed=0,
                 ),
@@ -2437,12 +2438,13 @@ class LVM(object):
                         f"⌛❎ Written percent data for thin pool should be {data_percent}  but is  "
                         f"{thin_util_data} "
                     )
-                    self.get_and_parse_lvs()
-                    if int(self.lv_data["lv_number"]) > 1 and data_percent == 0:
-                        logger.info(
-                            f"We shouldn't have LV other than thin-pool-1 {self.lv_data['lv_list']}"
-                        )
-        except TimeoutError:
+                    if fail:
+                        self.get_and_parse_lvs()
+                        if int(self.lv_data["lv_number"]) > 1 and data_percent == 0:
+                            logger.info(
+                                f"We shouldn't have LV other than thin-pool-1 {self.lv_data['lv_list']}"
+                            )
+        except TimeoutExpiredError:
             if fail:
                 raise ThinPoolUtilityWrong(
                     f"❌ Thin pool utility expected {data_percent} "
@@ -2643,21 +2645,31 @@ def check_clusters():
     """
 
     try:
-        OCP(kind="lvmcluster", resource_name="lvmcluster")
-        config.RUN["lvm"] = True
+        lvmcluster_obj = OCP(
+            kind="lvmcluster",
+            resource_name="lvmcluster",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            silent=True,
+        )
+        if isinstance(lvmcluster_obj.data, dict):
+            config.RUN["lvm"] = True
+            logger.info("Detected LVMcluster is installed")
     except CommandFailed:
         config.RUN["lvm"] = False
     except FileNotFoundError:
-        logger.info(
-            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
-        )
         if "install_lvmo" in config.DEPLOYMENT:
             config.RUN["lvm"] = True
         else:
             config.RUN["lvm"] = False
     try:
-        CephCluster()
-        config.RUN["cephcluster"] = True
+        cephcluster_obj = OCP(
+            kind="cephcluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            silent=True,
+        )
+        if isinstance(cephcluster_obj.data, dict):
+            config.RUN["cephcluster"] = True
+            logger.info("Detected CephCluster is installed")
     except CommandFailed:
         config.RUN["cephcluster"] = False
     except FileNotFoundError:

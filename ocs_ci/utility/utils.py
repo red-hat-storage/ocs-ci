@@ -440,7 +440,13 @@ def mask_secrets(plaintext, secrets):
 
 
 def run_cmd(
-    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    **kwargs,
 ):
     """
     *The deprecated form of exec_cmd.*
@@ -456,6 +462,7 @@ def run_cmd(
             raise the exception.
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -464,7 +471,7 @@ def run_cmd(
         (str) Decoded stdout of command
     """
     completed_process = exec_cmd(
-        cmd, secrets, timeout, ignore_error, threading_lock, **kwargs
+        cmd, secrets, timeout, ignore_error, threading_lock, silent=silent, **kwargs
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
@@ -552,7 +559,13 @@ def run_cmd_multicluster(
 
 
 def exec_cmd(
-    cmd, secrets=None, timeout=600, ignore_error=False, threading_lock=None, **kwargs
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    **kwargs,
 ):
     """
     Run an arbitrary command locally
@@ -570,6 +583,7 @@ def exec_cmd(
             raise the exception.
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -607,7 +621,8 @@ def exec_cmd(
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
-        log.warning(f"Command stderr: {masked_stderr}")
+        if not silent:
+            log.warning(f"Command stderr: {masked_stderr}")
     else:
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
