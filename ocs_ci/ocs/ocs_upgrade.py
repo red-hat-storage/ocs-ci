@@ -477,7 +477,9 @@ class OCSUpgrade(object):
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
 
-        if config.DEPLOYMENT.get("external_mode"):
+        if config.DEPLOYMENT.get("external_mode") or config.ENV_DATA.get(
+            "mcg_only_deployment"
+        ):
             timeout = 200
         else:
             timeout = 200 * get_osd_count()
