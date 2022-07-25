@@ -80,8 +80,13 @@ def check_all_obc_reached_bound_state_in_kube_job(
                     log.info(
                         f"obc {job_get_output[i]['metadata']['name']} status {status}"
                     )
-                except KeyError:
-                    if not status or status != constants.STATUS_BOUND:
+                except KeyError as err:
+                    msg = str(err)
+                    if (
+                        not status
+                        or "status" in msg
+                        or status != constants.STATUS_BOUND
+                    ):
                         obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
                         # Wait 20 secs to ensure the next obc on the list has status field populated
                         time.sleep(30)
