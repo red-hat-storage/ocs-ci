@@ -780,6 +780,7 @@ def pod_attach_csi_time(
 
     Return:
         float : Pod attachment csi time in seconds
+        (time. time): Start time of node stage, End time of node publish
 
     Raise:
         Exception : in case that the expected time logs are not found
@@ -857,4 +858,43 @@ def pod_attach_csi_time(
     total_time = node_stage_time + node_publish_time
     logger.info(f"Total csi pod attach time is {total_time} seconds")
 
+    return (total_time, (node_stage_st, node_publish_et))
+
+
+def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
+    """
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_objs (list): List of PVC objects to which pods were attached
+        csi_start_time (time): the start time of the test to reduce log size reading
+        namespace (str): the tests namespace
+
+    Returns:
+
+    """
+
+    start_times_list = []
+    end_times_list = []
+
+    for pvc in pvc_objs:
+        pv_name = pvc.backed_pv
+        start_time, end_time = pod_attach_csi_time(
+            interface, pv_name, csi_start_time, namespace
+        )[1]
+        start_times_list.append(start_time)
+        end_times_list.append(end_time)
+
+    start_times_list.sort()
+    end_times_list.sort()
+
+    # total bulk_attach_csi_time is the delta between the last node publish time and the first node stage time
+    total_time = (end_times_list[-1] - start_times_list[0]).total_seconds()
+    if total_time < 0:
+        # for start-time > end-time (before / after midnigth) adding 24H to the time.
+        total_time += 24 * 60 * 60
+
+    logger.info(
+        f"CSI time for bulk attach of {len(pvc_objs)} pvcs is {total_time} seconds"
+    )
     return total_time
