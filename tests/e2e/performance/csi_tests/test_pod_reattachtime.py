@@ -255,7 +255,7 @@ class TestPodReattachTimePerformance(PASTest):
 
             csi_time = performance_lib.pod_attach_csi_time(
                 self.interface, pvc_obj.backed_pv, csi_start_time, pvc_obj.namespace
-            )
+            )[0]
             csi_time_measures.append(csi_time)
             logger.info(
                 f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
