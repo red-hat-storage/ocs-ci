@@ -191,6 +191,12 @@ class BlockPoolUI(PageNavigator):
         """
         Takes pool name and returns True if the raw capacity of the block pool is loaded
         or returns False if the capacity is not loaded.
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is loaded, otherwise False
         """
         logger.info("Checking if the Block Pool Raw Capacity has loaded in UI")
         self.navigate_overview_page()
