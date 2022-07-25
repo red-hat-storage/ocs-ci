@@ -7,6 +7,8 @@ on Openshfit Dedicated Platform.
 import logging
 import os
 
+from botocore.exceptions import ClientError
+
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -286,48 +288,63 @@ class ROSA(CloudDeploymentBase):
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#
-        security_group.authorize_ingress(
-            DryRun=False,
-            IpPermissions=[
-                {
-                    "FromPort": 6800,
-                    "ToPort": 7300,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
-                    ],
-                },
-                {
-                    "FromPort": 3300,
-                    "ToPort": 3300,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
-                    ],
-                },
-                {
-                    "FromPort": 6789,
-                    "ToPort": 6789,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
-                    ],
-                },
-                {
-                    "FromPort": 9283,
-                    "ToPort": 9283,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
-                    ],
-                },
-                {
-                    "FromPort": 31659,
-                    "ToPort": 31659,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
-                    ],
-                },
-            ],
-        )
+        machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
+        rules = [
+            {
+                "FromPort": 6800,
+                "ToPort": 7300,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph OSDs"},
+                ],
+            },
+            {
+                "FromPort": 3300,
+                "ToPort": 3300,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule1"}
+                ],
+            },
+            {
+                "FromPort": 6789,
+                "ToPort": 6789,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule2"},
+                ],
+            },
+            {
+                "FromPort": 9283,
+                "ToPort": 9283,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph Manager"},
+                ],
+            },
+            {
+                "FromPort": 31659,
+                "ToPort": 31659,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "API Server"},
+                ],
+            },
+        ]
+        for rule in rules:
+            try:
+                security_group.authorize_ingress(
+                    DryRun=False,
+                    IpPermissions=[rule],
+                )
+            except ClientError as err:
+                if (
+                    err.response.get("Error", {}).get("Code")
+                    == "InvalidPermission.Duplicate"
+                ):
+                    logger.debug(
+                        f"Security group '{sg_id}' already contains the required rule "
+                        f"({err.response.get('Error', {}).get('Message')})."
+                    )
+                else:
+                    raise
