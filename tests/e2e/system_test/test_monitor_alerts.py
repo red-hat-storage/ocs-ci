@@ -69,7 +69,7 @@ class TestClusterFullAndRecovery(E2ETest):
         project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(project_obj)
 
-        log.info("Create PVC1 [FS + RBD]")
+        log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
         pvc_obj_blk1 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=project_obj,
@@ -95,6 +95,7 @@ class TestClusterFullAndRecovery(E2ETest):
             block=False,
         )
 
+        log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
         pvc_obj_fs1 = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=project_obj,
@@ -155,7 +156,7 @@ class TestClusterFullAndRecovery(E2ETest):
             log.error(f"The alerts {expected_alerts} do not exist after 600 sec")
             raise TimeoutExpiredError
 
-        log.info("Verify PVC2 [FS + RBD] are in Pending state")
+        log.info("Verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state")
         pvc_obj_blk2 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=project_obj,
@@ -168,8 +169,9 @@ class TestClusterFullAndRecovery(E2ETest):
             size=2,
             status=constants.STATUS_PENDING,
         )
-
-        log.info("Waiting 20 sec to verify PVC2 [FS + RBD] are in Pending state.")
+        log.info(
+            "Waiting 20 sec to verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state."
+        )
         time.sleep(20)
         helpers.wait_for_resource_state(
             resource=pvc_obj_blk2, state=constants.STATUS_PENDING
@@ -181,8 +183,6 @@ class TestClusterFullAndRecovery(E2ETest):
         log.info("Create snapshot from PVC1 and verify snapshots on false state")
         snap_blk1_obj = snapshot_factory(pvc_obj_blk1, wait=False)
         snap_fs1_obj = snapshot_factory(pvc_obj_fs1, wait=False)
-
-        log.info("Verify Snapshots stack on False state")
         time.sleep(20)
         snap_blk1_obj.ocp.wait_for_resource(
             condition="false",
@@ -207,7 +207,7 @@ class TestClusterFullAndRecovery(E2ETest):
         log.info("Change Ceph full_ratio from from 85% to 95%")
         change_ceph_backfillfull_ratio(95)
 
-        log.info("Verify PVC2 [FS + RBD]  are moved to Bound state")
+        log.info("Verify PVC2 [CEPH-FS + CEPH-RBD]  are moved to Bound state")
         helpers.wait_for_resource_state(
             resource=pvc_obj_blk2, state=constants.STATUS_BOUND, timeout=600
         )
@@ -229,7 +229,7 @@ class TestClusterFullAndRecovery(E2ETest):
             timeout=300,
         )
 
-        log.info(f"Creating a PVC from snapshot {snap_blk1_obj.name}")
+        log.info(f"Creating a PVC from snapshot [restore] {snap_blk1_obj.name}")
         restore_pvc_blk1_obj = snapshot_restore_factory(
             snapshot_obj=snap_blk1_obj,
             size="2Gi",
@@ -248,7 +248,7 @@ class TestClusterFullAndRecovery(E2ETest):
             block=False,
         )
 
-        log.info(f"Creating a PVC from snapshot {snap_fs1_obj.name}")
+        log.info(f"Creating a PVC from snapshot [restore] {snap_fs1_obj.name}")
         restore_pvc_fs1_obj = snapshot_restore_factory(
             snapshot_obj=snap_fs1_obj,
             size="2Gi",
@@ -266,6 +266,7 @@ class TestClusterFullAndRecovery(E2ETest):
             file_name="fio-rand-write",
             block=False,
         )
+
         assert pod_restore_fs1_obj.md5 == pod_fs1_obj.md5, (
             f"md5sum of restore_fs1 {pod_restore_fs1_obj.md5} is not equal "
             f"to pod_fs1_obj {pod_fs1_obj.md5}"
