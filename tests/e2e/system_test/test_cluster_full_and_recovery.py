@@ -4,6 +4,7 @@ import time
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size
+from ocs_ci.framework.pytest_customization.marks import system_test
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.ocs import constants
@@ -19,6 +20,7 @@ from ocs_ci.ocs.cluster import (
 log = logging.getLogger(__name__)
 
 
+@system_test
 class TestClusterFullAndRecovery(E2ETest):
     """
     Test Cluster Full And Recovery
