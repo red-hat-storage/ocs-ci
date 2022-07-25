@@ -230,6 +230,7 @@ higher priority).
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 * `ms_env_type` - to choose managed service environment type staging or production, default set to staging
+* `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
 #### UPGRADE
 
 Upgrade related configuration data.
