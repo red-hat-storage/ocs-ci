@@ -38,7 +38,7 @@ from ocs_ci.ocs.registry import (
     change_registry_backend_to_ocs,
     check_if_registry_stack_exists,
 )
-from ocs_ci.ocs.longevity_helpers import (
+from ocs_ci.helpers.longevity_helpers import (
     create_restore_verify_snapshots,
     expand_verify_pvcs,
 )
@@ -543,8 +543,6 @@ class Longevity(object):
         self.create_stage_builder_kube_job(
             kube_job_obj_list=obc_job_file, namespace=namespace
         )
-        # Wait 60 secs to ensure the obc on the list has status field populated
-        # time.sleep(180)
         # Validate OBCs in kube job reached BOUND state
         self.validate_obcs_in_kube_job_reached_running_state(
             kube_job_obj=obc_job_file[0],
@@ -1182,6 +1180,7 @@ class Longevity(object):
 
         """
         if concurrent:
+            # Start all Longevity testing stages concurrently
             stages_thread = [
                 ThreadPoolExecutor(max_workers=1).submit(
                     start_apps_workload,
@@ -1211,11 +1210,15 @@ class Longevity(object):
                     teardown_factory,
                 ),
             ]
-
+            # Wait for all the stages thread to complete
             for thread in stages_thread:
                 thread.result()
+            log.info(
+                "Concurrent: One iteration of Longevity all stages execution completed successfully"
+            )
 
         else:
+            # Start all Longevity stages in serial execution
             stage1_thread = ThreadPoolExecutor(max_workers=1).submit(
                 start_apps_workload,
                 workloads_list=["pgsql", "couchbase", "cosbench"],
@@ -1242,7 +1245,11 @@ class Longevity(object):
                 snapshot_restore_factory,
                 teardown_factory,
             )
+            # Wait for the applications thread (stage1) to complete
             stage1_thread.result()
+            log.info(
+                "Sequential: One iteration of Longevity all stages execution completed successfully"
+            )
 
 
 def start_app_workload(
