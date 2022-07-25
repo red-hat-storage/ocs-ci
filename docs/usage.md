@@ -237,7 +237,7 @@ If you would like to send the test run results to email you can run
 following command:
 ```bash
 
-run-ci tests/
+run-ci tests/ \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     --html=report.html --self-contained-html \
@@ -248,7 +248,7 @@ If you want to send reports to multiple email ID's, use comma separated
 email ID's like below
 ```bash
 
-run-ci tests/
+run-ci tests/ \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     --html=report.html --self-contained-html \
@@ -261,13 +261,13 @@ run-ci tests/
 If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci.
 ###### example 1:
 ```bash
-run-ci multicluster 2
-    tests/ -m tier1
-    --cluster1
-    --cluster-name test_cluster1 --cluster-path test_cluster1_path
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
-    --cluster2
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path
+run-ci multicluster 2 \
+    tests/ -m tier1 \
+    --cluster1 \
+    --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+    --cluster2 \
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
     --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 `multicluster` cluster subcommand is slightly different from usual CLI used in run-ci.
@@ -281,12 +281,12 @@ as arguments of `cluster1`.
 ###### example 2:
 Passing common arguments to cluster:
 ```bash
-run-ci multicluster 2
-    tests/ -m tier1 --ocsci-conf common-conf.yaml
+run-ci multicluster 2 \
+    tests/ -m tier1 --ocsci-conf common-conf.yaml \
     --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
-    --cluster2
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+    --cluster2 \
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
     --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 In the above example `common-conf.yaml` configuration will be applied on both the clusters.
