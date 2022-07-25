@@ -82,8 +82,8 @@ def check_all_obc_reached_bound_state_in_kube_job(
                     )
                 except KeyError as err:
                     if (
-                        not status
-                        or "status" in str(err)
+                        "status" in str(err)
+                        or not status
                         or status != constants.STATUS_BOUND
                     ):
                         obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
