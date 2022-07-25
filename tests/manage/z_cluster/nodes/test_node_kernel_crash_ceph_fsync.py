@@ -4,7 +4,7 @@ import pytest
 
 from time import sleep
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla, polarion_id
+from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from concurrent.futures import ThreadPoolExecutor
@@ -15,8 +15,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @bugzilla("2075068")
-@polarion_id("OCS-3947")
-@polarion_id("OCS-2597")
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash
@@ -44,9 +42,11 @@ class TestKernelCrash(E2ETest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-3947"),
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-2597"),
             ),
         ],
     )
