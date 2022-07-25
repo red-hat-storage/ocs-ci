@@ -1256,6 +1256,7 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     3. Security groups are set up correctly
+    4. verify memory limit of OSD pods are set to 7Gi
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1278,6 +1279,20 @@ def verify_provider_resources():
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
     assert verify_worker_nodes_security_groups()
+
+    # verify OSD pod memory size
+    osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
+    osd_pods = get_osd_pods()
+    log.info("verifying OSD pod memory size")
+    for osd_pod in osd_pods:
+        for each_container in osd_pod.data["spec"]["containers"]:
+            if "osd" in each_container["name"]:
+                assert (
+                    each_container["resources"]["limits"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have limits memory of 7Gi"
+                assert (
+                    each_container["resources"]["requests"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have requests memory of 7Gi"
 
 
 def verify_consumer_resources():
