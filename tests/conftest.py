@@ -185,8 +185,10 @@ def pytest_collection_modifyitems(session, items):
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
-        if any(map(lambda x: "_squad" in x.name, item.iter_markers())):
-            continue
+        for marker in item.iter_markers():
+            if "_squad" in marker.name:
+                squad = marker.name.split("_")[0]
+                item.user_properties.append(("squad", squad))
         for squad, paths in constants.SQUADS.items():
             for _path in paths:
                 # Limit the test_path to the tests directory
