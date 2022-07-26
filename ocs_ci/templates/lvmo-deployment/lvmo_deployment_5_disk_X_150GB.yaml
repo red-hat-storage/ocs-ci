@@ -4,3 +4,4 @@ DEPLOYMENT:
   lvmo_disks_size: 150
 ENV_DATA:
   skip_ocs_deployment: True
+  lvmo: true

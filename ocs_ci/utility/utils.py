@@ -1964,6 +1964,10 @@ def get_testrun_name():
         )
         if baremetal_config:
             testrun_name = f"LSO {baremetal_config} {testrun_name}"
+        if config.ENV_DATA.get("sno"):
+            testrun_name = f"{testrun_name} SNO"
+        if config.ENV_DATA.get("lvmo"):
+            testrun_name = f"{testrun_name} LVMO"
         post_upgrade = config.REPORTING.get("post_upgrade", "")
         if post_upgrade:
             post_upgrade = "post-upgrade"
