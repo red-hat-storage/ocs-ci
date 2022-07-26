@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @acceptance
 @skipif_lvm_not_installed
-@skipif_ocs_version("<4.10")
+@skipif_ocs_version("<4.11")
 class TestLvmSnapshotBiggerThanDisk(ManageTest):
     """
     Test lvm snapshot bigger than disk
@@ -125,13 +125,13 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
                 f"❌Lv size {lv_size} is not the same as pvc size {pvc_size}"
             )
 
-        fs = "fs"
+        storage_type = "fs"
         block = False
         if volume_mode == constants.VOLUME_MODE_BLOCK:
-            fs = "block"
+            storage_type = "block"
             block = True
         pod_obj.run_io(
-            fs,
+            storage_type,
             size=f"{fio_size}g",
             rate="1500M",
             fio_filename=filename,
@@ -188,7 +188,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
         )
 
         restored_pod_obj.run_io(
-            fs,
+            storage_type,
             size=f"{second_fio_size}g",
             rate="1500M",
             runtime=0,
