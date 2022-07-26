@@ -8,6 +8,7 @@ ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
   sno: true
+  lvmo: true
   worker_replicas: 0
   master_replicas: 1
   worker_num_cpus: '16'
