@@ -6,15 +6,16 @@ import json
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.pytest_customization.marks import skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 logger = logging.getLogger(__name__)
 
 
 @tier2
+@skipif_ocs_version("<4.11")
 class TestPvcEvictCephClients:
     """
     Test the ceph-fs PVC (RWX) mount with the following scenarios involving evict ceph-fs clients:
@@ -38,9 +39,7 @@ class TestPvcEvictCephClients:
             ),
         ],
     )
-    def test_pvc_evict_ceph_clients(
-        self, node, pvc_factory, teardown_factory, pod_factory
-    ):
+    def test_pvc_evict_ceph_clients(self, node, pvc_factory, pod_factory):
         worker_nodes = get_worker_nodes()
 
         # create a RWX PVC
@@ -53,14 +52,12 @@ class TestPvcEvictCephClients:
         # create a pod in particular node
         selected_node = random.choice(worker_nodes)
         logger.info(f"creating first pod on node {selected_node}")
-        first_pod_obj = pod_factory(
+        pod_factory(
             interface=constants.CEPHFILESYSTEM,
             pvc=pvc_obj,
             node_name=selected_node,
             pod_dict_path=constants.NGINX_POD_YAML,
-        )
-        helpers.wait_for_resource_state(
-            resource=first_pod_obj, state=constants.STATUS_RUNNING, timeout=120
+            status=constants.STATUS_RUNNING,
         )
 
         # fetch the sub-volume path
@@ -101,9 +98,7 @@ class TestPvcEvictCephClients:
             pvc=pvc_obj,
             node_name=selected_node,
             pod_dict_path=constants.NGINX_POD_YAML,
-        )
-        helpers.wait_for_resource_state(
-            resource=second_pod_obj, state=constants.STATUS_RUNNING, timeout=120
+            status=constants.STATUS_RUNNING,
         )
 
         # Run some IOs on second pod
