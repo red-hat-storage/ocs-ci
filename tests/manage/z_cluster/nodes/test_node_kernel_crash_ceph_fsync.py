@@ -33,9 +33,20 @@ class TestKernelCrash(E2ETest):
     def remove_files(self, pod_obj):
         while True:
             pod_obj.exec_sh_cmd_on_pod(
-                "for ((i=1;i<=%d;i++));rm -f %s/emp_$i.txt ; done"
+                "for ((i=1;i<=%d;i++));do rm -f %s/emp_$i.txt ; done"
                 % (self.END, self.result_dir)
             )
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            if self.create_thread:
+                self.create_thread.cancel()
+            if self.delete_thread:
+                self.delete_thread.cancel()
+            if self.fsync_thread:
+                self.fsync_thread.cancel()
+            request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames="interface_type",
@@ -88,15 +99,16 @@ class TestKernelCrash(E2ETest):
 
         # Create and delete files on mount point
         create_executor = ThreadPoolExecutor(max_workers=1)
-        create_executor.submit(self.creates_files, pod_obj)
+        self.create_thread = create_executor.submit(self.creates_files, pod_obj)
         sleep(3)
 
         log.info("Started deletion of files on volume")
         delete_executor = ThreadPoolExecutor(max_workers=1)
-        delete_executor.submit(self.remove_files, pod_obj)
+        self.delete_thread = delete_executor.submit(self.remove_files, pod_obj)
 
-        ThreadPoolExecutor(max_workers=1).submit(
-            pod_obj.exec_sh_cmd_on_pod, command="python fsync.py"
+        fsync_executor = ThreadPoolExecutor(max_workers=1)
+        self.fsync_thread = fsync_executor.submit(
+            pod_obj.exec_sh_cmd_on_pod, command="python3 fsync.py"
         )
 
         # Check Node gets Panic or not
