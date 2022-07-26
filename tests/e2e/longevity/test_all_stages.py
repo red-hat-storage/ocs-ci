@@ -14,8 +14,8 @@ class TestLongevity(E2ETest):
 
     def test_all_stages(
         self,
-        start_apps_workload,
         project_factory,
+        start_apps_workload,
         multi_pvc_pod_lifecycle_factory,
         multi_obc_lifecycle_factory,
         pod_factory,
@@ -44,8 +44,8 @@ class TestLongevity(E2ETest):
         """
         long = Longevity()
         long.longevity_all_stages(
-            start_apps_workload,
             project_factory,
+            start_apps_workload,
             multi_pvc_pod_lifecycle_factory,
             multi_obc_lifecycle_factory,
             pod_factory,

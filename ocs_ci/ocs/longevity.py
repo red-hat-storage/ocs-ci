@@ -838,8 +838,8 @@ class Longevity(object):
     def stage_3(
         self,
         project_factory,
-        num_of_pvc,
-        num_of_obc,
+        num_of_pvc=150,
+        num_of_obc=150,
         pvc_size=None,
         delay=60,
         run_time=1440,
@@ -1232,7 +1232,7 @@ class Longevity(object):
                 run_time=stage_run_time,
             )
 
-            self.stage3(
+            self.stage_3(
                 project_factory,
                 run_time=stage_run_time,
             )
