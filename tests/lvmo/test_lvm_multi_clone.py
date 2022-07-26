@@ -53,7 +53,7 @@ class TestLvmMultiClone(ManageTest):
     @tier1
     @acceptance
     @skipif_lvm_not_installed
-    @skipif_ocs_version("<4.10")
+    @skipif_ocs_version("<4.11")
     def test_create_multi_clone_from_pvc(
         self,
         volume_mode,
@@ -123,10 +123,10 @@ class TestLvmMultiClone(ManageTest):
         for future_pod in concurrent.futures.as_completed(futures_pods):
             pods_objs.append(future_pod.result())
 
-        fs = "fs"
+        storage_type = "fs"
         block = False
         if volume_mode == constants.VOLUME_MODE_BLOCK:
-            fs = "block"
+            storage_type = "block"
             block = True
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.pvc_num)
         futures_fio = []
@@ -134,7 +134,7 @@ class TestLvmMultiClone(ManageTest):
             futures_fio.append(
                 executor.submit(
                     pod.run_io,
-                    fs,
+                    storage_type,
                     size="5g",
                     rate="1500m",
                     runtime=0,
@@ -236,7 +236,7 @@ class TestLvmMultiClone(ManageTest):
             futures_restored_pods_fio.append(
                 executor.submit(
                     restored_pod.run_io,
-                    fs,
+                    storage_type,
                     size="1g",
                     rate="1500m",
                     runtime=0,
