@@ -103,7 +103,8 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
 
     if out_format == "list":
         output = output.split("\n")  # convert output to list
-        output.pop()  # remove last empty element from the list
+        if len(output) > 1:
+            output.pop()  # remove last empty element from the list
     return output
 
 
