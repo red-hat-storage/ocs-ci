@@ -4111,6 +4111,39 @@ def reportportal_customization(request):
         request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
 
 
+@pytest.fixture(scope="function")
+def login_factory(request):
+    return login_factory_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def login_factory_class(request):
+    return login_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def login_factory_session(request):
+    return login_factory_fixture(request)
+
+
+def login_factory_fixture(request):
+    """
+    Calling this fixture will login into console using other user(user other than kubeadmin)
+    """
+    driver = None
+
+    def factory(username, password):
+        driver = login_ui(username=username, password=password)
+        return driver
+
+    def finalizer():
+        close_browser(driver)
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
 @pytest.fixture()
 def multi_pvc_clone_factory(pvc_clone_factory, pod_factory):
     """
