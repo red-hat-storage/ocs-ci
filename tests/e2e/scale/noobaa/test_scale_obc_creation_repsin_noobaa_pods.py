@@ -27,7 +27,7 @@ class TestScaleOCBCreation(E2ETest):
     """
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
-    scale_obc_count = 1000
+    scale_obc_count = 100
     # Will increase number of obc with i/o when issue is fixed
     # BZ https://bugzilla.redhat.com/show_bug.cgi?id=2010560
     scale_obc_count_io = 5
@@ -119,8 +119,8 @@ class TestScaleOCBCreation(E2ETest):
         )
         log.info(
             f"Number of OBCs in Bound state after node reset: "
-            f"{len(obc_status_list)}"
+            f"{len(obc_status_list[0])}"
         )
         assert (
-            len(obc_status_list) == self.scale_obc_count
+            len(obc_status_list[0]) == self.scale_obc_count
         ), "Not all OBCs in Bound state"

@@ -70,7 +70,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2479")
@@ -111,7 +111,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2480")
@@ -177,5 +177,3 @@ class TestScaleOCBCreation(E2ETest):
                 f"Number of OBCs in Bound state MCG: {len(obc_mcg_bound_list)},"
                 f" RGW: {len(obc_rgw_bound_list)}"
             )
-
-        # TODO: Adding support to calculate OBC creation time
