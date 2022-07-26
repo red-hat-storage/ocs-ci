@@ -37,6 +37,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     get_osd_count,
+    mcg_only_install_verification,
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -161,23 +162,27 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             )
         else:
             raise
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        count=number_of_worker_nodes,
-    )
-    verify_pods_upgraded(
-        old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
-    )
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        count=number_of_worker_nodes,
-    )
-    verify_pods_upgraded(
-        old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
-    )
-    if not config.DEPLOYMENT.get("external_mode"):
+    if not config.ENV_DATA.get("mcg_only_deployment"):
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.CSI_CEPHFSPLUGIN_LABEL,
+            count=number_of_worker_nodes,
+        )
+        verify_pods_upgraded(
+            old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
+        )
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.CSI_RBDPLUGIN_LABEL,
+            count=number_of_worker_nodes,
+        )
+        verify_pods_upgraded(
+            old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
+        )
+    if not (
+        config.DEPLOYMENT.get("external_mode")
+        or config.ENV_DATA.get("mcg_only_deployment")
+    ):
         verify_pods_upgraded(
             old_images,
             selector=constants.MON_APP_LABEL,
@@ -477,7 +482,9 @@ class OCSUpgrade(object):
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
 
-        if config.DEPLOYMENT.get("external_mode"):
+        if config.DEPLOYMENT.get("external_mode") or config.ENV_DATA.get(
+            "mcg_only_deployment"
+        ):
             timeout = 200
         else:
             timeout = 200 * get_osd_count()
@@ -722,13 +729,16 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         )
         exec_cmd(cmd)
 
-    ocs_install_verification(
-        timeout=600,
-        skip_osd_distribution_check=True,
-        ocs_registry_image=upgrade_ocs.ocs_registry_image,
-        post_upgrade_verification=True,
-        version_before_upgrade=upgrade_ocs.version_before_upgrade,
-    )
+    if config.ENV_DATA.get("mcg_only_deployment"):
+        mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
+    else:
+        ocs_install_verification(
+            timeout=600,
+            skip_osd_distribution_check=True,
+            ocs_registry_image=upgrade_ocs.ocs_registry_image,
+            post_upgrade_verification=True,
+            version_before_upgrade=upgrade_ocs.version_before_upgrade,
+        )
 
 
 def ocs_odf_upgrade_ui():
