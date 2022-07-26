@@ -9,7 +9,6 @@ import ocs_ci.ocs.exceptions as ex
 import statistics
 import tempfile
 import yaml
-import time
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.ocs.perftests import PASTest
