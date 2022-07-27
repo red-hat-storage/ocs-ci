@@ -73,13 +73,25 @@ def check_all_obc_reached_bound_state_in_kube_job(
         job_get_output = kube_job_obj.get(namespace=namespace).get("items")
         if job_get_output is not None and len(job_get_output) == no_of_obc:
             for i in range(no_of_obc):
-                status = job_get_output[i]["status"]["phase"]
-                log.info(f"obc {job_get_output[i]['metadata']['name']} status {status}")
-                if not status or status != constants.STATUS_BOUND:
-                    obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
-                    # Wait 20 secs to ensure the next obc on the list has status field populated
-                    time.sleep(30)
-                    job_get_output = kube_job_obj.get(namespace=namespace).get("items")
+                try:
+                    # If the OBC status field is not yet populated and empty below line
+                    # throws KeyError. Handling it in try:except
+                    status = job_get_output[i]["status"]["phase"]
+                    log.info(
+                        f"obc {job_get_output[i]['metadata']['name']} status {status}"
+                    )
+                except KeyError as err:
+                    if (
+                        "status" in str(err)
+                        or not status
+                        or status != constants.STATUS_BOUND
+                    ):
+                        obc_not_bound_list.append(job_get_output[i]["metadata"]["name"])
+                        # Wait 20 secs to ensure the next obc on the list has status field populated
+                        time.sleep(30)
+                        job_get_output = kube_job_obj.get(namespace=namespace).get(
+                            "items"
+                        )
         else:
             while_iteration_count_1 += 1
             time.sleep(timeout)
