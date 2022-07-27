@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, node
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_pod, wait_for_resource_state
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -26,7 +27,23 @@ class TestChangePolicyScaleUpDown(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_change_policy_scale_up_down(self, pvc_factory):
+    def test_change_policy_scale_up_down(
+        self,
+        teardown_project_factory,
+        pvc_factory,
+        pod_factory,
+    ):
+        project_name = "test788"
+        project_obj = helpers.create_project(project_name=project_name)
+        teardown_project_factory(project_obj)
+
+        pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            size=10,
+            status=constants.STATUS_BOUND,
+        )
+
         worker_nodes_list = node.get_worker_nodes()
         node_one = worker_nodes_list[0]
         pvc_obj = pvc_factory(

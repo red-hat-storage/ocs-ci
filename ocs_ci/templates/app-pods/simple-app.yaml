@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-app
+  namespace: test-project
+  labels:
+    app: simple-app
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app: simple-app
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: simple-app
+    spec:
+      containers:
+        - command:
+            - sh
+            - -c
+            - echo Running simple app && sleep 18000
+          image: registry.access.redhat.com/ubi8
+          imagePullPolicy: Always
+          name: simple-app-container
+          resources: { }
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /mnt
+              name: simple-pvc
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1000620000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsUser: 1000620000
+      serviceAccountName: test
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: simple-pvc
+          persistentVolumeClaim:
+            claimName: simple-pvc
+
+  triggers:
+    - type: ConfigChange
+  paused: false
