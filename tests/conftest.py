@@ -185,18 +185,21 @@ def pytest_collection_modifyitems(session, items):
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
+        skip_path_squad_marker = False
         for marker in item.iter_markers():
             if "_squad" in marker.name:
                 squad = marker.name.split("_")[0]
                 item.user_properties.append(("squad", squad.capitalize()))
-        for squad, paths in constants.SQUADS.items():
-            for _path in paths:
-                # Limit the test_path to the tests directory
-                test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
-                if _path in test_path:
-                    item.add_marker(f"{squad.lower()}_squad")
-                    item.user_properties.append(("squad", squad))
-                    break
+                skip_path_squad_marker = True
+        if not skip_path_squad_marker:
+            for squad, paths in constants.SQUADS.items():
+                for _path in paths:
+                    # Limit the test_path to the tests directory
+                    test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
+                    if _path in test_path:
+                        item.add_marker(f"{squad.lower()}_squad")
+                        item.user_properties.append(("squad", squad))
+                        break
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:
