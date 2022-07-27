@@ -24,7 +24,7 @@ def jenkins(request):
 @pytest.mark.polarion_id("OCS-2175")
 class TestJenkinsWorkload(E2ETest):
     """
-    Test running Jenkins,.
+    Test running Jenkins workload.
     """
 
     @pytest.fixture()
