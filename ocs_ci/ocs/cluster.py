@@ -2188,6 +2188,7 @@ class LVM(object):
         self.version = None
         self.ip = None
         self.vg_data = None
+        self.node_ssh = None
         func_list = [
             self.cluster_ip(),
             self.get_lvmcluster(),
@@ -2618,6 +2619,17 @@ class LVM(object):
         node_ip_dict = get_node_ip_addresses(ipkind="InternalIP")
         self.ip = node_ip_dict[constants.SNO_NODE_NAME]
 
+    def create_ssh_object(self):
+        """
+        Get ssh object ready, sets self.node_ssh
+        """
+        self.node_ssh = Connection(
+            host=self.ip,
+            user="core",
+            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+            stdout=True,
+        )
+
     def exec_cmd_on_cluster_node(self, cmd):
         """
         Exec cmd on SNO node with ssh
@@ -2626,14 +2638,9 @@ class LVM(object):
         Return:
             (str) output from server.
         """
-        node_ssh = Connection(
-            host=self.ip,
-            user="core",
-            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
-            stdout=True,
-        )
-
-        return_output = node_ssh.exec_cmd(cmd=cmd)
+        if not self.node_ssh:
+            self.create_ssh_object()
+        return_output = self.node_ssh.exec_cmd(cmd=cmd)
         return_stdout = return_output[1]
         return return_stdout
 
