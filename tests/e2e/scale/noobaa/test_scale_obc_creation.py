@@ -62,7 +62,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -103,7 +103,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -158,7 +158,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file2.create(namespace=self.namespace)
             time.sleep(timeout * 3)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_mcg_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file1,

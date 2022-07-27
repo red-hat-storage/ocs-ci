@@ -57,7 +57,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
         job_file.create(namespace=namespace)
         time.sleep(timeout * 5)
 
-        # Check all the PVC reached Bound state
+        # Check all the OBCs reached Bound state
         obc_bound_list = scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
             kube_job_obj=job_file,
             namespace=namespace,
