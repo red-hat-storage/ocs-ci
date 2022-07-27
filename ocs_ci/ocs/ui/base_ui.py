@@ -63,13 +63,14 @@ class BaseUI:
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
 
-    def do_click(self, locator, timeout=30, enable_screenshot=False):
+    def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
         """
         Click on Button/link on OpenShift Console
 
         locator (set): (GUI element needs to operate on (str), type (By))
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
+        copy_dom (bool): copy page source of the webpage
         """
         try:
             wait = WebDriverWait(self.driver, timeout)
@@ -80,8 +81,11 @@ class BaseUI:
             if screenshot:
                 self.take_screenshot()
             element.click()
+            if copy_dom:
+                self.copy_dom()
         except TimeoutException as e:
             self.take_screenshot()
+            self.copy_dom()
             logger.error(e)
             raise TimeoutException
 
@@ -255,9 +259,23 @@ class BaseUI:
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
-        logger.info(f"Creating snapshot: {filename}")
+        logger.info(f"Creating screenshot: {filename}")
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
+
+    def copy_dom(self):
+        """
+        Get page source of the webpage
+
+        """
+        filename = os.path.join(
+            self.screenshots_folder,
+            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+        )
+        logger.info(f"Copy DOM file: {filename}")
+        html = self.driver.page_source
+        with open(filename, "w") as f:
+            f.write(html)
 
     def do_clear(self, locator, timeout=30):
         """

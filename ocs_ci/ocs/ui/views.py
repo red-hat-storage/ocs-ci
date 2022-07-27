@@ -165,6 +165,7 @@ deployment_4_11 = {
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
+    "managed-csi_sc": ("managed-csi-link", By.ID),
     "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
     "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
@@ -685,6 +686,7 @@ add_capacity_4_11 = {
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
+    "managed-csi_sc": ("managed-csi-link", By.ID),
 }
 
 block_pool = {
