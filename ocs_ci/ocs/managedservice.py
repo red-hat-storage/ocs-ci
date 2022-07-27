@@ -208,7 +208,7 @@ def update_non_ga_version():
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
     ocs_channel = config.UPGRADE["ocs_channel"]
-    odf_operator_u = f"odf-operator.v{deployer_version}"
+    odf_operator_u = f"odf-operator.v{upgrade_ocs_version}"
     mplace = constants.MARKETPLACE_NAMESPACE
 
     logger.info("Edit subscriptions")
