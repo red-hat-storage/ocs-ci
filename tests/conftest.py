@@ -640,6 +640,7 @@ def storageclass_factory_fixture(
         rbd_thick_provision=False,
         encrypted=False,
         encryption_kms_id=None,
+        volume_binding_mode="Immediate",
     ):
         """
         Args:
@@ -661,6 +662,8 @@ def storageclass_factory_fixture(
             encrypted (bool): True to enable RBD PV encryption
             encryption_kms_id (str): Key value of vault config to be used from
                     csi-kms-connection-details configmap
+            volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
+                till pod attachment.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -695,6 +698,7 @@ def storageclass_factory_fixture(
                 rbd_thick_provision=rbd_thick_provision,
                 encrypted=encrypted,
                 encryption_kms_id=encryption_kms_id,
+                volume_binding_mode=volume_binding_mode,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
