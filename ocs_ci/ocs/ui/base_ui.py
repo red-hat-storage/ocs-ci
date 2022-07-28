@@ -54,15 +54,17 @@ class BaseUI:
 
     def __init__(self, driver: WebDriver):
         self.driver = driver
-        self.screenshots_folder = os.path.join(
+        base_ui_logs_dir = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+        )
+        self.screenshots_folder = os.path.join(
+            base_ui_logs_dir,
             "screenshots_ui",
             get_current_test_name(),
         )
         self.dom_folder = os.path.join(
-            os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+            base_ui_logs_dir,
             "dom",
             get_current_test_name(),
         )
