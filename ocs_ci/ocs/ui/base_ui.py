@@ -270,7 +270,7 @@ class BaseUI:
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
-        logger.info(f"Creating screenshot: {filename}")
+        logger.debug(f"Creating screenshot: {filename}")
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
 
