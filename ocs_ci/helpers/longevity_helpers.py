@@ -658,7 +658,7 @@ def _multi_obc_lifecycle_factory(
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"rgw": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, None)]},
                     },
                 },
             ),
@@ -670,7 +670,7 @@ def _multi_obc_lifecycle_factory(
                     "namespace_policy_dict": {
                         "type": "Cache",
                         "ttl": 3600,
-                        "namespacestore_dict": {"rgw": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, None)]},
                     },
                     "placement_policy": {
                         "tiers": [
@@ -707,7 +707,7 @@ def _multi_obc_lifecycle_factory(
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Single",
-                "namespacestore_dict": {"rgw": [(1, None)]},
+                "namespacestore_dict": {"aws": [(1, None)]},
             },
         }
 
@@ -715,7 +715,7 @@ def _multi_obc_lifecycle_factory(
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Single",
-                "namespacestore_dict": {"rgw": [(1, None)]},
+                "namespacestore_dict": {"aws": [(1, None)]},
             },
         }
 
