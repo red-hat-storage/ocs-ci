@@ -11,6 +11,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import cal_md5sum
+from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.cluster import (
     change_ceph_backfillfull_ratio,
     change_ceph_full_ratio,
@@ -51,30 +52,32 @@ class TestClusterFullAndRecovery(E2ETest):
         4.Calculate Checksum PVC1_FS + PVC1_RBD
         5.Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator
         6.Verify Alerts are seen ["CephClusterCriticallyFull", "CephOSDNearFull"]
-        7.Create PVC2 [FS + RBD]
-        8.Verify PVC2 [FS + RBD] are in Pending state
-        9.Create snapshot from PVC1 [FS+RBD]
-        10.Verify snapshots on false state
-        11.Change Ceph full_ratiofrom from 85% to 95%
-        12.Delete  benchmark-operator PVCs
-        13.Change Ceph backfillfull_ratio from 80% to 95%
-        14.Verify PVC2 [FS + RBD]  are moved to Bound state
-        15.Verify snapshots moved from false state to true state
-        16.Restore new pvc from snapshot pvc [RBD + FS]
-        17.Verify checksum PVC1 equal to PVC1_RESTORE
-        18.Change Ceph full_ratiofrom from 95% to 85%
-        19.Change Ceph backfillfull_ratio from 95% to 80%
+        7.Respin 'osd' ,'mgr', 'mon' pods
+        8.Create PVC2 [FS + RBD]
+        9.Verify PVC2 [FS + RBD] are in Pending state
+        10.Create snapshot from PVC1 [FS+RBD]
+        11.Verify snapshots on false state
+        12.Change Ceph full_ratiofrom from 85% to 95%
+        13.Delete  benchmark-operator PVCs
+        14.Change Ceph backfillfull_ratio from 80% to 95%
+        15.Verify PVC2 [FS + RBD]  are moved to Bound state
+        16.Verify snapshots moved from false state to true state
+        17.Restore new pvc from snapshot pvc [RBD + FS]
+        18.Verify checksum PVC1 equal to PVC1_RESTORE
+        19.Change Ceph full_ratiofrom from 95% to 85%
+        20.Change Ceph backfillfull_ratio from 95% to 80%
 
         """
+        self.count = 0
         self.banchmark_operator_teardown = False
         project_name = "test788"
-        project_obj = helpers.create_project(project_name=project_name)
-        teardown_project_factory(project_obj)
+        self.project_obj = helpers.create_project(project_name=project_name)
+        teardown_project_factory(self.project_obj)
 
         log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
         pvc_obj_blk1 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
-            project=project_obj,
+            project=self.project_obj,
             size=2,
             status=constants.STATUS_BOUND,
         )
@@ -100,7 +103,7 @@ class TestClusterFullAndRecovery(E2ETest):
         log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
         pvc_obj_fs1 = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
-            project=project_obj,
+            project=self.project_obj,
             size=2,
             status=constants.STATUS_BOUND,
         )
@@ -158,16 +161,22 @@ class TestClusterFullAndRecovery(E2ETest):
             log.error(f"The alerts {expected_alerts} do not exist after 600 sec")
             raise TimeoutExpiredError
 
+        for pod_name in ("mon", "mgr", "osd"):
+            log.info(f"Respin pod {pod_name}")
+            disruption = disruption_helpers.Disruptions()
+            disruption.set_resource(resource=f"{pod_name}")
+            disruption.delete_resource()
+
         log.info("Verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state")
         pvc_obj_blk2 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
-            project=project_obj,
+            project=self.project_obj,
             size=2,
             status=constants.STATUS_PENDING,
         )
         pvc_obj_fs2 = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
-            project=project_obj,
+            project=self.project_obj,
             size=2,
             status=constants.STATUS_PENDING,
         )
@@ -278,7 +287,7 @@ class TestClusterFullAndRecovery(E2ETest):
             f"to pod_blk1_obj {pod_blk1_obj.md5}"
         )
 
-    def verify_used_capacity_greater_than_expected(self, expected_used_capacity):
+    def verify_used_capacity_greater_than_expected(self, expected_used_capacity, pvc_factory, pod_factory):
         """
         Verify cluster percent used capacity
 
@@ -290,6 +299,27 @@ class TestClusterFullAndRecovery(E2ETest):
 
         """
         used_capacity = get_percent_used_capacity()
+        if expected_used_capacity < used_capacity + 1:
+            self.count += 1
+        if self.count == 2:
+            log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
+            pvc_obj_fs1 = pvc_factory(
+                interface=constants.CEPHFILESYSTEM,
+                project=self.project_obj,
+                size=4,
+                status=constants.STATUS_BOUND,
+            )
+            pod_fs1_obj = pod_factory(
+                interface=constants.CEPHFILESYSTEM,
+                pvc=pvc_obj_fs1,
+                status=constants.STATUS_RUNNING,
+            )
+            pod_fs1_obj.run_io(
+                storage_type="fs",
+                size="3G",
+                io_direction="write",
+                runtime=60,
+            )
         return used_capacity > expected_used_capacity
 
     def verify_alerts_via_prometheus(self, expected_alerts):
