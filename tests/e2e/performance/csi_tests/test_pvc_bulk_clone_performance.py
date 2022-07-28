@@ -216,7 +216,7 @@ class TestBulkCloneCreation(PASTest):
                     resource_count=self.pvc_count * 2,
                     namespace=self.namespace,
                     status=constants.STATUS_BOUND,
-                    timeout=600,
+                    timeout=1200,
                     sleep_time=30,
                 )
             except Exception as ex:
