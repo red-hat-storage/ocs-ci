@@ -186,7 +186,7 @@ class TestBulkCloneCreation(PASTest):
                 timeout=600,
                 sleep_time=30,
             )
-            log.info(f"All PODs completed writing data to the PVC's")
+            log.info("All the PODs completed writing data to the PVC's")
 
             clone_dict_list = scale_lib.construct_pvc_clone_yaml_bulk_for_kube_job(
                 pvc_dict_list,
