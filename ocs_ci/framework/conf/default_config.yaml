@@ -214,7 +214,7 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.4'
+  rosa_cli_version: '1.2.5'
   appliance_mode: true
 
   # used in external mode deployment
