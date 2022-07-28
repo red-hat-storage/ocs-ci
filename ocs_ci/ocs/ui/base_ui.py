@@ -56,12 +56,23 @@ class BaseUI:
         self.driver = driver
         self.screenshots_folder = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+            f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+            "screenshots_ui",
+            get_current_test_name(),
+        )
+        self.dom_folder = os.path.join(
+            os.path.expanduser(ocsci_config.RUN["log_dir"]),
+            f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+            "dom",
             get_current_test_name(),
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
+
+        if not os.path.isdir(self.dom_folder):
+            Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
+        logger.info(f"screenshots pictures:{self.dom_folder}")
 
     def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
         """
@@ -269,7 +280,7 @@ class BaseUI:
 
         """
         filename = os.path.join(
-            self.screenshots_folder,
+            self.dom_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
         )
         logger.info(f"Copy DOM file: {filename}")
@@ -740,6 +751,7 @@ def take_screenshot(driver):
     screenshots_folder = os.path.join(
         os.path.expanduser(ocsci_config.RUN["log_dir"]),
         f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+        "screenshots_ui",
         get_current_test_name(),
     )
     if not os.path.isdir(screenshots_folder):
@@ -749,7 +761,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating screenshot: {filename}")
+    logger.debug(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
