@@ -659,7 +659,14 @@ def pytest_runtest_makereport(item, call):
         test_case_name = item.name
         ocp_logs_collection = (
             True
-            if any(x in item.location[0] for x in ["ecosystem", "e2e/performance"])
+            if any(
+                x in item.location[0]
+                for x in [
+                    "ecosystem",
+                    "e2e/performance",
+                    "test_ceph_csidriver_runs_on_non_ocs_nodes",
+                ]
+            )
             else False
         )
         ocs_logs_collection = (
