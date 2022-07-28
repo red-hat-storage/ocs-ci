@@ -183,7 +183,7 @@ class TestBulkCloneCreation(PASTest):
                 resource_count=self.pvc_count,
                 namespace=self.namespace,
                 status=constants.STATUS_COMPLETED,
-                timeout=600,
+                timeout=1200,
                 sleep_time=30,
             )
             log.info("All the PODs completed writing data to the PVC's")
