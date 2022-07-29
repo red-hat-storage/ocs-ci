@@ -1336,3 +1336,45 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
             f"pod-security.kubernetes.io/audit={constants.PSA_BASELINE} --overwrite"
         )
         ocp_obj.add_label(resource_name=namespace, label=label)
+
+
+def collect_pod_container_rpm_package(dir_name):
+    """
+    Collect information about rpm packages from all containers from
+    Args:
+        dir_name(str): directory to store container rpm package info
+    """
+    from ocs_ci.ocs.resources import pod
+
+    timestamp = time.time()
+    cluster_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"{dir_name}_{ocsci_config.RUN['run_id']}",
+    )
+    package_log_dir_path = os.path.join(
+        log_dir_path, "rpm_package", f"rpm_list_{timestamp}"
+    )
+    create_directory_path(package_log_dir_path)
+    log.info(f"Directory path for rpm logs is{package_log_dir_path}")
+    pods = pod.get_all_pods(namespace=cluster_namespace)
+    for pod_name in pods:
+        pod_object = pod_name.get()
+        pod_containers = pod_object.get("spec").get("containers")
+        for container in pod_containers:
+            container_name = container["name"]
+            ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
+            pod_status = ocp_pod_obj.get_resource_status(pod_name.name)
+            if pod_status == constants.STATUS_RUNNING:
+                command = f"exec -i {pod_name.name} -c {container_name} -- rpm -qa"
+                ocp_obj = OCP(namespace=cluster_namespace)
+                try:
+                    container_output = ocp_obj.exec_oc_cmd(command)
+                except:
+                    log.warning(
+                        f"failed to get rpm packages on pod {pod_name.name} container {container_name}"
+                    )
+                log_file_name = f"{package_log_dir_path}/{container_name}-rpm.log"
+                with open(log_file_name, "w") as f:
+                    f.write(container_output)

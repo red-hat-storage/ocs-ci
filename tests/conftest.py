@@ -45,7 +45,11 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.scale_lib import FioPodScale
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    collect_ocs_logs,
+    collect_pod_container_rpm_package,
+)
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
@@ -3948,6 +3952,7 @@ def collect_logs_fixture(request):
             if config.REPORTING["collect_logs_on_success_run"]:
                 collect_ocs_logs("testcases", ocs=False, status_failure=False)
                 collect_ocs_logs("testcases", ocp=False, status_failure=False)
+                collect_pod_container_rpm_package("testcases")
 
     request.addfinalizer(finalizer)
 
