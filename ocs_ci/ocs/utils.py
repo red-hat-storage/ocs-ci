@@ -1371,9 +1371,9 @@ def collect_pod_container_rpm_package(dir_name):
                 ocp_obj = OCP(namespace=cluster_namespace)
                 try:
                     container_output = ocp_obj.exec_oc_cmd(command)
-                except:
+                except Exception as e:
                     log.warning(
-                        f"failed to get rpm packages on pod {pod_name.name} container {container_name}"
+                        f"Following exception {e} was raised for pod {pod_name.name} and container {container_name}"
                     )
                 log_file_name = f"{package_log_dir_path}/{container_name}-rpm.log"
                 with open(log_file_name, "w") as f:
