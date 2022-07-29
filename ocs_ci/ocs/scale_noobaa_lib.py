@@ -379,4 +379,4 @@ def check_all_obcs_status(namespace=None):
             obc_bound_list.append(status)
         else:
             obc_not_bound_list.append(status)
-    return obc_bound_list
+    return obc_bound_list, obc_not_bound_list

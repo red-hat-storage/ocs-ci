@@ -62,7 +62,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -70,7 +70,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2479")
@@ -103,7 +103,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -111,7 +111,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2480")
@@ -158,7 +158,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file2.create(namespace=self.namespace)
             time.sleep(timeout * 3)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_mcg_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file1,
@@ -177,5 +177,3 @@ class TestScaleOCBCreation(E2ETest):
                 f"Number of OBCs in Bound state MCG: {len(obc_mcg_bound_list)},"
                 f" RGW: {len(obc_rgw_bound_list)}"
             )
-
-        # TODO: Adding support to calculate OBC creation time
