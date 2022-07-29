@@ -29,10 +29,11 @@ class OCPDeployment:
         self.deployment_type = config.ENV_DATA["deployment_type"].lower()
         if not hasattr(self, "flexy_deployment"):
             self.flexy_deployment = False
-        if (
-            not self.flexy_deployment
-            and self.deployment_platform != constants.IBMCLOUD_PLATFORM
-        ):
+        ibmcloud_managed_deployment = (
+            self.deployment_platform == constants.IBMCLOUD_PLATFORM
+            and self.deployment_type == "managed"
+        )
+        if not self.flexy_deployment and not ibmcloud_managed_deployment:
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.cluster_name = config.ENV_DATA["cluster_name"]

@@ -51,9 +51,14 @@ class DeploymentFactory(object):
 
             self.cls_map["gcp_ipi"] = GCPIPI
         elif self.deployment_platform == constants.IBMCLOUD_PLATFORM:
-            from ocs_ci.deployment.ibmcloud import IBMCloud
+            from ocs_ci.deployment.ibmcloud import IBMCloud, IBMCloudIPI
 
-            self.cls_map["ibm_cloud_managed"] = IBMCloud
+            self.cls_map.update(
+                {
+                    "ibm_cloud_ipi": IBMCloudIPI,
+                    "ibm_cloud_managed": IBMCloud,
+                }
+            )
         elif self.deployment_platform == constants.IBM_POWER_PLATFORM:
             from ocs_ci.deployment.ibm import IBMDeployment
 

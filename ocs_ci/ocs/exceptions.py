@@ -566,3 +566,7 @@ class ThinPoolUtilityWrong(Exception):
 
 class LVMOHealthException(Exception):
     pass
+
+
+class VolumesExistError(Exception):
+    pass

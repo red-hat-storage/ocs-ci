@@ -469,10 +469,11 @@ class Deployment(object):
 
         """
         live_deployment = config.DEPLOYMENT.get("live_deployment")
-        if (
+        managed_ibmcloud = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and not live_deployment
-        ):
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if managed_ibmcloud and not live_deployment:
             link_all_sa_and_secret_and_delete_pods(constants.OCS_SECRET, self.namespace)
         operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
@@ -658,8 +659,11 @@ class Deployment(object):
             run_cmd(f"oc create -f {multus_data_yaml.name}")
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
-
-        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        managed_ibmcloud = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if managed_ibmcloud:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
@@ -678,11 +682,7 @@ class Deployment(object):
                     cos_secret_data, cos_secret_data_yaml.name
                 )
                 exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
-        if (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and live_deployment
-            and not disable_addon
-        ):
+        if managed_ibmcloud and live_deployment and not disable_addon:
             self.deploy_odf_addon()
             return
         self.subscribe_ocs()
@@ -726,10 +726,7 @@ class Deployment(object):
             package_manifest.wait_for_resource(timeout=300)
             csv_name = package_manifest.get_current_csv(channel=channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
-            if (
-                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                and not live_deployment
-            ):
+            if managed_ibmcloud and not live_deployment:
                 if not is_ibm_sa_linked:
                     logger.info("Sleeping for 60 seconds before applying SA")
                     time.sleep(60)
@@ -743,7 +740,7 @@ class Deployment(object):
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         ocp_version = version.get_semantic_ocp_version_from_config()
-        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        if managed_ibmcloud:
             config_map = ocp.OCP(
                 kind="configmap",
                 namespace=self.namespace,
@@ -960,7 +957,7 @@ class Deployment(object):
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
-        if self.platform == constants.IBMCLOUD_PLATFORM:
+        if managed_ibmcloud:
             mon_pvc_template = {
                 "spec": {
                     "accessModes": ["ReadWriteOnce"],
@@ -1601,7 +1598,11 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         )
 
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
-    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+    managed_ibmcloud = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
     cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
