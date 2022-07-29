@@ -199,7 +199,7 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_loc
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
@@ -263,7 +263,9 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
 
     # wait for ceph to return into HEALTH_OK state after osd deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    # The check is increased to cover for slow ops events in case of larger clusters
+    # with uploaded data
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
