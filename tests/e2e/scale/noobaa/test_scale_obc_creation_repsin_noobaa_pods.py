@@ -119,8 +119,8 @@ class TestScaleOCBCreation(E2ETest):
         )
         log.info(
             f"Number of OBCs in Bound state after node reset: "
-            f"{len(obc_status_list)}"
+            f"{len(obc_status_list[0])}"
         )
         assert (
-            len(obc_status_list) == self.scale_obc_count
+            len(obc_status_list[0]) == self.scale_obc_count
         ), "Not all OBCs in Bound state"
