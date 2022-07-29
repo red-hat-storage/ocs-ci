@@ -3743,9 +3743,12 @@ def snapshot_restore_factory_fixture(request):
         restore_pvc_name = restore_pvc_name or (
             helpers.create_unique_resource_name(snapshot_obj.name, "restore")
         )
+        vol_snapshot_class = snapshot_info["spec"]["volumeSnapshotClassName"]
 
-        if snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        if (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
         ):
             storageclass = (
                 storageclass
@@ -3753,8 +3756,10 @@ def snapshot_restore_factory_fixture(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        elif (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
         ):
             storageclass = (
                 storageclass
