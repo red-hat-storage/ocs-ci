@@ -47,6 +47,7 @@ class TestNodesRestartMS(ManageTest):
         Initialize Sanity instance, and create pods and PVCs factory
 
         """
+        self.orig_index = config.cur_index
         self.sanity_helpers = Sanity()
         self.create_pods_and_pvcs_factory = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
@@ -76,6 +77,8 @@ class TestNodesRestartMS(ManageTest):
             for n in ocp_nodes:
                 recover_node_to_ready_state(n)
 
+            logger.info("Switch to the original cluster index")
+            config.switch_ctx(self.orig_index)
             ceph_health_check()
 
         request.addfinalizer(finalizer)
@@ -92,7 +95,11 @@ class TestNodesRestartMS(ManageTest):
         """
         # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
         if is_ms_consumer_cluster():
-            pytest.skip("The test will not run on a consumer cluster")
+            logger.info(
+                "The test is applicable only for an MS provider cluster. "
+                "Switching to the provider cluster..."
+            )
+            config.switch_to_provider()
 
         self.create_resources()
 
