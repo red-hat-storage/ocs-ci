@@ -191,8 +191,12 @@ class OCS(object):
 def get_version_info(namespace=None):
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+    if config.RUN.get("lvm"):
+        resource_name = defaults.LVM_OPERATOR_NAME
+    else:
+        resource_name = defaults.OCS_OPERATOR_NAME
     package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME,
+        resource_name=resource_name,
         selector=operator_selector,
         subscription_plan_approval=subscription_plan_approval,
     )

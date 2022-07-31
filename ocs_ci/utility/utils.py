@@ -1628,6 +1628,7 @@ def get_ocs_build_number():
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
     from ocs_ci.ocs.resources.catalog_source import CatalogSource
     from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator
+    from ocs_ci.ocs.cluster import check_clusters
 
     build_num = ""
     if (
@@ -1637,6 +1638,10 @@ def get_ocs_build_number():
         operator_name = defaults.ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
+    if "lvm" not in config.RUN.keys():
+        check_clusters()
+    if config.RUN.get("lvm") and not config.RUN.get("cephcluster"):
+        operator_name = defaults.LVM_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
         operator_name,
         defaults.ROOK_CLUSTER_NAMESPACE,

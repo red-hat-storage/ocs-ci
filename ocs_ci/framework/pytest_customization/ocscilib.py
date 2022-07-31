@@ -398,9 +398,9 @@ def pytest_configure(config):
                     del config._metadata[extra_meta]
 
             config._metadata["Test Run Name"] = get_testrun_name()
-            check_clusters()
-            if ocsci_config.RUN.get("cephcluster"):
-                gather_version_info_for_report(config)
+            if "cephcluster" not in ocsci_config.RUN.keys():
+                check_clusters()
+            gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 
@@ -420,16 +420,22 @@ def gather_version_info_for_report(config):
 
         # add ceph version
         if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
-            ceph_version = get_ceph_version()
-            config._metadata["Ceph Version"] = ceph_version
+            if "lvm" not in ocsci_config.RUN.keys():
+                check_clusters()
+            if not ocsci_config.RUN.get("lvm"):
+                ceph_version = get_ceph_version()
+                config._metadata["Ceph Version"] = ceph_version
 
-            # add csi versions
-            csi_versions = get_csi_versions()
-            config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
-            config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
+                # add csi versions
+                csi_versions = get_csi_versions()
+                config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
+                config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
-        config._metadata["OCS operator"] = get_ocs_build_number()
+        if ocsci_config.RUN.get("cephcluster"):
+            config._metadata["OCS operator"] = get_ocs_build_number()
+        else:
+            config._metadata["LVM operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         skip_list = ["ocs-operator"]

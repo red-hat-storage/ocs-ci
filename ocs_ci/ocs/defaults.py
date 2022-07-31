@@ -37,6 +37,7 @@ DEVICE_SIZE = 100
 
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
+LVM_OPERATOR_NAME = "odf-lvm-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
