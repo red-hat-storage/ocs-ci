@@ -42,9 +42,7 @@ class TestLvmCapacityAlerts(ManageTest):
 
     @pytest.fixture()
     def init_lvm(self):
-        self.lvm = LVM(
-            fstrim=False, fail_on_thin_pool_not_empty=True, thread_init=False
-        )
+        self.lvm = LVM(fstrim=True, fail_on_thin_pool_not_empty=True)
         disk1 = self.lvm.pv_data["pv_list"][0]
         log.info(f"PV List: {self.lvm.pv_data['pv_list']}")
         self.disk_size = self.lvm.pv_data[disk1]["pv_size"]

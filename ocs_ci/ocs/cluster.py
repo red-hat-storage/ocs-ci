@@ -2174,9 +2174,7 @@ class LVM(object):
 
     """
 
-    def __init__(
-        self, fstrim=False, fail_on_thin_pool_not_empty=False, thread_init=True
-    ):
+    def __init__(self, fstrim=False, fail_on_thin_pool_not_empty=False):
         """
         Initiate the class, gets 2 parameters.
         Args:
@@ -2186,7 +2184,6 @@ class LVM(object):
         Return:
             (LVM) object
         """
-        self.thread_init = thread_init
         self.lv_data = None
         self.lvmcluster = None
         self.pv_data = None
@@ -2248,8 +2245,7 @@ class LVM(object):
             ]
         func_list.extend(extend_func_list)
 
-        if self.thread_init:
-            thread_init_class(func_list, shutdown=0)
+        thread_init_class(func_list, shutdown=0)
 
     def init_prom(self):
         self.new_prom = PrometheusAPI()
