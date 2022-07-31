@@ -329,6 +329,7 @@ class Pod(OCS):
         direct=0,
         verify=False,
         fio_installed=False,
+        timeout=600,
     ):
         """
         Execute FIO on a pod
@@ -365,6 +366,7 @@ class Pod(OCS):
             direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
             verify (bool): This method verifies file contents after each iteration of the job. e.g. crc32c, md5
             fio_installed (bool): True if fio is already installed on the pod
+            timeout (int): The timeout in seconds to wait for fio to be completed
 
         """
         if not self.wl_setup_done:
@@ -404,6 +406,7 @@ class Pod(OCS):
             self.io_params["end_fsync"] = end_fsync
         if verify:
             self.io_params["verify"] = config.RUN["io_verification_method"]
+        self.io_params["timeout"] = timeout
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):

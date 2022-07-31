@@ -161,6 +161,7 @@ class TestLvmCapacityAlerts(ManageTest):
                 readwrite="write",
                 direct=1,
                 verify=False,
+                timeout=1800,
             )
             self.pod_obj.get_fio_results(timeout=1800)
 
