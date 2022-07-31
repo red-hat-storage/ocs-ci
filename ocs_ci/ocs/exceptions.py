@@ -562,3 +562,11 @@ class LvThinUtilNotChanged(Exception):
 
 class ThinPoolUtilityWrong(Exception):
     pass
+
+
+class CatalogSourceNotFoundAfterReboot(Exception):
+    pass
+
+
+class PodDidNotReachRunningState(Exception):
+    pass

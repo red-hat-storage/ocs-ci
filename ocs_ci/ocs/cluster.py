@@ -50,10 +50,12 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pod import get_pods_having_label, wait_for_pods_to_be_running
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
+from paramiko.ssh_exception import SSHException
 
 logger = logging.getLogger(__name__)
 
@@ -2193,6 +2195,7 @@ class LVM(object):
         Return:
             (LVM) object
         """
+        self.image = None
         self.lv_data = None
         self.lvmcluster = None
         self.pv_data = None
@@ -2201,6 +2204,8 @@ class LVM(object):
         self.vg_data = None
         self.node_ssh = None
         self.new_prom = None
+        self.lvm_pods = None
+
         func_list = [
             self.cluster_ip(),
             self.get_lvmcluster(),
@@ -2208,6 +2213,7 @@ class LVM(object):
             self.get_and_parse_pvs(),
             self.get_and_parse_lvs(),
             self.get_and_parse_vgs(),
+            self.get_lvm_pods_names(),
         ]
         extend_func_list = []
         if fstrim and fail_on_thin_pool_not_empty:
@@ -2287,6 +2293,7 @@ class LVM(object):
             **redhat_operators_catalogesource_ocp.data
         )
         image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+        self.image = image
         full_version = image.split(":")[1]
         pattern = re.compile(r"([^\.]*\.[^\.]*)")
         result = pattern.search(full_version)
@@ -2621,6 +2628,28 @@ class LVM(object):
                 f"✅ Pvc {pvc_obj.name} utilization is {pvc_data_percent} and expected is {pvc_expected_data_percent}"
             )
 
+    def get_lvm_pods_names(self):
+        """
+        Get lvm pods name (without operator), sets self.lvm_pods
+        """
+
+        self.lvm_pods = get_pods_having_label(
+            label="app.kubernetes.io/managed-by=lvm-operator",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+
+    def wait_for_lvm_pod_running(self):
+        """
+        Wait for all lvm pods to be running.
+        """
+
+        pod_name_list = []
+        for lvm_pod in self.lvm_pods:
+            pod_name_list.append(lvm_pod["metadata"]["name"])
+        wait_for_pods_to_be_running(
+            pod_names=pod_name_list, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+
     def cluster_ip(self):
         """
         Get cluster ip address for ssh connections, sets self.ip
@@ -2649,6 +2678,11 @@ class LVM(object):
             (str) output from server.
         """
         if not self.node_ssh:
+            self.create_ssh_object()
+        try:
+            return_output = self.node_ssh.exec_cmd(cmd=cmd)
+        except SSHException as er:
+            logger.info(f"Restoring ssh connection because {er}, ")
             self.create_ssh_object()
         return_output = self.node_ssh.exec_cmd(cmd=cmd)
         return_stdout = return_output[1]

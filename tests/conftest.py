@@ -3619,18 +3619,20 @@ def snapshot_factory_fixture(request):
     """
     instances = []
 
-    def factory(pvc_obj, wait=True, snapshot_name=None):
+    def factory(pvc_obj, wait=True, snapshot_name=None, time_to_wait=60):
         """
         Args:
             pvc_obj (PVC): PVC object from which snapshot has to be created
             wait (bool): True to wait for snapshot to be ready, False otherwise
             snapshot_name (str): Name to be provided for snapshot
-
+            time_to_wait (int): The number of seconds to wait for restore to get to state
         Returns:
             OCS: OCS instance of kind VolumeSnapshot
 
         """
-        snap_obj = pvc_obj.create_snapshot(snapshot_name=snapshot_name, wait=wait)
+        snap_obj = pvc_obj.create_snapshot(
+            snapshot_name=snapshot_name, wait=wait, time_to_wait=time_to_wait
+        )
         instances.append(snap_obj)
         return snap_obj
 

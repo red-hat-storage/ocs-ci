@@ -1886,7 +1886,11 @@ def check_pods_in_running_state(
     ret_val = True
 
     if pod_names:
-        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+        list_of_pods = get_pod_objs(
+            pod_names,
+            namespace=namespace,
+            raise_pod_not_found_error=raise_pod_not_found_error,
+        )
     else:
         list_of_pods = get_all_pods(namespace)
 
@@ -2739,3 +2743,29 @@ def get_mon_label(mon_pod_obj):
 
     """
     return mon_pod_obj.get().get("metadata").get("labels").get("mon")
+
+
+def get_lvm_pods_objs():
+    """
+    Get lvm pods name (without operator)
+    Returns:
+        list(POD): list of pods objects.
+    """
+    lvm_pods = get_pods_having_label(
+        label="app.kubernetes.io/managed-by=lvm-operator",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    return lvm_pods
+
+
+def wait_for_lvm_pod_running():
+    """
+    Wait for all lvm pods to be running.
+    """
+
+    pod_name_list = []
+    for lvm_pod in get_lvm_pods_objs():
+        pod_name_list.append(lvm_pod["metadata"]["name"])
+    wait_for_pods_to_be_running(
+        pod_names=pod_name_list, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
