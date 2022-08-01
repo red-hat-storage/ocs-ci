@@ -528,6 +528,7 @@ def create_storage_class(
     encrypted=False,
     encryption_kms_id=None,
     fs_name=None,
+    volume_binding_mode="Immediate",
 ):
     """
     Create a storage class
@@ -547,6 +548,8 @@ def create_storage_class(
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
         fs_name (str): the name of the filesystem for CephFS StorageClass
+        volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
+            pod attachment.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -596,6 +599,7 @@ def create_storage_class(
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
 
     try:
         del sc_data["parameters"]["userid"]
