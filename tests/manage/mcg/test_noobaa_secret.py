@@ -5,7 +5,6 @@ import boto3
 
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.cloud_manager import S3Client
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs.ocp import OCP
@@ -34,7 +33,7 @@ def create_bs_using_cli(
 @pytest.fixture(scope="function")
 def cleanup(request):
     """
-    Clean up function for the backinstores created using CLI
+    Clean up function for the backingstores created using CLI
     where we can't use teardown_factory()
 
     """
@@ -66,7 +65,12 @@ def cleanup(request):
 
 class TestNoobaaSecrets:
     def test_duplicate_noobaa_secrets(
-        self, backingstore_factory, cloud_uls_factory, mcg_obj, teardown_factory
+        self,
+        backingstore_factory,
+        cloud_uls_factory,
+        mcg_obj,
+        teardown_factory,
+        cld_mgr,
     ):
         """
         Objective of this test is:
@@ -76,27 +80,16 @@ class TestNoobaaSecrets:
         """
         # create secret with the same credentials to check if duplicates are allowed
         first_bs_obj = backingstore_factory(
-            method="oc", uls_dict={"aws": [(1, "eu-central-1")]}
+            method="oc", uls_dict={"aws": [(1, constants.AWS_REGION)]}
         )[0]
-        try:
-            logger.info(
-                "Trying to load credentials from ocs-ci-data. "
-                "This flow is only relevant when running under OCS-QE environments."
-            )
-            secret_dict = update_config_from_s3().get("AUTH")
-        except (AttributeError, EndpointConnectionError):
-            logger.warning(
-                "Failed to load credentials from ocs-ci-data.\n"
-                "Your local AWS credentials might be misconfigured.\n"
-                "Trying to load credentials from local auth.yaml instead"
-            )
-            secret_dict = load_auth_config().get("AUTH", {})
-        aws_client = S3Client(auth_dict=secret_dict["AWS"])
-        teardown_factory(aws_client.secret)
-        logger.info(f"New secret created: {aws_client.secret.name}")
+        aws_secret_obj = cld_mgr.aws_client.create_s3_secret(
+            cld_mgr.aws_client.secret_prefix, cld_mgr.aws_client.data_prefix
+        )
+        logger.info(f"New secret created: {aws_secret_obj.name}")
+        teardown_factory(aws_secret_obj)
 
         cloud = "aws"
-        uls_tup = (1, "eu-central-1")
+        uls_tup = (1, constants.AWS_REGION)
         uls_name = list(cloud_uls_factory({cloud: [uls_tup]})["aws"])[0]
         logger.info(f"ULS dict: {type(uls_name)}")
         second_bs_name = create_unique_resource_name(
@@ -110,9 +103,9 @@ class TestNoobaaSecrets:
             "type": "aws-s3",
             "awsS3": {
                 "targetBucket": uls_name,
-                "region": "eu-central-1",
+                "region": constants.AWS_REGION,
                 "secret": {
-                    "name": aws_client.secret.name,
+                    "name": aws_secret_obj.name,
                     "namespace": bs_data["metadata"]["namespace"],
                 },
             },
@@ -137,7 +130,9 @@ class TestNoobaaSecrets:
 
         # Modify the secret credentials to wrong one and see if the backingstores get rejected
         first_secret_name = first_bs_dict["spec"]["awsS3"]["secret"]["name"]
-        wrong_access_key_patch = {"data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}}
+        wrong_access_key_patch = {
+            "data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}
+        }  # Invalid Access Key
         OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").patch(
             resource_name=first_secret_name,
             params=json.dumps(wrong_access_key_patch),
@@ -153,7 +148,7 @@ class TestNoobaaSecrets:
         ), "Backingstores are not getting reconciled after changing linked secret credentials!"
         logger.info("Backingstores getting reconciled!")
 
-    def test_noobaa_secret_deletion_m1(
+    def test_noobaa_secret_deletion_method1(
         self, backingstore_factory, teardown_factory, mcg_obj, cleanup
     ):
         """
@@ -174,7 +169,7 @@ class TestNoobaaSecrets:
 
         secret_name = first_bs_dict["spec"]["awsS3"]["secret"]["name"]
 
-        # create the second backingstore using yaml and passing the secret name
+        # Create the second backingstore by applying a YAML that uses the same secret as the first backingstore
         second_bs_obj = backingstore_factory(
             method="oc", uls_dict={"aws": [(1, "eu-central-1")]}
         )[0]
@@ -194,7 +189,7 @@ class TestNoobaaSecrets:
             "Secret remains even after the linked backingstores are deleted, as expected!"
         )
 
-    def test_noobaa_secret_deletion_m2(self, teardown_factory, mcg_obj, cleanup):
+    def test_noobaa_secret_deletion_method2(self, teardown_factory, mcg_obj, cleanup):
         """
         Objectives of this tests are:
             1) create first backingstore using CLI passing credentials, which creates secret as well

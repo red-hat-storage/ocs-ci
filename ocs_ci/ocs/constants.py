@@ -842,6 +842,9 @@ BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 
+# AWS region constant
+AWS_REGION = "eu-central-1"
+
 # ignition files
 BOOTSTRAP_IGN = "bootstrap.ign"
 MASTER_IGN = "master.ign"
