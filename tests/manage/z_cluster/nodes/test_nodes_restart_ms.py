@@ -21,6 +21,7 @@ from ocs_ci.ocs.node import (
     wait_for_nodes_status,
     verify_worker_nodes_security_groups,
     get_nodes,
+    wait_for_node_count_to_reach_status,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -148,12 +149,14 @@ class TestNodesRestartMS(ManageTest):
         Test nodes restart (from the platform layer)
 
         """
+        node_count = len(get_nodes(node_type=node_type))
         if node_type == constants.WORKER_MACHINE:
             ocp_nodes = get_nodes(node_type=node_type)
         else:
             ocp_nodes = get_nodes(node_type=node_type, num_of_nodes=2)
 
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
+        wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
         self.sanity_helpers.health_check()
         self.create_resources()
 
