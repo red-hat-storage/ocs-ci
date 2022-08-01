@@ -194,14 +194,19 @@ class TestLvmCapacityAlerts(ManageTest):
             self.lvm.compare_percent_data_from_pvc(
                 pvc_list[-1], float(size["pvc_expected_size"])
             )
+            expected_os_values = [
+                self.lvm.get_thin_pool1_data_percent(),
+                self.lvm.get_thin_pool_metadata(),
+                self.lvm.get_thin_pool1_size(),
+                self.lvm.get_vg_free(),
+                self.lvm.get_vg_size(),
+            ]
 
-            val = self.lvm.parse_topolvm_metrics(constants.TOPOLVM_METRICS)
-            self.metric_data = val
+            for metric, expected in zip(constants.TOPOLVM_METRICS, expected_os_values):
+                self.lvm.validate_metrics_vs_operating_system_stats(metric, expected)
+
+            self.metric_data = self.lvm.parse_topolvm_metrics(constants.TOPOLVM_METRICS)
             log.info(self.metric_data)
-            assert self.lvm.validate_metric_of_thin_pool_data_percent()
-            assert self.lvm.validate_metric_of_thin_pool_bytes_size()
-            assert self.lvm.validate_metric_of_vg_size_bytes()
-            assert self.lvm.validate_metric_of_vg_available_bytes()
             log.info(f"getting alerts: {self.lvm.get_thin_provisioning_alerts()}")
             if size["file_name"] == "run-to-70":
                 assert not self.lvm.check_for_alert(

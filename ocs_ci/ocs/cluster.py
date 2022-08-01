@@ -2708,67 +2708,27 @@ class LVM(object):
 
         return metrics_short
 
-    def validate_metric_of_thin_pool_data_percent(self):
-        os_tp_data_precent = self.get_thin_pool1_data_percent()
-        thinpool_data_metric = self.parse_topolvm_metrics(
-            constants.TOPOLVM_METRICS
-        ).get("topolvm_thinpool_data_percent")
-        if thinpool_data_metric == os_tp_data_precent:
-            return True
-        else:
-            logger.info(
-                f"thinpool data precentage metric {thinpool_data_metric} is different than"
-                f"{os_tp_data_precent} that reported by node os"
-            )
-            return False
+    def validate_metrics_vs_operating_system_stats(self, metric, expected_os_value):
+        """
+        Validate metrics vs operating system stats
 
-    def validate_metric_of_thin_pool_bytes_size(self):
-        os_thin_pool_bytes_size = self.get_thin_pool1_size()
-        thinpool_sizebytes_metric = self.parse_topolvm_metrics(
-            constants.TOPOLVM_METRICS
-        ).get("topolvm_thinpool_size_bytes")
-        converted_thinpool_sizebytes_metric = convert_bytes_to_unit(
-            thinpool_sizebytes_metric
-        )
-        if os_thin_pool_bytes_size == converted_thinpool_sizebytes_metric[:-2]:
-            return True
-        else:
-            logger.info(
-                f"thinpool data bytes size {converted_thinpool_sizebytes_metric} is different than"
-                f"{os_thin_pool_bytes_size} that reported by node os"
-            )
-            return False
+        Args:
+            metric (str): tololvm metric name
+            expected_os_value (str): linux "lvs" equivalent value
 
-    def validate_metric_of_vg_available_bytes(self):
-        os_vg_free = self.get_vg_free()
-        vg_available_bytes_metric = self.parse_topolvm_metrics(
-            constants.TOPOLVM_METRICS
-        ).get("topolvm_volumegroup_available_bytes")
-        converted_vg_available_bytes_metric = convert_bytes_to_unit(
-            vg_available_bytes_metric
-        )
-        if os_vg_free == converted_vg_available_bytes_metric[:-2]:
-            return True
-        else:
-            logger.info(
-                f"volume group available free space {converted_vg_available_bytes_metric} is different than"
-                f"{os_vg_free} that reported by node os"
-            )
-            return False
+        Returns:
+            bool: True if metric equals expected_os_value, False otherwise
 
-    def validate_metric_of_vg_size_bytes(self):
-        os_vg_size = self.get_vg_size()
-        vg_sizebytes_metric = self.parse_topolvm_metrics(constants.TOPOLVM_METRICS).get(
-            "topolvm_volumegroup_size_bytes"
-        )
-        converted_vg_sizebytes_metric = convert_bytes_to_unit(vg_sizebytes_metric)
-        if os_vg_size == converted_vg_sizebytes_metric[:-2]:
+        """
+        logger.info(f"Comparing {metric} vs linux lvs output")
+        metric_value = self.parse_topolvm_metrics(constants.TOPOLVM_METRICS).get(metric)
+        converted_metric_value = convert_bytes_to_unit(metric_value)
+        if (abs(float(metric_value) - float(expected_os_value)) < 0.2) or (
+            abs(float(converted_metric_value[:-2]) - float(expected_os_value)) < 0.2
+        ):
             return True
         else:
-            logger.info(
-                f"volume group zise {converted_vg_sizebytes_metric} is different than"
-                f"{os_vg_size} that reported by node os"
-            )
+            logger.error(f"{metric} is not equal to os stat: {expected_os_value}")
             return False
 
 
