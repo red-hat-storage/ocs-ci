@@ -1591,7 +1591,7 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     for pod, log_list in pods_log.items():
         log_list.reverse()
         for log_msg in log_list:
-            # Check for last occurrence of leader message and note the timestamp.
+            # Check for last occurrence of leader message
             # This will be the first occurrence in reversed list.
             if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
                 curr_index = log_list.index(log_msg)
