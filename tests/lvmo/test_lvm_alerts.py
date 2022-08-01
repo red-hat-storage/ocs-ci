@@ -15,20 +15,36 @@ log = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(
-    argnames=["volume_mode", "volume_binding_mode"],
+    argnames=["volume_mode", "volume_binding_mode", "status"],
     argvalues=[
         pytest.param(
-            *[constants.VOLUME_MODE_FILESYSTEM, constants.WFFC_VOLUMEBINDINGMODE],
+            *[
+                constants.VOLUME_MODE_FILESYSTEM,
+                constants.WFFC_VOLUMEBINDINGMODE,
+                constants.STATUS_PENDING,
+            ],
         ),
-        # pytest.param(
-        #     *[constants.VOLUME_MODE_BLOCK, constants.WFFC_VOLUMEBINDINGMODE],
-        # ),
         pytest.param(
-            *[constants.VOLUME_MODE_FILESYSTEM, constants.IMMEDIATE_VOLUMEBINDINGMODE],
+            *[
+                constants.VOLUME_MODE_BLOCK,
+                constants.WFFC_VOLUMEBINDINGMODE,
+                constants.STATUS_PENDING,
+            ],
         ),
-        # pytest.param(
-        #     *[constants.VOLUME_MODE_BLOCK, constants.IMMEDIATE_VOLUMEBINDINGMODE],
-        # ),
+        pytest.param(
+            *[
+                constants.VOLUME_MODE_FILESYSTEM,
+                constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                constants.STATUS_BOUND,
+            ],
+        ),
+        pytest.param(
+            *[
+                constants.VOLUME_MODE_BLOCK,
+                constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                constants.STATUS_BOUND,
+            ],
+        ),
     ],
 )
 class TestLvmCapacityAlerts(ManageTest):
@@ -58,27 +74,6 @@ class TestLvmCapacityAlerts(ManageTest):
         self.proj_obj = project_factory()
         self.proj = self.proj_obj.namespace
 
-    @pytest.fixture()
-    def pvc(self, pvc_factory, volume_mode, volume_binding_mode):
-        self.status = constants.STATUS_PENDING
-        if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-            self.status = constants.STATUS_BOUND
-        self.pvc_obj = pvc_factory(
-            project=self.proj_obj,
-            interface=None,
-            storageclass=self.sc_obj,
-            size=self.pvc_size,
-            status=self.status,
-            access_mode=self.access_mode,
-            volume_mode=volume_mode,
-        )
-
-    @pytest.fixture()
-    def pod(self, pod_factory, volume_mode):
-        if volume_mode == constants.VOLUME_MODE_BLOCK:
-            self.block = True
-        self.pod_obj = pod_factory(pvc=self.pvc_obj, raw_block_pv=self.block)
-
     @tier1
     @skipif_lvm_not_installed
     @skipif_ocs_version("<4.11")
@@ -87,8 +82,7 @@ class TestLvmCapacityAlerts(ManageTest):
         namespace,
         init_lvm,
         storageclass,
-        pvc,
-        pod,
+        status,
         volume_mode,
         pvc_factory,
         pod_factory,
@@ -123,28 +117,44 @@ class TestLvmCapacityAlerts(ManageTest):
             {
                 "size_to_fill": size_to_76,
                 "file_name": "run-to-76",
-                "pvc_expected_size": f"{float(self.pvc_size)*0.76}",
+                "pvc_expected_size": f"{float(self.pvc_size)*0.06}",
                 "alert": constants.TOPOLVM_ALERTS.get("tp_data_75_precent"),
             },
             {
                 "size_to_fill": size_to_86,
                 "file_name": "run-to-86",
-                "pvc_expected_size": f"{float(self.pvc_size)*0.86}",
+                "pvc_expected_size": f"{float(self.pvc_size)*0.1}",
                 "alert": constants.TOPOLVM_ALERTS.get("tp_data_85_precent"),
             },
         ]
 
         log.info(f"LV Size:{self.thin_pool_size}")
         self.metric_data = dict()
+        pvc_list = list()
+        pods_list = list()
         storage_type = "fs"
         if volume_mode == constants.VOLUME_MODE_BLOCK:
             storage_type = "block"
+            self.block = True
 
         for size in sizes_list:
             log.info(
                 f"{size.get('size_to_fill')}, {size.get('file_name')}, {size.get('pvc_expected_size')}"
             )
-            self.pod_obj.run_io(
+            pvc_list.append(
+                pvc_factory(
+                    project=self.proj_obj,
+                    interface=None,
+                    storageclass=self.sc_obj,
+                    size=self.pvc_size,
+                    status=status,
+                    access_mode=self.access_mode,
+                    volume_mode=volume_mode,
+                )
+            )
+            pods_list.append(pod_factory(pvc=pvc_list[-1], raw_block_pv=self.block))
+
+            pods_list[-1].run_io(
                 storage_type=storage_type,
                 size=size.get("size_to_fill"),
                 rw_ratio=0,
@@ -153,32 +163,28 @@ class TestLvmCapacityAlerts(ManageTest):
                 depth=4,
                 rate="1250m",
                 rate_process=None,
-                fio_filename=size.get("file_name"),
                 bs="100M",
                 end_fsync=0,
-                invalidate=None,
+                invalidate=0,
                 buffer_pattern=None,
                 readwrite="write",
                 direct=1,
                 verify=False,
                 timeout=1800,
             )
-            self.pod_obj.get_fio_results(timeout=1800)
+            pods_list[-1].get_fio_results(timeout=1800)
 
             # Workaround for BZ-2108018
-            self.status = constants.STATUS_PENDING
-            if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-                self.status = constants.STATUS_BOUND
             minimal_pvc = pvc_factory(
                 project=self.proj_obj,
                 interface=None,
                 storageclass=self.sc_obj,
                 size="1",
-                status=self.status,
+                status=status,
                 access_mode=self.access_mode,
                 volume_mode=volume_mode,
             )
-            mini_pod = pod_factory(pvc=minimal_pvc, raw_block_pv=False)
+            mini_pod = pod_factory(pvc=minimal_pvc, raw_block_pv=self.block)
             log.info(f"{mini_pod} created")
             mini_pod.delete(wait=True)
             minimal_pvc.delete(wait=True)
@@ -186,7 +192,7 @@ class TestLvmCapacityAlerts(ManageTest):
             # End of workaround
 
             self.lvm.compare_percent_data_from_pvc(
-                self.pvc_obj, float(size["pvc_expected_size"])
+                pvc_list[-1], float(size["pvc_expected_size"])
             )
 
             val = self.lvm.parse_topolvm_metrics(constants.TOPOLVM_METRICS)
