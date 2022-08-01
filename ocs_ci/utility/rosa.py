@@ -9,7 +9,7 @@ import logging
 import os
 import re
 
-from ocs_ci.framework import config, get_consumer_indexes_list
+from ocs_ci.framework import config, MultiClusterConfig
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
@@ -613,7 +613,7 @@ def post_onboarding_verification():
         restore_ctx_index = config.cur_index
 
         consumer_ids = []
-        consumer_indexes = get_consumer_indexes_list()
+        consumer_indexes = MultiClusterConfig.get_consumer_indexes_list()
         for cluster_index in consumer_indexes:
             config.switch_ctx(cluster_index)
             clusterversion_yaml = ocp.OCP(
