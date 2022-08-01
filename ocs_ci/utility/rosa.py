@@ -9,7 +9,7 @@ import logging
 import os
 import re
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, get_consumer_indexes_list
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
@@ -613,19 +613,17 @@ def post_onboarding_verification():
         restore_ctx_index = config.cur_index
 
         consumer_ids = []
-        for cluster in config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "consumer":
-                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                clusterversion_yaml = ocp.OCP(
-                    kind="ClusterVersion",
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                    resource_name="version",
-                )
-                version_spec = clusterversion_yaml.get()["spec"]
-                logger.info(f"{version_spec}")
-                current_consumer = clusterversion_yaml.get()["spec"]["clusterID"]
-                logger.info(f"Current consumer's ID is {current_consumer}")
-                consumer_ids.append(f"storageconsumer-{current_consumer}")
+        consumer_indexes = get_consumer_indexes_list()
+        for cluster_index in consumer_indexes:
+            config.switch_ctx(cluster_index)
+            clusterversion_yaml = ocp.OCP(
+                kind="ClusterVersion",
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name="version",
+            )
+            current_consumer = clusterversion_yaml.get()["spec"]["clusterID"]
+            logger.info(f"Current consumer's ID is {current_consumer}")
+            consumer_ids.append(f"storageconsumer-{current_consumer}")
         logger.info(f"Consumer ids from consumer clusters: {consumer_ids}")
         config.switch_to_provider()
         for consumer in consumer_ids:
@@ -636,7 +634,7 @@ def post_onboarding_verification():
             )
             ceph_resources = consumer_yaml.get().get("status")["cephResources"]
             for resource in ceph_resources:
-                if resource["status"] != "Ready":
+                if resource["status"] != constants.STATUS_READY:
                     raise ResourceWrongStatusException(
                         f"{resource['name']} of {consumer} is in status {resource['status']}. Status should be Ready"
                     )
@@ -650,7 +648,7 @@ def post_onboarding_verification():
                     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                     resource_name=resource_name,
                 )
-                if resource_yaml.get()["status"]["phase"] != "Ready":
+                if resource_yaml.get()["status"]["phase"] != constants.STATUS_READY:
                     raise ResourceWrongStatusException(
                         f"{resource_name} is in Status {resource_yaml.get()['status']['phase']}. Status should be Ready"
                     )
