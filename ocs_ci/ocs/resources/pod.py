@@ -1565,26 +1565,43 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     leader_types = {
-        "provisioner": namespace,
-        "snapshotter": f"external-snapshotter-leader-{namespace}",
-        "resizer": f"external-resizer-{namespace}",
-        "attacher": f"external-attacher-{namespace}",
+        "provisioner": "csi-provisioner",
+        "snapshotter": "csi-snapshotter",
+        "resizer": "csi-resizer",
+        "attacher": "csi-attacher",
     }
+
+    non_leader_msg = "failed to acquire lease"
+    lease_acq_msg = "successfully acquired lease"
+    lease_renew_msg = "successfully renewed lease"
+    leader_pod = ""
+
     if interface == constants.CEPHBLOCKPOOL:
-        lease_cmd = f"get leases {leader_types[leader_type]}-rbd-csi-ceph-com -o yaml"
+        pods = get_rbdfsplugin_provisioner_pods(namespace=namespace)
+
     elif interface == constants.CEPHFILESYSTEM:
-        lease_cmd = (
-            f"get leases {leader_types[leader_type]}-cephfs-csi-ceph-com " "-o yaml"
-        )
+        pods = get_cephfsplugin_provisioner_pods(namespace=namespace)
 
-    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
-    lease = ocp_obj.exec_oc_cmd(command=lease_cmd)
-    leader = lease.get("spec").get("holderIdentity").strip()
-    assert leader, "Couldn't identify plugin provisioner leader pod."
-    logger.info(f"Plugin provisioner leader pod is {leader}")
+    pods_log = {}
+    for pod in pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name, container=leader_types[leader_type]
+        ).split("\n")
 
-    ocp_obj._resource_name = leader
-    leader_pod = Pod(**ocp_obj.get())
+    for pod, log_list in pods_log.items():
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader message and note the timestamp.
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                    leader_pod = pod
+                break
+    assert leader_pod, "Couldn't identify plugin provisioner leader pod."
+    logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
     return leader_pod
 
 
