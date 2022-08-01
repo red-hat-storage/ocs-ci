@@ -1,6 +1,8 @@
 import logging
+import os
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
-
+from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
@@ -20,8 +22,10 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     retrieve_test_objects_to_pod,
     craft_s3_command,
+    s3_put_object,
+    s3_head_object,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
@@ -360,3 +364,39 @@ class TestBucketIO(MCGTest):
                     awscli_pod_session, target_dir, full_object_path, mcg_obj
                 )
             )
+
+    @tier2
+    @bugzilla("2054074")
+    def test_content_encoding_with_write(self, bucket_factory, mcg_obj_session):
+        # create bucket
+        bucket_name = bucket_factory()[0].name
+        logger.info(f"Bucket created {bucket_name}")
+
+        # create a random file and then zip it
+        with open("randomFile", "wb") as f:
+            f.write(os.urandom(1000))
+        zip_obj = ZipFile("random.zip", "w")
+        zip_obj.write("randomFile", compress_type=zipfile.ZIP_DEFLATED)
+        zip_obj.close()
+
+        # put object to the bucket created
+        s3_put_object(
+            s3_obj=mcg_obj_session,
+            bucketname=bucket_name,
+            object_key="random.zip",
+            data="random.zip",
+            content_encoding="zip",
+        )
+
+        # head object to see if the content-encoding is preserved
+        head_obj = s3_head_object(
+            s3_obj=mcg_obj_session, bucketname=bucket_name, object_key="random.zip"
+        )
+        logger.info(f"Head object: {head_obj}")
+        assert (
+            head_obj["ContentEncoding"] == "zip"
+        ), "Put object operation doesn't store ContentEncoding!!"
+
+        # cleanup the files created
+        os.remove("random.zip")
+        os.remove("randomFile")

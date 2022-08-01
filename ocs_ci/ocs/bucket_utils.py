@@ -921,7 +921,9 @@ def delete_bucket_policy(s3_obj, bucketname):
     return s3_obj.s3_client.delete_bucket_policy(Bucket=bucketname)
 
 
-def s3_put_object(s3_obj, bucketname, object_key, data, content_type=""):
+def s3_put_object(
+    s3_obj, bucketname, object_key, data, content_type="", content_encoding=""
+):
     """
     Simple Boto3 client based Put object
 
@@ -937,7 +939,11 @@ def s3_put_object(s3_obj, bucketname, object_key, data, content_type=""):
 
     """
     return s3_obj.s3_client.put_object(
-        Bucket=bucketname, Key=object_key, Body=data, ContentType=content_type
+        Bucket=bucketname,
+        Key=object_key,
+        Body=data,
+        ContentType=content_type,
+        ContentEncoding=content_encoding,
     )
 
 
