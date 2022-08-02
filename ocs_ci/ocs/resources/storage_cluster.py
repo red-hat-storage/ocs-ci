@@ -364,7 +364,7 @@ def ocs_install_verification(
                 config.DEPLOYMENT["external_mode"]
                 and config.ENV_DATA["restricted-auth-permission"]
             ):
-                cephfs_name = get_cephfs_name()
+                cephfs_name = config.ENV_DATA.get("cephfs_name") or get_cephfs_name()
                 cephfs_node_secret = (
                     f"{constants.CEPHFS_NODE_SECRET}-{cluster_name}-{cephfs_name}"
                 )

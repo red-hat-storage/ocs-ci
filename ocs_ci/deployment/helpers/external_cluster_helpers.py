@@ -67,7 +67,7 @@ class ExternalCluster(object):
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
         # get ceph filesystem
-        ceph_fs_name = self.get_ceph_fs()
+        ceph_fs_name = config.ENV_DATA.get("cephfs_name") or self.get_ceph_fs()
 
         rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
 
