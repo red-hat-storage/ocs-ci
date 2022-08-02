@@ -1856,7 +1856,6 @@ def parse_pgsql_logs(data):
 
     """
     match = data.split("PGBench Results")
-    logging.info(f"Length: {len(match)}")
     list_data = []
     for i in range(1, len(match)):
         log = "".join(match[i].split("\n"))
