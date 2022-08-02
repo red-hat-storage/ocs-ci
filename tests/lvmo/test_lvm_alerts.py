@@ -1,5 +1,4 @@
 import logging
-import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -9,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
 from ocs_ci.ocs.cluster import LVM
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 log = logging.getLogger(__name__)
@@ -188,7 +188,16 @@ class TestLvmCapacityAlerts(ManageTest):
             log.info(f"{mini_pod} created")
             mini_pod.delete(wait=True)
             minimal_pvc.delete(wait=True)
-            time.sleep(60)
+
+            for sample in TimeoutSampler(
+                120,
+                30,
+                self.lvm.validate_metrics_vs_operating_system_stats,
+                "topolvm_thinpool_data_percent",
+                self.lvm.get_thin_pool1_data_percent(),
+            ):
+                if sample:
+                    break
             # End of workaround
 
             self.lvm.compare_percent_data_from_pvc(
@@ -205,8 +214,6 @@ class TestLvmCapacityAlerts(ManageTest):
             for metric, expected in zip(constants.TOPOLVM_METRICS, expected_os_values):
                 self.lvm.validate_metrics_vs_operating_system_stats(metric, expected)
 
-            self.metric_data = self.lvm.parse_topolvm_metrics(constants.TOPOLVM_METRICS)
-            log.info(self.metric_data)
             log.info(f"getting alerts: {self.lvm.get_thin_provisioning_alerts()}")
             if size["file_name"] == "run-to-70":
                 assert not self.lvm.check_for_alert(
