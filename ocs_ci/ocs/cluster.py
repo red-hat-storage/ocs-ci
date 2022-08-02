@@ -2439,17 +2439,12 @@ class LVM(object):
                         f"⌛❎ Written percent data for thin pool should be {data_percent}  but is  "
                         f"{thin_util_data} "
                     )
-                    if fail:
-                        self.get_and_parse_lvs()
-                        if int(self.lv_data["lv_number"]) > 1 and data_percent == 0:
-                            logger.info(
-                                f"We shouldn't have LV other than thin-pool-1 {self.lv_data['lv_list']}"
-                            )
         except TimeoutExpiredError:
             if fail:
                 raise ThinPoolUtilityWrong(
                     f"❌ Thin pool utility expected {data_percent} "
                     f"but real utility {thin_util_data}\nlv data is {self.lv_data}"
+                    f"Lv list is {self.lv_data['lv_list']}"
                 )
             else:
                 logger.info(
