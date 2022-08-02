@@ -191,7 +191,7 @@ class TestLvmCapacityAlerts(ManageTest):
 
             for sample in TimeoutSampler(
                 120,
-                30,
+                10,
                 self.lvm.validate_metrics_vs_operating_system_stats,
                 "topolvm_thinpool_data_percent",
                 self.lvm.get_thin_pool1_data_percent(),
