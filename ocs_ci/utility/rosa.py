@@ -464,7 +464,6 @@ def install_odf_addon(cluster):
         raise ManagedServiceAddonDeploymentError(
             f"Addon {addon_name} failed to be installed"
         )
-    post_onboarding_verification()
 
 
 def delete_odf_addon(cluster):
