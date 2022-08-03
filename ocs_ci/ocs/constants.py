@@ -986,6 +986,7 @@ SUPPORTED_BROWSERS = CHROME_BROWSER
 # Managed service deployment constants
 OSD_DEPLOYER = "ocs-osd-deployer"
 OSE_PROMETHEUS_OPERATOR = "ose-prometheus-operator"
+DEFAULT_CLUSTER_INDEX = "default-cluster-context-index"
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
