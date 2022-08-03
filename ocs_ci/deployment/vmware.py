@@ -1235,6 +1235,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         constants.VSPHERE_INSTALLER_REPO,
                         upi_repo_path,
                         installer_release_branch,
+                        force_checkout=True,
                     )
             except Exception as ex:
                 logger.error(ex)
