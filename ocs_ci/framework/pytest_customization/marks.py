@@ -29,6 +29,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 
 # tier marks
 
@@ -322,6 +323,16 @@ skipif_lso = pytest.mark.skipif(
 skipif_no_lso = pytest.mark.skipif(
     not config.DEPLOYMENT.get("local_storage"),
     reason="Test run only on LSO deployed cluster",
+)
+
+flexible_scaling_required = pytest.mark.skipif(
+    is_flexible_scaling_enabled() is False,
+    reason="Test runs ONLY on flexible scaling cluster",
+)
+
+skipif_flexible_scaling = pytest.mark.skipif(
+    is_flexible_scaling_enabled() is True,
+    reason="Test will not run on flexible scaling cluster",
 )
 
 skipif_rhel_os = pytest.mark.skipif(

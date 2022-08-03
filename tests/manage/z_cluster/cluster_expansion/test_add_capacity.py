@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_bmpsi,
     skipif_ibm_power,
+    skipif_flexible_scaling,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -103,6 +104,7 @@ def add_capacity_test():
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
+@skipif_flexible_scaling
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
