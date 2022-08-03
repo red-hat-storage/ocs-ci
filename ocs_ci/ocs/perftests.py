@@ -6,6 +6,7 @@ import re
 import tempfile
 from uuid import uuid4
 import yaml
+import numpy as np
 
 import requests
 import json
@@ -36,7 +37,7 @@ from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs.node import get_all_nodes
+
 
 log = logging.getLogger(__name__)
 
@@ -1028,58 +1029,112 @@ class PASTest(BaseTest):
             pass
 
     def get_performance_metrics(self, start_time):
-
         # This function is used to determine CPU and memory utilization of openshift storage pods and nodes
-        pods = ""
+        # start_time (secs) : start time of the test
+        from ocs_ci.ocs.resources import pod as pod1
+
         cluster_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
-        podss = pod.get_all_pods(namespace=cluster_namespace)
-        end_time = time.time()
-        end = int(end_time)
+        c_result, min_cpu, max_cpu, cpu_percentile_99, cpu_percentile_95 = (
+            {},
+            {},
+            {},
+            {},
+            {},
+        )
+        m_result, min_mem, max_mem, mem_percentile_99, mem_percentile_95 = (
+            {},
+            {},
+            {},
+            {},
+            {},
+        )
+        ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
+        pods = pod1.get_all_pods(namespace=cluster_namespace)
+        end_time = int(time.time())
         prometheus = PrometheusAPI()
         CPU_USAGE_POD = (
             "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate"
         )
-        MEM_USAGE_POD = (
-            # "node_namespace_pod_container:container_memory_working_set_bytes:sum_irate"
-            # 'sum(container_memory_working_set_bytes{cluster="", container != "", image != "",'
-            'sum(container_memory_working_set_bytes{cluster="", image != "",'
-        )
+        MEM_USAGE_POD = 'sum(container_memory_working_set_bytes{cluster="", container != "", image != "",'
 
-        nodes = get_all_nodes()
-        for podd in podss:
-            query1 = CPU_USAGE_POD
-            + " {'namespace' = "
-            + ocsci_config.ENV_DATA["cluster_namespace"]
-            + ",pod = "
-            + podd.name
-            + "}"
-            log.info(query1)
-            cpu_result = prometheus.query_range(
-                query=query1,
-                start=start_time,
-                end=end,
-                step=15,
+        for podd in pods:
+            pod_status = ocp_pod_obj.get_resource_status(podd.name)
+            if pod_status == constants.STATUS_RUNNING:
+                query1 = (
+                    "sum("
+                    + CPU_USAGE_POD
+                    + "{namespace= "
+                    + "'"
+                    + cluster_namespace
+                    + "'"
+                    + ",pod="
+                    + "'"
+                    + podd.name
+                    + "'"
+                    + "}) by (pod)"
+                )
+                cpu_result = prometheus.query_range(
+                    query=query1,
+                    start=start_time,
+                    end=end_time,
+                    step=15,
+                )
+                list_val_c = cpu_result[0]["values"]
+                cpu_val = [float(el[1]) for el in list_val_c]
+                c_result[podd.name] = cpu_val
+                min_cpu[podd.name] = min(cpu_val)
+                max_cpu[podd.name] = max(cpu_val)
+                cpu_percentile_99[podd.name] = np.percentile(cpu_val, 99)
+                cpu_percentile_95[podd.name] = np.percentile(cpu_val, 95)
+
+                mem_result = (
+                    prometheus.query_range(
+                        query=MEM_USAGE_POD
+                        + " namespace = "
+                        + "'"
+                        + cluster_namespace
+                        + "'"
+                        + ",pod = "
+                        + "'"
+                        + podd.name
+                        + "'"
+                        + "})",
+                        start=start_time,
+                        end=end_time,
+                        step=15,
+                    ),
+                )
+                list_val_m = mem_result[0][0]["values"]
+                mem_val = [float(el[1]) for el in list_val_m]
+                m_result[podd.name] = mem_val
+                min_mem[podd.name] = min(mem_val)
+                max_mem[podd.name] = max(mem_val)
+                mem_percentile_99[podd.name] = np.percentile(mem_val, 99)
+                mem_percentile_95[podd.name] = np.percentile(mem_val, 95)
+
+            log.info(
+                f"CPU consumption across pods based on start time, end time and step value is: {c_result}"
             )
-            mem_result = prometheus.query_range(
-                query=MEM_USAGE_POD
-                      + " {'namespace' = "
-                      + ocsci_config.ENV_DATA["cluster_namespace"]
-                      + ",pod = "
-                      + pod.names
-                      + "})",
-                start=start_time,
-                end=end,
-                step=15,
+            log.info(
+                f"Memory consumption across pods based on start time, end time and step value is: {m_result}"
             )
-
-            cpu_min = min(cpu_result)
-            cpu_max = max(cpu_result)
-            mem_min = min(mem_result)
-            mem_max = max(mem_result)
-            # mem_50 = np.percentile(mem_result, 50)
-            # cpu_50 = np.percentile(cpu_result, 50)
-            # mem_99 = np.percentile(mem_result, 99)
-            # cpu_99 = np.percentile(cpu_result, 99)
-            # mem_90 = np.percentile(mem_result, 90)
-            # cpu_90 = np.percentile(cpu_result, 90)
-
+            log.info(f"Maximum CPU consumption value for respective pods is: {max_cpu}")
+            log.info(f"Minimum CPU consumption value for respective pods is:{min_cpu}")
+            log.info(
+                f"99th CPU consumption percentile values for respective pods is: {cpu_percentile_99}"
+            )
+            log.info(
+                f"95th CPU consumption percentile values for respective pods is: {cpu_percentile_95}"
+            )
+            log.info(
+                f"Minimum Memory consumption value for respective pods is:{min_mem}"
+            )
+            log.info(
+                f"Maximum Memory consumption value for respective pods is:{max_mem}"
+            )
+            log.info(
+                f"99th Memory consumption percentile values for respective pods is: {mem_percentile_99}"
+            )
+            log.info(
+                f"95th Memory consumption percentile values for respective pods is: {mem_percentile_95}"
+            )
