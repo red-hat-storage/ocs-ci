@@ -12,9 +12,6 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     bugzilla,
 )
-from ocs_ci.utility.rosa import (
-    post_onboarding_verification,
-)
 from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
@@ -29,44 +26,6 @@ class TestPostInstallationState(ManageTest):
     @managed_service_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
-
-    @acceptance
-    @managed_service_required
-    def test_post_onboarding(self):
-        post_onboarding_verification()
-
-    @acceptance
-    @ms_provider_required
-    @pytest.mark.parametrize(
-        argnames=["resource"],
-        argvalues=[
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL.lower()],
-                marks=pytest.mark.polarion_id("OCS-3907"),
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEMSUBVOLUMEGROUP],
-                marks=pytest.mark.polarion_id("OCS-3908"),
-            ),
-        ],
-    )
-    def test_consumers_connected(self, resource):
-        """
-        Test run on provider cluster that at least one consumer is connected
-        and a unique cephblockpool and subvolumegroup are successfully created
-        on the provider cluster for each connected consumer.
-        """
-        consumer_names = managedservice.get_consumer_names()
-        log.info(f"Connected consumer names: {consumer_names}")
-        assert consumer_names, "No consumer clusters are connected"
-        for consumer_name in consumer_names:
-            resource_name = resource + "-" + consumer_name
-            resource_yaml = ocp.OCP(
-                kind=resource,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                resource_name=resource_name,
-            )
-            assert resource_yaml.get()["status"]["phase"] == "Ready"
 
     @acceptance
     @ms_provider_required
