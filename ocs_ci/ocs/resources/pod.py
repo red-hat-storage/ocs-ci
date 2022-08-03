@@ -329,7 +329,7 @@ class Pod(OCS):
         direct=0,
         verify=False,
         fio_installed=False,
-        timeout=600,
+        timeout=0,
     ):
         """
         Execute FIO on a pod
@@ -406,7 +406,8 @@ class Pod(OCS):
             self.io_params["end_fsync"] = end_fsync
         if verify:
             self.io_params["verify"] = config.RUN["io_verification_method"]
-        self.io_params["timeout"] = timeout
+        if timeout != 0:
+            self.io_params["timeout"] = timeout
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
