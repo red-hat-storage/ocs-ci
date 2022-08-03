@@ -1815,6 +1815,9 @@ SPACE = " "
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+
+FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/fsync.py")
+
 # Sno and lvmo constants
 SNO_NODE_NAME = "sno-edge-0"
 LVMO_POD_LABEL = {
