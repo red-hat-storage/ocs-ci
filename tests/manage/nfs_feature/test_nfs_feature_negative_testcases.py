@@ -4,7 +4,6 @@ import logging
 from ocs_ci.utility import utils, nfs_utils, version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -13,6 +12,10 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+)
+from ocs_ci.framework.pytest_customization.marks import (
+    pre_upgrade,
+    post_upgrade,
 )
 
 # from ocs_ci.ocs.resources.pod import get_all_pods
@@ -25,13 +28,18 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
-NAMESPACE = "openshift-storage"
-STORAGE_CLUSTER_OBJ = ocp.OCP(kind="Storagecluster", namespace=NAMESPACE)
-CONFIG_MAP_OBJ = ocp.OCP(kind="Configmap", namespace=NAMESPACE)
-POD_OBJ = ocp.OCP(kind="Pod", namespace=NAMESPACE)
-SERVICE_OBJ = ocp.OCP(kind="Service", namespace=NAMESPACE)
-PVC_OBJ = ocp.OCP(kind=constants.PVC, namespace=NAMESPACE)
-PV_OBJ = ocp.OCP(kind=constants.PV, namespace=NAMESPACE)
+STORAGE_CLUSTER_OBJ = ocp.OCP(
+    kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+)
+CONFIG_MAP_OBJ = ocp.OCP(
+    kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+)
+POD_OBJ = ocp.OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+SERVICE_OBJ = ocp.OCP(
+    kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+)
+PVC_OBJ = ocp.OCP(kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+PV_OBJ = ocp.OCP(kind=constants.PV, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 NFS_SC = "ocs-storagecluster-ceph-nfs"
 SC = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": NFS_SC})
 TEST_FOLDER = "test_nfs"
@@ -49,6 +57,7 @@ class TestNfsUnavailableInLowerODFversions(ManageTest):
 
     """
 
+    @pre_upgrade
     def test_nfs_not_available_before_odf_4_11(self):
         """
         This test is to validate nfs feature is not available for ODF cluster version below 4.11
@@ -96,40 +105,52 @@ class TestNfsUnavailableInLowerODFversions(ManageTest):
         else:
             log.error(f"nfs feature is enabled for ODF cluster version, {ocs_version}")
 
-        # Upgrade OCS
-        run_ocs_upgrade()
-        ocs_version = version.get_ocs_version_from_csv(
-            only_major_minor=False, ignore_pre_release=True
-        )
-        log.info(f"odf version---- {ocs_version}")
-        if ocs_version > version.VERSION_4_10:
-            log.info("ODF version is greater than 4.10")
-        else:
-            log.warning("ODF version is not greater than 4.10")
 
-        # Enable nfs feature
-        log.info("----Enable nfs----")
-        nfs_ganesha_pod_name = nfs_utils.nfs_enable(
-            STORAGE_CLUSTER_OBJ,
-            CONFIG_MAP_OBJ,
-            POD_OBJ,
-            NAMESPACE,
-        )
+@post_upgrade
+def test_nfs_available_from_odf_4_11():
+    """
+    This test is to validate nfs feature is not available for ODF cluster version below 4.11
 
-        # Check cephnfs resource running
-        cephnfs_resource_status = STORAGE_CLUSTER_OBJ.exec_oc_cmd(
-            "get CephNFS ocs-storagecluster-cephnfs --output jsonpath='{.status.phase}'"
-        )
-        assert cephnfs_resource_status == "Ready"
+    Steps:
+    1:- Check OCS version is >=4.11
+    2:- Enable nfs feature
+    3:- Check cephnfs resource running
+    4:- Disable nfs feature
 
-        # Disable nfs feature
-        nfs_utils.nfs_disable(
-            STORAGE_CLUSTER_OBJ,
-            CONFIG_MAP_OBJ,
-            POD_OBJ,
-            SC,
-            nfs_ganesha_pod_name,
-        )
+    """
+    # Upgrade OCS
+    ocs_version = version.get_ocs_version_from_csv(
+        only_major_minor=False, ignore_pre_release=True
+    )
+    log.info(f"odf version---- {ocs_version}")
+    if ocs_version > version.VERSION_4_10:
+        log.info("ODF version is greater than 4.10")
+    else:
+        log.warning("ODF version is not greater than 4.10")
+
+    # Enable nfs feature
+    log.info("----Enable nfs----")
+    nfs_ganesha_pod_name = nfs_utils.nfs_enable(
+        STORAGE_CLUSTER_OBJ,
+        CONFIG_MAP_OBJ,
+        POD_OBJ,
+        constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    # Check cephnfs resource running
+    cephnfs_resource_status = STORAGE_CLUSTER_OBJ.exec_oc_cmd(
+        "get CephNFS ocs-storagecluster-cephnfs --output jsonpath='{.status.phase}'"
+    )
+    assert cephnfs_resource_status == "Ready"
+
+    # Disable nfs feature
+    nfs_utils.nfs_disable(
+        STORAGE_CLUSTER_OBJ,
+        CONFIG_MAP_OBJ,
+        POD_OBJ,
+        SC,
+        nfs_ganesha_pod_name,
+    )
 
 
 @tier1
@@ -151,13 +172,11 @@ class TestNfsFeatureNegativeTests(ManageTest):
 
         Steps:
         ---Setup---
-        1:- Create objects for storage_cluster, configmap, pod, pv, pvc, service and storageclass
-        2:- Fetch number of cephfsplugin and cephfsplugin_provisioner pods running
-        3:- Enable nfs feature
-        4:- Create loadbalancer service for nfs
+        1:- Enable nfs feature
+        2:- Create loadbalancer service for nfs
         ---Teardown---
-        5:- Disable nfs feature
-        6:- Delete ocs nfs Service
+        3:- Disable nfs feature
+        4:- Delete ocs nfs Service
 
         """
         self = request.node.cls
@@ -170,7 +189,7 @@ class TestNfsFeatureNegativeTests(ManageTest):
             STORAGE_CLUSTER_OBJ,
             CONFIG_MAP_OBJ,
             POD_OBJ,
-            NAMESPACE,
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
 
         # Create loadbalancer service for nfs
@@ -199,29 +218,36 @@ class TestNfsFeatureNegativeTests(ManageTest):
     def teardown(self):
         """
         Test tear down
+
+        Steps:
+        1:- Check nfs plugin pods are running or not
+        2:- If nfsplugin pods are down enable ROOK_CSI_ENABLE_NFS
         """
-        rook_csi_config_enable = '{"data":{"ROOK_CSI_ENABLE_NFS": "true"}}'
-        # Enable ROOK_CSI_ENABLE_NFS via patch request
-        assert CONFIG_MAP_OBJ.patch(
-            resource_name="rook-ceph-operator-config",
-            params=rook_csi_config_enable,
-            format_type="merge",
-        ), "configmap/rook-ceph-operator-config not patched"
+        nfsplugin_provisoner_pods = pod.list_of_nodes_running_pods(
+            selector="csi-nfsplugin-provisioner"
+        )
+        log.info(f"number of nfsplugin pods --- {len(nfsplugin_provisoner_pods)}")
+        if len(nfsplugin_provisoner_pods) == 0:
+            rook_csi_config_enable = '{"data":{"ROOK_CSI_ENABLE_NFS": "true"}}'
+            # Enable ROOK_CSI_ENABLE_NFS via patch request
+            assert CONFIG_MAP_OBJ.patch(
+                resource_name="rook-ceph-operator-config",
+                params=rook_csi_config_enable,
+                format_type="merge",
+            ), "configmap/rook-ceph-operator-config not patched"
 
     def test_nfs_volumes_creation_deletion_for_nfs_plugin_pods_down(
         self,
-        pod_factory,
     ):
         """
         This test is to validate creation and deletion of NFS volumes when NFS plugin pods are down
 
         Steps:
         1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        2:- Create pods with nfs pvcs mounted
-        3:- Run IO
-        4:- Wait for IO completion
-        5:- Verify presence of the file
-        6:- Deletion of Pods and PVCs
+        2:- Disable ROOK_CSI_ENABLE_NFS via patch request
+        3:- Create another nfs pvcs, nfs_pvc_obj_2
+        4:- Verify nfs volume created when nfsplugin pods down is in Pending status
+        5:- Validate PV for claim nfs_pvc_obj is in Released state
 
         """
         rook_csi_config_disable = '{"data":{"ROOK_CSI_ENABLE_NFS": "false"}}'
@@ -229,7 +255,7 @@ class TestNfsFeatureNegativeTests(ManageTest):
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=NFS_SC,
-            namespace=NAMESPACE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             size="5Gi",
             do_reload=True,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -239,6 +265,10 @@ class TestNfsFeatureNegativeTests(ManageTest):
         helpers.wait_for_resource_state(nfs_pvc_obj, constants.STATUS_BOUND)
         nfs_pvc_obj.reload()
 
+        pod_objs = pod.get_all_pods(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, selector=["csi-nfsplugin"]
+        )
+
         # Disable ROOK_CSI_ENABLE_NFS via patch request
         assert CONFIG_MAP_OBJ.patch(
             resource_name="rook-ceph-operator-config",
@@ -246,31 +276,48 @@ class TestNfsFeatureNegativeTests(ManageTest):
             format_type="merge",
         ), "configmap/rook-ceph-operator-config not patched"
 
-        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        for plugin_pod_obj in pod_objs:
+            POD_OBJ.wait_for_delete(resource_name=plugin_pod_obj.name)
+
+        # Create another nfs pvcs, nfs_pvc_obj_2
         nfs_pvc_obj_2 = helpers.create_pvc(
             sc_name=NFS_SC,
-            namespace=NAMESPACE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             size="5Gi",
             do_reload=True,
             access_mode=constants.ACCESS_MODE_RWO,
             volume_mode="Filesystem",
         )
 
+        # Verify nfs volume created when nfsplugin pods down is in Pending status
         helpers.wait_for_resource_state(nfs_pvc_obj_2, constants.STATUS_PENDING)
-        failure_str = """waiting for a volume to be created, either by external provisioner
-         "openshift-storage.nfs.csi.ceph.com" or manually created by system administrator"""
-        if failure_str in nfs_pvc_obj.describe():
+        failure_str = '''waiting for a volume to be created, either by external provisioner
+        "openshift-storage.nfs.csi.ceph.com"'''
+        if failure_str in nfs_pvc_obj_2.describe():
             log.info(f"nfs pvc is in Pending state")
         else:
             log.error(f"nfs PVC mounted successfully")
 
         timeout = 120
+        # Fetch pv details for the nfs pvc
+        fetch_vol_name_cmd = (
+            "get pvc " + nfs_pvc_obj.name + " --output jsonpath='{.spec.volumeName}'"
+        )
+        vol_name = PVC_OBJ.exec_oc_cmd(fetch_vol_name_cmd)
+        log.info(f"For pvc {nfs_pvc_obj.name} volume name is, {vol_name}")
+
         log.info("Deleting nfs PVC in Bound")
         nfs_pvc_obj.delete()
-        assert helpers.wait_for_resource_state(
-            nfs_pvc_obj.name, constants.STATUS_TERMINATING, timeout
+        nfs_pvc_obj.ocp.wait_for_delete(
+            resource_name=nfs_pvc_obj.name
+        ), f"PVC {nfs_pvc_obj.name} is not deleted"
+        log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        # Validate PV for claim nfs_pvc_obj is in Released state
+        assert PV_OBJ.wait_for_resource(
+            condition=constants.STATUS_RELEASED, resource_name=vol_name
         ), (
-            f"The pvc {nfs_pvc_obj.name,constants} didn't reach the status {constants.STATUS_TERMINATING} "
+            f"The pvc {vol_name} didn't reach the status {constants.STATUS_RELEASED} "
             f"after {timeout} seconds"
         )
 
@@ -287,7 +334,11 @@ class TestNfsFeatureNegativeTests(ManageTest):
         3:- Run IO
         4:- Wait for IO completion
         5:- Verify presence of the file
-        6:- Deletion of Pods and PVCs
+        6:- Disable ROOK_CSI_ENABLE_NFS via patch request
+        7:- Create another pod, pod_obj_2 with nfs pvcs mounted
+        8:- Verify it is in CONTAINER_CREATING status
+        9:- Verify mount failure error message
+        10:- Verify unmount nfs pvc for pod_obj stucks at Terminating status
 
         """
         rook_csi_config_disable = '{"data":{"ROOK_CSI_ENABLE_NFS": "false"}}'
@@ -295,7 +346,7 @@ class TestNfsFeatureNegativeTests(ManageTest):
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=NFS_SC,
-            namespace=NAMESPACE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             size="5Gi",
             do_reload=True,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -337,6 +388,10 @@ class TestNfsFeatureNegativeTests(ManageTest):
         ), f"File {file_name} doesn't exist"
         log.info(f"File {file_name} exists in {pod_obj.name}")
 
+        pod_objs = pod.get_all_pods(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, selector=["csi-nfsplugin"]
+        )
+
         # Disable ROOK_CSI_ENABLE_NFS via patch request
         assert CONFIG_MAP_OBJ.patch(
             resource_name="rook-ceph-operator-config",
@@ -344,18 +399,35 @@ class TestNfsFeatureNegativeTests(ManageTest):
             format_type="merge",
         ), "configmap/rook-ceph-operator-config not patched"
 
-        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        for plugin_pod_obj in pod_objs:
+            POD_OBJ.wait_for_delete(resource_name=plugin_pod_obj.name)
+
+        # Create another pod with nfs pvcs mounted
+        # Verify it is in CONTAINER_CREATING status
         pod_obj_2 = pod_factory(
             interface=constants.CEPHFILESYSTEM,
             pvc=nfs_pvc_obj,
             status=constants.STATUS_CONTAINER_CREATING,
         )
 
-        failure_str = "attachdetach-controller  AttachVolume.Attach failed for volume"
+        # Verify mount failure error message
+        failure_str = f"MountVolume.WaitForAttach failed for volume"
+        +f'"{nfs_pvc_obj.get("spec").get("spec").get("volumeName")}"'
         if failure_str in pod_obj_2.describe():
-            log.info(f"nfs volume mount failed")
+            log.info(f"nfs volume mount failed with error, {pod_obj_2.describe()}")
         else:
             log.error(f"nfs volume mounted successfully")
+
+        # Verify unmount nfs pvc for pod_obj stucks at Terminating status
+        pod_obj.delete(wait=False)
+        assert pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_TERMINATING,
+            resource_name=pod_obj.name,
+            timeout=600,
+            sleep=30,
+        ), "nfs volume unmounted successfully"
+
+        log.info(f"{pod_obj.describe()}")
 
     def test_nfs_volumes_mount_unmount_outcluster_for_nfs_plugin_pods_down(
         self,
@@ -363,14 +435,26 @@ class TestNfsFeatureNegativeTests(ManageTest):
     ):
         """
         This test is to validate NFS volumes mount/unmount for an out-cluster consumer when NFS plugin pods are down
-
+        external clients,
+        - can still mount exports which created when provisioner was available
+        - existing mounts should still work
         Steps:
         1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         2:- Create pods with nfs pvcs mounted
-        3:- Run IO
-        4:- Wait for IO completion
-        5:- Verify presence of the file
-        6:- Deletion of Pods and PVCs
+        3:- Fetch sharing details for the nfs pvc
+        4:- Run IO
+        5:- Wait for IO completion
+        6:- Verify presence of the file
+        7:- Create /var/lib/www/html/index.html file inside the pod
+        8:- Connect the external client using the share path and ingress address
+        9:- Verify able to read exported volume
+        10:- Disable ROOK_CSI_ENABLE_NFS via patch request
+        11:- Able to access already exported volume
+        12:- Able to read updated /var/lib/www/html/index.html file from inside the pod
+        13:- Unmount
+        14:- Can still mount exports which was created while nfs plugin pods were up
+        15:- Verify able to read exported volume
+        16:- Unmount
 
         """
         rook_csi_config_disable = '{"data":{"ROOK_CSI_ENABLE_NFS": "false"}}'
@@ -378,7 +462,7 @@ class TestNfsFeatureNegativeTests(ManageTest):
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=NFS_SC,
-            namespace=NAMESPACE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             size="5Gi",
             do_reload=True,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -439,7 +523,7 @@ class TestNfsFeatureNegativeTests(ManageTest):
         command = (
             "bash -c "
             + '"echo '
-            + "'hello world'"
+            + "'nfs plugin pods running'"
             + '  > /var/lib/www/html/index.html"'
         )
         pod_obj.exec_cmd_on_pod(
@@ -469,7 +553,11 @@ class TestNfsFeatureNegativeTests(ManageTest):
         result = utils.exec_cmd(cmd=command)
         stdout = result.stdout.decode().rstrip()
         log.info(stdout)
-        assert stdout == "hello world"
+        assert stdout == "nfs plugin pods running"
+
+        pod_objs = pod.get_all_pods(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, selector=["csi-nfsplugin"]
+        )
 
         # Disable ROOK_CSI_ENABLE_NFS via patch request
         assert CONFIG_MAP_OBJ.patch(
@@ -478,37 +566,65 @@ class TestNfsFeatureNegativeTests(ManageTest):
             format_type="merge",
         ), "configmap/rook-ceph-operator-config not patched"
 
-        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        pod_obj_2 = pod_factory(
-            interface=constants.CEPHFILESYSTEM,
-            pvc=nfs_pvc_obj,
-            status=constants.STATUS_CONTAINER_CREATING,
-        )
+        for plugin_pod_obj in pod_objs:
+            POD_OBJ.wait_for_delete(resource_name=plugin_pod_obj.name)
 
-        failure_str = "attachdetach-controller  AttachVolume.Attach failed for volume"
-        if failure_str in pod_obj_2.describe():
-            log.info(f"nfs volume mount failed")
-        else:
-            log.error(f"nfs volume mounted successfully")
-
-        # Create /var/lib/www/html/index.html file inside the pod
+        # Able to access already exported volume
+        command = f"sudo chmod 666 {TEST_FOLDER}/index.html"
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
         command = (
             "bash -c "
             + '"echo '
-            + f"'I am pod,{pod_obj.name}'"
-            + '  >> /var/lib/www/html/index.html"'
+            + "'nfs plugin pods are down'"
+            + f'  >> {TEST_FOLDER}/index.html"'
         )
-        pod_obj.exec_cmd_on_pod(
+        result = utils.exec_cmd(cmd=command)
+        assert result.returncode == 0
+
+        command = f"cat {TEST_FOLDER}/index.html"
+        result = utils.exec_cmd(cmd=command)
+        stdout = result.stdout.decode().rstrip()
+        log.info(stdout)
+        assert (
+            stdout == "nfs plugin pods running" + """\n""" + "nfs plugin pods are down"
+        )
+
+        # Able to read updated /var/lib/www/html/index.html file from inside the pod
+        command = "bash -c " + '"cat ' + ' /var/lib/www/html/index.html"'
+        result = pod_obj.exec_cmd_on_pod(
             command=command,
             out_yaml_format=False,
         )
+        assert (
+            result.rstrip()
+            == "nfs plugin pods running" + """\n""" + "nfs plugin pods are down"
+        )
+
+        # unmount
+        result = retry(
+            (CommandFailed),
+            tries=300,
+            delay=10,
+        )(utils.exec_cmd(cmd="sudo umount -l " + TEST_FOLDER))
+        assert result.returncode == 0
+
+        # can still mount exports which was created while nfs plugin pods were up
+        result = retry(
+            (CommandFailed),
+            tries=200,
+            delay=10,
+        )(utils.exec_cmd(cmd=export_nfs_external_cmd))
+        assert result.returncode == 0
 
         # Verify able to read exported volume
         command = f"cat {TEST_FOLDER}/index.html"
         result = utils.exec_cmd(cmd=command)
         stdout = result.stdout.decode().rstrip()
         log.info(stdout)
-        assert stdout == "hello world" + """\n""" + f"I am pod,{pod_obj.name}"
+        assert (
+            stdout == "nfs plugin pods running" + """\n""" + "nfs plugin pods are down"
+        )
 
         # unmount
         result = retry(
