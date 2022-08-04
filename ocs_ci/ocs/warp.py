@@ -21,8 +21,6 @@ class Warp(object):
 
         """
         self.pod_dic_path = constants.WARP_YAML
-        # self.pod_dic_path = constants.GOLANG_YAML
-        # self.pod_dic_path = constants.FEDORA_DC_YAML
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
         self.host = self.warp_cr["host"]
@@ -38,10 +36,10 @@ class Warp(object):
 
     def create_resource_warp(self):
         """
-        Create resource for hsbench mark test:
-            Create service account
-            Create PVC
-            Create golang pod
+        Create resource for Warp S3 benchmark:
+            * Create service account
+            * Create PVC
+            * Create warp pod for running workload
 
         """
 
@@ -51,7 +49,7 @@ class Warp(object):
         helpers.add_scc_policy(sa_name=self.sa_name, namespace=self.namespace)
 
         # Create test pvc+pod
-        log.info(f"Create Warp pod to generate S3 workload... {self.namespace}")
+        log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
         self.pod_name = "warp-pod"
         self.pvc_obj = helpers.create_pvc(
@@ -79,7 +77,6 @@ class Warp(object):
         # Install warp
         log.info(f"Installing warp S3 benchmark on testing pod {self.pod_obj.name}")
         warp_path = "https://github.com/minio/warp/releases/download/v0.5.5/warp_0.5.5_Linux_x86_64.tar.gz"
-        # self.pod_obj.exec_cmd_on_pod(f"yum -y install wget", timeout=timeout)
         self.pod_obj.exec_cmd_on_pod(f"wget {warp_path}", timeout=timeout)
         self.pod_obj.exec_cmd_on_pod(
             "tar -xzvf warp_0.5.5_Linux_x86_64.tar.gz", timeout=timeout
@@ -137,6 +134,7 @@ class Warp(object):
             f"--delete-distrib={self.delete_distrib} "
             f"--stat-distrib={self.stat_distrib} "
             f"--analyze.v --bucket={self.bucket_name}",
+            out_yaml_format=False,
             timeout=timeout,
         )
 
