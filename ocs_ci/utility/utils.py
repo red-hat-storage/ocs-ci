@@ -2130,7 +2130,14 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None, clone_type="shallow"):
+def clone_repo(
+    url,
+    location,
+    branch="master",
+    to_checkout=None,
+    clone_type="shallow",
+    force_checkout=False,
+):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2143,6 +2150,8 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         clone_type (str): type of clone (shallow, blobless, treeless and normal)
             By default, shallow clone will be used. For normal clone use
             clone_type as "normal".
+        force_checkout (bool): True for force checkout to branch.
+            force checkout will ignore the unmerged entries.
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -2188,7 +2197,10 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         log.info("Fetching latest changes from repository")
         run_cmd("git fetch --all", cwd=location)
     log.info("Checking out repository to specific branch: %s", branch)
-    run_cmd(f"git checkout {branch}", cwd=location)
+    if force_checkout:
+        run_cmd(f"git checkout --force {branch}", cwd=location)
+    else:
+        run_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
     run_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
