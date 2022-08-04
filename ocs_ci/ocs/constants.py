@@ -145,9 +145,11 @@ BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
+DRPOLICY = "DRPolicy"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
+VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "lvmcluster"
 
@@ -1812,6 +1814,10 @@ VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
 SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
 SPACE = " "
+
+# DR actions
+ACTION_FAILOVER = "Failover"
+ACTION_RELOCATE = "Relocate"
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
