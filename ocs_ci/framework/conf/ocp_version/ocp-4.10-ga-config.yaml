@@ -14,4 +14,4 @@ DEPLOYMENT:
   ocp_channel: "stable"
 ENV_DATA:
   vm_template: "rhcos-4.10.3-x86_64-vmware.x86_64"
-  acm_hub_channel: release-2.4
+  acm_hub_channel: release-2.5
