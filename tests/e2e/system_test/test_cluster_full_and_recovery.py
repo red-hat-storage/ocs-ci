@@ -141,6 +141,8 @@ class TestClusterFullAndRecovery(E2ETest):
             sleep=40,
             func=self.verify_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
         )
         if not sample.wait_for_func_status(result=True):
             log.error("The after 18000 seconds the used capacity smaller than 85%")
@@ -208,14 +210,14 @@ class TestClusterFullAndRecovery(E2ETest):
             timeout=60,
         )
 
-        log.info("Change Ceph full_ratiofrom from 85% to 95%")
+        log.info("Change Ceph full_ratio from from 85% to 95%")
         change_ceph_full_ratio(95)
 
         log.info("Delete  benchmark-operator PVCs")
         self.benchmark_obj.cleanup()
         self.banchmark_operator_teardown = False
 
-        log.info("Change Ceph full_ratio from from 85% to 95%")
+        log.info("Change Ceph backfillfull_ratio from from 80% to 95%")
         change_ceph_backfillfull_ratio(95)
 
         log.info("Verify PVC2 [CEPH-FS + CEPH-RBD]  are moved to Bound state")
@@ -287,7 +289,9 @@ class TestClusterFullAndRecovery(E2ETest):
             f"to pod_blk1_obj {pod_blk1_obj.md5}"
         )
 
-    def verify_used_capacity_greater_than_expected(self, expected_used_capacity, pvc_factory, pod_factory):
+    def verify_used_capacity_greater_than_expected(
+        self, expected_used_capacity, pvc_factory, pod_factory
+    ):
         """
         Verify cluster percent used capacity
 
