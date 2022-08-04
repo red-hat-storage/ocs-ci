@@ -25,8 +25,13 @@ from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
     s3_head_object,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    bugzilla,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -367,17 +372,24 @@ class TestBucketIO(MCGTest):
 
     @tier2
     @bugzilla("2054074")
+    @skipif_ocs_version("<4.10")
     def test_content_encoding_with_write(self, bucket_factory, mcg_obj_session):
+        """
+        Test s3 put object operation to see if the content-encoding is stored as object
+        metadata after put
+        """
         # create bucket
         bucket_name = bucket_factory()[0].name
         logger.info(f"Bucket created {bucket_name}")
 
         # create a random file and then zip it
-        with open("randomFile", "wb") as f:
+        filename = f"random-{uuid4().hex}"
+        with open(filename, "wb") as f:
             f.write(os.urandom(1000))
-        zip_obj = ZipFile("random.zip", "w")
-        zip_obj.write("randomFile", compress_type=zipfile.ZIP_DEFLATED)
+        zip_obj = ZipFile(f"{filename}.zip", "w")
+        zip_obj.write(f"{filename}", compress_type=zipfile.ZIP_DEFLATED)
         zip_obj.close()
+        logger.info(f"Random zip file generated : {filename}.zip")
 
         # put object to the bucket created
         s3_put_object(
@@ -392,11 +404,10 @@ class TestBucketIO(MCGTest):
         head_obj = s3_head_object(
             s3_obj=mcg_obj_session, bucketname=bucket_name, object_key="random.zip"
         )
-        logger.info(f"Head object: {head_obj}")
         assert (
             head_obj["ContentEncoding"] == "zip"
         ), "Put object operation doesn't store ContentEncoding!!"
 
         # cleanup the files created
-        os.remove("random.zip")
-        os.remove("randomFile")
+        os.remove(f"{filename}.zip")
+        os.remove(f"{filename}")
