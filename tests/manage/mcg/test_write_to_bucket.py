@@ -373,6 +373,7 @@ class TestBucketIO(MCGTest):
     @tier2
     @bugzilla("2054074")
     @skipif_ocs_version("<4.10")
+    @pytest.mark.polarion_id("OCS-4000")
     def test_content_encoding_with_write(self, bucket_factory, mcg_obj_session):
         """
         Test s3 put object operation to see if the content-encoding is stored as object
