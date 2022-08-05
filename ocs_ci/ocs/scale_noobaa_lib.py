@@ -400,7 +400,7 @@ def get_noobaa_pods_status():
     for nb_pod in pod_items:
         status = ocp_pod.get_resource_status(nb_pod.get("metadata").get("name"))
         if status == constants.STATUS_RUNNING:
-            log.info(f"Noobaa pod in running state")
+            log.info("Noobaa pod in running state")
         else:
             log.error(f"Noobaa pod is in {status}, expected in Running state")
             ret_val = False
