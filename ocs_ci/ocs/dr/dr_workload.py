@@ -4,11 +4,13 @@ This module will have all DR related workload classes
 """
 
 import os
+from subprocess import TimeoutExpired
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.utils import get_primary_cluster_config
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility.utils import clone_repo, run_cmd
 from ocs_ci.utility import templating
 
@@ -115,26 +117,35 @@ class BusyBox(DRWorkload):
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
-        dr_helpers.wait_for_workload_resource_creation(
+        dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
-        )
-        dr_helpers.wait_for_vr_creation(
-            self.workload_pvc_count, self.workload_namespace
         )
         dr_helpers.wait_for_mirroring_status_ok()
 
-    def delete_workload(self):
+    def delete_workload(self, force=False):
         """
         Delete busybox workload
 
         """
-        primary_cluster_name = dr_helpers.get_primary_cluster_name(
-            self.workload_namespace
-        )
+        try:
+            config.switch_acm_ctx()
+            run_cmd(
+                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+            )
 
-        config.switch_acm_ctx()
-        run_cmd(f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}")
-        run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                dr_helpers.wait_for_all_resources_deletion(
+                    namespace=self.workload_namespace,
+                    check_replication_resources_state=False,
+                )
 
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        dr_helpers.wait_for_workload_resource_deletion(self.workload_namespace)
+        except (TimeoutExpired, TimeoutExpiredError, TimeoutError):
+            if force:
+                dr_helpers.resources_cleanup(self.workload_namespace)
+            else:
+                raise
+
+        finally:
+            config.switch_acm_ctx()
+            run_cmd(f"oc delete -k {self.workload_subscription_dir}")

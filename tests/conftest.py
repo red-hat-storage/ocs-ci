@@ -5738,7 +5738,7 @@ def rdr_workload(request):
     workload = BusyBox()
 
     def teardown():
-        workload.delete_workload()
+        workload.delete_workload(force=True)
 
     request.addfinalizer(teardown)
 

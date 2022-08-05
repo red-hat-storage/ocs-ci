@@ -1796,7 +1796,7 @@ def verify_volume_deleted_in_backend(
         return False
 
 
-def delete_volume_in_backend(img_uuid, pool_name=None):
+def delete_volume_in_backend(img_uuid, pool_name=None, disable_mirroring=False):
     """
     Delete an Image/Subvolume in the backend
 
@@ -1807,7 +1807,8 @@ def delete_volume_in_backend(img_uuid, pool_name=None):
             Output is the CSI generated VolID and looks like:
             ``0001-000c-rook-cluster-0000000000000001-f301898c-a192-11e9-852a-1eeeb6975c91``
             where image_uuid is ``f301898c-a192-11e9-852a-1eeeb6975c91``
-         pool_name (str): The of the pool
+         pool_name (str): The name of the pool
+         disable_mirroring (bool): True to disable the mirroring for the image, False otherwise
 
     Returns:
          bool: True if image deleted successfully
@@ -1859,6 +1860,13 @@ def delete_volume_in_backend(img_uuid, pool_name=None):
             cmd = f"ceph fs subvolume rm {get_cephfs_name()} csi-vol-{img_uuid} csi"
 
         ct_pod = pod.get_ceph_tools_pod()
+
+        if disable_mirroring:
+            rbd_mirror_cmd = (
+                f"rbd mirror image disable --force {pool_name}/csi-vol-{img_uuid}"
+            )
+            ct_pod.exec_ceph_cmd(ceph_cmd=rbd_mirror_cmd, format=None)
+
         try:
             ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format=None)
         except CommandFailed as ecf:
