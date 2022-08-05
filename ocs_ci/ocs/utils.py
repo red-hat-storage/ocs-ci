@@ -1340,8 +1340,8 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
 
 def collect_pod_container_rpm_package(dir_name):
     """
-    Collect information about rpm packages from all containers from
-
+    Collect information about rpm packages from all containers
+    
     Args:
         dir_name(str): directory to store container rpm package info
 
