@@ -1,5 +1,7 @@
 import logging
 import os
+import time
+
 import pytest
 
 from ocs_ci.helpers.helpers import (
@@ -143,6 +145,8 @@ class TestPVEncryption(ManageTest):
         self.vault.vault_path_token = self.vault.generate_vault_token()
         self.vault.create_vault_csi_kms_token(namespace=self.pro_obj.namespace)
         logger.info("ceph-csi-kms-token created")
+
+        time.sleep(10)
 
         pvc_ui_obj = PvcUI(setup_ui)
 
