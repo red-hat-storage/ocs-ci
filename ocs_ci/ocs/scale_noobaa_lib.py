@@ -396,7 +396,7 @@ def get_noobaa_pods_status():
     ocp_pod = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     pod_items = ocp_pod.get(selector=constants.NOOBAA_APP_LABEL).get("items")
 
-    # Check if noobaa pods are running
+    # Check if noobaa pods are in running state
     for nb_pod in pod_items:
         status = ocp_pod.get_resource_status(nb_pod.get("metadata").get("name"))
         if status == constants.STATUS_RUNNING:
