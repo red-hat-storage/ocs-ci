@@ -17,6 +17,7 @@ login = {
 }
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
+    "login_page_title": "Log in · Red Hat OpenShift",
 }
 
 deployment = {
