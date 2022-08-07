@@ -376,6 +376,8 @@ class PageNavigator(BaseUI):
                 self.storage_class = "managed-csi_sc"
             else:
                 self.storage_class = "managed-premium_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            self.storage_class = "standard_sc"
 
     def navigate_overview_page(self):
         """
