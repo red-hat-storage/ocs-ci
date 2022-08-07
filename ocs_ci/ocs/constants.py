@@ -474,6 +474,8 @@ PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
 PERF_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_block.yaml")
 
+SIMPLE_APP_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "simple-app.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
