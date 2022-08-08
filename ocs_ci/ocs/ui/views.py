@@ -17,6 +17,7 @@ login = {
 }
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
+    "login_page_title": "Log in · Red Hat OpenShift",
 }
 
 deployment = {
@@ -969,6 +970,7 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "acm_page": {**acm_page_nav, **acm_configuration},
         "add_capacity": {**add_capacity, **add_capacity_4_11},
     },
     "4.10": {
