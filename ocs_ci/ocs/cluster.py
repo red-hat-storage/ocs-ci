@@ -2318,10 +2318,10 @@ class LVM(object):
 
     def get_and_parse_pvs(self):
         """
-        get "pvs --reportformat json" from server and parse some data, sets self.pv_data
+        get "pvs --unit g --reportformat json" from server and parse some data, sets self.pv_data
 
         """
-        cmd = "sudo pvs --reportformat json"
+        cmd = "sudo pvs --unit g --reportformat json"
         pvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
 
         pvs_json = json.loads(pvs_output)
@@ -2336,10 +2336,10 @@ class LVM(object):
 
     def get_and_parse_lvs(self):
         """
-        get "lvs --reportformat json" from server and parse some data, sets self.lv_data
+        get "lvs --unit g --reportformat json" from server and parse some data, sets self.lv_data
 
         """
-        cmd = "sudo lvs --reportformat json"
+        cmd = "sudo lvs --unit g --reportformat json"
         lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
         lvs_json = json.loads(lvs_output)
         items = lvs_json["report"][0]["lv"]
@@ -2375,10 +2375,10 @@ class LVM(object):
 
     def get_and_parse_vgs(self):
         """
-        get "vgs --reportformat json" from server and parse some data, sets self.vg_data
+        get "vgs --unit g --reportformat json" from server and parse some data, sets self.vg_data
 
         """
-        cmd = "sudo vgs --reportformat json"
+        cmd = "sudo vgs --unit g --reportformat json"
         lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
         lvs_json = json.loads(lvs_output)
         char_to_replace_in_size = {"<": "", "g": ""}
