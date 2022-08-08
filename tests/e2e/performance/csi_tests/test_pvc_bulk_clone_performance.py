@@ -290,9 +290,12 @@ class TestBulkCloneCreation(PASTest):
             for object_file in [job_pod_file, job_clone_file, job_pvc_file]:
                 if object_file:
                     object_file.delete(namespace=self.namespace)
-                    object_file.wait_for_delete(
-                        resource_name=object_file.name, namespace=self.namespace
-                    )
+                    try:
+                        object_file.wait_for_delete(
+                            resource_name=object_file.name, namespace=self.namespace
+                        )
+                    except Exception:
+                        log.error(f"{object_file['name']} didnt deleted !")
 
             # Check ceph health status
             utils.ceph_health_check(tries=20)
