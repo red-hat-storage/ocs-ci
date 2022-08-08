@@ -93,15 +93,16 @@ class TestBulkCloneCreation(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
-    def attach_multiple_pvc_to_pod_dict(self, pvc_list):
+    def attach_pvcs_to_pod_dict(self, pvc_list):
         """
-        Function to construct pod.yaml with multiple PVC's
+        Function to construct pod.yaml with multiple PVC's each one of the PVC
+        connected to different POD
 
         Args:
-            pvc_list (list): list of PVCs to be attached to single pod
+            pvc_list (list): list of PVCs to be attached to a pod
 
         Returns:
-            pod_data (str): pod data with multiple PVC mount paths added
+            pod_data (list): pods data with multiple PVC
 
         """
         pods_list = []
@@ -168,7 +169,7 @@ class TestBulkCloneCreation(PASTest):
 
             # Kube_job to Create pod
             log.info("Attaching PODs to the PVCs and filling them with data (60%)")
-            pod_dict_list = self.attach_multiple_pvc_to_pod_dict(pvc_bound_list)
+            pod_dict_list = self.attach_pvcs_to_pod_dict(pvc_bound_list)
             job_pod_file = ObjectConfFile(
                 name="job_profile_pod",
                 obj_dict_list=pod_dict_list,
