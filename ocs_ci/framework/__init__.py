@@ -148,7 +148,11 @@ class MultiClusterConfig:
 
     @property
     def default_cluster_ctx(self):
-        return self.clusters[self.cluster_ctx.ENV_DATA["default_cluster_context_index"]]
+        # Get the default index. If not found, the default value is 0
+        default_index = self.cluster_ctx.ENV_DATA.get(
+            "default_cluster_context_index", 0
+        )
+        return self.clusters[default_index]
 
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
