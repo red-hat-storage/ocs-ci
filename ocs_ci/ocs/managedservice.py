@@ -278,3 +278,30 @@ def get_admin_key_from_provider():
     finally:
         config.switch_ctx(initial_cluster_index)
         return admin_key
+
+
+def check_default_cluster_context_index_equal_to_current_index(switch_to_default=True):
+    """
+    Check that the default index is equal to the current index
+
+    Args:
+        switch_to_default(bool): If true, it will switch to the default cluster in case the default index
+            is different from the current index. False, otherwise. The default value is true.
+
+    Returns:
+        bool: True, if the default index is equal to the current index
+
+    """
+    default_index = config.ENV_DATA["default_cluster_context_index"]
+    logger.info(f"default index = {default_index}, current index = {config.cur_index}")
+
+    if default_index != config.cur_index:
+        logger.warning("The default index is different from the current index")
+        if switch_to_default:
+            logger.info("Switch to the default index")
+            config.switch_ctx(default_index)
+
+        return False
+    else:
+        logger.info("The default index is equal to the current index")
+        return True

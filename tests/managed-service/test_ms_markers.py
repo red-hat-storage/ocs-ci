@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
+    tier1,
     ManageTest,
     ignore_leftovers,
     managed_service_required,
@@ -9,39 +10,19 @@ from ocs_ci.framework.testlib import (
     skipif_ms_provider,
     runs_on_provider,
 )
-from ocs_ci.ocs.cluster import is_ms_consumer_cluster, is_ms_provider_cluster
-from ocs_ci.framework import config
+from ocs_ci.ocs.cluster import (
+    is_ms_consumer_cluster,
+    is_ms_provider_cluster,
+    ceph_health_check,
+)
+from ocs_ci.ocs.managedservice import (
+    check_default_cluster_context_index_equal_to_current_index,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def check_default_cluster_context_index_equal_to_current_index(switch_to_default=True):
-    """
-    Check that the default index is equal to the current index
-
-    Args:
-        switch_to_default(bool): If true, it will switch to the default cluster in case the default index
-            is different from the current index. False, otherwise. The default value is true.
-
-    Returns:
-        bool: True, if the default index is equal to the current index
-
-    """
-    default_index = config.ENV_DATA["default_cluster_context_index"]
-    logger.info(f"default index = {default_index}, current index = {config.cur_index}")
-
-    if default_index != config.cur_index:
-        logger.warning("The default index is different from the current index")
-        if switch_to_default:
-            logger.info("Switch to the default index")
-            config.switch_ctx(default_index)
-
-        return False
-    else:
-        logger.info("The default index is equal to the current index")
-        return True
-
-
+@tier1
 @managed_service_required
 @ignore_leftovers
 class TestManagedServiceMarkers(ManageTest):
@@ -50,15 +31,12 @@ class TestManagedServiceMarkers(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    def teardown(self):
         """
-        Check that the default index is equal to the current index
+        Check that the Ceph health is OK
         """
-
-        def finalizer():
-            assert check_default_cluster_context_index_equal_to_current_index()
-
-        request.addfinalizer(finalizer)
+        logger.info("Check that the Ceph health is OK")
+        ceph_health_check()
 
     def test_default_cluster_context_index_equal_to_current_index(self):
         """
@@ -67,6 +45,7 @@ class TestManagedServiceMarkers(ManageTest):
         assert (
             check_default_cluster_context_index_equal_to_current_index()
         ), "The default index is different from the current index"
+        logger.info("The default index is equal to the current index as expected")
 
     @skipif_ms_consumer
     def test_marker_skipif_ms_consumer(self):
@@ -78,6 +57,9 @@ class TestManagedServiceMarkers(ManageTest):
         ), "The cluster is a consumer cluster, even though we have the marker 'skipif_ms_consumer'"
         logger.info("The cluster is not a consumer cluster as expected")
 
+        assert check_default_cluster_context_index_equal_to_current_index()
+        logger.info("The default index is equal to the current index as expected")
+
     @skipif_ms_provider
     def test_marker_skipif_ms_provider(self):
         """
@@ -88,6 +70,9 @@ class TestManagedServiceMarkers(ManageTest):
         ), "The cluster is a provider cluster, even though we have the marker 'skipif_ms_provider'"
         logger.info("The cluster is not a provider cluster as expected")
 
+        assert check_default_cluster_context_index_equal_to_current_index()
+        logger.info("The default index is equal to the current index as expected")
+
     @runs_on_provider
     def test_runs_on_provider_marker(self):
         """
@@ -97,3 +82,15 @@ class TestManagedServiceMarkers(ManageTest):
             is_ms_provider_cluster()
         ), "The cluster is not a provider cluster, even though we have the marker 'runs_on_provider'"
         logger.info("The cluster is a provider cluster as expected")
+
+    def test_current_index_not_change_after_using_runs_on_provider(self):
+        """
+        Test that the current index didn't change after using the 'runs_on_provider'
+        marker in the previous test.
+        """
+        assert (
+            check_default_cluster_context_index_equal_to_current_index()
+        ), "The current index has changed after using the 'runs_on_provider' marker"
+        logger.info(
+            "The current index didn't change after using the 'runs_on_provider' marker"
+        )
