@@ -651,6 +651,7 @@ acm_configuration = {
 
 acm_configuration_4_11 = {
     "install-submariner-btn": ("install-submariner", By.ID),
+    "nat-t-checkbox": ("natt-enable", By.ID),
 }
 
 add_capacity = {
