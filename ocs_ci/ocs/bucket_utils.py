@@ -158,6 +158,47 @@ def retrieve_anon_s3_resource():
     return anon_s3_resource
 
 
+def list_objects_from_bucket(
+    pod_obj, target, prefix=None, s3_obj=None, signed_request_creds=None, **kwargs
+):
+    """
+    Lists objects in a bucket using s3 ls command
+
+    Args:
+        podobj: Pod object that is used to perform copy operation
+        src_obj: full path to object
+        target: target bucket
+        prefix: prefix
+        s3_obj: obc/mcg object
+
+    Returns:
+        List of objects in a bucket
+    """
+
+    if prefix:
+        retrieve_cmd = f"ls {target}/{prefix}"
+    else:
+        retrieve_cmd = f"ls {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    return pod_obj.exec_cmd_on_pod(
+        command=craft_s3_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    )
+
+
 def copy_objects(
     podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
 ):
@@ -197,7 +238,7 @@ def copy_objects(
 
 
 def copy_random_individual_objects(
-    podobj, file_dir, pattern, target, amount, s3_obj=None, **kwargs
+    podobj, file_dir, target, amount, pattern="test-obj-", s3_obj=None, **kwargs
 ):
     """
     Generates random objects and then copies them individually one after the other
@@ -222,6 +263,37 @@ def copy_random_individual_objects(
         src_obj = f"{file_dir}/{obj}"
         copy_objects(podobj, src_obj, target, s3_obj, **kwargs)
         logger.info(f"Copied {src_obj}")
+
+
+def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=False):
+    """
+    Performs upload operation using java s3 pod
+
+    Args:
+        javas3_pod: java s3 sdk pod session
+        s3_obj: MCG object
+        bucket_name: bucket on which objects are uploaded
+        is_multipart: By default False, set to True if you want
+                      to perform multipart upload
+    Returns:
+          Output of the command execution
+
+    """
+
+    access_key = s3_obj.access_key_id
+    secret_key = s3_obj.access_key
+    endpoint = s3_obj.s3_internal_endpoint
+
+    # compile the src code
+    javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
+
+    # execute the upload application
+    command = (
+        'mvn exec:java -Dexec.mainClass=amazons3.s3test.ChunkedUploadApplication -Dexec.args="'
+        + f"{endpoint} {access_key} {secret_key} {bucket_name} {is_multipart}"
+        + '" -Dmaven.test.skip=true package'
+    )
+    return javas3_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
 
 
 def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
@@ -391,7 +463,10 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "awsS3": {
             "targetBucket": uls_name,
             "region": region,
-            "secret": {"name": cld_mgr.aws_client.secret.name},
+            "secret": {
+                "name": cld_mgr.aws_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -413,7 +488,8 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         f"backingstore create aws-s3 {backingstore_name} "
         f"--access-key {cld_mgr.aws_client.access_key} "
         f"--secret-key {cld_mgr.aws_client.secret_key} "
-        f"--target-bucket {uls_name} --region {region}"
+        f"--target-bucket {uls_name} --region {region}",
+        use_yes=True,
     )
 
 
@@ -434,7 +510,10 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
             "targetBucket": uls_name,
-            "secret": {"name": cld_mgr.gcp_client.secret.name},
+            "secret": {
+                "name": cld_mgr.gcp_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -457,7 +536,8 @@ def cli_create_google_backingstore(
     mcg_obj.exec_mcg_cmd(
         f"backingstore create google-cloud-storage {backingstore_name} "
         f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
@@ -478,7 +558,10 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
             "targetBlobContainer": uls_name,
-            "secret": {"name": cld_mgr.azure_client.secret.name},
+            "secret": {
+                "name": cld_mgr.azure_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -501,7 +584,8 @@ def cli_create_azure_backingstore(
         f"backingstore create azure-blob {backingstore_name} "
         f"--account-key {cld_mgr.azure_client.credential} "
         f"--account-name {cld_mgr.azure_client.account_name} "
-        f"--target-blob-container {uls_name}"
+        f"--target-blob-container {uls_name}",
+        use_yes=True,
     )
 
 
@@ -527,7 +611,10 @@ def oc_create_ibmcos_backingstore(cld_mgr, backingstore_name, uls_name, region):
             "endpoint": constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
                 cld_mgr.ibmcos_client.region.lower()
             ),
-            "secret": {"name": cld_mgr.ibmcos_client.secret.name},
+            "secret": {
+                "name": cld_mgr.ibmcos_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
         },
     }
     create_resource(**bs_data)
@@ -555,7 +642,8 @@ def cli_create_ibmcos_backingstore(
                 cld_mgr.ibmcos_client.region.lower()
             )
         } """
-        f"--target-bucket {uls_name}"
+        f"--target-bucket {uls_name}",
+        use_yes=True,
     )
 
 
@@ -583,7 +671,8 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"]["pvPool"]["resources"]["requests"]["storage"] = str(size) + "Gi"
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
-    bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    if storage_class:
+        bs_data["spec"]["pvPool"]["storageClass"] = storage_class
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -601,10 +690,13 @@ def cli_create_pv_backingstore(
         storage_class (str): which storage class to use
 
     """
-    mcg_obj.exec_mcg_cmd(
+    cmd = (
         f"backingstore create pv-pool {backingstore_name} --num-volumes "
-        f"{vol_num} --pv-size-gb {size} --storage-class {storage_class}"
+        f"{vol_num} --pv-size-gb {size}"
     )
+    if storage_class:
+        cmd += f" --storage-class {storage_class}"
+    mcg_obj.exec_mcg_cmd(cmd)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
 
@@ -620,7 +712,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=240,
+        timeout=300,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,
@@ -1140,18 +1232,16 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
     return obj_lst
 
 
-def setup_base_objects(awscli_pod, original_dir, result_dir, amount=2):
+def setup_base_objects(awscli_pod, original_dir, amount=2):
     """
-    Prepares two directories and populate one of them with objects
+    Creates a directory and populates it with random objects
 
      Args:
         awscli_pod (Pod): A pod running the AWS CLI tools
         original_dir (str): original directory name
-        result_dir (str): result directory name
         amount (Int): Number of test objects to create
 
     """
-    awscli_pod.exec_cmd_on_pod(command=f"mkdir {original_dir} {result_dir}")
     write_random_objects_in_pod(awscli_pod, original_dir, amount)
 
 

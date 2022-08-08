@@ -194,6 +194,24 @@ class Pod(OCS):
             else None,
         )
 
+    def copy_to_pod(self, src_path, target_path, container=None):
+        """
+        Copies to pod path from the local path
+
+        Args:
+            src_path (str): local path
+            target_path (str): path within pod where you want to copy
+            container (str): if multi-container pod you can specify the container name, by default its None
+
+        Returns:
+            str: stdout of the command
+
+        """
+        cmd = f"rsync {src_path} {self.name}:/{target_path}"
+        if container:
+            cmd = cmd + f" -c {container}"
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+
     def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
@@ -271,13 +289,14 @@ class Pod(OCS):
             .get("mountPath")
         )
 
-    def workload_setup(self, storage_type, jobs=1):
+    def workload_setup(self, storage_type, jobs=1, fio_installed=False):
         """
         Do setup on pod for running FIO
 
         Args:
             storage_type (str): 'fs' or 'block'
             jobs (int): Number of jobs to execute FIO
+            fio_installed (bool): True if fio is already installed on the pod
         """
         work_load = "fio"
         name = f"test_workload_{work_load}"
@@ -285,7 +304,8 @@ class Pod(OCS):
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(name, path, work_load, storage_type, self, jobs)
-        assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
+        if not (fio_installed and work_load == "fio"):
+            assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
         self.wl_setup_done = True
 
     def run_io(
@@ -307,6 +327,8 @@ class Pod(OCS):
         buffer_pattern=None,
         readwrite=None,
         direct=0,
+        verify=False,
+        fio_installed=False,
     ):
         """
         Execute FIO on a pod
@@ -341,10 +363,14 @@ class Pod(OCS):
             buffer_pattern (str): fio will fill the I/O buffers with this pattern
             readwrite (str): Type of I/O pattern default is randrw from yaml
             direct(int): If value is 1, use non-buffered I/O. This is usually O_DIRECT. Fio default is 0.
+            verify (bool): This method verifies file contents after each iteration of the job. e.g. crc32c, md5
+            fio_installed (bool): True if fio is already installed on the pod
 
         """
         if not self.wl_setup_done:
-            self.workload_setup(storage_type=storage_type, jobs=jobs)
+            self.workload_setup(
+                storage_type=storage_type, jobs=jobs, fio_installed=fio_installed
+            )
 
         if io_direction == "rw":
             self.io_params = templating.load_yaml(constants.FIO_IO_RW_PARAMS_YAML)
@@ -364,7 +390,8 @@ class Pod(OCS):
             self.io_params["filename"] = fio_filename
         self.io_params["iodepth"] = depth
         self.io_params["rate"] = rate
-        self.io_params["rate_process"] = rate_process
+        if rate_process is not None:
+            self.io_params["rate_process"] = rate_process
         self.io_params["bs"] = bs
         self.io_params["direct"] = direct
         if buffer_compress_percentage:
@@ -375,6 +402,8 @@ class Pod(OCS):
             self.io_params["readwrite"] = readwrite
         if end_fsync:
             self.io_params["end_fsync"] = end_fsync
+        if verify:
+            self.io_params["verify"] = config.RUN["io_verification_method"]
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def fillup_fs(self, size, fio_filename=None):
@@ -695,6 +724,107 @@ def get_ocs_operator_pod(ocs_label=constants.OCS_OPERATOR_LABEL, namespace=None)
     return ocs_operator_pod
 
 
+def get_alertmanager_managed_ocs_alertmanager_pods(
+    label=constants.MANAGED_ALERTMANAGER_LABEL, namespace=None
+):
+    """
+    Get alertmanager-managed-ocs-alertmanager pods in the cluster
+
+    Args:
+        label (str): Label associated with alertmanager-managed-ocs-alertmanager pods
+        namespace (str): Namespace in which alertmanager-managed-ocs-alertmanager pods are residing
+
+    Returns:
+        list: Pod objects of alertmanager-managed-ocs-alertmanager pods
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    alertmanager_managed_pods = get_pods_having_label(label, namespace)
+    return [
+        Pod(**alertmanager_managed)
+        for alertmanager_managed in alertmanager_managed_pods
+    ]
+
+
+def get_ocs_osd_controller_manager_pod(
+    label=constants.MANAGED_CONTROLLER_LABEL, namespace=None
+):
+    """
+    Get ocs-osd-controller-manager pod in the cluster
+
+    Args:
+        label (str): Label associated with ocs-osd-controller-manager pod
+        namespace (str): Namespace in which ocs-osd-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-osd-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    # odf-operator-controller-manager pod also have the same label. Select ocs-osd-controller-manager pod only.
+    controller_manager_pods = [
+        controller_manager
+        for controller_manager in get_pods_having_label(label, namespace)
+        if "ocs-osd-controller-manager" in controller_manager["metadata"]["name"]
+    ]
+    return Pod(**controller_manager_pods[0])
+
+
+def get_prometheus_managed_ocs_prometheus_pod(
+    label=constants.MANAGED_PROMETHEUS_LABEL, namespace=None
+):
+    """
+    Get prometheus-managed-ocs-prometheus pod in the cluster
+
+    Args:
+        label (str): Label associated with prometheus-managed-ocs-prometheus pod
+        namespace (str): Namespace in which prometheus-managed-ocs-prometheus pod is residing
+
+    Returns:
+        Pod: Pod object of prometheus-managed-ocs-prometheus pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    prometheus_managed_ocs_prometheus = get_pods_having_label(label, namespace)
+    return Pod(**prometheus_managed_ocs_prometheus[0])
+
+
+def get_prometheus_operator_pod(
+    label=constants.PROMETHEUS_OPERATOR_LABEL, namespace=None
+):
+    """
+    Get prometheus-operator pod in the cluster
+
+    Args:
+        label (str): Label associated with prometheus-operator pod
+        namespace (str): Namespace in which prometheus-operator pod is residing
+
+    Returns:
+        Pod: Pod object of prometheus-operator pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    prometheus_operator = get_pods_having_label(label, namespace)
+    return Pod(**prometheus_operator[0])
+
+
+def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace=None):
+    """
+    Get ocs-provider-server pod in the cluster
+
+    Args:
+        label (str): Label associated with ocs-provider-server pod
+        namespace (str): Namespace in which ocs-provider-server pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-provider-server pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocs_provider_server = get_pods_having_label(label, namespace)
+    return Pod(**ocs_provider_server[0])
+
+
 def list_ceph_images(pool_name="rbd"):
     """
     Args:
@@ -751,6 +881,24 @@ def get_file_path(pod_obj, file_name):
     return file_path
 
 
+def get_device_path(pod_obj):
+    """
+    get device path from pod in block mode
+    Args:
+         pod_obj (Pod): The object of the pod
+    Returns:
+          str: device path
+    """
+
+    return (
+        pod_obj.get()
+        .get("spec")
+        .get("containers")[0]
+        .get("volumeDevices")[0]
+        .get("devicePath")
+    )
+
+
 def cal_md5sum(pod_obj, file_name, block=False):
     """
     Calculates the md5sum of the file
@@ -764,7 +912,11 @@ def cal_md5sum(pod_obj, file_name, block=False):
     Returns:
         str: The md5sum of the file
     """
-    file_path = file_name if block else get_file_path(pod_obj, file_name)
+
+    if block:
+        file_path = get_device_path(pod_obj)
+    else:
+        file_path = get_file_path(pod_obj, file_name)
     md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
         command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
     )
@@ -798,6 +950,74 @@ def verify_data_integrity(pod_obj, file_name, original_md5sum, block=False):
     assert current_md5sum == original_md5sum, "Data corruption found"
     logger.info(f"File {file_name} exists and md5sum matches")
     return True
+
+
+def verify_data_integrity_for_multi_pvc_objs(pod_objs, pvc_objs, file_name):
+    """
+    Verifies existence and md5sum of file created during IO, for all the pods.
+
+    Args:
+        pod_objs (list) : List of POD objects for which existence and md5sum of file created during IO needs to be
+                            verified.
+        pvc_objs (list) : List of original PVC objects.
+        file_name (str) : The name of the file for which md5sum is to be calculated.
+
+    Raises:
+        AssertionError : Raises an exception if current md5sum does not match the original md5sum.
+
+    """
+    for pod_no in range(len(pod_objs)):
+        pod_obj = pod_objs[pod_no]
+        is_block = (
+            True
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK
+            else False
+        )
+        file_name_pod = (
+            file_name
+            if not is_block
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+        logger.info(f"Verifying md5sum of {file_name_pod} " f"on pod {pod_obj.name}")
+        verify_data_integrity(pod_obj, file_name_pod, pvc_objs[pod_no].md5sum)
+        logger.info(
+            f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
+            f"matches with the original md5sum"
+        )
+
+
+def verify_data_integrity_after_expansion_for_block_pvc(pod_obj, pvc_obj, fio_size):
+    """
+    Verifies data integrity the block PVC obj, by comparing the md5sum of data written using FIO before
+    expansion and after expansion.
+
+    Args:
+        pod_obj (Pod) : POD object for which md5sum of data written during FIO needs to be verified.
+        pvc_obj (PVC) : Original PVC object before expansion.
+        fio_size (int) : Size in MB of FIO.
+
+    Raises:
+        AssertionError : Raises an exception if current md5sum does not match the original md5sum.
+
+    """
+    logger.info(f"Verifying md5sum on pod {pod_obj.name}")
+    # Read IO from given block PVCs using dd and calculate md5sum.
+    # This dd command reads the data from the device, writes it to stdout, and reads md5sum from stdin.
+    current_md5sum = pod_obj.exec_sh_cmd_on_pod(
+        command=(
+            f"dd iflag=direct if={pod_obj.get_storage_path(storage_type='block')} bs=10M "
+            f"count={fio_size // 10} | md5sum"
+        )
+    )
+    logger.info(f"Original md5sum of file: {pvc_obj.md5sum}")
+    logger.info(f"Current md5sum of file: {current_md5sum}")
+    assert current_md5sum == pvc_obj.md5sum, "Data corruption found"
+    logger.info("md5sum matches")
+
+    logger.info(
+        f"Verified: md5sum of {pod_obj.get_storage_path(storage_type='block')} on pod {pod_obj.name} "
+        f"matches with the original md5sum"
+    )
 
 
 def get_fio_rw_iops(pod_obj):
@@ -1622,9 +1842,12 @@ def check_pods_in_running_state(
     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     pod_names=None,
     raise_pod_not_found_error=False,
+    skip_for_status=None,
 ):
     """
-    checks whether all the pods in a given namespace are in Running state or not
+    Checks whether the pods in a given namespace are in Running state or not.
+    The pods which are in 'Completed' state will be skipped when checking for all pods in the
+    namespace openshift-storage. 'Completed' will be the expected state of such pods.
 
     Args:
         namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
@@ -1633,7 +1856,9 @@ def check_pods_in_running_state(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             returns the pod objects of the rest of the pod names. The default value is False
-
+        skip_for_status(list): List of pod status that should be skipped. If the status of a pod is in the given list,
+            the check for 'Running' status of that particular pod will be skipped.
+            eg: ["Pending", "Completed"]
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
@@ -1659,6 +1884,21 @@ def check_pods_in_running_state(
             and ("debug" not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
+            if skip_for_status:
+                if status in skip_for_status:
+                    continue
+            # Skip the pods which are in 'Completed' state when checking for all pods in the
+            # namespace openshift-storage. 'Completed' will be the expected state of such pods.
+            if (
+                (status == constants.STATUS_COMPLETED)
+                and (not pod_names)
+                and (namespace == defaults.ROOK_CLUSTER_NAMESPACE)
+            ):
+                logger.warning(
+                    f"The pod {p.name} is not in {constants.STATUS_RUNNING} state, "
+                    f"but in {constants.STATUS_COMPLETED} state."
+                )
+                continue
             if status not in "Running":
                 logger.error(
                     f"The pod {p.name} is in {status} state. Expected = Running"
@@ -1766,6 +2006,8 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         "4.7": "ocs-osd-removal-job",
         "4.8": "ocs-osd-removal-",
         "4.9": "ocs-osd-removal-job",
+        "4.10": "ocs-osd-removal-job",
+        "4.11": "ocs-osd-removal-job",
     }
 
     ocs_version = config.ENV_DATA["ocs_version"]
@@ -1835,7 +2077,13 @@ def run_osd_removal_job(osd_ids=None):
     """
     osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
-    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+    ocs_version = config.ENV_DATA["ocs_version"]
+
+    if Version.coerce(ocs_version) >= Version.coerce(
+        "4.10"
+    ) and not check_safe_to_destroy_status(osd_ids_str):
+        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
+    elif Version.coerce(ocp_version) >= Version.coerce("4.6"):
         cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
         cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
@@ -1849,6 +2097,29 @@ def run_osd_removal_job(osd_ids=None):
     osd_removal_job.create(do_reload=False)
 
     return osd_removal_job
+
+
+def check_safe_to_destroy_status(osd_id):
+    """
+    check if it is safe to destroy the osd
+
+    Args:
+        osd_id (str): osd id
+
+    Return:
+        bool: True, if it is safe to destroy the osd. False, otherwise
+
+    """
+    try:
+        pod_tool = get_ceph_tools_pod()
+        out = pod_tool.exec_cmd_on_pod(
+            command=f"ceph osd safe-to-destroy {osd_id}",
+            out_yaml_format=False,
+        )
+    except Exception as e:
+        logger.error(e)
+        return False
+    return "are safe to destroy without reducing data durability" in out
 
 
 def verify_osd_removal_job_completed_successfully(osd_id):
@@ -2385,3 +2656,66 @@ def get_pod_ip(pod_obj):
 
     """
     return pod_obj.get().get("status").get("podIP")
+
+
+def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
+    """
+    Wait for the osd pods having specific ids
+
+    Args:
+        osd_ids (list): The list of the osd ids
+        timeout (int): Time to wait for the osd pods having the specified ids
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        list: The osd pods having the specified ids
+
+    Raise:
+        TimeoutExpiredError: In case it didn't find all the osd pods with the specified ids
+
+    """
+    for osd_pods in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_osd_pods_having_ids,
+        osd_ids=osd_ids,
+    ):
+        if len(osd_pods) == len(osd_ids):
+            logger.info(f"Found all the osd pods with the ids: {osd_ids}")
+            return osd_pods
+
+
+def pod_resource_utilization_raw_output_from_adm_top(
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Gets the pod's memory utilization using adm top command.
+
+    Args:
+        namespace (str) : The pod's namespace where the adm top command has to be run
+
+    Returns:
+        str : Raw output of adm top pods command
+
+    """
+    obj = ocp.OCP()
+    resource_utilization_all_pods = obj.exec_oc_cmd(
+        command=f"adm top pods -n {namespace}", out_yaml_format=False
+    )
+    logger.info("Command RAW output of adm top pods")
+    logger.info(f"{resource_utilization_all_pods}")
+    return resource_utilization_all_pods
+
+
+def get_mon_label(mon_pod_obj):
+    """
+    Gets the mon pod label
+
+    Args:
+        mon_pod_obj (Pod): The pod object
+
+    Returns:
+        str: The mon pod label (eg: a)
+
+    """
+    return mon_pod_obj.get().get("metadata").get("labels").get("mon")

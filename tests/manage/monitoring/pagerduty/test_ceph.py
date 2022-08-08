@@ -14,6 +14,9 @@ from ocs_ci.utility import pagerduty
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.skip(
+    reason="measure_corrupt_pg is unstable and may turn cluster into segfault state"
+)
 @tier4
 @tier4a
 @managed_service_required

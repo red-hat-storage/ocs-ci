@@ -6,11 +6,18 @@ OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
 
 login = {
+    "pre_login_page_title": "Log In",
+    "login_page_title": "Log in · Red Hat OpenShift Container Platform",
     "ocp_page": "Overview · Red Hat OpenShift Container Platform",
     "username": ("inputUsername", By.ID),
     "password": ("inputPassword", By.ID),
     "click_login": ("//button[text()='Log in']", By.XPATH),
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
+    "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
+}
+login_4_11 = {
+    "ocp_page": "Overview · Red Hat OpenShift",
+    "login_page_title": "Log in · Red Hat OpenShift",
 }
 
 deployment = {
@@ -68,6 +75,10 @@ deployment = {
     "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
+    "choose_local_storage_version_non_ga": (
+        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 deployment_4_6 = {
@@ -147,6 +158,17 @@ deployment_4_10 = {
     "enable_taint_node": ('input[id="taint-nodes"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+}
+
+deployment_4_11 = {
+    "osd_size_dropdown": ("//div[@data-test-id='dropdown-button']", By.XPATH),
+    "thin_sc": ("thin-link", By.ID),
+    "gp2_sc": ("gp2-link", By.ID),
+    "gp2-csi_sc": ("gp2-csi-link", By.ID),
+    "gp3-csi_sc": ("gp3-csi-link", By.ID),
+    "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
+    "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
+    "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -293,14 +315,8 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
-}
-
-pvc_4_7 = {
-    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
-    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
-    "Block": ("input[value='Block']", By.CSS_SELECTOR),
-    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
-    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
+    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
     "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
@@ -308,7 +324,6 @@ pvc_4_7 = {
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
     ),
-    "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expected-capacity": (
         "//dd[contains(text(),'{}') and @data-test='pvc-requested-capacity']",
         By.XPATH,
@@ -317,6 +332,50 @@ pvc_4_7 = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
+}
+
+pvc_4_6 = {
+    "pvc_create_button": ("#yaml-create", By.CSS_SELECTOR),
+    "pvc_storage_class_selector": (
+        "#storageclass-dropdown",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-ceph-rbd": (
+        "a[id='ocs-storagecluster-ceph-rbd-link'] span[class='co-resource-item']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-storagecluster-cephfs": (
+        "a[id='ocs-storagecluster-cephfs-link'] span[class='co-resource-item']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_name": ("#pvc-name", By.CSS_SELECTOR),
+    "ReadWriteOnce": (
+        "input[value='ReadWriteOnce']",
+        By.CSS_SELECTOR,
+    ),
+    "ReadWriteMany": (
+        "input[value='ReadWriteMany']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_size": ("#request-size-input", By.CSS_SELECTOR),
+    "pvc_create": ("#save-changes", By.CSS_SELECTOR),
+    "pvc-status": (
+        "dd[data-test-id='pvc-status'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
+    "pvc_delete": (
+        "button[data-test-action='Delete Persistent Volume Claim']",
+        By.CSS_SELECTOR,
+    ),
+    "clone_name_input": ("//input[@value='{}']", By.XPATH),
+}
+
+pvc_4_7 = {
+    "test-pvc-fs": ('a[data-test-id="test-pvc-fs"]', By.CSS_SELECTOR),
+    "test-pvc-rbd": ("a[title='test-pvc-rbd']", By.CSS_SELECTOR),
+    "Block": ("input[value='Block']", By.CSS_SELECTOR),
+    "Filesystem": ("input[value='Filesystem']", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select Project...']", By.CSS_SELECTOR),
 }
 
 pvc_4_8 = {
@@ -374,6 +433,11 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
+    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+}
+
+page_nav_4_6 = {
+    "persistentvolumeclaims_page": ("Persistent Volume Claims", By.LINK_TEXT),
 }
 
 page_nav_4_10 = {
@@ -617,6 +681,13 @@ add_capacity = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+add_capacity_4_11 = {
+    "thin_sc": ("thin-link", By.ID),
+    "gp2_sc": ("gp2-link", By.ID),
+    "gp2-csi_sc": ("gp2-csi-link", By.ID),
+    "gp3-csi_sc": ("gp3-csi-link", By.ID),
+}
+
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -742,10 +813,16 @@ validation_4_9 = {
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster/overview']",
+        By.CSS_SELECTOR,
+    ),
     "overview": (
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
+    "odf-overview": ("a[data-test-id='horizontal-link-Overview']", By.CSS_SELECTOR),
+    "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
     "blockandfile": (
         "a[data-test-id='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
@@ -805,8 +882,12 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
-    "storage-system-health-card-hyperlink": (
+    "storage-system-status-card-hyperlink": (
         "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        By.XPATH,
+    ),
+    "storage-system-external-status-card-hyperlink": (
+        "(//a[contains(text(),'ocs-external-storagecluster-storagesystem')])[3]",
         By.XPATH,
     ),
     "storagesystem-details": (
@@ -814,12 +895,37 @@ validation_4_9 = {
         By.XPATH,
     ),
     "performance-card": ("//h2[normalize-space()='Performance']", By.XPATH),
+    "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),
+    "backingstore-link": (
+        "//a[normalize-space()='noobaa-default-backing-store']",
+        By.XPATH,
+    ),
+    "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
+    "backingstorage-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass": ("a[data-test-id='horizontal-link-Bucket Class']", By.CSS_SELECTOR),
+    "bucketclass-link": (
+        "//a[normalize-space()='noobaa-default-bucket-class']",
+        By.XPATH,
+    ),
+    "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
+    "bucketclass-breadcrumb": (
+        ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
+        By.CSS_SELECTOR,
+    ),
+    "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
 }
 
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
+        By.CSS_SELECTOR,
+    ),
+    "ocs-external-storagecluster-storagesystem": (
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
         By.CSS_SELECTOR,
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
@@ -832,8 +938,41 @@ validation_4_10 = {
         By.XPATH,
     ),
 }
+validation_4_11 = {
+    "overview": ("//span[normalize-space()='Overview']", By.XPATH),
+    "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
+    "object": ("//span[normalize-space()='Object']", By.XPATH),
+    "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
+    "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+    "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
+    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
+}
+
 
 locators = {
+    "4.11": {
+        "login": {**login, **login_4_11},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+        },
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "acm_page": {**acm_page_nav, **acm_configuration},
+        "add_capacity": {**add_capacity, **add_capacity_4_11},
+    },
     "4.10": {
         "login": login,
         "page": {**page_nav, **page_nav_4_10},
@@ -889,8 +1028,9 @@ locators = {
     },
     "4.6": {
         "login": login,
-        "page": page_nav,
+        "page": {**page_nav, **page_nav_4_6},
         "deployment": {**deployment, **deployment_4_6},
-        "pvc": pvc,
+        "pvc": {**pvc, **pvc_4_6},
+        "validation": validation,
     },
 }

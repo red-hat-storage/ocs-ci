@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -121,6 +122,18 @@ def _pytest_addoption_cluster_specific(parser):
             dest=f"osd_size{suffix}",
             type=int,
             help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+        )
+        parser.addoption(
+            f"--lvmo-disks{suffix}",
+            dest=f"lvmo_disks{suffix}",
+            type=int,
+            help="Number of disks to add to node for LVMO",
+        )
+        parser.addoption(
+            f"--lvmo-disks-size{suffix}",
+            dest=f"lvmo_disks_size{suffix}",
+            type=int,
+            help="Size of the disks to add to lvmo in GB",
         )
 
 
@@ -302,6 +315,15 @@ def pytest_addoption(parser):
         loaded when run-ci starts
         """,
     )
+    parser.addoption(
+        "--install-lvmo",
+        dest="install_lvmo",
+        action="store_true",
+        default=False,
+        help="""
+            set for installing lvmo operator and lvmo cluster
+            """,
+    )
 
 
 def pytest_configure(config):
@@ -376,7 +398,9 @@ def pytest_configure(config):
                     del config._metadata[extra_meta]
 
             config._metadata["Test Run Name"] = get_testrun_name()
-            gather_version_info_for_report(config)
+            check_clusters()
+            if ocsci_config.RUN.get("cephcluster"):
+                gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 
@@ -509,6 +533,19 @@ def process_cluster_cli_params(config):
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
+    install_lvmo = get_cli_param(config, "install_lvmo")
+    if install_lvmo:
+        ocsci_config.DEPLOYMENT["install_lvmo"] = True
+        number_of_disks = get_cli_param(config, "lvmo_disks")
+        if number_of_disks is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = 3
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = number_of_disks
+        disk_size = get_cli_param(config, "lvmo_disks_size")
+        if disk_size is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = 200
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = disk_size
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image
@@ -622,7 +659,14 @@ def pytest_runtest_makereport(item, call):
         test_case_name = item.name
         ocp_logs_collection = (
             True
-            if any(x in item.location[0] for x in ["ecosystem", "e2e/performance"])
+            if any(
+                x in item.location[0]
+                for x in [
+                    "ecosystem",
+                    "e2e/performance",
+                    "test_ceph_csidriver_runs_on_non_ocs_nodes",
+                ]
+            )
             else False
         )
         ocs_logs_collection = (

@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
     skipif_ibm_cloud,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
@@ -37,6 +38,7 @@ class TestOCSWorkerNodeShutdown(ManageTest):
 
     @pytest.mark.polarion_id("OCS-2315")
     @skipif_ibm_cloud
+    @skipif_managed_service
     def test_check_pod_status_after_two_nodes_shutdown_recovery(
         self, nodes, node_restart_teardown
     ):

@@ -126,57 +126,25 @@ class TestPVCClonePerformance(PASTest):
         """
         Cleanup the test environment
         """
-        logger.info("Starting the test environment celanup")
-
-        # Delete The test POD
+        logger.info("Starting the test environment cleanup")
         try:
-            self.pod_object.delete()
-            # Wait for the POD to be deleted
-            performance_lib.wait_for_resource_bulk_status(
-                "pod", 0, self.namespace, constants.STATUS_RUNNING, 60, 5
-            )
-            logger.info("The POD was deleted successfully")
-        except Exception:
-            pass
-
-        # Delete the test PVC
-        try:
-            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
-            self.pvc_obj.delete()
-            # Wait for the PVC to be deleted
-            performance_lib.wait_for_resource_bulk_status(
-                "pvc", 0, self.namespace, constants.STATUS_BOUND, 60, 5
-            )
-            logger.info("The PVC was deleted successfully")
-        except Exception:
-            pass
-
-        # Delete the backend PV of the PVC
-        logger.info(f"Try to delete the backend PV : {pv}")
-        try:
-            performance_lib.run_oc_command(f"delete pv {pv}")
-        except Exception as ex:
-            err_msg = f"cannot delete PV {pv} - [{ex}]"
-            logger.error(err_msg)
-
-        logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
-        try:
+            logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
             self.sc_obj.delete()
             logger.info("Wait until the SC is deleted.")
             self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
         except Exception as ex:
-            logger.error(f"Can not delete the test sc : {ex}")
-
+            logger.warning(f"Can not delete the test sc : {ex}")
         # Delete the test project (namespace)
         self.delete_test_project()
-        if self.interface == constants.CEPHBLOCKPOOL:
-            logger.info(f"Try to delete the Storage pool {self.pool_name}")
-            try:
-                self.delete_ceph_pool(self.pool_name)
-            except Exception:
-                pass
-            finally:
-                # Verify deletion by checking the backend CEPH pools using the toolbox
+
+        logger.info(f"Try to delete the Storage pool {self.pool_name}")
+        try:
+            self.delete_ceph_pool(self.pool_name)
+        except Exception:
+            pass
+        finally:
+            # Verify deletion by checking the backend CEPH pools using the toolbox
+            if self.interface == constants.CEPHBLOCKPOOL:
                 results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
                 logger.debug(f"Existing pools are : {results}")
                 if self.pool_name in results.split():
@@ -385,6 +353,7 @@ class TestPVCClonePerformance(PASTest):
                     "name": Interfaces_info[self.interface]["sc"],
                 },
             )
+            self.pool_name = "ocs-storagecluster-cephfilesystem"
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
@@ -450,7 +419,10 @@ class TestPVCClonePerformance(PASTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, 13, 1800],
-                marks=pytest.mark.polarion_id("OCS-2674"),
+                marks=[
+                    pytest.mark.polarion_id("OCS-2674"),
+                    pytest.mark.bugzilla("2101874"),
+                ],
             ),
         ],
     )
@@ -503,6 +475,7 @@ class TestPVCClonePerformance(PASTest):
                     "name": Interfaces_info[self.interface]["sc"],
                 },
             )
+            self.pool_name = "ocs-storagecluster-cephfilesystem"
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
         # Create a POD
@@ -568,6 +541,9 @@ class TestPVCClonePerformance(PASTest):
         This is not a test - it is only check that previous tests ran and finished as expected
         and reporting the full results (links in the ES) of previous tests (8 + 2)
         """
+        # Define variables for the teardown phase
+        self.interface = None
+        self.pool_name = None
 
         self.add_test_to_results_check(
             test="test_clone_create_delete_performance",
@@ -576,7 +552,8 @@ class TestPVCClonePerformance(PASTest):
         )
         self.add_test_to_results_check(
             test="test_pvc_clone_performance_multiple_files",
-            test_count=2,
-            test_name="PVC Clone Multiple Filese",
+            # TODO: after BZ-2101874 will fix, change the test_count to 2
+            test_count=1,
+            test_name="PVC Clone Multiple Files",
         )
         self.check_results_and_push_to_dashboard()

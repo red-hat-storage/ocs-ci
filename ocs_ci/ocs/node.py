@@ -354,7 +354,7 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
     # wait for the new node to come to ready state
     log.info("Waiting for the new node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name)
+    machine.wait_for_new_node_to_be_ready(machineset_name, timeout=900)
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = get_worker_nodes()
@@ -1603,15 +1603,25 @@ def verify_all_nodes_created():
 
     """
     expected_num_nodes = (
-        config.ENV_DATA["worker_replicas"]
-        + config.ENV_DATA["master_replicas"]
-        + config.ENV_DATA.get("infra_replicas", 0)
+        config.ENV_DATA["worker_replicas"] + config.ENV_DATA["master_replicas"]
     )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        expected_num_nodes += 3
+    else:
+        expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
+
     existing_num_nodes = len(get_all_nodes())
     if expected_num_nodes != existing_num_nodes:
-        raise NotAllNodesCreated(
-            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
-        )
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            log.warning(
+                f"Expected number of nodes is {expected_num_nodes} but "
+                f"created during deployment is {existing_num_nodes}"
+            )
+        else:
+            raise NotAllNodesCreated(
+                f"Expected number of nodes is {expected_num_nodes} but "
+                f"created during deployment is {existing_num_nodes}"
+            )
 
 
 def add_node_to_lvd_and_lvs(node_name):
@@ -2319,3 +2329,97 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         if all(nodes_racks_or_zones):
             log.info("All the nodes racks or zones exist!")
             break
+
+
+def wait_for_new_worker_node_ipi(machineset, old_wnodes, timeout=900):
+    """
+    Wait for the new worker node to be ready
+
+    Args:
+        machineset (str): The machineset name
+        old_wnodes (list): The old worker nodes
+        timeout (int): Time to wait for the new worker node to be ready.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The new worker node object
+
+    Raise:
+        ResourceWrongStatusException: In case the new spun machine fails to reach Ready state
+            or replica count didn't match. Or in case one or more nodes haven't reached
+            the desired state.
+
+    """
+    machine.wait_for_new_node_to_be_ready(machineset, timeout=timeout)
+    new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
+    new_wnode = get_node_objs(new_wnode_names)[0]
+    log.info(f"Successfully created a new node {new_wnode.name}")
+
+    wait_for_nodes_status([new_wnode.name])
+    log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
+    return new_wnode
+
+
+def wait_for_node_count_to_reach_status(
+    node_count,
+    node_type=constants.WORKER_MACHINE,
+    expected_status=constants.STATUS_READY,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Wait for a node count to reach the expected status
+
+    Args:
+        node_count (int): The node count
+        node_type (str): The node type. Default value is worker.
+        expected_status (str): The expected status. Default value is "Ready".
+        timeout (int): Time to wait for the node count to reach the expected status.
+        sleep (int): Time in seconds to wait between attempts.
+
+    Raise:
+        TimeoutExpiredError: In case the node count didn't reach the expected status in the given timeout.
+
+    """
+    log.info(
+        f"Wait for {node_count} of the nodes to reach the expected status {expected_status}"
+    )
+
+    for node_objs in TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=get_nodes, node_type=node_type
+    ):
+        node_names_in_expected_status = [
+            n.name for n in node_objs if get_node_status(n) == expected_status
+        ]
+        if len(node_names_in_expected_status) == node_count:
+            log.info(
+                f"{node_count} of the nodes reached the expected status: {expected_status}"
+            )
+            break
+        else:
+            log.info(
+                f"The nodes {node_names_in_expected_status} reached the expected status {expected_status}, "
+                f"but we were waiting for {node_count} of them to reach status {expected_status}"
+            )
+
+
+def check_for_zombie_process_on_node(node_name=None):
+    """
+    Check if there are any zombie process on the nodes
+
+    Args:
+        node_name (list): Node names list to check for zombie process
+
+    Raise:
+        ZombieProcessFoundException: In case zombie process are found on the node
+
+    """
+    node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
+    for node_obj in node_obj_list:
+        debug_cmd = f'debug nodes/{node_obj.name} -- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        if not out:
+            log.info(f"No Zombie process found on the node: {node_obj.name}")
+        else:
+            log.error(f"Zombie process found on node: {node_obj.name}")
+            log.error(f"pid and ppid details: {out}")
+            raise exceptions.ZombieProcessFoundException

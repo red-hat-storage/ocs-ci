@@ -6,14 +6,17 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
     managed_service_required,
-    skipif_ms_consumer,
     ignore_leftovers,
 )
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     check_pods_after_node_replacement,
+    get_osd_pods_having_ids,
+    delete_pods,
+    wait_for_osd_pods_having_ids,
 )
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -25,13 +28,14 @@ from ocs_ci.ocs.node import (
     get_node_osd_ids,
     wait_for_nodes_status,
     recover_node_to_ready_state,
-    get_ocs_nodes,
-    get_osd_ids_per_node,
     get_node_rook_ceph_pod_names,
     verify_worker_nodes_security_groups,
     wait_for_osd_ids_come_up_on_node,
-    wait_for_all_osd_ids_come_up_on_nodes,
+    unschedule_nodes,
+    schedule_nodes,
+    wait_for_new_worker_node_ipi,
 )
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -55,35 +59,25 @@ def get_node_pod_names_expected_to_terminate(node_name):
     ]
 
 
-def get_all_pod_names_expected_to_terminate():
-    """
-    Get the pod names of all the ocs nodes, that expected to be in a Terminating state
-
-    Returns:
-         list: list of the pod names of all the ocs nodes, that expected to be in a Terminating state
-
-    """
-    ocs_nodes = get_ocs_nodes()
-    ocs_node_names = [n.name for n in ocs_nodes]
-    pod_names_expected_to_terminate = []
-    for node_name in ocs_node_names:
-        pod_names_expected_to_terminate.extend(
-            get_node_pod_names_expected_to_terminate(node_name)
-        )
-
-    return pod_names_expected_to_terminate
-
-
 def check_automated_recovery_from_stopped_node(nodes):
     """
     1) Stop node.
     2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) The node should power on automatically.
-    4) The new osd pods with the same ids should start on the stopped node after it powered on.
+    3) The node should power on automatically, or if removed from the cluster,
+       a new node should create automatically.
+    4) The new osd pods with the same ids should start on the stopped node after it powered on,
+       or to start on the new osd node.
 
     """
+    old_wnodes = get_worker_nodes()
+    log.info(f"Current worker nodes: {old_wnodes}")
+
     osd_node_name = random.choice(get_osd_running_nodes())
     osd_node = get_node_objs([osd_node_name])[0]
+
+    machine_name = machine.get_machine_from_node_name(osd_node_name)
+    machineset = machine.get_machineset_from_machine_name(machine_name)
+    log.info(f"machineset name: {machineset}")
 
     old_osd_pod_ids = get_node_osd_ids(osd_node_name)
     log.info(f"osd pod ids: {old_osd_pod_ids}")
@@ -101,15 +95,19 @@ def check_automated_recovery_from_stopped_node(nodes):
     )
     assert res, "Not all the node rook ceph pods are in a Terminating state"
 
-    # This is a workaround until we find what should be the behavior
-    # when shutting down a worker node
-    nodes.start_nodes(nodes=[osd_node])
+    try:
+        log.info(f"Wait for the node: {osd_node_name} to power on")
+        wait_for_nodes_status([osd_node_name])
+        log.info(f"Successfully powered on node {osd_node_name}")
+    except ResourceWrongStatusException as e:
+        log.info(
+            f"The worker node {osd_node_name} didn't start due to the exception {str(e)} "
+            f"Probably it has been removed from the cluster. Waiting for a new node to come up..."
+        )
+        new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
+        osd_node_name = new_wnode.name
 
-    log.info(f"Wait for the node: {osd_node_name} to power on")
-    wait_for_nodes_status([osd_node_name])
-    log.info(f"Successfully powered on node {osd_node_name}")
-
-    assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids)
+    assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids, timeout=300)
     log.info(
         f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
     )
@@ -124,18 +122,16 @@ def check_automated_recovery_from_terminated_node(nodes):
 
     """
     old_wnodes = get_worker_nodes()
-    log.info(f"start worker nodes: {old_wnodes}")
+    log.info(f"Current worker nodes: {old_wnodes}")
 
-    old_osd_node_names = get_osd_running_nodes()
-    old_osd_nodes = get_node_objs(old_osd_node_names)
-    osd_node = random.choice(old_osd_nodes)
-    log.info(f"osd node name: {osd_node.name}")
+    osd_node_name = random.choice(get_osd_running_nodes())
+    osd_node = get_node_objs([osd_node_name])[0]
 
-    machine_name = machine.get_machine_from_node_name(osd_node.name)
+    machine_name = machine.get_machine_from_node_name(osd_node_name)
     machineset = machine.get_machineset_from_machine_name(machine_name)
     log.info(f"machineset name: {machineset}")
 
-    old_osd_pod_ids = get_node_osd_ids(osd_node.name)
+    old_osd_pod_ids = get_node_osd_ids(osd_node_name)
     log.info(f"osd pod ids: {old_osd_pod_ids}")
 
     pod_names_expected_to_terminate = get_node_pod_names_expected_to_terminate(
@@ -143,7 +139,7 @@ def check_automated_recovery_from_terminated_node(nodes):
     )
 
     nodes.terminate_nodes([osd_node], wait=True)
-    log.info(f"Successfully terminated the node: {osd_node.name}")
+    log.info(f"Successfully terminated the node: {osd_node_name}")
 
     log.info("Verify the node rook ceph pods go into a Terminating state")
     res = wait_for_pods_to_be_in_statuses(
@@ -151,71 +147,101 @@ def check_automated_recovery_from_terminated_node(nodes):
     )
     assert res, "Not all the node rook ceph pods are in a Terminating state"
 
-    machine.wait_for_new_node_to_be_ready(machineset, timeout=900)
-    new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
-    new_wnode = get_node_objs(new_wnode_names)[0]
-    log.info(f"Successfully created a new node {new_wnode.name}")
-
-    wait_for_nodes_status([new_wnode.name])
-    log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
+    new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
 
     wait_for_osd_ids_come_up_on_node(new_wnode.name, old_osd_pod_ids, timeout=300)
     log.info(
-        f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node.name}"
+        f"the osd ids {old_osd_pod_ids} Successfully come up on the node {new_wnode.name}"
     )
 
 
-def check_automated_recovery_from_full_cluster_shutdown(nodes):
+def check_automated_recovery_from_drain_node(nodes):
     """
-    1) Stop all the worker nodes.
-    2) The rook ceph pods associated with the osd nodes should change to a Terminating state.
-    3) The worker nodes should be powered on automatically.
-    4) The new osd pods with the same ids should start on the same worker nodes.
+    1) Drain one worker node.
+    2) Delete the OSD pods associated with the node.
+    3) The new OSD pods with the same ids that come up, should be in a Pending state.
+    4) Schedule the worker node.
+    5) The OSD pods associated with the node, should back into a Running state, and come up
+        on the same node.
 
     """
-    old_osd_ids_per_node = get_osd_ids_per_node()
-    log.info(f"old osd ids per node: {old_osd_ids_per_node}")
+    osd_node_name = random.choice(get_osd_running_nodes())
+    old_osd_pod_ids = get_node_osd_ids(osd_node_name)
+    log.info(f"osd pod ids: {old_osd_pod_ids}")
+    node_osd_pods = get_osd_pods_having_ids(old_osd_pod_ids)
 
-    wnode_names = get_worker_nodes()
-    wnodes = get_node_objs(wnode_names)
+    unschedule_nodes([osd_node_name])
+    log.info(f"Successfully unschedule the node: {osd_node_name}")
 
-    pod_names_expected_to_terminate = get_all_pod_names_expected_to_terminate()
+    log.info("Delete the node osd pods")
+    delete_pods(node_osd_pods)
 
-    nodes.stop_nodes(wnodes)
-    log.info(f"Successfully stopped the worker nodes: {wnode_names}")
+    new_osd_pods = wait_for_osd_pods_having_ids(osd_ids=old_osd_pod_ids)
+    new_osd_pod_names = [p.name for p in new_osd_pods]
 
+    wnodes = get_worker_nodes()
+    if len(wnodes) <= 3:
+        expected_pods_status = constants.STATUS_PENDING
+    else:
+        expected_pods_status = constants.STATUS_RUNNING
+
+    log.info(
+        f"Verify the new osd pods {new_osd_pod_names} go into a {expected_pods_status} state"
+    )
     res = wait_for_pods_to_be_in_statuses(
-        [constants.STATUS_TERMINATING], pod_names_expected_to_terminate
+        [expected_pods_status],
+        new_osd_pod_names,
+        raise_pod_not_found_error=True,
     )
-    assert res, "Not all the rook ceph pods are in a Terminating state"
+    assert res, f"Not all the node osd pods are in a {expected_pods_status} state"
 
-    # This is a workaround until we find what should be the behavior
-    # when shutting down a worker node
-    nodes.start_nodes(nodes=wnodes)
+    log.info(f"Wait for the node: {osd_node_name} to be scheduled")
+    schedule_nodes([osd_node_name])
+    log.info(f"Successfully scheduled the node {osd_node_name}")
 
-    wait_for_nodes_status(wnode_names, timeout=360)
-    log.info("All the worker nodes are in a Ready state!")
-
-    assert wait_for_all_osd_ids_come_up_on_nodes(old_osd_ids_per_node)
-    log.info("The osd ids successfully come up on the osd nodes")
+    if len(wnodes) <= 3:
+        assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids)
+        log.info(
+            f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
+        )
 
 
 FAILURE_TYPE_FUNC_CALL_DICT = {
     "stopped_node": check_automated_recovery_from_stopped_node,
     "terminate_node": check_automated_recovery_from_terminated_node,
-    "full_cluster_shutdown": check_automated_recovery_from_full_cluster_shutdown,
+    "drain_node": check_automated_recovery_from_drain_node,
 }
 
 
 @ignore_leftovers
 @tier4b
 @managed_service_required
-@skipif_ms_consumer
 class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
+    @pytest.fixture(autouse=True)
+    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+        """
+        Initialize the create pods and PVCs factory, save the original index
+
+        """
+        self.orig_index = config.cur_index
+        self.create_pods_and_pvcs_factory = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        )
+
+    def create_resources(self):
+        """
+        Create resources on the consumers and run IO
+
+        """
+        self.create_pods_and_pvcs_factory()
+
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         def finalizer():
-            log.info("Verify that all the worker nodes are in a Ready state")
+            config.switch_to_provider()
+            log.info(
+                "Verify that all the worker nodes are in a Ready state on the provider"
+            )
             wnodes = get_nodes(node_type=constants.WORKER_MACHINE)
             for wnode in wnodes:
                 is_recovered = recover_node_to_ready_state(wnode)
@@ -225,6 +251,8 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             log.info("Verify again that the ceph health is OK")
             ceph_health_check()
 
+            config.switch_ctx(self.orig_index)
+
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
@@ -232,7 +260,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         argvalues=[
             pytest.param("stopped_node"),
             pytest.param("terminate_node"),
-            pytest.param("full_cluster_shutdown"),
+            pytest.param("drain_node"),
         ],
     )
     def test_automated_recovery_from_failed_nodes_reactive_ms(
@@ -241,11 +269,14 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         failure,
     ):
         """
-        We have 3 test cases to check:
+        We have 3 test cases to check when running IO in the background:
             A) Automated recovery from stopped worker node
             B) Automated recovery from termination of a worker node
-            C) Automated recovery from full cluster shutdown
+            C) Automated recovery from unschedule and reschedule a worker node.
         """
+        self.create_resources()
+
+        config.switch_to_provider()
         log.info("Start executing the node test function on the provider...")
         FAILURE_TYPE_FUNC_CALL_DICT[failure](nodes)
 
@@ -255,5 +286,11 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             verify_worker_nodes_security_groups()
         ), "Not all the worker nodes security groups set correctly"
 
-        log.info("Checking that the ceph health is ok")
+        log.info("Checking that the ceph health is ok on the provider")
         ceph_health_check()
+
+        log.info("Checking that the ceph health is ok on the consumers")
+        consumer_indexes = config.get_consumer_indexes_list()
+        for i in consumer_indexes:
+            config.switch_ctx(i)
+            ceph_health_check()

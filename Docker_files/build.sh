@@ -16,7 +16,7 @@ Platforms="linux/amd64,linux/ppc64le,linux/s390x,linux/arm64"
 
 # The tool to use for the build.
 # using docker since podman doesn't not support the multi-arch
-CMD_TOOL="docker"
+CMD_TOOL="podman"
 
 usage() {
   # Display the script usage and exit the script
@@ -86,14 +86,12 @@ if [[ ${Multi} -eq 0 ]] ; then
 	CMD="${CMD_TOOL} build --tag ${Repo}:${Tag} --file ${Dockerfile} ."
 else
 	echo "Building the image for Multi Arch"
-	CMD="${CMD_TOOL} buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} --file ${Dockerfile} ."
+	CMD="${CMD_TOOL} buildx build --platform ${Platforms} --tag ${Repo}:${Tag} --file ${Dockerfile} ."
 fi
 
 # Run the build command
 echo "Going to run : ${CMD}"
 ${CMD}
 
-# Push the image - for single arch only, the multi-arch push is done during the build
-if [[ ${Multi} -eq 0 ]] ; then
-  ${CMD_TOOL} push ${Repo}:${Tag}
-fi
+# Push the image - for single arch only
+${CMD_TOOL} push ${Repo}:${Tag}

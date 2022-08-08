@@ -49,6 +49,8 @@ class OCP(object):
         selector=None,
         field_selector=None,
         cluster_kubeconfig="",
+        threading_lock=None,
+        silent=False,
     ):
         """
         Initializer function
@@ -63,6 +65,9 @@ class OCP(object):
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
             cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
+            threading_lock (threading.Lock): threading.Lock object that is used
+                for handling concurrent oc commands
+            silent (bool): If True will silent errors from the server, default false
         """
         self._api_version = api_version
         self._kind = kind
@@ -72,6 +77,8 @@ class OCP(object):
         self.selector = selector
         self.field_selector = field_selector
         self.cluster_kubeconfig = cluster_kubeconfig
+        self.threading_lock = threading_lock
+        self.silent = silent
 
     @property
     def api_version(self):
@@ -90,10 +97,12 @@ class OCP(object):
         return self._resource_name
 
     @property
-    def data(self):
+    def data(self, silent=False):
         if self._data:
             return self._data
-        self._data = self.get()
+        if self.silent:
+            silent = True
+        self._data = self.get(silent=silent)
         return self._data
 
     def reload_data(self):
@@ -109,6 +118,7 @@ class OCP(object):
         secrets=None,
         timeout=600,
         ignore_error=False,
+        silent=False,
         **kwargs,
     ):
         """
@@ -125,6 +135,7 @@ class OCP(object):
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
+            silent (bool): If True will silent errors from the server, default false
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -153,6 +164,8 @@ class OCP(object):
             secrets=secrets,
             timeout=timeout,
             ignore_error=ignore_error,
+            threading_lock=self.threading_lock,
+            silent=silent,
             **kwargs,
         )
 
@@ -204,6 +217,7 @@ class OCP(object):
         retry=0,
         wait=3,
         dont_raise=False,
+        silent=False,
         field_selector=None,
     ):
         """
@@ -247,15 +261,17 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command)
+                return self.exec_oc_cmd(command, silent=silent)
             except CommandFailed as ex:
-                log.warning(
-                    f"Failed to get resource: {resource_name} of kind: "
-                    f"{self.kind}, selector: {selector}, Error: {ex}"
-                )
+                if not silent:
+                    log.warning(
+                        f"Failed to get resource: {resource_name} of kind: "
+                        f"{self.kind}, selector: {selector}, Error: {ex}"
+                    )
                 retry -= 1
                 if not retry:
-                    log.warning("Number of attempts to get resource reached!")
+                    if not silent:
+                        log.warning("Number of attempts to get resource reached!")
                     if not dont_raise:
                         raise
                     else:
@@ -418,7 +434,9 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
+        if f'Now using project "{project_name}"' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         return False
 
@@ -439,7 +457,9 @@ class OCP(object):
 
         """
         command = f"oc delete project {project_name}"
-        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+        if f' "{project_name}" deleted' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         raise CommandFailed(f"{project_name} was not deleted")
 
@@ -456,12 +476,16 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
-        status = exec_cmd(command, secrets=[password])
+        status = exec_cmd(
+            command, secrets=[password], threading_lock=self.threading_lock
+        )
         # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             kubeconfig = os.getenv("KUBECONFIG")
             if not kubeconfig or not os.path.exists(kubeconfig):
@@ -483,7 +507,7 @@ class OCP(object):
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
-        status = run_cmd(command)
+        status = run_cmd(command, threading_lock=self.threading_lock)
         return status
 
     def get_user_token(self):
@@ -764,17 +788,28 @@ class OCP(object):
             wait=wait,
             selector=selector,
         )
+        resource = re.split(r"\s{2,}", resource)
+
         # get the list of titles
-        titles = re.sub(r"\s{2,}", ",", resource)  # noqa: W605
-        titles = titles.split(",")
-        # Get the index of column
-        column_index = titles.index(column)
-        resource = shlex.split(resource)
+        titles = [
+            i for i in resource if (i.isupper() and i not in ("RWO", "RWX", "ROX"))
+        ]
+
         # Get the values from the output including access modes in capital
         # letters
         resource_info = [
             i for i in resource if (not i.isupper() or i in ("RWO", "RWX", "ROX"))
         ]
+        temp_list = shlex.split(resource_info[0])
+        for i in temp_list:
+            if i.isupper():
+                titles.append(i)
+            else:
+                resource_info[0] = i
+
+        # Get the index of column
+        column_index = titles.index(column)
+
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:

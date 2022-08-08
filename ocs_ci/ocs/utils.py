@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 from subprocess import TimeoutExpired
+from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 from gevent import sleep
@@ -1266,3 +1267,20 @@ def get_primary_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def thread_init_class(class_init_operations, shutdown):
+    if len(class_init_operations) > 0:
+        executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
+        futures = []
+        i = 0
+        for operation in class_init_operations:
+            i += 1
+            future = executor.map(operation)
+            futures.append(future)
+            if i == shutdown:
+                future.add_done_callback(executor.shutdown(wait=False))
+                return
+        if shutdown == 0:
+            executor.shutdown(wait=True)
+            return

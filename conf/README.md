@@ -143,6 +143,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
+* `post_upgrade` - If True, post-upgrade will be reported in the test suite
+  name in the mail subject.
 
 #### ENV_DATA
 
@@ -228,6 +230,7 @@ higher priority).
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 * `ms_env_type` - to choose managed service environment type staging or production, default set to staging
+* `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
 #### UPGRADE
 
 Upgrade related configuration data.

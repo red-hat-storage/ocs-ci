@@ -27,20 +27,16 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
-from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
-    storagecluster_independent_check,
     wait_for_resource_state,
 )
 import subprocess
@@ -169,43 +165,6 @@ class MCG:
                 endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key,
-            )
-
-        if (
-            config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
-            or storagecluster_independent_check()
-        ):
-            if (
-                not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
-                and not config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                and (
-                    version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
-                )
-            ):
-                logger.info("Checking whether RGW pod is not present")
-                pods = pod.get_pods_having_label(
-                    label=constants.RGW_APP_LABEL, namespace=self.namespace
-                )
-                assert (
-                    not pods
-                ), "RGW pods should not exist in the current platform/cluster"
-
-        elif (
-            config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
-            and not config.ENV_DATA["mcg_only_deployment"]
-        ):
-            rgw_count = get_rgw_count(
-                config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
-            )
-            logger.info(
-                f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
-            )
-            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
-            assert rgw_pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=constants.RGW_APP_LABEL,
-                resource_count=rgw_count,
-                timeout=60,
             )
 
     def retrieve_nb_token(self):
@@ -880,7 +839,7 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -898,9 +857,18 @@ class MCG:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
-        result = exec_cmd(
-            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}", **kwargs
-        )
+
+        if use_yes:
+            result = exec_cmd(
+                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                shell=True,
+                **kwargs,
+            )
+        else:
+            result = exec_cmd(
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                **kwargs,
+            )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result

@@ -21,7 +21,7 @@ setup(
         "gevent==20.9.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
-        "paramiko==2.10.1",
+        "paramiko==2.11.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
@@ -29,7 +29,6 @@ setup(
         "munch==2.5.0",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
-        'dataclasses==0.7;python_version < "3.7"',
         "pytest-html==3.1.1",
         "pytest-metadata==1.11.0",
         "bs4==0.0.1",
@@ -49,9 +48,9 @@ setup(
         "google-cloud-storage==1.29.0",
         "google-auth==1.35.0",
         "elasticsearch==7.14.0",
-        "numpy==1.21.0",
+        "numpy==1.22.0",
         "python-ipmi==0.4.2",
-        "scipy==1.6.0",
+        "scipy==1.8.1",
         "PrettyTable==0.7.2",
         "azure-common==1.1.25",
         "azure-mgmt-compute==12.0.0",
@@ -80,6 +79,7 @@ setup(
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
         "protobuf==3.20.1",
+        "ping3>=4.0.3",
     ],
     entry_points={
         "console_scripts": [

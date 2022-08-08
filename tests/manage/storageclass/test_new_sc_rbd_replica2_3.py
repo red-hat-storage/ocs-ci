@@ -26,16 +26,55 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
     """
 
     @pytest.mark.parametrize(
-        argnames=["replica", "compression"],
+        argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
         argvalues=[
-            pytest.param(*[2, "aggressive"], marks=pytest.mark.polarion_id("OCS-2400")),
-            pytest.param(*[3, "aggressive"], marks=pytest.mark.polarion_id("OCS-2397")),
-            pytest.param(*[2, "none"], marks=pytest.mark.polarion_id("OCS-2401")),
-            pytest.param(*[3, "none"], marks=pytest.mark.polarion_id("OCS-2406")),
+            pytest.param(
+                *[
+                    2,
+                    "aggressive",
+                    constants.WFFC_VOLUMEBINDINGMODE,
+                    constants.STATUS_PENDING,
+                ],
+                marks=pytest.mark.polarion_id("OCS-2400"),
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "aggressive",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                ],
+                marks=pytest.mark.polarion_id("OCS-2397"),
+            ),
+            pytest.param(
+                *[
+                    2,
+                    "none",
+                    constants.WFFC_VOLUMEBINDINGMODE,
+                    constants.STATUS_PENDING,
+                ],
+                marks=pytest.mark.polarion_id("OCS-2401"),
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "none",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                ],
+                marks=pytest.mark.polarion_id("OCS-2406"),
+            ),
         ],
     )
     def test_new_sc_new_rbd_pool(
-        self, replica, compression, storageclass_factory, pvc_factory, pod_factory
+        self,
+        replica,
+        compression,
+        volume_binding_mode,
+        pvc_status,
+        storageclass_factory,
+        pvc_factory,
+        pod_factory,
     ):
         """
         This test function does below,
@@ -50,10 +89,13 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             new_rbd_pool=True,
             replica=replica,
             compression=compression,
+            volume_binding_mode=volume_binding_mode,
         )
 
         log.info(f"Creating a PVC using {sc_obj.name}")
-        pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj, size=10)
+        pvc_obj = pvc_factory(
+            interface=interface_type, storageclass=sc_obj, size=10, status=pvc_status
+        )
         log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
 
         # Create app pod and mount each PVC

@@ -12,6 +12,7 @@ from jsonschema import validate
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
@@ -41,7 +42,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
-from ocs_ci.helpers.helpers import get_secret_names
+from ocs_ci.helpers.helpers import get_secret_names, get_cephfs_name
 from ocs_ci.utility import (
     localstorage,
     utils,
@@ -49,6 +50,7 @@ from ocs_ci.utility import (
     kms as KMS,
     version,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd
 
@@ -118,6 +120,12 @@ def ocs_install_verification(
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
+    provider_cluster = (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+    consumer_cluster = (
+        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
     ocs_version = version.get_semantic_ocs_version_from_config()
     external = config.DEPLOYMENT["external_mode"] or (
         managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
@@ -164,7 +172,7 @@ def ocs_install_verification(
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
 
-    if managed_service and config.ENV_DATA["cluster_type"].lower() == "provider":
+    if provider_cluster:
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 3,
@@ -173,7 +181,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    elif consumer_cluster:
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -233,13 +241,13 @@ def ocs_install_verification(
         f"{storage_cluster_name}-ceph-rbd",
     }
     skip_storage_classes = set()
-    if disable_cephfs:
+    if disable_cephfs or provider_cluster:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-cephfs",
             }
         )
-    if disable_blockpools:
+    if disable_blockpools or provider_cluster:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-ceph-rbd",
@@ -281,11 +289,12 @@ def ocs_install_verification(
     log.info("Verifying CSI driver object contains provisioner names.")
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
-    if not managed_service or config.ENV_DATA["cluster_type"].lower() != "provider":
+    if not provider_cluster:
         assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
+    cluster_name = config.ENV_DATA["cluster_name"]
     if config.DEPLOYMENT["external_mode"]:
         sc_rbd = storage_class.get(
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
@@ -294,14 +303,14 @@ def ocs_install_verification(
             resource_name=(constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
         )
     else:
-        if not disable_blockpools:
+        if not disable_blockpools and not provider_cluster:
             sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
-        if not disable_cephfs:
+        if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
-    if not disable_blockpools:
-        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+    if not disable_blockpools and not provider_cluster:
+        if consumer_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -311,16 +320,37 @@ def ocs_install_verification(
                 in sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
             )
         else:
-            assert (
-                sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                == constants.RBD_NODE_SECRET
-            )
-            assert (
-                sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                == constants.RBD_PROVISIONER_SECRET
-            )
-    if not disable_cephfs:
-        if managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer":
+            if (
+                config.DEPLOYMENT["external_mode"]
+                and config.ENV_DATA["restricted-auth-permission"]
+            ):
+                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                rbd_node_secret = (
+                    f"{constants.RBD_NODE_SECRET}-{cluster_name}-{rbd_name}"
+                )
+                rbd_provisioner_secret = (
+                    f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-{rbd_name}"
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == rbd_node_secret
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                    == rbd_provisioner_secret
+                )
+            else:
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == constants.RBD_NODE_SECRET
+                )
+                assert (
+                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
+                    == constants.RBD_PROVISIONER_SECRET
+                )
+
+    if not disable_cephfs and not provider_cluster:
+        if consumer_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -330,14 +360,37 @@ def ocs_install_verification(
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
             )
         else:
-            assert (
-                sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                == constants.CEPHFS_NODE_SECRET
-            )
-            assert (
-                sc_cephfs["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                == constants.CEPHFS_PROVISIONER_SECRET
-            )
+            if (
+                config.DEPLOYMENT["external_mode"]
+                and config.ENV_DATA["restricted-auth-permission"]
+            ):
+                cephfs_name = config.ENV_DATA.get("cephfs_name") or get_cephfs_name()
+                cephfs_node_secret = (
+                    f"{constants.CEPHFS_NODE_SECRET}-{cluster_name}-{cephfs_name}"
+                )
+                cephfs_provisioner_secret = f"{constants.CEPHFS_PROVISIONER_SECRET}-{cluster_name}-{cephfs_name}"
+                assert (
+                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == cephfs_node_secret
+                )
+                assert (
+                    sc_cephfs["parameters"][
+                        "csi.storage.k8s.io/provisioner-secret-name"
+                    ]
+                    == cephfs_provisioner_secret
+                )
+            else:
+                assert (
+                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
+                    == constants.CEPHFS_NODE_SECRET
+                )
+                assert (
+                    sc_cephfs["parameters"][
+                        "csi.storage.k8s.io/provisioner-secret-name"
+                    ]
+                    == constants.CEPHFS_PROVISIONER_SECRET
+                )
+
     log.info("Verified node and provisioner secret names in storage class.")
 
     ct_pod = get_ceph_tools_pod()
@@ -396,10 +449,22 @@ def ocs_install_verification(
     # verify caps for external cluster
     log.info("Verify CSI users and caps for external cluster")
     if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
-        ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+        if config.ENV_DATA["restricted-auth-permission"]:
+            ceph_csi_users = [
+                f"client.csi-cephfs-node-{cluster_name}-{cephfs_name}",
+                f"client.csi-cephfs-provisioner-{cluster_name}-{cephfs_name}",
+                f"client.csi-rbd-node-{cluster_name}-{rbd_name}",
+                f"client.csi-rbd-provisioner-{cluster_name}-{rbd_name}",
+            ]
+            log.debug(f"CSI users for restricted auth permissions are {ceph_csi_users}")
+            expected_csi_users = copy.deepcopy(ceph_csi_users)
+        else:
+            ceph_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+            expected_csi_users = copy.deepcopy(defaults.ceph_csi_users)
+
         ceph_auth_data = ct_pod.exec_cmd_on_pod("ceph auth ls -f json")
         for each in ceph_auth_data["auth_dump"]:
-            if each["entity"] in defaults.ceph_csi_users:
+            if each["entity"] in expected_csi_users:
                 assert (
                     "osd blocklist" in each["caps"]["mon"]
                 ), f"osd blocklist caps are not present for user {each['entity']}"
@@ -599,6 +664,19 @@ def verify_storage_system():
             "Because of the BZ 2075422, we are skipping storage system validation!"
         )
         return
+    if config.UPGRADE.get("upgrade_ocs_version"):
+        upgrade_ocs_version = version.get_semantic_version(
+            config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
+        )
+        if (
+            live_deployment
+            and ocp_version == version.VERSION_4_10
+            and upgrade_ocs_version == version.VERSION_4_10
+        ):
+            log.warning(
+                "Because of the BZ 2075422, we are skipping storage system validation after upgrade"
+            )
+            return
     if ocs_version >= version.VERSION_4_9 and not managed_service:
         log.info("Verifying storage system status")
         storage_system = OCP(
@@ -687,7 +765,15 @@ def osd_encryption_verification():
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
         lsblk_cmd = f"oc debug node/{worker_node} -- chroot /host lsblk"
-        lsblk_out = run_cmd(lsblk_cmd)
+        # It happens from time to time that we see this error:
+        # error: unable to create the debug pod "node-name-internal-debug
+        # Hence we need to add some re-try logic here
+        lsblk_out = retry(
+            (CommandFailed),
+            tries=3,
+            delay=60,
+            text_in_exception="unable to create the debug pod",
+        )(run_cmd)(lsblk_cmd)
         log.info(f"the output of lsblk command on node {worker_node} is:\n {lsblk_out}")
         osd_node_names[worker_node].append(lsblk_out)
 
@@ -1164,6 +1250,7 @@ def verify_managed_service_resources():
         verify_provider_resources()
     else:
         verify_consumer_storagecluster(sc_data)
+        verify_consumer_resources()
     ocp_version = get_semantic_version(get_ocp_version(), only_major_minor=True)
     if ocp_version < VERSION_4_11:
         prometheus_csv = csv.get_csvs_start_with_prefix(
@@ -1179,6 +1266,7 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     3. Security groups are set up correctly
+    4. verify memory limit of OSD pods are set to 7Gi
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1201,6 +1289,45 @@ def verify_provider_resources():
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
     assert verify_worker_nodes_security_groups()
+
+    # verify OSD pod memory size
+    osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
+    osd_pods = get_osd_pods()
+    log.info("verifying OSD pod memory size")
+    for osd_pod in osd_pods:
+        for each_container in osd_pod.data["spec"]["containers"]:
+            if "osd" in each_container["name"]:
+                assert (
+                    each_container["resources"]["limits"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have limits memory of 7Gi"
+                assert (
+                    each_container["resources"]["requests"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have requests memory of 7Gi"
+
+
+def verify_consumer_resources():
+    """
+    Verify resources specific to managed OCS consumer:
+    1. MGR endpoint
+    2. monitoring endpoint in cephcluster yaml
+    """
+    mgr_endpoint = OCP(
+        kind="endpoints",
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        selector=constants.MGR_APP_LABEL,
+    )
+    mgr_ep_yaml = mgr_endpoint.get().get("items")[0]
+    log.info("Verifying that MGR endpoint has an IP address")
+    mgr_ip = mgr_ep_yaml["subsets"][0]["addresses"][0]["ip"]
+    log.info(f"MGR endpoint IP is {mgr_ip}")
+    assert re.match("\\d+(\\.\\d+){3}", mgr_ip)
+    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster_yaml = cephcluster.get().get("items")[0]
+    monitoring_endpoint = cephcluster_yaml["spec"]["monitoring"][
+        "externalMgrEndpoints"
+    ][0]["ip"]
+    log.info(f"Monitoring endpoint of cephcluster yaml: {monitoring_endpoint}")
+    assert re.match("\\d+(\\.\\d+){3}", monitoring_endpoint)
 
 
 def verify_managed_service_networkpolicy():

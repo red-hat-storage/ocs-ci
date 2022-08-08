@@ -44,6 +44,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     update_container_with_mirrored_image,
 )
+from ocs_ci.utility.utils import convert_device_size
 
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,7 @@ def create_pod(
         elif (
             pod_dict_path == constants.NGINX_POD_YAML
             or pod_dict == constants.CSI_RBD_POD_YAML
+            or pod_dict == constants.PERF_POD_YAML
         ):
             temp_dict = [
                 {
@@ -526,6 +528,7 @@ def create_storage_class(
     encrypted=False,
     encryption_kms_id=None,
     fs_name=None,
+    volume_binding_mode="Immediate",
 ):
     """
     Create a storage class
@@ -545,6 +548,8 @@ def create_storage_class(
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
         fs_name (str): the name of the filesystem for CephFS StorageClass
+        volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
+            pod attachment.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -594,6 +599,7 @@ def create_storage_class(
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
 
     try:
         del sc_data["parameters"]["userid"]
@@ -3731,6 +3737,47 @@ def create_reclaim_space_job(
     return ocs_obj
 
 
+def create_reclaim_space_cronjob(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+    schedule="weekly",
+):
+    """
+    Create ReclaimSpaceCronJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceCRonJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+        schedule (str): Type of schedule
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
+    """
+    reclaim_space_cronjob_name = reclaim_space_job_name or create_unique_resource_name(
+        pvc_name, f"{constants.RECLAIMSPACECRONJOB}-{schedule}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_cronjob_name
+    job_data["spec"]["jobTemplate"]["spec"]["target"][
+        "persistentVolumeClaim"
+    ] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["jobTemplate"]["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["jobTemplate"]["spec"][
+            "retryDeadlineSeconds"
+        ] = retry_deadline_seconds
+    if schedule:
+        job_data["spec"]["schedule"] = "@" + schedule
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
@@ -3754,3 +3801,78 @@ def get_cephfs_subvolumegroup():
         subvolume_group_name = "csi"
 
     return subvolume_group_name
+
+
+def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    """
+    Creates a serviceaccount token secret
+
+    Args:
+        sa_name (str): Name of the serviceaccount for which the secret has to be created
+        namespace (str) : Namespace in which the serviceaccount exists
+
+    Returns:
+        str : Name of the serviceaccount token secret
+
+    """
+    logger.info(f"Creating token secret for serviceaccount {sa_name}")
+    token_secret = templating.load_yaml(constants.SERVICE_ACCOUNT_TOKEN_SECRET)
+    token_secret["metadata"]["name"] = f"{sa_name}-token"
+    token_secret["metadata"]["namespace"] = namespace
+    token_secret["metadata"]["annotations"][
+        "kubernetes.io/service-account.name"
+    ] = sa_name
+    create_resource(**token_secret)
+    logger.info(f"Serviceaccount token secret {sa_name}-token created successfully")
+    return token_secret["metadata"]["name"]
+
+
+def get_mon_db_size_in_kb(mon_pod_obj):
+    """
+    Get mon db size and returns the size in KB
+    The output of 'du -sh' command contains the size of the directory and its path as string
+    e.g. "67M\t/var/lib/ceph/mon/ceph-c/store.db"
+    The size is extracted by splitting the string with '\t'.
+    The size format for example: 1K, 234M, 2G
+    For uniformity, this test uses KB
+
+    Args:
+        mon_pod_obj (obj): Mon pod resource object
+
+    Returns:
+        convert_device_size (int): Converted Mon db size in KB
+
+    """
+    mon_pod_label = pod.get_mon_label(mon_pod_obj=mon_pod_obj)
+    logger.info(f"Getting the current mon db size for mon-{mon_pod_label}")
+    size = mon_pod_obj.exec_cmd_on_pod(
+        f"du -sh /var/lib/ceph/mon/ceph-{mon_pod_label}/store.db",
+        out_yaml_format=False,
+    )
+    size = re.split("\t+", size)
+    assert len(size) > 0, f"Failed to get mon-{mon_pod_label} db size"
+    size = size[0]
+    mon_db_size_kb = convert_device_size(size + "i", "KB")
+    logger.info(f"mon-{mon_pod_label} DB size: {mon_db_size_kb} KB")
+    return mon_db_size_kb
+
+
+def get_noobaa_db_used_space():
+    """
+    Get noobaa db size
+
+    Returns:
+        df_out (str): noobaa_db used space
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    logger.info(
+        f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
+    )
+    return df_out[-4]
