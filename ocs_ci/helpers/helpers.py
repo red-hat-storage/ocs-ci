@@ -2863,12 +2863,16 @@ def default_volumesnapshotclass(interface_type):
             if external
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS
     elif interface_type == constants.CEPHFILESYSTEM:
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
             if external
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
         )
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            resource_name = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
