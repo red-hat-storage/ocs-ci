@@ -1371,7 +1371,7 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"{self.installer} create cluster "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=7200,
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
@@ -1379,7 +1379,14 @@ class VSPHEREIPI(VSPHEREBASE):
                         gather_bootstrap()
                     except Exception as ex:
                         logger.error(ex)
-                raise e
+                    raise e
+                if "Waiting up to" in str(e):
+                    run_cmd(
+                        f"{self.installer} wait-for install-complete "
+                        f"--dir {self.cluster_path} "
+                        f"--log-level {log_cli_level}",
+                        timeout=3600,
+                    )
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
