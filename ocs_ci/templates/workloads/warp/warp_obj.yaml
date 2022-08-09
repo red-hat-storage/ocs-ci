@@ -7,4 +7,4 @@ get-distrib: 2
 put-distrib: 2
 delete-distrib: 1
 stat-distrib: 0
-warp_bin_dir: "/go/warp"
+warp_bin_dir: "/home/warp/warp"

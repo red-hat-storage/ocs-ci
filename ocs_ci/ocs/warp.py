@@ -1,10 +1,14 @@
 import logging
+import os
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources import pod
+from tempfile import mkdtemp
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +26,8 @@ class Warp(object):
         """
         self.pod_dic_path = constants.WARP_YAML
         self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.ocp_obj = OCP(namespace=self.namespace)
+        self.bucket_name = None
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
         self.host = self.warp_cr["host"]
         self.duration = self.warp_cr["duration"]
@@ -33,6 +39,8 @@ class Warp(object):
         self.delete_distrib = self.warp_cr["delete-distrib"]
         self.stat_distrib = self.warp_cr["stat-distrib"]
         self.warp_bin_dir = self.warp_cr["warp_bin_dir"]
+        self.output_file = "output.csv"
+        self.warp_dir = mkdtemp(prefix="warp-")
 
     def create_resource_warp(self):
         """
@@ -93,6 +101,7 @@ class Warp(object):
         objects=None,
         obj_size=None,
         timeout=None,
+        validate=True,
     ):
         """
          Running Warp S3 benchmark
@@ -107,6 +116,7 @@ class Warp(object):
             objects (int): number of objects
             obj_size (int): size of object
             timeout (int): timeout in seconds
+            validate (Boolean): Validates whether running workload is completed.
 
         """
 
@@ -133,10 +143,37 @@ class Warp(object):
             f"--put-distrib={self.put_distrib} "
             f"--delete-distrib={self.delete_distrib} "
             f"--stat-distrib={self.stat_distrib} "
-            f"--analyze.v --bucket={self.bucket_name}",
+            f"--bucket={self.bucket_name} "
+            f"--analyze.out={self.output_file}",
             out_yaml_format=False,
             timeout=timeout,
         )
+        if validate:
+            self.validate_warp_workload()
+
+    def validate_warp_workload(self):
+        """
+        Validate if workload was running on the app-pod
+
+        Raise:
+            UnexpectedBehaviour: if output.csv file doesn't contain output data.
+        """
+        cmd = (
+            f"cp {self.pod_obj.name}:/home/warp/{self.output_file} "
+            f"{self.warp_dir}/{self.output_file}"
+        )
+        self.ocp_obj.exec_oc_cmd(
+            command=cmd,
+            out_yaml_format=False,
+            timeout=180,
+        )
+        if os.path.getsize(f"{self.warp_dir}/{self.output_file}") != 0:
+            log.info("Workload was running...")
+        else:
+            raise UnexpectedBehaviour(
+                f"Output file {self.output_file} is empty, "
+                "Warp workload doesn't run as expected..."
+            )
 
     def cleanup(self):
         """
@@ -145,5 +182,5 @@ class Warp(object):
 
         """
         log.info("Deleting pods and deployment config")
-        run_cmd(f"oc delete deploymentconfig/{self.pod_name} -n {self.namespace}")
+        pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
