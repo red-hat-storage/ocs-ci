@@ -404,7 +404,7 @@ class OCSUpgrade(object):
             subscription_name = constants.OCS_SUBSCRIPTION
         subscription = OCP(
             resource_name=subscription_name,
-            kind="subscription",
+            kind=constants.SUBSCRIPTION_COREOS,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         current_ocs_source = subscription.data["spec"]["source"]

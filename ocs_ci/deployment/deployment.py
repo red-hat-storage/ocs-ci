@@ -531,9 +531,13 @@ class Deployment(object):
             subscription_name (str): Subscription name pattern
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
+        ocp.OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=self.namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="subscription", namespace=self.namespace
+            300,
+            10,
+            ocp.OCP,
+            kind=constants.SUBSCRIPTION_COREOS,
+            namespace=self.namespace,
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
@@ -553,7 +557,7 @@ class Deployment(object):
             csv_name (str): CSV name pattern
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
+        ocp.OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=self.namespace)
         for sample in TimeoutSampler(
             300, 10, ocp.OCP, kind="csv", namespace=self.namespace
         ):
