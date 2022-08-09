@@ -49,9 +49,7 @@ class TestPodReattachTimePerformance(PASTest):
     def create_pod_and_wait_for_completion(self, **kwargs):
         # Creating pod yaml file to run as a Job, the command to run on the pod and
         # arguments to it will replace in the create_pod function
-        self.create_fio_pod_yaml(
-            pvc_size=int(self.pvc_size), filesize=kwargs.pop("filesize", "1M")
-        )
+        self.create_fio_pod_yaml(pvc_size=100, filesize=kwargs.pop("filesize", "1M"))
         # Create a pod
         logger.info(f"Creating Pod with pvc {self.pvc_obj.name}")
 
