@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.exceptions import PodNotCreated
@@ -187,42 +186,24 @@ class TestPodReattachTimePerformance(PASTest):
             )
 
             pod_name = pod_obj1.name
-            pod_path = "/mnt"
 
-            _ocp = OCP(namespace=self.pvc_obj.namespace)
-
-            rsh_cmd = (
-                f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C {pod_path}/tmp"
-            )
-            _ocp.exec_oc_cmd(rsh_cmd)
-
-            for x in range(copies):
-                rsh_cmd = f"exec {pod_name} -- mkdir -p {pod_path}/folder{x}"
-                _ocp.exec_oc_cmd(rsh_cmd)
-                rsh_cmd = (
-                    f"exec {pod_name} -- cp -r {pod_path}/tmp {pod_path}/folder{x}"
-                )
-                _ocp.exec_oc_cmd(rsh_cmd)
-                rsh_cmd = f"exec {pod_name} -- sync"
-                _ocp.exec_oc_cmd(rsh_cmd)
-
+            # Get the number of files and total written data from the pod
             logger.info("Getting the amount of data written to the PVC")
-            rsh_cmd = f"exec {pod_name} -- df -h {pod_path}"
-            data_written_str = _ocp.exec_oc_cmd(rsh_cmd).split()[-4]
-            logger.info(f"The amount of written data is {data_written_str}")
-            data_written = float(data_written_str[:-1])
-
-            rsh_cmd = f"exec {pod_name} -- find {pod_path} -type f"
-            files_written = len(_ocp.exec_oc_cmd(rsh_cmd).split())
+            for line in pod_obj1.ocp.get_logs(name=pod_obj1.name).split("\n"):
+                if "Number Of Files" in line:
+                    files_written = line.split(" ")[-1]
+                if "Total Data" in line:
+                    data_written = line.split(" ")[-1]
+            logger.info(f"The amount of written data is {data_written}")
             logger.info(
-                f"For {self.interface} - The number of files written to the pod is {files_written}"
+                f"For {self.interface} - The number of files written to the pod is {int(files_written):,}"
             )
+
             files_written_list.append(files_written)
             data_written_list.append(data_written)
 
             logger.info("Deleting the pod")
-            rsh_cmd = f"delete pod {pod_name}"
-            _ocp.exec_oc_cmd(rsh_cmd)
+            pod_obj1.delete()
 
             logger.info(f"Creating Pod with pvc {self.pvc_obj.name} on node {node_two}")
 
@@ -270,9 +251,7 @@ class TestPodReattachTimePerformance(PASTest):
             time_measures.append(total_time)
 
             logger.info("Deleting the pod")
-            rsh_cmd = f"delete pod {pod_name}"
-            _ocp.exec_oc_cmd(rsh_cmd)
-            # teardown_factory(pod_obj2)
+            pod_obj2.delete()
 
         average = statistics.mean(time_measures)
         logger.info(
