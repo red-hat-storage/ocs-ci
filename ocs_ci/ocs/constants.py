@@ -981,6 +981,7 @@ HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
 SUPPORTED_BROWSERS = CHROME_BROWSER
+UI_DEPLOYMENT = "ui"
 
 # Managed service deployment constants
 OSD_DEPLOYER = "ocs-osd-deployer"

@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
+from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,8 @@ class Submariner(object):
     def __init__(self):
         # whether upstream OR downstream
         self.source = config.ENV_DATA["submariner_source"]
+        # Deployment type:
+        self.deployment_type = config.ENV_DATA.get("submariner_deployment")
         # Designated broker cluster index where broker will be deployed
         self.designated_broker_cluster_index = self.get_primary_cluster_index()
         # sequence number for the clusters from submariner perspective
@@ -74,15 +77,22 @@ class Submariner(object):
     def deploy(self):
         if self.source == "upstream":
             self.deploy_upstream()
-        else:
+        elif self.source == "downstream":
             self.deploy_downstream()
+        else:
+            raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
         self.download_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
-        raise NotImplementedError("Deploy downstream functionality not implemented")
+        config.switch_acm_ctx()
+        # Get the Selenium driver obj after logging in to ACM
+        get_driver = login_to_acm()
+        acm_obj = AcmAddClusters(get_driver)
+        acm_obj.install_submariner_ui()
+        acm_obj.submariner_validation_ui()
 
     def download_binary(self):
         if self.source == "upstream":
