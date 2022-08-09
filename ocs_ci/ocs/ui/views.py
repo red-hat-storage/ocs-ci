@@ -649,6 +649,11 @@ acm_configuration = {
     ),
 }
 
+acm_configuration_4_11 = {
+    "install-submariner-btn": ("install-submariner", By.ID),
+    "nat-t-checkbox": ("natt-enable", By.ID),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -970,7 +975,11 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
-        "acm_page": {**acm_page_nav, **acm_configuration},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+        },
         "add_capacity": {**add_capacity, **add_capacity_4_11},
     },
     "4.10": {
