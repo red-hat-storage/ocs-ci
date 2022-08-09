@@ -23,7 +23,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
-from ocs_ci.deployment.acm import Submariner
+from ocs_ci.ocs.acm.submariner import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict

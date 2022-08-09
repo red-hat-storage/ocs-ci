@@ -107,7 +107,10 @@ class Submariner(object):
                 )
                 raise
             tempf = tempfile.NamedTemporaryFile(
-                dir=".", mode="wb", prefix="submariner_downloader_", delete=False
+                dir="../../deployment",
+                mode="wb",
+                prefix="submariner_downloader_",
+                delete=False,
             )
             tempf.write(resp.content)
 

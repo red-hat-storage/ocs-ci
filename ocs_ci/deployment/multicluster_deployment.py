@@ -7,7 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ACMClusterDeployException, ACMClusterDestroyException
 from ocs_ci.ocs.ui import acm_ui
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.ocs.acm import acm
+from ocs_ci.ocs.acm import acm_utils
 from ocs_ci.ocs import constants
 
 
@@ -76,7 +76,7 @@ class OCPDeployWithACM(Deployment):
         Specific to regional DR OCP cluster deployments
 
         """
-        self.ui_driver = acm.login_to_acm()
+        self.ui_driver = acm_utils.login_to_acm()
 
         if self.deploy_sync_mode == "async":
             rdr_clusters = get_non_acm_cluster_config()
@@ -141,7 +141,7 @@ class OCPDeployWithACM(Deployment):
         Teardown OCP clusters deployed through ACM
 
         """
-        self.ui_driver = acm.login_to_acm()
+        self.ui_driver = acm_utils.login_to_acm()
         cluster_list = list()
 
         rdr_clusters = get_non_acm_cluster_config()

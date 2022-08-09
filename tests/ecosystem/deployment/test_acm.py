@@ -1,4 +1,4 @@
-from ocs_ci.ocs.acm.acm import import_clusters_with_acm
+from ocs_ci.ocs.acm.acm_utils import import_clusters_with_acm
 from ocs_ci.framework.testlib import acm_import
 
 ####################################################################################################
