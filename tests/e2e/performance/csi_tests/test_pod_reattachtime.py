@@ -121,7 +121,7 @@ class TestPodReattachTimePerformance(PASTest):
         if self.dev_mode:
             samples_num = 3
 
-        test_start_time = PASTest.get_time()
+        test_start_time = self.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
         # Download a linux Kernel
 
@@ -320,7 +320,7 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key("pod_csi_reattach_time_average", csi_average)
         full_results.add_key("pod_csi_reattach_standard_deviation", csi_st_deviation)
 
-        test_end_time = PASTest.get_time()
+        test_end_time = self.get_time()
 
         # Add the test time to the ES report
         full_results.add_key(
