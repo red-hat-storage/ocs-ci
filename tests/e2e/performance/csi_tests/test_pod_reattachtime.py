@@ -46,6 +46,38 @@ class TestPodReattachTimePerformance(PASTest):
 
         super(TestPodReattachTimePerformance, self).teardown()
 
+    def create_pod_and_wait_for_completion(self, **kwargs):
+        # Creating pod yaml file to run as a Job, the command to run on the pod and
+        # arguments to it will replace in the create_pod function
+        self.create_fio_pod_yaml(
+            pvc_size=int(self.pvc_size), filesize=kwargs.pop("filesize", "1M")
+        )
+        # Create a pod
+        logger.info(f"Creating Pod with pvc {self.pvc_obj.name}")
+
+        try:
+            pod_object = helpers.create_pod(
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                interface_type=self.interface,
+                pod_name="pod-pas-test",
+                pod_dict_path=self.pod_yaml_file.name,
+                **kwargs,
+            )
+        except Exception as e:
+            logger.exception(
+                f"Pod attached to PVC {pod_object.name} was not created, exception [{str(e)}]"
+            )
+            raise ex.PodNotCreated("Pod attached to PVC was not created.")
+
+        # Confirm that pod is running on the selected_nodes
+        logger.info("Checking whether the pod is running")
+        helpers.wait_for_resource_state(
+            resource=pod_object,
+            state=constants.STATUS_COMPLETED,
+            timeout=1200,
+        )
+
     def init_full_results(self, full_results):
         """
         Initialize the full results object which will send to the ES server
