@@ -344,8 +344,8 @@ def validate_cluster_import(cluster_name):
 
 def get_clusters_env():
     """
-    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup
-        Returns after execution with cluster index zero as default context
+    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup.
+    Function will switch to context index zero before returning
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
