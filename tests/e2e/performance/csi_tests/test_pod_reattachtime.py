@@ -169,16 +169,16 @@ class TestPodReattachTimePerformance(PASTest):
             csi_start_time = self.get_time("csi")
 
             logger.info(f"Start creating PVC number {sample_index}.")
-            pvc_obj = helpers.create_pvc(
+            self.pvc_obj = helpers.create_pvc(
                 sc_name=self.sc_obj.name, size="100Gi", namespace=self.namespace
             )
-            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
 
             # Create a pod on one node
-            logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
+            logger.info(f"Creating Pod with pvc {self.pvc_obj.name} on node {node_one}")
 
-            pvc_obj.reload()
-            self.pvc_list.append(pvc_obj)
+            self.pvc_obj.reload()
+            self.pvc_list.append(self.pvc_obj)
 
             pod_obj1 = self.create_pod_and_wait_for_completion(
                 command=["/opt/multiple_files.sh"],
@@ -189,7 +189,7 @@ class TestPodReattachTimePerformance(PASTest):
             pod_name = pod_obj1.name
             pod_path = "/mnt"
 
-            _ocp = OCP(namespace=pvc_obj.namespace)
+            _ocp = OCP(namespace=self.pvc_obj.namespace)
 
             rsh_cmd = (
                 f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C {pod_path}/tmp"
@@ -224,19 +224,19 @@ class TestPodReattachTimePerformance(PASTest):
             rsh_cmd = f"delete pod {pod_name}"
             _ocp.exec_oc_cmd(rsh_cmd)
 
-            logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_two}")
+            logger.info(f"Creating Pod with pvc {self.pvc_obj.name} on node {node_two}")
 
             try:
                 pod_obj2 = helpers.create_pod(
                     interface_type=self.interface,
-                    pvc_name=pvc_obj.name,
-                    namespace=pvc_obj.namespace,
+                    pvc_name=self.pvc_obj.name,
+                    namespace=self.pvc_obj.namespace,
                     node_name=node_two,
                     pod_dict_path=constants.PERF_POD_YAML,
                 )
             except Exception as e:
                 logger.error(
-                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
+                    f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
                 )
                 raise PodNotCreated("Pod on PVC was not created.")
 
@@ -257,11 +257,14 @@ class TestPodReattachTimePerformance(PASTest):
                 )
 
             csi_time = performance_lib.pod_attach_csi_time(
-                self.interface, pvc_obj.backed_pv, csi_start_time, pvc_obj.namespace
+                self.interface,
+                self.pvc_obj.backed_pv,
+                csi_start_time,
+                self.pvc_obj.namespace,
             )[0]
             csi_time_measures.append(csi_time)
             logger.info(
-                f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
+                f"PVC #{self.pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
                 f"csi time is {csi_time} seconds"
             )
             time_measures.append(total_time)
