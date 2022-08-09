@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
-from ocs_ci.ocs.acm.acm_submariner import install_submariner_in_acm_ui
+from ocs_ci.ocs.acm.submariner import install_submariner_in_acm_ui
 
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,10 @@ class Submariner(object):
                 )
                 raise
             tempf = tempfile.NamedTemporaryFile(
-                dir=".", mode="wb", prefix="submariner_downloader_", delete=False
+                dir="../../deployment",
+                mode="wb",
+                prefix="submariner_downloader_",
+                delete=False,
             )
             tempf.write(resp.content)
 

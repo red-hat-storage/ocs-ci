@@ -1,4 +1,4 @@
-from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
+from ocs_ci.ocs.acm.acm_utils import AcmAddClusters, login_to_acm
 import logging
 
 
