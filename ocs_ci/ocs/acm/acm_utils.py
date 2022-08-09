@@ -88,7 +88,9 @@ class AcmAddClusters(AcmPageNavigator):
         on the Hub Cluster to create a link between them
 
         """
-
+        cluster_env = get_clusters_env()
+        cluster_name_a = cluster_env.get("cluster_name_1")
+        cluster_name_b = cluster_env.get("cluster_name_2")
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
@@ -342,8 +344,8 @@ def validate_cluster_import(cluster_name):
 
 def get_clusters_env():
     """
-    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup
-        Returns after execution with cluster index zero as default context
+    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup.
+        Function will switch to context index zero before returning
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
@@ -366,13 +368,12 @@ def import_clusters_with_acm():
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
 
     """
+    # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
     clusters_env = get_clusters_env()
     log.info(clusters_env)
     kubeconfig_a = clusters_env.get("kubeconfig_location_c1")
     kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
-    global cluster_name_a
     cluster_name_a = clusters_env.get("cluster_name_1")
-    global cluster_name_b
     cluster_name_b = clusters_env.get("cluster_name_2")
     verify_running_acm()
     driver = login_to_acm()

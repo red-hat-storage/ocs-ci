@@ -9,5 +9,3 @@ from ocs_ci.framework.testlib import acm_import
 @acm_import
 def test_acm_import(setup_acm_ui):
     import_clusters_with_acm()
-    # TODO: Install the submariner and run validation by calling the methods:
-    # install_submariner_ui() and submarines_validation_ui() from AcmAddClusters Class
