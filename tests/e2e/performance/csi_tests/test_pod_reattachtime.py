@@ -182,24 +182,10 @@ class TestPodReattachTimePerformance(PASTest):
             pvc_obj.reload()
             self.pvc_list.append(pvc_obj)
 
-            try:
-                pod_obj1 = helpers.create_pod(
-                    interface_type=self.interface,
-                    pvc_name=pvc_obj.name,
-                    namespace=pvc_obj.namespace,
-                    node_name=node_one,
-                    pod_dict_path=constants.PERF_POD_YAML,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
-                )
-                raise PodNotCreated("Pod on PVC was not created.")
-
-            # Confirm that pod is running on the selected_nodes
-            logger.info("Checking whether pods are running on the selected nodes")
-            helpers.wait_for_resource_state(
-                resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=timeout
+            pod_obj1 = self.create_pod_and_wait_for_completion(
+                command=["/opt/multiple_files.sh"],
+                command_args=[f"{copies}", "/mnt"],
+                node_name=node_one,
             )
 
             pod_name = pod_obj1.name
