@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
-from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
+from ocs_ci.ocs.acm.acm_submariner import install_submariner_in_acm_ui
 
 
 logger = logging.getLogger(__name__)
@@ -88,11 +88,7 @@ class Submariner(object):
 
     def deploy_downstream(self):
         config.switch_acm_ctx()
-        # Get the Selenium driver obj after logging in to ACM
-        get_driver = login_to_acm()
-        acm_obj = AcmAddClusters(get_driver)
-        acm_obj.install_submariner_ui()
-        acm_obj.submariner_validation_ui()
+        install_submariner_in_acm_ui()
 
     def download_binary(self):
         if self.source == "upstream":
