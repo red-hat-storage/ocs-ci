@@ -344,13 +344,9 @@ class TestPodReattachTimePerformance(PASTest):
         and reporting the full results (links in the ES) of previous tests (4)
         """
 
-        self.number_of_tests = 4
-        self.results_path = get_full_test_logs_path(
-            cname=self, fname="test_pod_reattach_time_performance"
+        self.add_test_to_results_check(
+            test="test_pod_reattach_time_performance",
+            test_count=4,
+            test_name="POD Reattach",
         )
-        self.results_file = os.path.join(self.results_path, "all_results.txt")
-        logger.info(f"Check results in {self.results_file}")
-
-        self.check_tests_results()
-
-        self.push_to_dashboard(test_name="POD Reattach")
+        self.check_results_and_push_to_dashboard()
