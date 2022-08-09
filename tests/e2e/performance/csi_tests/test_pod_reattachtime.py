@@ -77,6 +77,7 @@ class TestPodReattachTimePerformance(PASTest):
             state=constants.STATUS_COMPLETED,
             timeout=1200,
         )
+        return pod_object
 
     def init_full_results(self, full_results):
         """
