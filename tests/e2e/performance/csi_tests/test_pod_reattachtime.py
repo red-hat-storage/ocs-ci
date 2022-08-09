@@ -193,14 +193,14 @@ class TestPodReattachTimePerformance(PASTest):
                 if "Number Of Files" in line:
                     files_written = line.split(" ")[-1]
                 if "Total Data" in line:
-                    data_written = line.split(" ")[-1]
+                    data_written = line.split(" ")[-1][:-1]
             logger.info(f"The amount of written data is {data_written}")
             logger.info(
                 f"For {self.interface} - The number of files written to the pod is {int(files_written):,}"
             )
 
-            files_written_list.append(files_written)
-            data_written_list.append(data_written)
+            files_written_list.append(int(files_written))
+            data_written_list.append(float(data_written))
 
             logger.info("Deleting the pod")
             pod_obj1.delete()
