@@ -1,10 +1,8 @@
 import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
-import urllib.request
 import time
 import statistics
-import os
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
@@ -114,8 +112,6 @@ class TestPodReattachTimePerformance(PASTest):
         The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
         and calculates average total and csi reattach times and standard deviation
         """
-        kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
-        download_path = "tmp"
 
         samples_num = 7
         if self.dev_mode:
@@ -123,13 +119,6 @@ class TestPodReattachTimePerformance(PASTest):
 
         test_start_time = self.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
-        # Download a linux Kernel
-
-        dir_path = os.path.join(os.getcwd(), download_path)
-        file_path = os.path.join(dir_path, "file.gz")
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-        urllib.request.urlretrieve(kernel_url, file_path)
 
         worker_nodes_list = node.get_worker_nodes()
         assert len(worker_nodes_list) > 1
@@ -184,9 +173,6 @@ class TestPodReattachTimePerformance(PASTest):
             pod_path = "/mnt"
 
             _ocp = OCP(namespace=pvc_obj.namespace)
-
-            rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
-            _ocp.exec_oc_cmd(rsh_cmd)
 
             rsh_cmd = (
                 f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C {pod_path}/tmp"
@@ -291,9 +277,6 @@ class TestPodReattachTimePerformance(PASTest):
 
         files_written_average = statistics.mean(files_written_list)
         data_written_average = statistics.mean(data_written_list)
-
-        os.remove(file_path)
-        os.rmdir(dir_path)
 
         # Produce ES report
 
