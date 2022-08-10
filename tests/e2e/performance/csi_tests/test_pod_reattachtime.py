@@ -1,6 +1,5 @@
 import logging
 import pytest
-import ocs_ci.ocs.exceptions as ex
 import time
 import statistics
 
@@ -8,9 +7,9 @@ from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.ocs.exceptions import PodNotCreated
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +218,7 @@ class TestPodReattachTimePerformance(PASTest):
                 logger.error(
                     f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
                 )
-                raise PodNotCreated("Pod on PVC was not created.")
+                raise ex.PodNotCreated("Pod on PVC was not created.")
 
             start_time = time.time()
 
