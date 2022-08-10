@@ -70,7 +70,7 @@ class TestClusterFullAndRecovery(E2ETest):
         """
         self.count = 0
         self.banchmark_operator_teardown = False
-        project_name = "test788"
+        project_name = "test844"
         self.project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(self.project_obj)
 
@@ -129,7 +129,7 @@ class TestClusterFullAndRecovery(E2ETest):
         log.info(
             "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
         )
-        size = get_file_size(92)
+        size = get_file_size(100)
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
@@ -303,14 +303,14 @@ class TestClusterFullAndRecovery(E2ETest):
 
         """
         used_capacity = get_percent_used_capacity()
-        if expected_used_capacity < used_capacity + 1:
+        if expected_used_capacity < used_capacity + 3:
             self.count += 1
         if self.count == 2:
             log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
             pvc_obj_fs1 = pvc_factory(
                 interface=constants.CEPHFILESYSTEM,
                 project=self.project_obj,
-                size=4,
+                size=5,
                 status=constants.STATUS_BOUND,
             )
             pod_fs1_obj = pod_factory(
@@ -318,11 +318,8 @@ class TestClusterFullAndRecovery(E2ETest):
                 pvc=pvc_obj_fs1,
                 status=constants.STATUS_RUNNING,
             )
-            pod_fs1_obj.run_io(
-                storage_type="fs",
-                size="3G",
-                io_direction="write",
-                runtime=60,
+            pod_fs1_obj.fillup_fs(
+                size="4096M",
             )
         return used_capacity > expected_used_capacity
 
