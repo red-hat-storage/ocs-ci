@@ -183,14 +183,14 @@ class TestPodReattachTimePerformance(PASTest):
                 if "Number Of Files" in line:
                     files_written = line.split(" ")[-1]
                 if "Total Data" in line:
-                    data_written = line.split(" ")[-1][:-1]
+                    data_written = line.split(" ")[-1]
             logger.info(f"The amount of written data is {data_written}")
             logger.info(
                 f"For {self.interface} - The number of files written to the pod is {int(files_written):,}"
             )
 
             files_written_list.append(int(files_written))
-            data_written_list.append(float(data_written))
+            data_written_list.append(float(data_written[:-1]))
 
             logger.info("Deleting the pod")
             pod_obj1.delete()
@@ -221,10 +221,10 @@ class TestPodReattachTimePerformance(PASTest):
             total_time = end_time - start_time
             if total_time > total_time_limit:
                 logger.error(
-                    f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
+                    f"Pod creation time is {total_time:,.3f} and greater than {total_time_limit:,.3f} seconds"
                 )
                 raise ex.PerformanceException(
-                    f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
+                    f"Pod creation time is {total_time:,.3f} and greater than {total_time_limit:,.3f} seconds"
                 )
 
             csi_time = performance_lib.pod_attach_csi_time(
@@ -235,8 +235,8 @@ class TestPodReattachTimePerformance(PASTest):
             )[0]
             csi_time_measures.append(csi_time)
             logger.info(
-                f"PVC #{self.pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
-                f"csi time is {csi_time} seconds"
+                f"PVC {self.pvc_obj.name}, pod {pod_name} creation time took {total_time:,.3f} seconds, "
+                f"csi time is {csi_time:,.3f} seconds"
             )
             time_measures.append(total_time)
 
@@ -244,28 +244,28 @@ class TestPodReattachTimePerformance(PASTest):
             pod_obj2.delete()
 
         average = statistics.mean(time_measures)
-        logger.info(
-            f"The average time of {self.interface} pod creation on {samples_num} PVCs is {average} seconds"
-        )
-
         st_deviation = statistics.stdev(time_measures)
-        logger.info(
-            f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
-        )
-
         csi_average = statistics.mean(csi_time_measures)
-        logger.info(
-            f"The average csi time of {self.interface} pod creation on {samples_num} PVCs is {csi_average} seconds"
-        )
-
         csi_st_deviation = statistics.stdev(csi_time_measures)
-        logger.info(
-            f"The standard deviation of {self.interface} csi pod creation time on {samples_num} PVCs "
-            f"is {csi_st_deviation}"
-        )
-
         files_written_average = statistics.mean(files_written_list)
         data_written_average = statistics.mean(data_written_list)
+
+        logger.info("=================================================================")
+        logger.info(f"Summery results for {self.interface} with {samples_num} samples:")
+        logger.info("--------------------------------------------------------")
+        logger.info(f"Average number of files on the PVC is {files_written_average:,}")
+        logger.info(f"Average data on the PVC is {data_written_average:,.3f} GB")
+        logger.info(f"The average pod creation time is {average:,.3f} seconds")
+        logger.info(
+            f"The standard deviation of pod creation time is {st_deviation:,.3f}"
+        )
+        logger.info(
+            f"The average csi time of pod creation is {csi_average:,.3f} seconds"
+        )
+        logger.info(
+            f"The standard deviation of csi pod creation time is {csi_st_deviation:,.3f}"
+        )
+        logger.info("=================================================================")
 
         # Produce ES report
 
