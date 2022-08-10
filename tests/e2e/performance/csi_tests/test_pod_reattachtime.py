@@ -13,6 +13,17 @@ from ocs_ci.ocs.perftests import PASTest
 
 logger = logging.getLogger(__name__)
 
+Interfaces_info = {
+    constants.CEPHBLOCKPOOL: {
+        "name": "RBD",
+        "sc_name": constants.DEFAULT_STORAGECLASS_RBD,
+    },
+    constants.CEPHFILESYSTEM: {
+        "name": "CephFS",
+        "sc_name": constants.DEFAULT_STORAGECLASS_CEPHFS,
+    },
+}
+
 
 @performance
 class TestPodReattachTimePerformance(PASTest):
@@ -123,11 +134,6 @@ class TestPodReattachTimePerformance(PASTest):
         """
 
         self.interface = interface
-
-        if self.interface == constants.CEPHFILESYSTEM:
-            self.sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            self.sc = "RBD"
 
         samples_num = 7
         if self.dev_mode:
@@ -278,7 +284,7 @@ class TestPodReattachTimePerformance(PASTest):
             )
         )
 
-        full_results.add_key("storageclass", self.sc)
+        full_results.add_key("storageclass", Interfaces_info[self.interface]["name"])
         full_results.add_key("pod_reattach_time", time_measures)
         full_results.add_key("copies_number", copies)
         full_results.add_key("files_number_average", files_written_average)
