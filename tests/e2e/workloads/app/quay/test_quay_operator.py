@@ -94,12 +94,11 @@ class TestQuayWorkload(E2ETest):
         # Create quay registry
         quay_operator.create_quay_registry()
         log.info("Waiting for quay endpoint to start serving")
-        sleep(90)
+        sleep(120)
         endpoint = quay_operator.get_quay_endpoint()
 
         log.info("Pulling test image")
         exec_cmd(f"podman pull {constants.COSBENCH_IMAGE}")
-
         log.info("Getting the Super user token")
         token = get_super_user_token(endpoint)
 

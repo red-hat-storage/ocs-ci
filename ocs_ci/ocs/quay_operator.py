@@ -191,6 +191,10 @@ def get_super_user_token(endpoint):
         data=data,
         verify=False,
     )
+    if r.status_code != 200:
+        raise Exception(
+            f"Error code [{r.status_code}]: Failed to fetch super user token!!"
+        )
     return r.json()["access_token"]
 
 
