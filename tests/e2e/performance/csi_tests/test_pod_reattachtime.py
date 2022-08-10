@@ -5,7 +5,6 @@ import statistics
 
 from ocs_ci.framework.testlib import performance
 from ocs_ci.helpers import helpers, performance_lib
-from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -306,7 +305,7 @@ class TestPodReattachTimePerformance(PASTest):
             logger.info(f"The Result can be found at : {res_link}")
 
             # Create text file with results of all subtest (4 - according to the parameters)
-            self.results_path = get_full_test_logs_path(
+            self.results_path = helpers.get_full_test_logs_path(
                 cname=self, fname="test_pod_reattach_time_performance"
             )
             self.write_result_to_file(res_link)
