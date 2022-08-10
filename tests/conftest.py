@@ -5532,6 +5532,12 @@ def set_live_must_gather_images(pytestconfig):
     """
     live_deployment = config.DEPLOYMENT["live_deployment"]
     ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    # For ROSA platforms, we use upstream must gather image
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        log.debug(
+            "Live must gather image is not supported in Managed Service platforms"
+        )
+        return
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
     if live_deployment or ibm_cloud_platform:
