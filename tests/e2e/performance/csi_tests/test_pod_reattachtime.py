@@ -91,25 +91,6 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key("index", full_results.new_index)
         return full_results
 
-    @pytest.fixture()
-    def base_setup(self, interface):
-        """
-        A setup phase for the test
-        Args:
-            interface: Interface parameter
-
-        """
-
-        self.interface = interface
-
-        if self.interface == constants.CEPHFILESYSTEM:
-            self.sc = "CephFS"
-        if self.interface == constants.CEPHBLOCKPOOL:
-            self.sc = "RBD"
-
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        self.full_log_path += f"-{self.sc}"
-
     @pytest.mark.parametrize(
         argnames=["interface", "copies", "timeout", "total_time_limit"],
         argvalues=[
@@ -131,9 +112,8 @@ class TestPodReattachTimePerformance(PASTest):
             ),
         ],
     )
-    @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
-        self, storageclass_factory, copies, timeout, total_time_limit
+        self, storageclass_factory, interface, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
@@ -141,6 +121,13 @@ class TestPodReattachTimePerformance(PASTest):
         The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
         and calculates average total and csi reattach times and standard deviation
         """
+
+        self.interface = interface
+
+        if self.interface == constants.CEPHFILESYSTEM:
+            self.sc = "CephFS"
+        if self.interface == constants.CEPHBLOCKPOOL:
+            self.sc = "RBD"
 
         samples_num = 7
         if self.dev_mode:
