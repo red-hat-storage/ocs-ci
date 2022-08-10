@@ -1605,6 +1605,7 @@ def verify_all_nodes_created():
     expected_num_nodes = (
         config.ENV_DATA["worker_replicas"] + config.ENV_DATA["master_replicas"]
     )
+    raise_exception = False
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         expected_num_nodes += 3
     else:
@@ -1617,11 +1618,35 @@ def verify_all_nodes_created():
                 f"Expected number of nodes is {expected_num_nodes} but "
                 f"created during deployment is {existing_num_nodes}"
             )
+        elif (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        ):
+            try:
+
+                for node_list in TimeoutSampler(
+                    timeout=1200, sleep=60, func=get_all_nodes
+                ):
+                    if len(node_list) == expected_num_nodes:
+                        log.info(
+                            f"All {expected_num_nodes} nodes are created successfully."
+                        )
+                        break
+                    else:
+                        log.warning(
+                            f"waiting for {expected_num_nodes} nodes to create but found {len(node_list)} nodes"
+                        )
+            except TimeoutExpiredError:
+                log.error(f"Expected {expected_num_nodes} nodes are not created")
+                raise_exception = True
         else:
-            raise NotAllNodesCreated(
-                f"Expected number of nodes is {expected_num_nodes} but "
-                f"created during deployment is {existing_num_nodes}"
-            )
+            raise_exception = True
+
+    if raise_exception:
+        raise NotAllNodesCreated(
+            f"Expected number of nodes is {expected_num_nodes} but "
+            f"created during deployment is {existing_num_nodes}"
+        )
 
 
 def add_node_to_lvd_and_lvs(node_name):
