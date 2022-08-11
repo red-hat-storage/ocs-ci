@@ -37,6 +37,9 @@ def login():
     account_id = ibm_config.get("account_id")
     if account_id:
         login_cmd += f" -c {account_id}"
+    api_endpoint = ibm_config.get("api_endpoint")
+    if api_endpoint:
+        login_cmd += f" -a {api_endpoint}"
     region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
