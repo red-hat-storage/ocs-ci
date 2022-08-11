@@ -58,10 +58,19 @@ class BasePvcCreateRespinCephPods(E2ETest):
         )
         rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
         for pvc_obj in rbd_pvcs:
-            if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                rbd_rwx_pvc.append(pvc_obj)
-            else:
-                rbd_rwo_pvc.append(pvc_obj)
+            if pvc_obj is not None:
+                if type(pvc_obj) is list:
+                    for pvc_ in pvc_obj:
+                        if pvc_.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                            rbd_rwx_pvc.append(pvc_)
+                        else:
+                            rbd_rwo_pvc.append(pvc_)
+                else:
+                    if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                        rbd_rwx_pvc.append(pvc_obj)
+                    else:
+                        rbd_rwo_pvc.append(pvc_obj)
+
         rbd_rwo_pods = helpers.create_pods_parallel(
             rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
         )
