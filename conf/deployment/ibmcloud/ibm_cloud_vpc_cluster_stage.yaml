@@ -16,8 +16,9 @@ ENV_DATA:
   # vpc_id: VPC ID PLACEHOLDER
   # subnet_id: SUBNET ID PLACEHOLDER
   # cos_instance: COS INSTANCE PLACEHOLDER
-#AUTH:
-#  ibmcloud:
+AUTH:
+  ibmcloud:
+    api_endpoint: "https://test.cloud.ibm.com"
 #    api_key: IBM CLOUD API KEY PLACEHOLDER
 #    account_id: ACCOUNT ID PLACEHOLDER
 #    ibm_cos_access_key_id: KEY PLACEHOLDER
