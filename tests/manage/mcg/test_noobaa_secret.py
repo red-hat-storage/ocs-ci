@@ -9,6 +9,12 @@ from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    polarion_id,
+    bugzilla,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -63,7 +69,11 @@ def cleanup(request):
     return factory
 
 
+@tier2
+@skipif_ocs_version("<4.11")
 class TestNoobaaSecrets:
+    @bugzilla("1992090")
+    @polarion_id("OCS-4466")
     def test_duplicate_noobaa_secrets(
         self,
         backingstore_factory,
@@ -74,9 +84,7 @@ class TestNoobaaSecrets:
     ):
         """
         Objective of this test is:
-            1) Create a secret with the same credentials and see if the duplicates are allowed when BS created
-            2) Modify the existing secret credentials see if the owned BS/NS is getting reconciled
-
+            * Create a secret with the same credentials and see if the duplicates are allowed when BS created
         """
         # create secret with the same credentials to check if duplicates are allowed
         first_bs_obj = backingstore_factory(
@@ -128,26 +136,8 @@ class TestNoobaaSecrets:
             "Duplicate secrets are not allowed! only the first secret is being referred"
         )
 
-        # Modify the secret credentials to wrong one and see if the backingstores get rejected
-        first_secret_name = first_bs_dict["spec"]["awsS3"]["secret"]["name"]
-        wrong_access_key_patch = {
-            "data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}
-        }  # Invalid Access Key
-        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").patch(
-            resource_name=first_secret_name,
-            params=json.dumps(wrong_access_key_patch),
-            format_type="merge",
-        )
-        logger.info("Patched wrong access key!")
-        assert OCP(
-            namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
-        ).wait_for_resource(
-            resource_name=first_bs_obj.name,
-            condition="Creating",
-            column="PHASE",
-        ), "Backingstores are not getting reconciled after changing linked secret credentials!"
-        logger.info("Backingstores getting reconciled!")
-
+    @bugzilla("2090956")
+    @polarion_id("OCS-4467")
     def test_noobaa_secret_deletion_method1(
         self, backingstore_factory, teardown_factory, mcg_obj, cleanup
     ):
@@ -189,15 +179,19 @@ class TestNoobaaSecrets:
             "Secret remains even after the linked backingstores are deleted, as expected!"
         )
 
+    @bugzilla("2090956")
+    @bugzilla("1992090")
+    @polarion_id("OCS-4468")
     def test_noobaa_secret_deletion_method2(self, teardown_factory, mcg_obj, cleanup):
         """
         Objectives of this tests are:
             1) create first backingstore using CLI passing credentials, which creates secret as well
             2) create second backingstore using CLI passing credentials, which recognizes the duplicates
                and uses the secret created above
-            3) delete the first backingstore and make sure secret is not deleted
-            4) check for the ownerReference see if its removed for the above backingstore deletion
-            5) delete the second backingstore and make sure secret is now deleted
+            3) Modify the existing secret credentials see if the owned BS/NS is getting reconciled
+            4) delete the first backingstore and make sure secret is not deleted
+            5) check for the ownerReference see if its removed for the above backingstore deletion
+            6) delete the second backingstore and make sure secret is now deleted
 
         """
 
@@ -285,9 +279,28 @@ class TestNoobaaSecrets:
         )
         cleanup(second_bs_obj)
 
+        # Modify the secret credentials to wrong one and see if the backingstores get rejected
         secret_name = OCP(
             namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
         ).get(resource_name=second_bs_name)["spec"]["awsS3"]["secret"]["name"]
+
+        wrong_access_key_patch = {
+            "data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}
+        }  # Invalid Access Key
+        OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="secret").patch(
+            resource_name=secret_name,
+            params=json.dumps(wrong_access_key_patch),
+            format_type="merge",
+        )
+        logger.info("Patched wrong access key!")
+        assert OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind="backingstore"
+        ).wait_for_resource(
+            resource_name=second_bs_name,
+            condition="Creating",
+            column="PHASE",
+        ), "Backingstores are not getting reconciled after changing linked secret credentials!"
+        logger.info("Backingstores getting reconciled!")
 
         # delete first backingstore
         first_bs_obj.delete()
