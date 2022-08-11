@@ -4,6 +4,7 @@ import time
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size
+from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.framework.pytest_customization.marks import system_test
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
@@ -12,10 +13,12 @@ from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.helpers import disruption_helpers
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.cluster import (
     change_ceph_backfillfull_ratio,
     change_ceph_full_ratio,
     get_percent_used_capacity,
+    count_cluster_osd,
 )
 
 log = logging.getLogger(__name__)
@@ -70,7 +73,7 @@ class TestClusterFullAndRecovery(E2ETest):
         """
         self.count = 0
         self.banchmark_operator_teardown = False
-        project_name = "test844"
+        project_name = "test849"
         self.project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(self.project_obj)
 
@@ -145,7 +148,7 @@ class TestClusterFullAndRecovery(E2ETest):
             pod_factory=pod_factory,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 18000 seconds the used capacity smaller than 85%")
+            log.error("The after 1800 seconds the used capacity smaller than 85%")
             raise TimeoutExpiredError
 
         log.info(
@@ -163,11 +166,31 @@ class TestClusterFullAndRecovery(E2ETest):
             log.error(f"The alerts {expected_alerts} do not exist after 600 sec")
             raise TimeoutExpiredError
 
+        number_of_osds = count_cluster_osd()
         for pod_name in ("mon", "mgr", "osd"):
             log.info(f"Respin pod {pod_name}")
             disruption = disruption_helpers.Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
+
+        pod_obj = OCP(kind=constants.POD, namespace=ROOK_CLUSTER_NAMESPACE)
+        pod_obj.wait_for_resource(
+            timeout=100,
+            condition=constants.STATUS_RUNNING,
+            selector=constants.OSD_APP_LABEL,
+            resource_count=number_of_osds,
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MON_APP_LABEL,
+            resource_count=3,
+            timeout=150,
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MGR_APP_LABEL,
+            timeout=100,
+        )
 
         log.info("Verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state")
         pvc_obj_blk2 = pvc_factory(
