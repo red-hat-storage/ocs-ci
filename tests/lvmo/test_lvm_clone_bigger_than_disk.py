@@ -2,8 +2,8 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_lvm_not_installed
-from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, acceptance
+from ocs_ci.framework.pytest_customization.marks import tier2, skipif_lvm_not_installed
+from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import LVM
 from ocs_ci.ocs.exceptions import LvSizeWrong
@@ -11,13 +11,12 @@ from ocs_ci.ocs.exceptions import LvSizeWrong
 logger = logging.getLogger(__name__)
 
 
-@tier1
-@acceptance
+@tier2
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.11")
-class TestLvmSnapshotBiggerThanDisk(ManageTest):
+class TestLvmCloneBiggerThanDisk(ManageTest):
     """
-    Test lvm snapshot bigger than disk
+    Test lvm clone bigger than disk
 
     """
 
@@ -26,33 +25,32 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
         argvalues=[
             pytest.param(
                 *[constants.VOLUME_MODE_FILESYSTEM, constants.WFFC_VOLUMEBINDINGMODE],
-                marks=pytest.mark.polarion_id("OCS-3983"),
+                marks=pytest.mark.polarion_id("OCS-4383"),
             ),
             pytest.param(
                 *[constants.VOLUME_MODE_BLOCK, constants.WFFC_VOLUMEBINDINGMODE],
-                marks=pytest.mark.polarion_id("OCS-3983"),
+                marks=pytest.mark.polarion_id("OCS-4383"),
             ),
             pytest.param(
                 *[
                     constants.VOLUME_MODE_FILESYSTEM,
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                 ],
-                marks=pytest.mark.polarion_id("OCS-3983"),
+                marks=pytest.mark.polarion_id("OCS-4383"),
             ),
             pytest.param(
                 *[constants.VOLUME_MODE_BLOCK, constants.IMMEDIATE_VOLUMEBINDINGMODE],
-                marks=pytest.mark.polarion_id("OCS-3983"),
+                marks=pytest.mark.polarion_id("OCS-4383"),
             ),
         ],
     )
-    def test_create_snapshot_from_pvc_bigger_than_disk(
+    def test_create_clone_from_pvc_bigger_than_disk(
         self,
         volume_mode,
         volume_binding_mode,
         project_factory,
         lvm_storageclass_factory,
-        snapshot_factory,
-        snapshot_restore_factory,
+        pvc_clone_factory,
         pvc_factory,
         pod_factory,
     ):
@@ -62,8 +60,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
         .* Create PVC bigger than disk size
         .* Create POD
         .* Run IO PVC
-        .* Create Snapshot
-        .* Create pvc from Snapshot
+        .* Create clone
         .* Attach pod
         .* Check LV size
         .* Run IO
@@ -77,6 +74,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
         disk_size = lvm.pv_data[disk1]["pv_size"]
         pvc_size = int(float(disk_size)) * 2
         thin_pool_size = lvm.get_thin_pool1_size()
+        # the ratio of the PVC IO. 1 = 100%
         first_io_ratio = 0.6
         second_io_ratio = 0.3
         fio_size = (
@@ -114,11 +112,8 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             volume_mode=volume_mode,
         )
 
-        block = False
-        if volume_mode == constants.VOLUME_MODE_BLOCK:
-            block = True
+        block = True if volume_mode == constants.VOLUME_MODE_BLOCK else False
         pod_obj = pod_factory(pvc=pvc_obj, raw_block_pv=block)
-
         lv_size = lvm.get_lv_size_of_pvc(pvc_obj)
         if int(float(lv_size)) != pvc_size:
             raise LvSizeWrong(
@@ -138,7 +133,6 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             direct=1,
             invalidate=0,
             rate_process=None,
-            timeout=1200,
             buffer_pattern="0xdeadface",
             bs="100M",
             jobs=1,
@@ -146,28 +140,18 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             readwrite=readwrite,
             rw_ratio=50,
         )
-        pod_obj.get_fio_results(timeout=1200)
+        pod_obj.get_fio_results()
         lvm.compare_percent_data_from_pvc(pvc_obj, fio_size)
 
-        logger.info(f"ℹ️Creating snapshot from {pvc_obj.name}")
-        snapshot = snapshot_factory(pvc_obj)
-        lvm.compare_percent_data_from_pvc(snapshot, fio_size)
-
-        logger.info(f"ℹ️Creating restore from snapshot {snapshot.name}")
-        pvc_restore = snapshot_restore_factory(
-            snapshot,
-            storageclass=sc_obj.name,
-            restore_pvc_name=f"{pvc_obj.name}-restore",
-            size=str(pvc_size * 1024 * 1024 * 1024),
-            volume_mode=volume_mode,
-            restore_pvc_yaml=constants.CSI_LVM_PVC_RESTORE_YAML,
-            access_mode=access_mode,
-            status=status,
+        logger.info(f"ℹ ️Creating clone from {pvc_obj.name}")
+        clone = pvc_clone_factory(
+            pvc_obj=pvc_obj, status=status, volume_mode=volume_mode
         )
-        if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-            lvm.compare_percent_data_from_pvc(pvc_restore, fio_size)
 
-        restored_pod_obj = pod_factory(pvc=pvc_restore, raw_block_pv=block)
+        if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
+            lvm.compare_percent_data_from_pvc(clone, fio_size)
+
+        restored_pod_obj = pod_factory(pvc=clone, raw_block_pv=block)
 
         logger.info(f"ℹ ️LVMCluster version is {lvm.get_lvm_version()}")
         logger.info(
@@ -177,15 +161,15 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             f"ℹ️ Lvm thin-pool sizePercent is {lvm.get_lvm_thin_pool_config_size_percent()}"
         )
 
-        logger.info(f"ℹ️Attaching pod to pvc restore {pvc_restore.name}")
+        logger.info(f"ℹ️Attaching pod to pvc restore {clone.name}")
 
         if volume_binding_mode == constants.WFFC_VOLUMEBINDINGMODE:
-            lvm.compare_percent_data_from_pvc(pvc_restore, fio_size)
-        lv_name = lvm.get_lv_name_from_pvc(pvc_restore)
+            lvm.compare_percent_data_from_pvc(clone, fio_size)
+        lv_name = lvm.get_lv_name_from_pvc(clone)
 
         before_fio_thin_pool_util = lvm.get_thin_pool1_data_percent()
         logger.info(
-            f"ℹ️ lv {lv_name} from pvc {pvc_restore.name} utilization after fio is {before_fio_thin_pool_util}"
+            f"ℹ️ lv {lv_name} from pvc {clone.name} utilization after fio is {before_fio_thin_pool_util}"
         )
 
         restored_pod_obj.run_io(
@@ -196,7 +180,6 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             rate_process=None,
             fio_filename=f"second-{filename}",
             buffer_pattern="0xdeadface",
-            timeout=1200,
             direct=1,
             invalidate=0,
             bs="100M",
@@ -204,7 +187,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             readwrite=readwrite,
         )
 
-        restored_pod_obj.get_fio_results(timeout=1200)
+        restored_pod_obj.get_fio_results()
 
         if block:
             if fio_size > second_fio_size:
@@ -226,7 +209,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
             ) * 100
             lv_util_after_second_fio = float(fio_size + second_fio_size)
 
-        lvm.compare_percent_data_from_pvc(pvc_restore, lv_util_after_second_fio)
+        lvm.compare_percent_data_from_pvc(clone, lv_util_after_second_fio)
         lvm.compare_thin_pool_data_percent(
             data_percent=after_expected_util,
             sampler=True,
