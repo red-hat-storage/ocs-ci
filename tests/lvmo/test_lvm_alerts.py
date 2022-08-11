@@ -190,14 +190,13 @@ class TestLvmCapacityAlerts(ManageTest):
             minimal_pvc.delete(wait=True)
 
             for sample in TimeoutSampler(
-                180,
-                60,
-                self.lvm.validate_metrics_vs_operating_system_stats,
-                "topolvm_thinpool_data_percent",
-                self.lvm.get_thin_pool1_data_percent(),
+                150, 30, self.lvm.check_for_alert, size.get("alert")
             ):
-                if sample:
+                if size["file_name"] == "run-to-70":
                     break
+                else:
+                    if sample:
+                        break
             # End of workaround
 
             self.lvm.compare_percent_data_from_pvc(
