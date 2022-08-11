@@ -48,7 +48,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @polarion_id("OCS-2759")
     @tier1
-    def test_rbd_space_reclaim_cronjob(self):
+    def test_rbd_space_reclaim_cronjob(self, pause_and_resume_cluster_load):
         """
         Test to verify RBD space reclamation
         Steps:
@@ -61,6 +61,7 @@ class TestRbdSpaceReclaim(ManageTest):
         7. Verify the decreased used size of the RBD pool
         8. Verify the presence of other files in the folder
         """
+
         pvc_obj = self.pvc[0]
         pod_obj = self.pod[0]
 
