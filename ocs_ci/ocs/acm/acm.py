@@ -129,7 +129,7 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
-        self.do_click(self.page_nav["install-submariner-btn"])
+        self.do_click(self.page_nav["install-submariner-btn"], timeout=120)
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
         log.info(f"Select 1st cluster which is {cluster_name_a}")
