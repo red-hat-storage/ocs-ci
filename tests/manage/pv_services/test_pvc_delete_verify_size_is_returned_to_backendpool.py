@@ -3,7 +3,6 @@ A test case to verify after deleting pvc whether
 size is returned to backend pool
 """
 import logging
-
 import pytest
 
 from ocs_ci.ocs import constants
@@ -63,6 +62,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
+
         cbp_name = helpers.default_ceph_block_pool()
 
         # TODO: Get exact value of replica size
