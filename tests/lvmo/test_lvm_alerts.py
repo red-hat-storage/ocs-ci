@@ -1,4 +1,5 @@
 import logging
+import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -193,6 +194,7 @@ class TestLvmCapacityAlerts(ManageTest):
                 150, 30, self.lvm.check_for_alert, size.get("alert")
             ):
                 if size["file_name"] == "run-to-70":
+                    time.sleep(60)
                     break
                 else:
                     if sample:
