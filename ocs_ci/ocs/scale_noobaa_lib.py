@@ -13,8 +13,10 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import hsbench
 
 log = logging.getLogger(__name__)
+hsbenchs3 = hsbench.HsBench()
 
 
 def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace):
@@ -380,7 +382,6 @@ def check_all_obcs_status(namespace=None):
             obc_not_bound_list.append(status)
     return obc_bound_list, obc_not_bound_list
 
-
 def get_noobaa_pods_status():
     """
     Check Noobaa pod status to ensure it is in Running state.
@@ -430,3 +431,53 @@ def check_memory_leak_in_noobaa_endpoint_log():
         raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
     else:
         log.info("No memory leak is seen in Noobaa endpoint logs")
+def hsbench_io(
+    namespace=None,
+    num_obj=None,
+    num_bucket=None,
+    object_size=None,
+    validate=None,
+    timeout=None,
+):
+    """
+    Run hsbench s3 benchmark
+
+    Args:
+        namespace (str): namespace to run workload
+        num_obj (int): Number of object(s)
+        num_bucket (int): Number of bucket(s)
+        object_size (str): Size of objects in bytes with postfix K, M, and G
+        validate (bool): Validates whether running workload is completed.
+        timeout (int): timeout in second
+
+    """
+    # Setup and install hsbench
+    hsbenchs3.create_test_user()
+    hsbenchs3.create_resource_hsbench()
+    hsbenchs3.install_hsbench()
+
+    # Running hsbench
+    hsbenchs3.run_benchmark(
+        num_obj=num_obj,
+        num_bucket=num_bucket,
+        object_size=object_size,
+        validate=validate,
+        timeout=timeout,
+    )
+
+
+def validate_bucket():
+    """
+    Validate S3 objects created by hsbench on bucket(s)
+
+    """
+    hsbenchs3.validate_s3_objects()
+
+
+def hsbench_cleanup():
+    """
+    Clean up deployment config, pvc, pod and test user
+
+    """
+    hsbenchs3.delete_test_user()
+    hsbenchs3.cleanup()

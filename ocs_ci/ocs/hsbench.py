@@ -1,12 +1,14 @@
 import logging
+import os
 
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from tempfile import mkdtemp
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +24,8 @@ class HsBench(object):
         Initializer to create pvc and rgw pod to running hsbench benchmark
 
         """
+        self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.ocp_obj = OCP(namespace=self.namespace)
         self.pod_dic_path = constants.GOLANG_YAML
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.hsbench_cr = templating.load_yaml(constants.HSBENCH_OBJ_YAML)
@@ -32,6 +36,8 @@ class HsBench(object):
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
         self.hsbench_bin_dir = self.hsbench_cr["hsbench_bin_dir"]
+        self.output = self.hsbench_cr["output_file"]
+        self.warp_dir = mkdtemp(prefix="hsbench-")
 
     def create_resource_hsbench(self):
         """
@@ -111,6 +117,9 @@ class HsBench(object):
         access_key=None,
         secret_key=None,
         end_point=None,
+        num_bucket=None,
+        object_size=None,
+        validate=True,
     ):
         """
          Running Hotsauce S3 benchmark
@@ -123,6 +132,9 @@ class HsBench(object):
             access_key (string): Access Key credential
             secret_key (string): Secret Key credential
             end_point (string): S3 end_point
+            num_bucket (int): Number of bucket(s)
+            object_size (int): Size of object
+            validate (Boolean): Validates whether running workload is completed.
 
         """
         # Create hsbench S3 benchmark
@@ -134,36 +146,69 @@ class HsBench(object):
         self.access_key = access_key if access_key else self.access_key
         self.secret_key = secret_key if secret_key else self.secret_key
         self.end_point = end_point if end_point else self.end_point
+        self.num_bucket = num_bucket if num_bucket else self.num_bucket
+        self.object_size = object_size if object_size else self.object_size
         self.pod_obj.exec_cmd_on_pod(
-            f"{self.hsbench_bin_dir} -a {self.access_key} "
+            f"{self.hsbench_bin_dir} "
+            f"-a {self.access_key} "
             f"-s {self.secret_key} "
             f"-u {self.end_point} "
             f"-z {self.object_size} "
-            f"-d {self.duration} -t {self.num_threads} "
+            f"-d {self.duration} "
+            f"-t {self.num_threads} "
             f"-b {self.num_bucket} "
-            f"-n {self.num_obj} -m {self.run_mode} "
-            f"-bp {self.bucket_prefix}",
+            f"-n {self.num_obj} "
+            f"-m {self.run_mode} "
+            f"-bp {self.bucket_prefix} "
+            f"-o {self.output}",
             timeout=timeout,
         )
+        if validate:
+            self.validate_hsbench_workload()
+
+    def validate_hsbench_workload(self):
+        """
+        Validate if workload was running on the app-pod
+
+        Raise:
+            UnexpectedBehaviour: if result.csv file doesn't contain output data.
+        """
+        cmd = (
+            f"cp {self.pod_obj.name}:/go/{self.output} "
+            f"{self.warp_dir}/{self.output}"
+        )
+        self.ocp_obj.exec_oc_cmd(
+            command=cmd,
+            out_yaml_format=False,
+            timeout=180,
+        )
+        if os.path.getsize(f"{self.warp_dir}/{self.output}") != 0:
+            log.info("Workload was running...")
+        else:
+            raise UnexpectedBehaviour(
+                f"Output file {self.output} is empty, "
+                "Warp workload doesn't run as expected..."
+            )
 
     def validate_s3_objects(self):
         """
         Validate S3 objects created by hsbench on single bucket
 
         """
-        self.bucket_name = self.bucket_prefix + "000000000000"
-        num_objects = self.toolbox.exec_sh_cmd_on_pod(
-            f"radosgw-admin bucket stats --bucket={self.bucket_name} | grep num_objects"
-        )
-        if num_objects is not self.num_obj:
-            log.info(
-                f"Number object is created by hsbench in {self.bucket_name} "
-                f"is {num_objects}"
+        for i in range(self.num_bucket):
+            bucket_name = self.bucket_prefix + "00000000000" + str(i)
+            num_objects = self.toolbox.exec_sh_cmd_on_pod(
+                f"radosgw-admin bucket stats --bucket={bucket_name} | grep num_objects"
             )
-        assert num_objects, (
-            "Number objects in bucket don't match."
-            f"Expecting {self.num_obj} but getting {num_objects}"
-        )
+            if num_objects is not self.num_obj:
+                log.info(
+                    f"Number object is created by hsbench in {bucket_name} "
+                    f"is {num_objects}"
+                )
+            assert num_objects, (
+                "Number objects in bucket don't match."
+                f"Expecting {self.num_obj} but getting {num_objects}"
+            )
 
     def validate_reshard_process(self):
         """
@@ -206,5 +251,5 @@ class HsBench(object):
 
         """
         log.info("Deleting pods and deployment config")
-        run_cmd(f"oc delete deploymentconfig/{self.pod_name} -n {self.namespace}")
+        pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
