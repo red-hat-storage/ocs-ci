@@ -33,6 +33,7 @@ from ocs_ci.utility.flexy import (
     configure_allowed_domains_in_proxy,
     load_cluster_info,
 )
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +469,7 @@ class FlexyBase(object):
         exec_cmd(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        exec_cmd(rsync_cmd, timeout=1200)
+        exec_cmd(rsync_cmd, timeout=3600)
 
         # mirror install-dir to cluster path (auth directory, metadata.json
         # file and other files)
@@ -488,7 +489,15 @@ class FlexyBase(object):
             terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
-            for _file in ("terraform.tfstate", "terraform.tfvars"):
+            # related to flexy-templates changes 4a4099541
+            if version.get_semantic_ocp_running_version() >= version.VERSION_4_11:
+                files_to_copy = (
+                    "upi_on_vsphere-terraform-scripts/terraform.tfstate",
+                    "terraform.tfvars",
+                )
+            else:
+                files_to_copy = ("terraform.tfstate", "terraform.tfvars")
+            for _file in files_to_copy:
                 shutil.copy2(
                     os.path.join(flexy_terraform_dir, _file), terraform_data_dir
                 )

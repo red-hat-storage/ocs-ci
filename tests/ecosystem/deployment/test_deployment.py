@@ -6,9 +6,10 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     mcg_only_install_verification,
 )
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.reporting import get_polarion_id
-from ocs_ci.utility.utils import is_cluster_running
+from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
 log = logging.getLogger(__name__)
@@ -49,8 +50,20 @@ def test_deployment(pvc_factory, pod_factory):
                     sanity_helpers = SanityExternalCluster()
                 else:
                     sanity_helpers = Sanity()
-                sanity_helpers.health_check()
+                if (
+                    config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                ):
+                    try:
+                        sanity_helpers.health_check()
+                    except exceptions.ResourceWrongStatusException as err_msg:
+                        log.warning(err_msg)
+                else:
+                    sanity_helpers.health_check()
                 sanity_helpers.delete_resources()
+                # Verify ceph health
+                log.info("Verifying ceph health after deployment")
+                assert ceph_health_check(tries=10, delay=30)
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")

@@ -240,6 +240,10 @@ class RDMDiskNotFound(Exception):
     pass
 
 
+class PassThroughEnabledDeviceNotFound(Exception):
+    pass
+
+
 class ExternalClusterDetailsException(Exception):
     pass
 
@@ -257,6 +261,14 @@ class ExternalClusterObjectStoreUserCreationFailed(Exception):
 
 
 class ExternalClusterRGWEndPointMissing(Exception):
+    pass
+
+
+class ExternalClusterRGWEndPointPortMissing(Exception):
+    pass
+
+
+class ExternalClusterCephfsMissing(Exception):
     pass
 
 
@@ -456,6 +468,10 @@ class ManagedServiceAddonDeploymentError(Exception):
     pass
 
 
+class ManagedServiceSecurityGroupNotFound(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 
@@ -476,6 +492,14 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class RDRDeploymentException(Exception):
+    pass
+
+
+class ACMClusterDestroyException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 
@@ -489,4 +513,52 @@ class AlertingError(Exception):
 
 
 class AuthError(Exception):
+    pass
+
+
+class UnknownCloneTypeException(Exception):
+    pass
+
+
+class CephToolBoxNotFoundException(Exception):
+    pass
+
+
+class UnsupportedWorkloadError(Exception):
+    pass
+
+
+class RebootEventNotFoundException(Exception):
+    pass
+
+
+class ConnectivityFail(Exception):
+    pass
+
+
+class ROSAProdAdminLoginFailedException(Exception):
+    pass
+
+
+class Md5CheckFailed(Exception):
+    pass
+
+
+class ZombieProcessFoundException(Exception):
+    pass
+
+
+class LvSizeWrong(Exception):
+    pass
+
+
+class LvDataPercentSizeWrong(Exception):
+    pass
+
+
+class LvThinUtilNotChanged(Exception):
+    pass
+
+
+class ThinPoolUtilityWrong(Exception):
     pass

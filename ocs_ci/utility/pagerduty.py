@@ -26,7 +26,7 @@ def set_pagerduty_integration_secret(integration_key):
     cmd = (
         f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
         f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
-        f"--kubeconfig {kubeconfig} --dry-run -o yaml"
+        f"--kubeconfig {kubeconfig} --dry-run=client -o yaml"
     )
     secret_data = exec_cmd(
         cmd,

@@ -304,6 +304,11 @@ skipif_disconnected_cluster = pytest.mark.skipif(
     reason="Test will not run on disconnected clusters",
 )
 
+skipif_proxy_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("proxy") is True,
+    reason="Test will not run on proxy clusters",
+)
+
 skipif_external_mode = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is True,
     reason="Test will not run on External Mode cluster",
@@ -374,7 +379,7 @@ skipif_ui_not_support = pytest.mark.skipif_ui_not_support
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
-
+skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
@@ -385,6 +390,7 @@ skipif_ibm_flash = pytest.mark.skipif(
 )
 
 # Squad marks
+aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
 blue_squad = pytest.mark.blue_squad
 brown_squad = pytest.mark.brown_squad

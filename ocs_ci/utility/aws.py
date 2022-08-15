@@ -1444,9 +1444,30 @@ class AWS(object):
         """
         domain = domain or config.ENV_DATA["base_domain"]
         hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=domain)
-        record_sets = self.route53_client.list_resource_record_sets(
+        record_sets = []
+        record_sets_data = self.route53_client.list_resource_record_sets(
             HostedZoneId=hosted_zone_id
-        )["ResourceRecordSets"]
+        )
+        record_sets.extend(record_sets_data["ResourceRecordSets"])
+        # If a ListResourceRecordSets command returns more than one page of results,
+        # the value of IsTruncated is true. To display the next page of results,
+        # get the values of NextRecordName, NextRecordType, and NextRecordIdentifier (if any)
+        # from the response.
+        # Then submit another ListResourceRecordSets request, and specify those values for StartRecordName,
+        # StartRecordType, and StartRecordIdentifier.
+        is_truncated = record_sets_data["IsTruncated"]
+        while is_truncated:
+            start_record_name = record_sets_data["NextRecordName"]
+            start_record_type = record_sets_data["NextRecordType"]
+
+            record_sets_data = self.route53_client.list_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                StartRecordName=start_record_name,
+                StartRecordType=start_record_type,
+            )
+            record_sets.extend(record_sets_data["ResourceRecordSets"])
+            is_truncated = record_sets_data["IsTruncated"]
+
         return record_sets
 
     def delete_record(self, record, hosted_zone_id):

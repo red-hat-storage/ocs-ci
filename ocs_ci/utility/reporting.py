@@ -49,6 +49,10 @@ def get_rp_launch_attributes():
     rp_attrs["worker_instance_type"] = config.ENV_DATA.get("worker_instance_type")
     rp_attrs["ocp_version"] = get_ocp_version()
     rp_attrs["ocs_version"] = config.ENV_DATA.get("ocs_version")
+    if config.ENV_DATA.get("sno"):
+        rp_attrs["sno"] = True
+    if config.ENV_DATA.get("lvmo"):
+        rp_attrs["lvmo"] = True
     rp_attrs["run_id"] = config.RUN.get("run_id")
     if config.DEPLOYMENT.get("ocs_registry_image"):
         ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")

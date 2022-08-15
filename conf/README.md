@@ -123,6 +123,7 @@ anywhere else.
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
+* `ibmcloud_disable_addon` - Disable OCS addon
 
 #### REPORTING
 
@@ -142,7 +143,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
-* `overwrite_must_gather_image` - If true, it allows overwrite must gather image when reloading config during upgrade to the default value.
+* `post_upgrade` - If True, post-upgrade will be reported in the test suite
+  name in the mail subject.
 
 #### ENV_DATA
 
@@ -227,7 +229,8 @@ higher priority).
 * `http_proxy`, `https_proxy`, `no_proxy` - proxy configuration used for accessing external resources
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
-
+* `ms_env_type` - to choose managed service environment type staging or production, default set to staging
+* `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
 #### UPGRADE
 
 Upgrade related configuration data.

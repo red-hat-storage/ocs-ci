@@ -44,6 +44,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     update_container_with_mirrored_image,
 )
+from ocs_ci.utility.utils import convert_device_size
 
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,7 @@ def create_pod(
         elif (
             pod_dict_path == constants.NGINX_POD_YAML
             or pod_dict == constants.CSI_RBD_POD_YAML
+            or pod_dict == constants.PERF_POD_YAML
         ):
             temp_dict = [
                 {
@@ -526,6 +528,7 @@ def create_storage_class(
     encrypted=False,
     encryption_kms_id=None,
     fs_name=None,
+    volume_binding_mode="Immediate",
 ):
     """
     Create a storage class
@@ -545,6 +548,8 @@ def create_storage_class(
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
         fs_name (str): the name of the filesystem for CephFS StorageClass
+        volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
+            pod attachment.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -594,6 +599,7 @@ def create_storage_class(
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
 
     try:
         del sc_data["parameters"]["userid"]
@@ -1261,138 +1267,6 @@ def set_image_lookup(image_name):
     logger.info(f'image lookup for image"{image_name}" is set')
     status = ocp_obj.exec_oc_cmd(command)
     return status
-
-
-def get_snapshot_time(interface, snap_name, status):
-    """
-    Get the starting/ending creation time of a PVC based on provisioner logs
-
-    The time and date extraction code below has been modified to read
-    the month and day data in the logs.  This fixes an error where negative
-    time values are calculated when test runs cross midnight.  Also, previous
-    calculations would not set the year, and so the calculations were done
-    as if the year were 1900.  This is not a problem except that 1900 was
-    not a leap year and so the next February 29th would throw ValueErrors
-    for the whole day.  To avoid this problem, changes were made to also
-    include the current year.
-
-    Incorrect times will still be given for tests that cross over from
-    December 31 to January 1.
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str / list): Name of the PVC(s) for creation time
-                               the list will be list of pvc objects
-        status (str): the status that we want to get - Start / End
-
-    Returns:
-        datetime object: Time of PVC(s) creation
-
-    """
-
-    def get_pattern_time(log, snapname, pattern):
-        """
-        Get the time of pattern in the log
-
-        Args:
-            log (list): list of all lines in the log file
-            snapname (str): the name of the snapshot
-            pattern (str): the pattern that need to be found in the log (start / bound)
-
-        Returns:
-            str: string of the pattern timestamp in the log, if not found None
-
-        """
-        this_year = str(datetime.datetime.now().year)
-        for line in log:
-            if re.search(snapname, line) and re.search(pattern, line):
-                mon_day = " ".join(line.split(" ")[0:2])
-                return f"{this_year} {mon_day}"
-        return None
-
-    logs = ""
-
-    # the starting and ending time are taken from different logs,
-    # the start creation time is taken from the snapshot controller, while
-    # the end creation time is taken from the csi snapshot driver
-    if status.lower() == "start":
-        pattern = "Creating content for snapshot"
-        # Get the snapshoter-controller pod
-        pod_name = pod.get_csi_snapshoter_pod()
-        logs = pod.get_pod_logs(
-            pod_name, namespace="openshift-cluster-storage-operator"
-        )
-    elif status.lower() == "end":
-        pattern = "readyToUse true"
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-    else:
-        logger.error(f"the status {status} is invalid.")
-        return None
-
-    logs = logs.split("\n")
-
-    stat = None
-    # Extract the time for the one PVC snapshot provisioning
-    if isinstance(snap_name, str):
-        stat = get_pattern_time(logs, snap_name, pattern)
-    # Extract the time for the list of PVCs snapshot provisioning
-    if isinstance(snap_name, list):
-        all_stats = []
-        for snapname in snap_name:
-            all_stats.append(get_pattern_time(logs, snapname.name, pattern))
-        all_stats = sorted(all_stats)
-        if status.lower() == "end":
-            stat = all_stats[-1]  # return the highest time
-        elif status.lower() == "start":
-            stat = all_stats[0]  # return the lowest time
-    if stat:
-        return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-    else:
-        return None
-
-
-def measure_snapshot_creation_time(interface, snap_name, snap_con_name, snap_uid=None):
-    """
-    Measure Snapshot creation time based on logs
-
-    Args:
-        snap_name (str): Name of the snapshot for creation time measurement
-
-    Returns:
-        float: Creation time for the snapshot
-
-    """
-    start = get_snapshot_time(interface, snap_name, status="start")
-    end = get_snapshot_time(interface, snap_con_name, status="end")
-    logs = ""
-    if start and end:
-        total = end - start
-        return total.total_seconds()
-    else:
-        # at 4.8 the log messages was changed, so need different parsing
-        pod_name = pod.get_csi_provisioner_pod(interface)
-        # get the logs from the csi-provisioner containers
-        for log_pod in pod_name:
-            logger.info(f"Read logs from {log_pod}")
-            logs += pod.get_pod_logs(log_pod, "csi-snapshotter")
-        logs = logs.split("\n")
-        pattern = "CSI CreateSnapshot: snapshot-"
-        for line in logs:
-            if (
-                re.search(snap_uid, line)
-                and re.search(pattern, line)
-                and re.search("readyToUse \\[true\\]", line)
-            ):
-                # The creation time log is in nanosecond, so, it need to convert to seconds.
-                results = int(line.split()[-5].split(":")[1].replace("]", "")) * (
-                    10**-9
-                )
-                return float(f"{results:.3f}")
-
-        return None
 
 
 def get_provision_time(interface, pvc_name, status="start"):
@@ -2288,9 +2162,16 @@ def create_multiple_pvc_parallel(sc_obj, namespace, number_of_pvc, size, access_
     # Check for all the pvcs in Bound state
     with ThreadPoolExecutor() as executor:
         for objs in pvc_objs_list:
-            obj_status_list.append(
-                executor.submit(wait_for_resource_state, objs, "Bound", 90)
-            )
+            if objs is not None:
+                if type(objs) is list:
+                    for obj in objs:
+                        obj_status_list.append(
+                            executor.submit(wait_for_resource_state, obj, "Bound", 90)
+                        )
+                else:
+                    obj_status_list.append(
+                        executor.submit(wait_for_resource_state, objs, "Bound", 90)
+                    )
     if False in [obj.result() for obj in obj_status_list]:
         raise TimeoutExpiredError
     return pvc_objs_list
@@ -2331,20 +2212,39 @@ def create_pods_parallel(
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
-            future_pod_objs.append(
-                executor.submit(
-                    create_pod,
-                    interface_type=interface,
-                    pvc_name=pvc_obj.name,
-                    do_reload=False,
-                    namespace=namespace,
-                    raw_block_pv=raw_block_pv,
-                    pod_dict_path=pod_dict_path,
-                    sa_name=sa_name,
-                    dc_deployment=dc_deployment,
-                    node_selector=node_selector,
-                )
-            )
+            if pvc_obj is not None:
+                if type(pvc_obj) is list:
+                    for pvc_ in pvc_obj:
+                        future_pod_objs.append(
+                            executor.submit(
+                                create_pod,
+                                interface_type=interface,
+                                pvc_name=pvc_.name,
+                                do_reload=False,
+                                namespace=namespace,
+                                raw_block_pv=raw_block_pv,
+                                pod_dict_path=pod_dict_path,
+                                sa_name=sa_name,
+                                dc_deployment=dc_deployment,
+                                node_selector=node_selector,
+                            )
+                        )
+                else:
+                    future_pod_objs.append(
+                        executor.submit(
+                            create_pod,
+                            interface_type=interface,
+                            pvc_name=pvc_obj.name,
+                            do_reload=False,
+                            namespace=namespace,
+                            raw_block_pv=raw_block_pv,
+                            pod_dict_path=pod_dict_path,
+                            sa_name=sa_name,
+                            dc_deployment=dc_deployment,
+                            node_selector=node_selector,
+                        )
+                    )
+
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
@@ -2373,9 +2273,16 @@ def delete_objs_parallel(obj_list):
     """
     threads = list()
     for obj in obj_list:
-        process = threading.Thread(target=obj.delete)
-        process.start()
-        threads.append(process)
+        if obj is not None:
+            if type(obj) is list:
+                for obj_ in obj:
+                    process = threading.Thread(target=obj_.delete)
+                    process.start()
+                    threads.append(process)
+            else:
+                process = threading.Thread(target=obj.delete)
+                process.start()
+                threads.append(process)
     for process in threads:
         process.join()
     return True
@@ -3009,7 +2916,7 @@ def wait_for_pv_delete(pv_objs):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
 
-@retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+@retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
 def fetch_used_size(cbp_name, exp_val=None):
     """
     Fetch used size in the pool
@@ -3863,6 +3770,47 @@ def create_reclaim_space_job(
     return ocs_obj
 
 
+def create_reclaim_space_cronjob(
+    pvc_name,
+    reclaim_space_job_name=None,
+    backoff_limit=None,
+    retry_deadline_seconds=None,
+    schedule="weekly",
+):
+    """
+    Create ReclaimSpaceCronJob to invoke reclaim space operation on RBD volume
+
+    Args:
+        pvc_name (str): Name of the PVC
+        reclaim_space_job_name (str): The name of the ReclaimSpaceCRonJob to be created
+        backoff_limit (int): The number of retries before marking reclaim space operation as failed
+        retry_deadline_seconds (int): The duration in seconds relative to the start time that the
+            operation may be retried
+        schedule (str): Type of schedule
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
+    """
+    reclaim_space_cronjob_name = reclaim_space_job_name or create_unique_resource_name(
+        pvc_name, f"{constants.RECLAIMSPACECRONJOB}-{schedule}"
+    )
+    job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML)
+    job_data["metadata"]["name"] = reclaim_space_cronjob_name
+    job_data["spec"]["jobTemplate"]["spec"]["target"][
+        "persistentVolumeClaim"
+    ] = pvc_name
+    if backoff_limit:
+        job_data["spec"]["jobTemplate"]["spec"]["backOffLimit"] = backoff_limit
+    if retry_deadline_seconds:
+        job_data["spec"]["jobTemplate"]["spec"][
+            "retryDeadlineSeconds"
+        ] = retry_deadline_seconds
+    if schedule:
+        job_data["spec"]["schedule"] = "@" + schedule
+    ocs_obj = create_resource(**job_data)
+    return ocs_obj
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
@@ -3886,3 +3834,78 @@ def get_cephfs_subvolumegroup():
         subvolume_group_name = "csi"
 
     return subvolume_group_name
+
+
+def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    """
+    Creates a serviceaccount token secret
+
+    Args:
+        sa_name (str): Name of the serviceaccount for which the secret has to be created
+        namespace (str) : Namespace in which the serviceaccount exists
+
+    Returns:
+        str : Name of the serviceaccount token secret
+
+    """
+    logger.info(f"Creating token secret for serviceaccount {sa_name}")
+    token_secret = templating.load_yaml(constants.SERVICE_ACCOUNT_TOKEN_SECRET)
+    token_secret["metadata"]["name"] = f"{sa_name}-token"
+    token_secret["metadata"]["namespace"] = namespace
+    token_secret["metadata"]["annotations"][
+        "kubernetes.io/service-account.name"
+    ] = sa_name
+    create_resource(**token_secret)
+    logger.info(f"Serviceaccount token secret {sa_name}-token created successfully")
+    return token_secret["metadata"]["name"]
+
+
+def get_mon_db_size_in_kb(mon_pod_obj):
+    """
+    Get mon db size and returns the size in KB
+    The output of 'du -sh' command contains the size of the directory and its path as string
+    e.g. "67M\t/var/lib/ceph/mon/ceph-c/store.db"
+    The size is extracted by splitting the string with '\t'.
+    The size format for example: 1K, 234M, 2G
+    For uniformity, this test uses KB
+
+    Args:
+        mon_pod_obj (obj): Mon pod resource object
+
+    Returns:
+        convert_device_size (int): Converted Mon db size in KB
+
+    """
+    mon_pod_label = pod.get_mon_label(mon_pod_obj=mon_pod_obj)
+    logger.info(f"Getting the current mon db size for mon-{mon_pod_label}")
+    size = mon_pod_obj.exec_cmd_on_pod(
+        f"du -sh /var/lib/ceph/mon/ceph-{mon_pod_label}/store.db",
+        out_yaml_format=False,
+    )
+    size = re.split("\t+", size)
+    assert len(size) > 0, f"Failed to get mon-{mon_pod_label} db size"
+    size = size[0]
+    mon_db_size_kb = convert_device_size(size + "i", "KB")
+    logger.info(f"mon-{mon_pod_label} DB size: {mon_db_size_kb} KB")
+    return mon_db_size_kb
+
+
+def get_noobaa_db_used_space():
+    """
+    Get noobaa db size
+
+    Returns:
+        df_out (str): noobaa_db used space
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    logger.info(
+        f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
+    )
+    return df_out[-4]

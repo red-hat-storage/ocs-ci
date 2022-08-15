@@ -40,7 +40,9 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # we need to mount the volume on every worker node, so RWX/cephfs
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
-    if storagecluster_independent_check():
+    if (
+        config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS
+    ) and storagecluster_independent_check():
         sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
     else:
         sc_name = constants.CEPHFILESYSTEM_SC
@@ -106,6 +108,12 @@ def test_log_reader_writer_parallel(project, tmp_path):
     # is a bit larger than usual number required to reproduce bug from
     # BZ 1989301, but we need to be sure here)
     number_of_fetches = 120
+    # if given fetch fail, we will ignore the failure unless the number of
+    # failures is too high (this has no direct impact on feature under test,
+    # we should be able to detect the bug even with 10% of rsync failures,
+    # since data corruption doesn't simply go away ...)
+    number_of_failures = 0
+    allowed_failures = 12
     is_local_data_ok = True
     local_dir = tmp_path / "logwriter"
     local_dir.mkdir()
@@ -129,6 +137,7 @@ def test_log_reader_writer_parallel(project, tmp_path):
         try:
             run_cmd(cmd=oc_cmd, timeout=300)
         except Exception as ex:
+            number_of_failures += 1
             # in case this fails, we are going to fetch extra evidence, that
             # said such failure is most likely related to OCP or infrastructure
             error_msg = "oc rsync failed: something is wrong with the cluster"
@@ -153,7 +162,31 @@ def test_log_reader_writer_parallel(project, tmp_path):
                     ]
                 ),
             ]
-            run_cmd(cmd=oc_rpm_debug, timeout=600)
+            try:
+                run_cmd(cmd=oc_rpm_debug, timeout=600)
+            except Exception:
+                # if fetch of additional evidence fails, log and ignore the
+                # exception (so that we can retry if needed)
+                logger.exception("failed to fetch additional evidence")
+            # in case the rsync run failed because of a container restart,
+            # we assume the pod name hasn't changed, and just wait for the
+            # container to be running again - unless the number of rsync
+            # failures is too high
+            if number_of_failures > allowed_failures:
+                logger.error("number of ignored rsync failures is too high")
+            else:
+                ocp_pod.wait_for_resource(
+                    resource_count=deploy_dict["spec"]["replicas"],
+                    condition=constants.STATUS_RUNNING,
+                    error_condition=constants.STATUS_ERROR,
+                    timeout=300,
+                    sleep=30,
+                )
+                continue
+            logger.debug(
+                "before this failure, we ignored %d previous failures",
+                number_of_failures,
+            )
             raise exceptions.UnexpectedBehaviour(error_msg) from ex
         # look for null bytes in the just fetched local files in target dir,
         # and if these binary bytes are found, the test failed (the bug
@@ -171,6 +204,8 @@ def test_log_reader_writer_parallel(project, tmp_path):
         # is_local_data_ok = False
         assert is_local_data_ok, "data corruption detected"
         time.sleep(2)
+
+    logger.debug("number of ignored rsync failures: %d", number_of_failures)
 
     # if no obvious problem was detected, run the logreader job to validate
     # checksums in the log files (so that we are 100% sure that nothing went

@@ -14,6 +14,7 @@ import subprocess
 import time
 import traceback
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -42,6 +43,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedImage,
+    UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
 )
@@ -437,7 +439,15 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd(
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    **kwargs,
+):
     """
     *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
@@ -450,6 +460,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -457,7 +470,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (str) Decoded stdout of command
     """
-    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    completed_process = exec_cmd(
+        cmd, secrets, timeout, ignore_error, threading_lock, silent=silent, **kwargs
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -513,9 +528,8 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
-    index = 0
     for cluster in config.clusters:
-        if skip_index and (cluster.MULTICLUSTER["multicluster_index"] == skip_index):
+        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -524,7 +538,9 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[index] = exec_cmd(
+                completed_process[
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ] = exec_cmd(
                     cmd,
                     secrets=secrets,
                     timeout=timeout,
@@ -538,14 +554,24 @@ def run_cmd_multicluster(
                     f"Command {cmd} execution failed on cluster {cluster.ENV_DATA['cluster_name']} "
                 )
                 raise
-            index = +1
     config.switch_ctx(restore_ctx_index)
     return completed_process
 
 
-def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def exec_cmd(
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    **kwargs,
+):
     """
     Run an arbitrary command locally
+
+    If the command is grep and matching pattern is not found, then this function
+    returns "command terminated with exit code 1" in stderr.
 
     Args:
         cmd (str): command to run
@@ -555,6 +581,9 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -572,6 +601,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -580,6 +611,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -588,15 +621,22 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
-        log.warning(f"Command stderr: {masked_stderr}")
+        if not silent:
+            log.warning(f"Command stderr: {masked_stderr}")
     else:
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
-        raise CommandFailed(
-            f"Error during execution of command: {masked_cmd}."
-            f"\nError is {masked_stderr}"
-        )
+        if (
+            "grep" in masked_cmd
+            and b"command terminated with exit code 1" in completed_process.stderr
+        ):
+            log.info(f"No results found for grep command: {masked_cmd}")
+        else:
+            raise CommandFailed(
+                f"Error during execution of command: {masked_cmd}."
+                f"\nError is {masked_stderr}"
+            )
     return completed_process
 
 
@@ -1491,7 +1531,7 @@ def move_summary_to_top(soup):
 
     """
     summary = []
-    summary.append(soup.find("h2", text="Summary"))
+    summary.append(soup.find("h2", string="Summary"))
     for tag in summary[0].next_siblings:
         if tag.name == "h2":
             break
@@ -1924,7 +1964,13 @@ def get_testrun_name():
         )
         if baremetal_config:
             testrun_name = f"LSO {baremetal_config} {testrun_name}"
-
+        if config.ENV_DATA.get("sno"):
+            testrun_name = f"{testrun_name} SNO"
+        if config.ENV_DATA.get("lvmo"):
+            testrun_name = f"{testrun_name} LVMO"
+        post_upgrade = config.REPORTING.get("post_upgrade", "")
+        if post_upgrade:
+            post_upgrade = "post-upgrade"
         testrun_name = (
             f"{testrun_name}"
             f"{get_az_count()}AZ "
@@ -1932,7 +1978,7 @@ def get_testrun_name():
             f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
-            f"{markers}"
+            f"{markers} {post_upgrade}".rstrip()
         )
     testrun_name = (
         f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
@@ -2005,6 +2051,10 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     run_cmd(
         f"oc wait --for condition=ready pod "
@@ -2012,17 +2062,44 @@ def ceph_health_check_base(namespace=None):
         f"-n {namespace} "
         f"--timeout=120s"
     )
-    tools_pod = run_cmd(
-        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
-        f"-o jsonpath='{{.items[0].metadata.name}}'",
-        timeout=60,
-    )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
+    ceph_health_cmd = create_ceph_health_cmd(namespace)
+    try:
+        health = run_cmd(ceph_health_cmd)
+    except CommandFailed as ex:
+        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+            log.info("Patch the consumer rook-ceph-tools deployment")
+            patch_consumer_toolbox()
+            # get the new tool box pod since patching creates the new tool box pod
+            ceph_health_cmd = create_ceph_health_cmd(namespace)
+            health = run_cmd(ceph_health_cmd)
+        else:
+            raise ex
+
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+
+
+def create_ceph_health_cmd(namespace):
+    """
+    Forms the ceph health command
+
+    Args:
+        namespace (str): Namespace of OCS
+
+    Returns:
+        str: ceph health command
+
+    """
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l '{constants.TOOL_APP_LABEL}' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'",
+        timeout=60,
+    )
+    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    return ceph_health_cmd
 
 
 def get_rook_repo(branch="master", to_checkout=None):
@@ -2053,7 +2130,14 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None):
+def clone_repo(
+    url,
+    location,
+    branch="master",
+    to_checkout=None,
+    clone_type="shallow",
+    force_checkout=False,
+):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2063,16 +2147,60 @@ def clone_repo(url, location, branch="master", to_checkout=None):
         location (str): path where the repository will be cloned to
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
+        clone_type (str): type of clone (shallow, blobless, treeless and normal)
+            By default, shallow clone will be used. For normal clone use
+            clone_type as "normal".
+        force_checkout (bool): True for force checkout to branch.
+            force checkout will ignore the unmerged entries.
+
+    Raises:
+        UnknownCloneTypeException: In case of incorrect clone_type is used
+
     """
+    if clone_type == "shallow":
+        if branch != "master":
+            git_params = "--no-single-branch --depth=1"
+        else:
+            git_params = "--depth=1"
+    elif clone_type == "blobless":
+        git_params = "--filter=blob:none"
+    elif clone_type == "treeless":
+        git_params = "--filter=tree:0"
+    elif clone_type == "normal":
+        git_params = ""
+    else:
+        raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("srozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("srozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
+
     if not os.path.isdir(location):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {url} {location}")
+        run_cmd(f"git clone {git_params} {url} {location}")
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
         run_cmd("git fetch --all", cwd=location)
     log.info("Checking out repository to specific branch: %s", branch)
-    run_cmd(f"git checkout {branch}", cwd=location)
+    if force_checkout:
+        run_cmd(f"git checkout --force {branch}", cwd=location)
+    else:
+        run_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
     run_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
@@ -3157,13 +3285,13 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     """
     version = version or constants.TERRAFORM_IGNITION_PROVIDER_VERSION
     terraform_ignition_provider_zip_file = (
-        f"terraform-provider-ignition-{version}-linux-amd64.tar.gz"
-    )
-    terraform_ignition_provider_dir = (
-        f"terraform-provider-ignition-{version}-linux-amd64"
+        f"terraform-provider-ignition_{version[1:]}_linux_amd64.zip"
     )
     terraform_plugins_path = ".terraform/plugins/linux_amd64/"
-    log.info(f"Downloading terraform ignition proivider version {version}")
+    terraform_ignition_provider = os.path.join(
+        terraform_plugins_path, "terraform-provider-ignition"
+    )
+    log.info(f"Downloading terraform ignition provider version {version}")
     previous_dir = os.getcwd()
     os.chdir(terraform_dir)
     url = (
@@ -3174,18 +3302,24 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
 
     # Download and untar
     download_file(url, terraform_ignition_provider_zip_file)
-    run_cmd(f"tar xzf {terraform_ignition_provider_zip_file}")
+    run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
     create_directory_path(terraform_plugins_path)
+    if (
+        version_module.get_semantic_ocp_version_from_config()
+        >= version_module.VERSION_4_11
+    ):
+        target_terraform_ignition_provider = terraform_plugins_path
+    else:
+        target_terraform_ignition_provider = terraform_ignition_provider
     move(
-        f"{terraform_ignition_provider_dir}/terraform-provider-ignition",
-        terraform_plugins_path,
+        f"terraform-provider-ignition_{version}",
+        target_terraform_ignition_provider,
     )
 
     # delete the downloaded files
     delete_file(terraform_ignition_provider_zip_file)
-    delete_dir(terraform_ignition_provider_dir)
 
     # return to the previous working directory
     os.chdir(previous_dir)
@@ -3641,3 +3775,79 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)

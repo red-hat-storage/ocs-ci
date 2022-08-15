@@ -149,7 +149,12 @@ class BenchmarkOperator(object):
         """
         log.info("Deploy the benchmark-operator project")
         try:
-            run("make deploy", shell=True, check=True, cwd=self.dir)
+            run(
+                "make deploy IMG=quay.io/ocsci/benchmark-operator:testing",
+                shell=True,
+                check=True,
+                cwd=self.dir,
+            )
         except Exception as ex:
             log.error(f"Failed to deploy benchmark operator : {ex}")
 

@@ -13,10 +13,18 @@ from ocs_ci.deployment.deployment import (
     Deployment,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.deployment.helpers.external_cluster_helpers import ExternalCluster
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
-from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, EXTERNAL_CLUSTER_USER
+from ocs_ci.ocs.defaults import (
+    EXTERNAL_CLUSTER_USER,
+    MUST_GATHER_UPSTREAM_IMAGE,
+    MUST_GATHER_UPSTREAM_TAG,
+    OCS_OPERATOR_NAME,
+)
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -29,6 +37,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     get_osd_count,
+    mcg_only_install_verification,
     ocs_install_verification,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -55,6 +64,7 @@ from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 
 log = logging.getLogger(__name__)
 
@@ -152,23 +162,27 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             )
         else:
             raise
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        count=number_of_worker_nodes,
-    )
-    verify_pods_upgraded(
-        old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
-    )
-    verify_pods_upgraded(
-        old_images,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        count=number_of_worker_nodes,
-    )
-    verify_pods_upgraded(
-        old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
-    )
-    if not config.DEPLOYMENT.get("external_mode"):
+    if not config.ENV_DATA.get("mcg_only_deployment"):
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.CSI_CEPHFSPLUGIN_LABEL,
+            count=number_of_worker_nodes,
+        )
+        verify_pods_upgraded(
+            old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
+        )
+        verify_pods_upgraded(
+            old_images,
+            selector=constants.CSI_RBDPLUGIN_LABEL,
+            count=number_of_worker_nodes,
+        )
+        verify_pods_upgraded(
+            old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
+        )
+    if not (
+        config.DEPLOYMENT.get("external_mode")
+        or config.ENV_DATA.get("mcg_only_deployment")
+    ):
         verify_pods_upgraded(
             old_images,
             selector=constants.MON_APP_LABEL,
@@ -298,18 +312,25 @@ class OCSUpgrade(object):
                 f"Upgrade version {upgrade_version} is not higher than old version:"
                 f" {self.version_before_upgrade}, config file will not be loaded"
             )
-        overwrite_must_gather_image = config.REPORTING["overwrite_must_gather_image"]
-        if live_deployment and upgrade_in_same_source and overwrite_must_gather_image:
+        # For IBM ROKS cloud, there is no possibility to use internal build of must gather image.
+        # If we are not testing the live upgrade, then we will need to change images to the upsream.
+        ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        use_upstream_mg_image = ibm_cloud_platform and not upgrade_in_same_source
+        if (live_deployment and upgrade_in_same_source) or (
+            ibm_cloud_platform and not use_upstream_mg_image
+        ):
             update_live_must_gather_image()
+        elif use_upstream_mg_image:
+            config.REPORTING["ocs_must_gather_image"] = MUST_GATHER_UPSTREAM_IMAGE
+            config.REPORTING["ocs_must_gather_latest_tag"] = MUST_GATHER_UPSTREAM_TAG
         else:
-            if overwrite_must_gather_image:
-                must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
-                must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
-                log.info(
-                    f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
-                )
-                config.REPORTING["ocs_must_gather_image"] = must_gather_image
-                config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
+            must_gather_image = config.REPORTING["default_ocs_must_gather_image"]
+            must_gather_tag = config.REPORTING["default_ocs_must_gather_latest_tag"]
+            log.info(
+                f"Reloading to default must gather image: {must_gather_image}:{must_gather_tag}"
+            )
+            config.REPORTING["ocs_must_gather_image"] = must_gather_image
+            config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
     def get_csv_name_pre_upgrade(self):
         """
@@ -461,7 +482,9 @@ class OCSUpgrade(object):
             setup_ceph_toolbox(force_setup=True)
         # End of workaround
 
-        if config.DEPLOYMENT.get("external_mode"):
+        if config.DEPLOYMENT.get("external_mode") or config.ENV_DATA.get(
+            "mcg_only_deployment"
+        ):
             timeout = 200
         else:
             timeout = 200 * get_osd_count()
@@ -543,11 +566,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     )
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
-        host = config.EXTERNAL_MODE["external_cluster_node_roles"]["node1"][
-            "ip_address"
-        ]
-        user = config.EXTERNAL_MODE["login"]["username"]
-        password = config.EXTERNAL_MODE["login"]["password"]
+        host, user, password = get_external_cluster_client()
         external_cluster = ExternalCluster(host, user, password)
 
     # For external cluster , create the secrets if upgraded version is 4.8
@@ -583,58 +602,77 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
-        ui_upgrade_supported = False
-        if config.UPGRADE.get("ui_upgrade"):
-            if (
-                version.get_semantic_ocp_version_from_config() == version.VERSION_4_9
-                and original_ocs_version == "4.8"
-                and upgrade_version == "4.9"
-            ):
-                ui_upgrade_supported = True
-            else:
-                log.warning(
-                    "UI upgrade combination is not supported. It will fallback to CLI upgrade"
-                )
+        live_deployment = config.DEPLOYMENT["live_deployment"]
+        disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
+        if (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and live_deployment
+            and not disable_addon
+        ):
+            clustername = config.ENV_DATA.get("cluster_name")
+            cmd = f"ibmcloud ks cluster addon disable openshift-data-foundation --cluster {clustername} -f"
+            run_ibmcloud_cmd(cmd)
+            time.sleep(120)
+            cmd = (
+                f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
+                f"{upgrade_version}.0 --param ocsUpgrade=true"
+            )
+            run_ibmcloud_cmd(cmd)
+            time.sleep(120)
+        else:
+            ui_upgrade_supported = False
+            if config.UPGRADE.get("ui_upgrade"):
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    == version.VERSION_4_9
+                    and original_ocs_version == "4.8"
+                    and upgrade_version == "4.9"
+                ):
+                    ui_upgrade_supported = True
+                else:
+                    log.warning(
+                        "UI upgrade combination is not supported. It will fallback to CLI upgrade"
+                    )
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
-        else:
-            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
-                upgrade_in_current_source
-            ):
-                create_ocs_secret(config.ENV_DATA["cluster_namespace"])
-            if upgrade_version != "4.9":
-                # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
-                # OCS automatically.
-                upgrade_ocs.update_subscription(channel)
-            if original_ocs_version == "4.8" and upgrade_version == "4.9":
-                deployment = Deployment()
-                deployment.subscribe_ocs()
             else:
-                # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
-                # we need to wait and approve install plan, otherwise it's approved in the
-                # subscribe_ocs method.
-                subscription_plan_approval = config.DEPLOYMENT.get(
-                    "subscription_plan_approval"
-                )
-                if subscription_plan_approval == "Manual":
-                    wait_for_install_plan_and_approve(
-                        config.ENV_DATA["cluster_namespace"]
+                if (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                ) and not (upgrade_in_current_source):
+                    create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+                if upgrade_version != "4.9":
+                    # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+                    # OCS automatically.
+                    upgrade_ocs.update_subscription(channel)
+                if original_ocs_version == "4.8" and upgrade_version == "4.9":
+                    deployment = Deployment()
+                    deployment.subscribe_ocs()
+                else:
+                    # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
+                    # we need to wait and approve install plan, otherwise it's approved in the
+                    # subscribe_ocs method.
+                    subscription_plan_approval = config.DEPLOYMENT.get(
+                        "subscription_plan_approval"
                     )
-            if (config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM) and not (
-                upgrade_in_current_source
-            ):
-                for attempt in range(2):
-                    # We need to do it twice, because some of the SA are updated
-                    # after the first load of OCS pod after upgrade. So we need to
-                    # link updated SA again.
-                    log.info(
-                        f"Sleep 1 minute before attempt: {attempt + 1}/2 "
-                        "of linking secret/SAs"
-                    )
-                    time.sleep(60)
-                    link_all_sa_and_secret_and_delete_pods(
-                        constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
-                    )
+                    if subscription_plan_approval == "Manual":
+                        wait_for_install_plan_and_approve(
+                            config.ENV_DATA["cluster_namespace"]
+                        )
+                if (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                ) and not (upgrade_in_current_source):
+                    for attempt in range(2):
+                        # We need to do it twice, because some of the SA are updated
+                        # after the first load of OCS pod after upgrade. So we need to
+                        # link updated SA again.
+                        log.info(
+                            f"Sleep 1 minute before attempt: {attempt + 1}/2 "
+                            "of linking secret/SAs"
+                        )
+                        time.sleep(60)
+                        link_all_sa_and_secret_and_delete_pods(
+                            constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
+                        )
         if operation:
             log.info(f"Calling test function: {operation}")
             _ = operation(*operation_args, **operation_kwargs)
@@ -691,13 +729,16 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         )
         exec_cmd(cmd)
 
-    ocs_install_verification(
-        timeout=600,
-        skip_osd_distribution_check=True,
-        ocs_registry_image=upgrade_ocs.ocs_registry_image,
-        post_upgrade_verification=True,
-        version_before_upgrade=upgrade_ocs.version_before_upgrade,
-    )
+    if config.ENV_DATA.get("mcg_only_deployment"):
+        mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
+    else:
+        ocs_install_verification(
+            timeout=600,
+            skip_osd_distribution_check=True,
+            ocs_registry_image=upgrade_ocs.ocs_registry_image,
+            post_upgrade_verification=True,
+            version_before_upgrade=upgrade_ocs.version_before_upgrade,
+        )
 
 
 def ocs_odf_upgrade_ui():

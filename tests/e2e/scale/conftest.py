@@ -26,7 +26,7 @@ def pytest_collection_modifyitems(items):
         for item in items.copy():
             for testname in skip_list:
                 if testname in str(item.fspath):
-                    log.info(
+                    log.debug(
                         f"Test {item} is removed from the collected items"
                         f" since it does not run on vSphere"
                     )

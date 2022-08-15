@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
     skipif_ibm_cloud,
+    skipif_ms_consumer,
+    skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
@@ -16,6 +18,8 @@ from ocs_ci.ocs.node import (
     get_node_pods,
     get_node_osd_ids,
     get_node_mon_ids,
+    get_worker_nodes,
+    wait_for_node_count_to_reach_status,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -26,7 +30,9 @@ from ocs_ci.ocs.resources.pod import (
     get_rook_ceph_pod_names,
     get_mon_pods,
     get_mon_pod_id,
+    check_pods_after_node_replacement,
 )
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +78,8 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 
 @ignore_leftovers
 @tier4a
+@skipif_ms_consumer
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2552")
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
@@ -122,6 +130,8 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         if not ocs_nodes:
             pytest.skip("We don't have ocs nodes in the cluster")
 
+        wnodes = get_worker_nodes()
+
         ocs_node = random.choice(ocs_nodes)
         node_name = ocs_node.name
         log.info(f"Selected node is '{node_name}'")
@@ -145,11 +155,15 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         ), f"Rook Ceph pods status didn't change after {timeout} seconds"
 
         log.info("Check the rook ceph pods are in 'Running' or 'Completed' state")
-        timeout = 480
+        previous_timeout = 480
+        timeout = 600
         are_pods_running = wait_for_pods_to_be_running(
             pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30
         )
-        assert are_pods_running, f"The pods are not 'Running' after {timeout} seconds"
+        assert are_pods_running, (
+            f"Increased timeout from {previous_timeout} to {timeout} seconds, "
+            f"The pods are not 'Running' even after {timeout} seconds"
+        )
 
         # Get the rook ceph pods without the osd, and mon pods have the old node ids
         osd_pods = get_osd_pods()
@@ -181,12 +195,22 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         ), f"The new pods are not 'Running' after {timeout} seconds"
 
         log.info("All the pods are in 'Running' or 'Completed' state")
-        log.info(f"Starting the node '{node_name}' again...")
-        nodes.start_nodes(nodes=[ocs_node])
-        wait_for_nodes_status(node_names=[node_name])
 
-        log.info(
-            "Waiting for all the pods to be running and cluster health to be OK..."
-        )
-        wait_for_pods_to_be_running(timeout=600)
+        if is_managed_service_cluster():
+            log.info(
+                "When we use the managed service, the worker node should recover automatically "
+                "by starting the node or removing it, and creating a new one."
+                "Waiting for all the worker nodes to be ready..."
+            )
+            wait_for_node_count_to_reach_status(node_count=len(wnodes), timeout=900)
+            log.info("Waiting for all the pods to be running")
+            assert check_pods_after_node_replacement(), "Not all the pods are running"
+        else:
+            log.info(f"Starting the node '{node_name}' again...")
+            nodes.start_nodes(nodes=[ocs_node])
+            wait_for_nodes_status(node_names=[node_name])
+            log.info("Waiting for all the pods to be running")
+            wait_for_pods_to_be_running(timeout=600)
+
+        log.info("Checking that the cluster health is OK...")
         self.sanity_helpers.health_check(tries=40)

@@ -38,6 +38,8 @@ from ocs_ci.utility.utils import (
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    get_ocp_version,
+    encode,
 )
 
 
@@ -141,6 +143,12 @@ class Vault(KMS):
         self.vault_unseal()
         if config.ENV_DATA.get("use_vault_namespace"):
             self.vault_create_namespace()
+        if config.ENV_DATA.get("use_auth_path"):
+            self.cluster_id = get_running_cluster_id()
+            self.vault_kube_auth_path = (
+                f"{constants.VAULT_DEFAULT_PATH_PREFIX}-{self.cluster_id}-"
+                f"{get_cluster_name(config.ENV_DATA['cluster_path'])}"
+            )
         self.vault_create_backend_path()
         self.create_ocs_vault_resources()
 
@@ -183,6 +191,11 @@ class Vault(KMS):
 
         if not self.vault_namespace_exists(self.vault_namespace):
             self.create_namespace(self.vault_namespace)
+
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = (
+                f"{constants.VAULT_HCP_NAMESPACE}/{self.vault_namespace}"
+            )
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
     def vault_namespace_exists(self, vault_namespace):
@@ -196,7 +209,10 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault namespace lookup {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace lookup -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace lookup {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
@@ -236,7 +252,10 @@ class Vault(KMS):
             VaultOperationError: If namespace is not created successfully
 
         """
-        cmd = f"vault namespace create {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace create -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace create {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -299,12 +318,15 @@ class Vault(KMS):
         self.create_resource(ca_data, prefix="ca")
 
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+            self.client_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            self.client_key_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
             # create client cert secret
             client_cert_data = templating.load_yaml(
                 constants.EXTERNAL_VAULT_CLIENT_CERT
-            )
-            self.client_cert_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
             client_cert_data["data"]["cert"] = self.client_cert_base64
@@ -312,9 +334,6 @@ class Vault(KMS):
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-            self.client_key_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-            )
             client_key_data["metadata"]["name"] = self.client_key_name
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
@@ -358,7 +377,10 @@ class Vault(KMS):
         if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_KUBERNETES_AUTH:
             self.vault_auth_method = constants.VAULT_KUBERNETES_AUTH
             self.create_ocs_kube_auth_resources()
-            self.vault_kube_auth_setup(token_reviewer_name=self.vault_cwd_kms_sa_name)
+            self.vault_kube_auth_setup(
+                auth_path=self.vault_kube_auth_path,
+                token_reviewer_name=self.vault_cwd_kms_sa_name,
+            )
             self.create_vault_kube_auth_role(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                 role_name=self.vault_kube_auth_role,
@@ -373,10 +395,7 @@ class Vault(KMS):
             # create oc resource secret for token
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
             # token has to base64 encoded (with padding)
-            token_data["data"]["token"] = base64.b64encode(
-                # encode() because b64encode expects a byte type
-                self.vault_path_token.encode()
-            ).decode()  # decode() because b64encode returns a byte type
+            token_data["data"]["token"] = encode(self.vault_path_token)
             self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
@@ -403,8 +422,13 @@ class Vault(KMS):
             connection_data["data"][
                 "VAULT_AUTH_KUBERNETES_ROLE"
             ] = constants.VAULT_KUBERNETES_AUTH_ROLE
+
         else:
             connection_data["data"].pop("VAULT_AUTH_KUBERNETES_ROLE")
+        if config.ENV_DATA.get("use_auth_path"):
+            connection_data["data"]["VAULT_AUTH_MOUNT_PATH"] = self.vault_kube_auth_path
+        else:
+            connection_data["data"].pop("VAULT_AUTH_MOUNT_PATH")
         self.create_resource(connection_data, prefix="kmsconnection")
 
     def vault_unseal(self):
@@ -561,7 +585,10 @@ class Vault(KMS):
 
         """
         if self.vault_deploy_mode == "external":
-            vault_conf = load_auth_config()["vault"]
+            if config.ENV_DATA.get("use_vault_namespace"):
+                vault_conf = load_auth_config()["vault_hcp"]
+            else:
+                vault_conf = load_auth_config()["vault"]
             return vault_conf
 
     def get_vault_connection_info(self, resource_name=None):
@@ -710,7 +737,11 @@ class Vault(KMS):
         # Unset namespace from environment
         # else delete will look for namespace within namespace
         os.environ.pop("VAULT_NAMESPACE")
-        cmd = f"vault namespace delete {self.vault_namespace}/"
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = self.vault_namespace.replace("admin/", "")
+            cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
+        else:
+            cmd = f"vault namespace delete {self.vault_namespace}/"
         subprocess.check_output(shlex.split(cmd))
         if self.vault_namespace_exists(self.vault_namespace):
             raise KMSResourceCleaneupError(
@@ -882,15 +913,28 @@ class Vault(KMS):
             buf = json.loads(conn_str)
             buf["vaultAddress"] = f"https://{self.vault_server}:{self.port}"
             buf["vaultBackendPath"] = self.vault_backend_path
-            buf["vaultCAFromsecret"] = get_default_if_keyval_empty(
+            buf["vaultCAFromSecret"] = get_default_if_keyval_empty(
                 config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
             )
-            buf["vaultClientCertFromSecret"] = self.client_cert_name
-            buf["vaultClientCertKeyFromSecret"] = self.client_key_name
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                buf["vaultClientCertFromSecret"] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_CERT",
+                    defaults.VAULT_DEFAULT_CLIENT_CERT,
+                )
+                buf["vaultClientCertKeyFromSecret"] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_KEY",
+                    defaults.VAULT_DEFAULT_CLIENT_KEY,
+                )
+            else:
+                buf.pop("vaultClientCertFromSecret")
+                buf.pop("vaultClientCertKeyFromSecret")
+
             if self.vault_namespace:
                 buf["vaultNamespace"] = self.vault_namespace
             if self.vault_kube_auth_path:
-                buf["vaultAuthPath"] = self.vault_kube_auth_path
+                buf["vaultAuthPath"] = f"/v1/auth/{self.vault_kube_auth_path}/login"
             else:
                 buf.pop("vaultAuthPath")
             if self.vault_kube_auth_namespace:
@@ -999,17 +1043,21 @@ class Vault(KMS):
         """
 
         # Get secret name from serviceaccount
-        logger.info("Retrieving secret name from serviceaccount ")
-        cmd = (
-            f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-        )
-        secrets = run_cmd(cmd=cmd).split()
-        for secret in secrets:
-            if "-token-" in secret:
-                secret_name = secret
-        if not secret_name:
-            raise NotFoundError("Secret name not found")
+        if Version.coerce(get_ocp_version()) < Version.coerce("4.11"):
+            logger.info("Retrieving secret name from serviceaccount ")
+            cmd = (
+                f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
+                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            secrets = run_cmd(cmd=cmd).split()
+            secret_name = ""
+            for secret in secrets:
+                if "-token-" in secret and "docker" not in secret:
+                    secret_name = secret
+            if not secret_name:
+                raise NotFoundError("Secret name not found")
+        else:
+            secret_name = helpers.create_sa_token_secret(sa_name=token_reviewer_name)
 
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")
@@ -1042,8 +1090,8 @@ class Vault(KMS):
 
         # enable kubernetes auth method
         if auth_path and auth_namespace:
-            self.vault_kube_auth_path = auth_path
             self.vault_kube_auth_namespace = auth_namespace
+            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
@@ -1075,6 +1123,7 @@ class Vault(KMS):
                 f"vault write auth/{self.vault_kube_auth_path}/config token_reviewer_jwt=@{token_file_name} "
                 f"kubernetes_host={k8s_host} kubernetes_ca_cert=@{ca_file_name}"
             )
+
         os.environ.pop("VAULT_FORMAT")
         proc = subprocess.run(
             cmd,
@@ -1083,7 +1132,6 @@ class Vault(KMS):
             shell=True,
             env=os.environ,
         )
-
         if "Success" in proc.stdout.decode():
             logger.info("vault: Kubernetes auth method configured successfully")
         else:

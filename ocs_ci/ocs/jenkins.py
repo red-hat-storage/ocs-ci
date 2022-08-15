@@ -25,6 +25,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.ocs.node import get_nodes, get_app_pod_running_nodes, get_worker_nodes
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_pvc,
@@ -227,6 +228,8 @@ class Jenkins(object):
         sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             if storagecluster_independent_check()
+            and config.ENV_DATA["platform"].lower()
+            not in constants.MANAGED_SERVICE_PLATFORMS
             else constants.DEFAULT_STORAGECLASS_RBD
         )
         for project in self.projects:

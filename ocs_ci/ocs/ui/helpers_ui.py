@@ -9,7 +9,6 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -121,7 +120,7 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
-    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10"):
+    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10", "4.11"):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )

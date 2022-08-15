@@ -5,6 +5,7 @@ ENV_DATA:
   encryption_at_rest: true
   vault_deploy_mode: external
   use_vault_namespace: false
+  use_auth_path: false
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
   VAULT_CACERT: "ocs-kms-ca-secret"

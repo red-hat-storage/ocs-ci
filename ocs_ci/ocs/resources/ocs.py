@@ -16,6 +16,8 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
+
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +50,15 @@ class OCS(object):
         if "metadata" in self.data:
             self._namespace = self.data.get("metadata").get("namespace")
             self._name = self.data.get("metadata").get("name")
+        if "threading_lock" in self.data:
+            self.threading_lock = self.data.pop("threading_lock")
+        else:
+            self.threading_lock = None
         self.ocp = OCP(
-            api_version=self._api_version, kind=self.kind, namespace=self._namespace
+            api_version=self._api_version,
+            kind=self.kind,
+            namespace=self._namespace,
+            threading_lock=self.threading_lock,
         )
         with tempfile.NamedTemporaryFile(
             mode="w+", prefix=self._kind, delete=False
@@ -86,8 +95,10 @@ class OCS(object):
         After creating a resource from a yaml file, the actual yaml file is
         being changed and more information about the resource is added.
         """
+        cluster_kubeconfig = self.ocp.cluster_kubeconfig
         self.data = self.get()
         self.__init__(**self.data)
+        self.ocp.cluster_kubeconfig = cluster_kubeconfig
 
     def get(self, out_yaml_format=True):
         return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
@@ -203,6 +214,16 @@ def get_ocs_csv():
         CSVNotFound: In case no CSV found.
 
     """
+
+    ver = get_semantic_ocs_version_from_config()
+    operator_base = (
+        defaults.OCS_OPERATOR_NAME if ver < VERSION_4_9 else defaults.ODF_OPERATOR_NAME
+    )
+    operator_name = f"{operator_base}.openshift-storage"
+    operator = OCP(kind="operator", resource_name=operator_name)
+
+    if "Error" in operator.data:
+        raise CSVNotFound(f"{operator_name} is not found, csv check will be skipped")
     namespace = config.ENV_DATA["cluster_namespace"]
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")

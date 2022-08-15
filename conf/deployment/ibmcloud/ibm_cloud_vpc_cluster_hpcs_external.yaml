@@ -30,11 +30,3 @@ ENV_DATA:
 #    ibm_cos_secret_access_key: SECRET PLACEHOLDER
 #DEPLOYMENT:
 #  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
-REPORTING:
-  # We cannot use internal image for must gather cause of secret issue.
-  # To allow us testing NON GA version we have to use upstream image. For GAed
-  # version of OCS, we need to pass extra config file:
-  # conf/ocsci/live-must-gather.yaml
-  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
-  ocs_must_gather_latest_tag: 'latest'
-  overwrite_must_gather_image: false

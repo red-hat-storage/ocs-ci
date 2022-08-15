@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     config,
 )
 from ocs_ci.helpers.helpers import (
@@ -33,14 +35,24 @@ if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
     argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
-    argvalues = [
-        pytest.param(
-            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
-        ),
-        pytest.param(
-            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
-        ),
-    ]
+    if config.ENV_DATA.get("vault_hcp"):
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3973")
+            ),
+            pytest.param(
+                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3974")
+            ),
+        ]
+    else:
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
+            ),
+            pytest.param(
+                "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
+            ),
+        ]
 
 
 @pytest.mark.parametrize(
@@ -50,6 +62,8 @@ else:
 @skipif_ocs_version("<4.7")
 @kms_config_required
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestRbdPvEncryption(ManageTest):
     """
     Test to verify RBD PV encryption

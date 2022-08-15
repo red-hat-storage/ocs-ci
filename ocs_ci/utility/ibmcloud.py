@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
 )
+from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
@@ -220,12 +221,17 @@ def add_deployment_dependencies():
     """
     Adding dependencies for IBM Cloud deployment
     """
-    ocp_version = get_ocp_version()
+    ocp_version = util_version.get_semantic_ocp_version_from_config()
+    if ocp_version >= util_version.VERSION_4_9:
+        logger.info(
+            "IBM Cloud dependencies like volumesnapshot CRs will not be created"
+        )
+        return
     cr_base_url = (
         "https://raw.githubusercontent.com/openshift/csi-external-snapshotter/"
         f"release-{ocp_version}/"
     )
-    if float(ocp_version) < 4.6:
+    if ocp_version < util_version.VERSION_4_6:
         cr_base_url = f"{cr_base_url}config/crd/"
     else:
         cr_base_url = f"{cr_base_url}client/config/crd/"

@@ -59,10 +59,20 @@ class BasePvcPodCreateDelete(E2ETest):
         )
         rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
         for pvc_obj in rbd_pvcs:
-            if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                rbd_rwx_pvc.append(pvc_obj)
-            else:
-                rbd_rwo_pvc.append(pvc_obj)
+            if pvc_obj is not None:
+                if type(pvc_obj) is list:
+                    for pvc_ in pvc_obj:
+                        if pvc_.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                            rbd_rwx_pvc.append(pvc_)
+                        else:
+                            rbd_rwo_pvc.append(pvc_)
+                else:
+
+                    if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                        rbd_rwx_pvc.append(pvc_obj)
+                    else:
+                        rbd_rwo_pvc.append(pvc_obj)
+
         rbd_rwo_pods = helpers.create_pods_parallel(
             rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
         )
@@ -108,11 +118,21 @@ class BasePvcPodCreateDelete(E2ETest):
         temp_pod_list = random.choices(self.all_pod_obj, k=self.delete_pod_count)
         temp_pvc_list = []
         for pod_obj in temp_pod_list:
+            list_counter_for_pvc = 0
             for pvc_obj in self.all_pvc_obj:
-                if pod.get_pvc_name(pod_obj) == pvc_obj.name:
-                    temp_pvc_list.append(pvc_obj)
-                    log.info(f"Deleting pvc {pvc_obj.name}")
-                    self.all_pvc_obj.remove(pvc_obj)
+                if pvc_obj is not None:
+                    if type(pvc_obj) is list:
+                        for pvc_ in pvc_obj:
+                            if pod.get_pvc_name(pod_obj) == pvc_.name:
+                                temp_pvc_list.append(pvc_)
+                                log.info(f"Deleting pvc {pvc_.name}")
+                                self.all_pvc_obj[list_counter_for_pvc].remove(pvc_)
+                    else:
+                        if pod.get_pvc_name(pod_obj) == pvc_obj.name:
+                            temp_pvc_list.append(pvc_obj)
+                            log.info(f"Deleting pvc {pvc_obj.name}")
+                            self.all_pvc_obj.remove(pvc_obj)
+                list_counter_for_pvc += 1
             log.info(f"Deleting pod {pod_obj.name}")
             if pod_obj in self.all_pod_obj:
                 self.all_pod_obj.remove(pod_obj)
