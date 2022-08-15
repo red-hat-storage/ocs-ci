@@ -8,6 +8,7 @@ import pytest
 import statistics
 
 # Local modules
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -513,7 +514,23 @@ class TestPvcSnapshotPerformance(PASTest):
         # SmallFiles workload, since it is mandatory for the workload.
         # This is deployed once for all test iterations and will be deleted
         # in the end of the test.
-        self.es = ElasticSearch()
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+                return
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not super(TestPvcSnapshotPerformance, self).es_connect():
+                    self.es = None
+                    log.error("ElasticSearch doesn't exist ! The test cannot run")
+                    return
 
         # Loading the main template yaml file for the benchmark and update some
         # fields with new values
