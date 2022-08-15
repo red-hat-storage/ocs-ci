@@ -224,5 +224,8 @@ def get_lso_channel():
         # Use channel corresponding to OCP version
         return ocp_version
     else:
-        # Use latest channel
-        return sorted_versions[-1]
+        if len(sorted_versions) >= 1:
+            # Use latest channel
+            return sorted_versions[-1]
+        else:
+            return channels[-1]["name"]
