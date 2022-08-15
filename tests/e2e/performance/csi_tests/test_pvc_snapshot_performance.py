@@ -42,8 +42,6 @@ class TestPvcSnapshotPerformance(PASTest):
     Tests to verify PVC snapshot creation and deletion performance
     """
 
-    tests_numbers = 3  # number of tests to run
-
     @pytest.fixture()
     def base_setup(
         self,
@@ -101,6 +99,7 @@ class TestPvcSnapshotPerformance(PASTest):
         log.info("Starting the test setup")
         super(TestPvcSnapshotPerformance, self).setup()
         self.benchmark_name = "pvc_snaspshot_performance"
+        self.tests_numbers = 3  # number of tests to run
 
     def init_full_results(self, full_results):
         """
