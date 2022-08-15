@@ -2,7 +2,6 @@
 import logging
 import time
 import datetime
-import os
 from uuid import uuid4
 
 # 3ed party modules
@@ -762,23 +761,14 @@ class TestPvcSnapshotPerformance(PASTest):
         This is not a test - it is only check that previous tests ran and finished as expected
         and reporting the full results (links in the ES) of previous tests (6 + 2)
         """
-
-        workloads = [
-            {
-                "name": "test_pvc_snapshot_performance",
-                "tests": 6,
-                "test_name": "PVC Snapshot",
-            },
-            {
-                "name": "test_pvc_snapshot_performance_multiple_files",
-                "tests": 2,
-                "test_name": "PVC Snapshot - Multiple Files",
-            },
-        ]
-        for wl in workloads:
-            self.number_of_tests = wl["tests"]
-            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
-            self.results_file = os.path.join(self.results_path, "all_results.txt")
-            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
-            self.check_tests_results()
-            self.push_to_dashboard(test_name=wl["test_name"])
+        self.add_test_to_results_check(
+            test="test_pvc_snapshot_performance",
+            test_count=6,
+            test_name="PVC Snapshot",
+        )
+        self.add_test_to_results_check(
+            test="test_pvc_snapshot_performance_multiple_files",
+            test_count=2,
+            test_name="PVC Snapshot - Multiple Files",
+        )
+        self.check_results_and_push_to_dashboard()
