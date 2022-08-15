@@ -925,17 +925,21 @@ def get_helper_pods_output():
         output_describe_mg_helper (str): the output of "oc describe mg-helper pods"
 
     """
-    from ocs_ci.ocs.resources.pod import get_pod_obj
+    from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 
     output_describe_mg_helper = ""
     helper_pods = get_pod_name_by_pattern(pattern="helper")
     for helper_pod in helper_pods:
-        helper_pod_obj = get_pod_obj(
-            name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        output_describe_mg_helper += (
-            f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
-        )
+        try:
+            helper_pod_obj = get_pod_obj(
+                name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            output_describe_mg_helper += (
+                f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
+                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod.name)}"
+            )
+        except Exception as e:
+            log.error(e)
     return output_describe_mg_helper
 
 
