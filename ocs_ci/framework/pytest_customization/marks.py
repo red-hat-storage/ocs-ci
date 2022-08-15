@@ -42,6 +42,8 @@ tier4b = compose(tier4, pytest.mark.tier4b)
 tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
 
+# flexible scaling
+flexible_scaling = is_flexible_scaling_enabled()
 
 # build acceptance
 acceptance = pytest.mark.acceptance
@@ -326,12 +328,12 @@ skipif_no_lso = pytest.mark.skipif(
 )
 
 flexible_scaling_required = pytest.mark.skipif(
-    is_flexible_scaling_enabled() is False,
+    flexible_scaling is False,
     reason="Test runs ONLY on flexible scaling cluster",
 )
 
 skipif_flexible_scaling = pytest.mark.skipif(
-    is_flexible_scaling_enabled() is True,
+    flexible_scaling is True,
     reason="Test will not run on flexible scaling cluster",
 )
 
