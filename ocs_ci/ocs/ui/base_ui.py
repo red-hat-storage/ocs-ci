@@ -54,22 +54,36 @@ class BaseUI:
 
     def __init__(self, driver: WebDriver):
         self.driver = driver
-        self.screenshots_folder = os.path.join(
+        base_ui_logs_dir = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+            f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+        )
+        self.screenshots_folder = os.path.join(
+            base_ui_logs_dir,
+            "screenshots_ui",
+            get_current_test_name(),
+        )
+        self.dom_folder = os.path.join(
+            base_ui_logs_dir,
+            "dom",
             get_current_test_name(),
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
 
-    def do_click(self, locator, timeout=30, enable_screenshot=False):
+        if not os.path.isdir(self.dom_folder):
+            Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
+        logger.info(f"screenshots pictures:{self.dom_folder}")
+
+    def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
         """
         Click on Button/link on OpenShift Console
 
         locator (set): (GUI element needs to operate on (str), type (By))
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
+        copy_dom (bool): copy page source of the webpage
         """
         try:
             wait = WebDriverWait(self.driver, timeout)
@@ -80,8 +94,11 @@ class BaseUI:
             if screenshot:
                 self.take_screenshot()
             element.click()
+            if copy_dom:
+                self.copy_dom()
         except TimeoutException as e:
             self.take_screenshot()
+            self.copy_dom()
             logger.error(e)
             raise TimeoutException
 
@@ -255,9 +272,23 @@ class BaseUI:
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
-        logger.info(f"Creating snapshot: {filename}")
+        logger.debug(f"Creating screenshot: {filename}")
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
+
+    def copy_dom(self):
+        """
+        Get page source of the webpage
+
+        """
+        filename = os.path.join(
+            self.dom_folder,
+            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+        )
+        logger.info(f"Copy DOM file: {filename}")
+        html = self.driver.page_source
+        with open(filename, "w") as f:
+            f.write(html)
 
     def do_clear(self, locator, timeout=30):
         """
@@ -713,6 +744,55 @@ class PageNavigator(BaseUI):
             return False
 
 
+def screenshot_dom_location(type_loc="screenshot"):
+    """
+    Get the location for copy DOM/screenshot
+
+    Args:
+        type_loc (str): if type_loc is "screenshot" the location for copy screeenshot else DOM
+
+    """
+    base_ui_logs_dir = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+    )
+    if type_loc == "screenshot":
+        return os.path.join(
+            base_ui_logs_dir,
+            "screenshots_ui",
+            get_current_test_name(),
+        )
+    else:
+        return os.path.join(
+            base_ui_logs_dir,
+            "dom",
+            get_current_test_name(),
+        )
+
+
+def copy_dom(driver):
+    """
+    Copy DOM using python code
+
+    Args:
+        driver (Selenium WebDriver)
+
+    """
+    dom_folder = screenshot_dom_location(type_loc="dom")
+    if not os.path.isdir(dom_folder):
+        Path(dom_folder).mkdir(parents=True, exist_ok=True)
+    time.sleep(1)
+    filename = os.path.join(
+        dom_folder,
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+    )
+    logger.info(f"Copy DOM file: {filename}")
+    html = driver.page_source
+    with open(filename, "w") as f:
+        f.write(html)
+    time.sleep(0.5)
+
+
 def take_screenshot(driver):
     """
     Take screenshot using python code
@@ -721,11 +801,7 @@ def take_screenshot(driver):
         driver (Selenium WebDriver)
 
     """
-    screenshots_folder = os.path.join(
-        os.path.expanduser(ocsci_config.RUN["log_dir"]),
-        f"screenshots_ui_{ocsci_config.RUN['run_id']}",
-        get_current_test_name(),
-    )
+    screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
@@ -733,7 +809,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating screenshot: {filename}")
+    logger.debug(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
@@ -861,11 +937,13 @@ def login_ui(console_url=None):
             element.click()
         except TimeoutException as e:
             take_screenshot(driver)
+            copy_dom(driver)
             logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
     take_screenshot(driver)
+    copy_dom(driver)
     element.send_keys("kubeadmin")
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
@@ -892,6 +970,7 @@ def close_browser(driver):
     """
     logger.info("Close browser")
     take_screenshot(driver)
+    copy_dom(driver)
     driver.close()
 
 
