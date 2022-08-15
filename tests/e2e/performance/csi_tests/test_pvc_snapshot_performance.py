@@ -115,7 +115,6 @@ class TestPvcSnapshotPerformance(PASTest):
         """
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
-        full_results.add_key("index", full_results.new_index)
         return full_results
 
     def measure_create_snapshot_time(
