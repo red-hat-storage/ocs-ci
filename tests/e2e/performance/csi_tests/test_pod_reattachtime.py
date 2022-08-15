@@ -9,16 +9,19 @@ from ocs_ci.ocs import constants, node
 import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.resources import ocs
 
 logger = logging.getLogger(__name__)
 
 Interfaces_info = {
     constants.CEPHBLOCKPOOL: {
         "name": "RBD",
+        "sc": constants.CEPHBLOCKPOOL_SC,
         "sc_name": constants.DEFAULT_STORAGECLASS_RBD,
     },
     constants.CEPHFILESYSTEM: {
         "name": "CephFS",
+        "sc": constants.CEPHFILESYSTEM_SC,
         "sc_name": constants.DEFAULT_STORAGECLASS_CEPHFS,
     },
 }
@@ -49,8 +52,39 @@ class TestPodReattachTimePerformance(PASTest):
         """
         logger.info("Starting the test cleanup")
 
+        # Delete the Storage Class
+        try:
+            logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
+            self.sc_obj.delete()
+            logger.info("Wait until the SC is deleted.")
+            self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
+        except Exception as ex:
+            logger.warning(f"Can not delete the test sc : {ex}")
+
         # Deleting the namespace used by the test
         self.delete_test_project()
+
+        # Delete the Storage Pool
+        logger.info(f"Try to delete the Storage pool {self.pool_name}")
+        try:
+            self.delete_ceph_pool(self.pool_name)
+        except Exception:
+            pass
+        finally:
+            # Verify deletion by checking the backend CEPH pools using the toolbox
+            if self.interface == constants.CEPHBLOCKPOOL:
+                results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
+                logger.debug(f"Existing pools are : {results}")
+                if self.pool_name in results.split():
+                    logger.warning(
+                        "The pool did not deleted by CSI, forcing delete it manually"
+                    )
+                    self.ceph_cluster.toolbox.exec_cmd_on_pod(
+                        f"ceph osd pool delete {self.pool_name} {self.pool_name} "
+                        "--yes-i-really-really-mean-it"
+                    )
+                else:
+                    logger.info(f"The pool {self.pool_name} was deleted successfully")
 
         super(TestPodReattachTimePerformance, self).teardown()
 
@@ -84,6 +118,23 @@ class TestPodReattachTimePerformance(PASTest):
             timeout=1200,
         )
         return pod_object
+
+    def create_new_pool_and_sc(self, secret_factory):
+
+        self.pool_name = (
+            f"pas-test-pool-{Interfaces_info[self.interface]['name'].lower()}"
+        )
+        secret = secret_factory(interface=self.interface)
+        self.create_new_pool(self.pool_name)
+        # Creating new StorageClass (pool) for the test.
+        self.sc_obj = helpers.create_storage_class(
+            interface_type=self.interface,
+            interface_name=self.pool_name,
+            secret_name=secret.name,
+            sc_name=self.pool_name,
+            fs_name=self.pool_name,
+        )
+        logger.info(f"The new SC is : {self.sc_obj.name}")
 
     def init_full_results(self, full_results):
         """
@@ -122,7 +173,7 @@ class TestPodReattachTimePerformance(PASTest):
         ],
     )
     def test_pod_reattach_time_performance(
-        self, storageclass_factory, interface, copies, timeout, total_time_limit
+        self, secret_factory, interface, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
@@ -152,7 +203,20 @@ class TestPodReattachTimePerformance(PASTest):
             [],
         )
 
-        self.sc_obj = storageclass_factory(self.interface)
+        # Create new pool and sc only for RBD, for CepgFS use thr default
+        if self.interface == constants.CEPHBLOCKPOOL:
+            # Creating new pool to run the test on it
+            self.create_new_pool_and_sc(secret_factory)
+        else:
+            self.sc_obj = ocs.OCS(
+                kind="StorageCluster",
+                metadata={
+                    "namespace": self.namespace,
+                    "name": Interfaces_info[self.interface]["sc"],
+                },
+            )
+            self.pool_name = "ocs-storagecluster-cephfilesystem"
+
         for sample_index in range(1, samples_num + 1):
 
             csi_start_time = self.get_time("csi")
