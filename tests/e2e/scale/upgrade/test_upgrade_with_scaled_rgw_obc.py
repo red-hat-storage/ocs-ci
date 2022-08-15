@@ -48,7 +48,7 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
     # Running hsbench to create buckets with objects before upgrade
     scale_noobaa_lib.hsbench_io(
         namespace=namespace,
-        num_obj=100000,
+        num_obj=150000,
         num_bucket=10,
         object_size="100K",
         validate=True,
