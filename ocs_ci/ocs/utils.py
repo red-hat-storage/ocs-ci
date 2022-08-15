@@ -923,7 +923,7 @@ def get_helper_pods_output():
     Get the output of "oc describe mg-helper pods"
 
     Returns:
-        output_describe_mg_helper (str): the output of "oc describe mg-helper pods"
+        output_describe_mg_helper (str): the output of "oc describe pods mg-helper" and "oc logs mg-helper"
 
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
