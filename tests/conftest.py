@@ -5557,9 +5557,7 @@ def set_live_must_gather_images(pytestconfig):
     ):
         # There is a promise that in 4.10 or 4.11 there will be possible to change
         # global pull secret. If that's the case, we can remove those workarounds.
-        config.REPORTING[
-            "default_ocs_must_gather_image"
-        ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
+        config.REPORTING["ocs_must_gather_image"] = defaults.MUST_GATHER_UPSTREAM_IMAGE
         config.REPORTING[
             "default_ocs_must_gather_latest_tag"
         ] = defaults.MUST_GATHER_UPSTREAM_TAG
