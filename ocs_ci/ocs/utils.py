@@ -937,7 +937,7 @@ def get_helper_pods_output():
             )
             output_describe_mg_helper += (
                 f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
-                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod.name)}"
+                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod)}"
             )
         except Exception as e:
             log.error(e)
