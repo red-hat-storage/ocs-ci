@@ -16,7 +16,6 @@ from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
 import ocs_ci.ocs.exceptions as ex
@@ -194,8 +193,7 @@ class TestPvcSnapshotPerformance(PASTest):
         """
 
         # Getting the total Storage capacity
-        ceph_cluster = CephCluster()
-        ceph_capacity = ceph_cluster.get_ceph_capacity()
+        ceph_capacity = self.ceph_cluster.get_ceph_capacity()
 
         log.info(f"Total capacity size is : {ceph_capacity}")
         log.info(f"PVC Size is : {pvc_size}")
