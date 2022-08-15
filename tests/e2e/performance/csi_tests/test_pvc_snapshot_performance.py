@@ -81,9 +81,11 @@ class TestPvcSnapshotPerformance(PASTest):
                 interface_type=self.interface,
                 pvc_name=self.pvc_obj.name,
                 namespace=self.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
             )
             helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
             self.pod_object.reload()
+            self.pod_object.workload_setup(self.interface, jobs=1, fio_installed=True)
         except Exception as e:
             log.error(
                 f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
