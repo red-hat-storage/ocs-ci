@@ -2,7 +2,6 @@
 import logging
 import time
 import datetime
-from uuid import uuid4
 
 # 3ed party modules
 import pytest
@@ -21,7 +20,6 @@ from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
 import ocs_ci.ocs.exceptions as ex
-from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -103,25 +101,6 @@ class TestPvcSnapshotPerformance(PASTest):
         log.info("Starting the test setup")
         super(TestPvcSnapshotPerformance, self).setup()
         self.benchmark_name = "pvc_snaspshot_performance"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
 
     def init_full_results(self, full_results):
         """
