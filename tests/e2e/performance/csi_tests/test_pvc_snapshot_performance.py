@@ -22,7 +22,6 @@ import ocs_ci.ocs.exceptions as ex
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs.perfresult import ResultsAnalyse
-from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
@@ -211,9 +210,6 @@ class TestPvcSnapshotPerformance(PASTest):
         file_size = f"{int(filesize * 1024)}M"
 
         all_results = []
-
-        self.results_path = get_full_test_logs_path(cname=self)
-        log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
         # Collecting environment information
@@ -569,9 +565,6 @@ class TestPvcSnapshotPerformance(PASTest):
         switch_to_project(BMO_NAME)
 
         all_results = []
-
-        self.results_path = get_full_test_logs_path(cname=self)
-        log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
         # Collecting environment information
