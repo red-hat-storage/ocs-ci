@@ -13,8 +13,9 @@ import ovirtsdk4.types as types
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
-    update_machine_conf,
     comment_sensitive_var,
+    get_ignition_provider_version,
+    update_machine_conf,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -54,6 +55,7 @@ from ocs_ci.utility.utils import (
     set_aws_region,
     run_cmd,
     get_module_ip,
+    get_terraform_ignition_provider,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
@@ -1671,6 +1673,17 @@ class VSPHEREUPINode(VMWareNodes):
             >= version_module.VERSION_4_11
         ):
             comment_sensitive_var()
+            ignition_provider_version = get_ignition_provider_version()
+            terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            terraform_ignition_provider_path = os.path.join(
+                self.terraform_data_dir,
+                terraform_plugins_path,
+                f"terraform-provider-ignition_{ignition_provider_version}",
+            )
+            if not os.path.isfile(terraform_ignition_provider_path):
+                get_terraform_ignition_provider(
+                    self.terraform_data_dir, version=ignition_provider_version
+                )
 
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)
