@@ -208,14 +208,15 @@ ENV_DATA:
   rhel8_template: 'rhel85_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
-  default_acm_unreleased_image: "2.5.1-DOWNSTREAM-2022-06-21-19-23-07"
+  default_acm_unreleased_image: "2.5.2-DOWNSTREAM-2022-07-29-15-56-49"
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.3'
+  rosa_cli_version: '1.2.5'
   appliance_mode: true
+  ms_osd_pod_memory: "7Gi"
 
   # used in external mode deployment
   restricted-auth-permission: false

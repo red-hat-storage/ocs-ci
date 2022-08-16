@@ -145,9 +145,11 @@ BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
+DRPOLICY = "DRPolicy"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
+VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "lvmcluster"
 
@@ -769,9 +771,11 @@ ALERT_CLUSTERERRORSTATE = "CephClusterErrorState"
 ALERT_CLUSTERWARNINGSTATE = "CephClusterWarningState"
 ALERT_DATARECOVERYTAKINGTOOLONG = "CephDataRecoveryTakingTooLong"
 ALERT_MGRISABSENT = "CephMgrIsAbsent"
+ALERT_MGRISMISSINGREPLICAS = "CephMgrIsMissingReplicas"
 ALERT_MONQUORUMATRISK = "CephMonQuorumAtRisk"
 ALERT_MONQUORUMLOST = "CephMonQuorumLost"
 ALERT_OSDDISKNOTRESPONDING = "CephOSDDiskNotResponding"
+ALERT_OSDDISKUNAVAILABLE = "CephOSDDiskUnavailable"
 ALERT_PGREPAIRTAKINGTOOLONG = "CephPGRepairTakingTooLong"
 ALERT_PROMETHEUSRULEFAILURES = "PrometheusRuleFailures"
 ALERT_BUCKETREACHINGQUOTASTATE = "NooBaaBucketReachingQuotaState"
@@ -976,6 +980,7 @@ HTPASSWD_SECRET_NAME = "htpass-secret"
 HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
+UI_DEPLOYMENT = "ui"
 SUPPORTED_BROWSERS = CHROME_BROWSER
 
 # Managed service deployment constants
@@ -1544,6 +1549,7 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 # the pattern "/registry/" match the test path and so the test belongs to
 # Magenta squad.
 SQUADS = {
+    "Aqua": ["/lvmo/"],
     "Brown": ["/z_cluster/"],
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
@@ -1638,6 +1644,20 @@ mon_osd_nearfull_ratio = .75
 mon_max_pg_per_osd = 600
 mon_pg_warn_max_object_skew = 0
 mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+"""
+
+ROOK_CEPH_CONFIG_VALUES_411 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+rbd_mirror_die_after_seconds = 3600
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.8
 """
@@ -1796,8 +1816,15 @@ SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
 SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
 SPACE = " "
 
+# DR actions
+ACTION_FAILOVER = "Failover"
+ACTION_RELOCATE = "Relocate"
+
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
+
+FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/fsync.py")
+
 # Sno and lvmo constants
 SNO_NODE_NAME = "sno-edge-0"
 LVMO_POD_LABEL = {

@@ -1235,6 +1235,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         constants.VSPHERE_INSTALLER_REPO,
                         upi_repo_path,
                         installer_release_branch,
+                        force_checkout=True,
                     )
             except Exception as ex:
                 logger.error(ex)
@@ -1370,7 +1371,7 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"{self.installer} create cluster "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=7200,
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
@@ -1378,7 +1379,14 @@ class VSPHEREIPI(VSPHEREBASE):
                         gather_bootstrap()
                     except Exception as ex:
                         logger.error(ex)
-                raise e
+                    raise e
+                if "Waiting up to" in str(e):
+                    run_cmd(
+                        f"{self.installer} wait-for install-complete "
+                        f"--dir {self.cluster_path} "
+                        f"--log-level {log_cli_level}",
+                        timeout=3600,
+                    )
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -1532,7 +1540,7 @@ def clone_openshift_installer():
     if Version.coerce(ocp_version) >= Version.coerce("4.5"):
         if config.ENV_DATA["sno"]:
             constants.VSPHERE_INSTALLER_REPO = (
-                "https://github.com/shyRozen/installer.git"
+                "https://gitlab.cee.redhat.com/srozen/installer.git"
             )
             clone_repo(
                 url=constants.VSPHERE_INSTALLER_REPO,

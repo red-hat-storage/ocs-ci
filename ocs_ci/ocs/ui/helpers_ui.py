@@ -43,6 +43,7 @@ def ui_deployment_conditions():
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
+        constants.GCP_PLATFORM,
     ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
@@ -117,6 +118,7 @@ def ui_add_capacity_conditions():
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
+        constants.GCP_PLATFORM,
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False

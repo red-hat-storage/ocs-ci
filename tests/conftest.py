@@ -185,16 +185,21 @@ def pytest_collection_modifyitems(session, items):
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
-        if any(map(lambda x: "_squad" in x.name, item.iter_markers())):
-            continue
-        for squad, paths in constants.SQUADS.items():
-            for _path in paths:
-                # Limit the test_path to the tests directory
-                test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
-                if _path in test_path:
-                    item.add_marker(f"{squad.lower()}_squad")
-                    item.user_properties.append(("squad", squad))
-                    break
+        skip_path_squad_marker = False
+        for marker in item.iter_markers():
+            if "_squad" in marker.name:
+                squad = marker.name.split("_")[0]
+                item.user_properties.append(("squad", squad.capitalize()))
+                skip_path_squad_marker = True
+        if not skip_path_squad_marker:
+            for squad, paths in constants.SQUADS.items():
+                for _path in paths:
+                    # Limit the test_path to the tests directory
+                    test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
+                    if _path in test_path:
+                        item.add_marker(f"{squad.lower()}_squad")
+                        item.user_properties.append(("squad", squad))
+                        break
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:
@@ -640,6 +645,7 @@ def storageclass_factory_fixture(
         rbd_thick_provision=False,
         encrypted=False,
         encryption_kms_id=None,
+        volume_binding_mode="Immediate",
     ):
         """
         Args:
@@ -661,6 +667,8 @@ def storageclass_factory_fixture(
             encrypted (bool): True to enable RBD PV encryption
             encryption_kms_id (str): Key value of vault config to be used from
                     csi-kms-connection-details configmap
+            volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
+                till pod attachment.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -695,6 +703,7 @@ def storageclass_factory_fixture(
                 rbd_thick_provision=rbd_thick_provision,
                 encrypted=encrypted,
                 encryption_kms_id=encryption_kms_id,
+                volume_binding_mode=volume_binding_mode,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -1667,6 +1676,12 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
         try:
             for load_status in TimeoutSampler(300, 3, config.RUN.get, "load_status"):
                 if load_status in ["paused", "reduced"]:
+                    # Wait for 45 seconds for cluster load to pause/reduce effectively
+                    wait_time = 45
+                    log.info(
+                        f"Waiting for {wait_time} seconds for cluster load to pause/reduce..."
+                    )
+                    time.sleep(wait_time)
                     break
         except TimeoutExpiredError:
             log.error(
@@ -3743,9 +3758,12 @@ def snapshot_restore_factory_fixture(request):
         restore_pvc_name = restore_pvc_name or (
             helpers.create_unique_resource_name(snapshot_obj.name, "restore")
         )
+        vol_snapshot_class = snapshot_info["spec"]["volumeSnapshotClassName"]
 
-        if snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        if (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
         ):
             storageclass = (
                 storageclass
@@ -3753,8 +3771,10 @@ def snapshot_restore_factory_fixture(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        elif (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
         ):
             storageclass = (
                 storageclass
@@ -4130,14 +4150,16 @@ def login_factory_fixture(request):
     """
     Calling this fixture will login into console using other user(user other than kubeadmin)
     """
-    driver = None
+    drivers = []
 
     def factory(username, password):
         driver = login_ui(username=username, password=password)
+        drivers.append(driver)
         return driver
 
     def finalizer():
-        close_browser(driver)
+        for driver in drivers:
+            close_browser(driver)
 
     request.addfinalizer(finalizer)
 
@@ -5551,6 +5573,12 @@ def set_live_must_gather_images(pytestconfig):
     """
     live_deployment = config.DEPLOYMENT["live_deployment"]
     ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    # For ROSA platforms, we use upstream must gather image
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        log.debug(
+            "Live must gather image is not supported in Managed Service platforms"
+        )
+        return
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
     if live_deployment or ibm_cloud_platform:

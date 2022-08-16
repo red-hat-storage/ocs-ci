@@ -49,7 +49,7 @@ class TestLvmSnapshot(ManageTest):
     @tier1
     @acceptance
     @skipif_lvm_not_installed
-    @skipif_ocs_version("<4.10")
+    @skipif_ocs_version("<4.11")
     def test_create_clone_from_pvc(
         self,
         volume_mode,
@@ -103,14 +103,14 @@ class TestLvmSnapshot(ManageTest):
             block = True
         pod_obj = pod_factory(pvc=pvc_obj, raw_block_pv=block)
 
-        fs = "fs"
+        storage_type = "fs"
         block = False
         if volume_mode == constants.VOLUME_MODE_BLOCK:
-            fs = "block"
+            storage_type = "block"
             block = True
 
         pod_obj.run_io(
-            fs,
+            storage_type,
             size="5g",
             rate="1500m",
             runtime=0,
@@ -148,7 +148,7 @@ class TestLvmSnapshot(ManageTest):
                 )
 
         restored_pod_obj.run_io(
-            fs,
+            storage_type,
             size="1g",
             rate="1500m",
             runtime=0,

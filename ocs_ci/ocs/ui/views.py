@@ -22,6 +22,7 @@ login = {
 }
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
+    "login_page_title": "Log in · Red Hat OpenShift",
 }
 
 deployment = {
@@ -45,6 +46,7 @@ deployment = {
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
+    "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
@@ -170,6 +172,8 @@ deployment_4_11 = {
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
+    "managed-csi_sc": ("managed-csi-link", By.ID),
+    "standard_sc": ("standard-link", By.ID),
     "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
     "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
@@ -252,18 +256,18 @@ bucketclass = {
 }
 
 obc = {
-    "create_project": (
-        'button[id="yaml-create"]',
-        By.CSS_SELECTOR,
-    ),
+    "create_project": ('//*[@id="yaml-create"]', By.XPATH),
+    "project_name": ('input[id="input-name"]', By.CSS_SELECTOR),
+    "save_project": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "Developer_dropdown": (
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
     ),
     "select_administrator": (
-        'button[data-ouia-component-id="OUIA-Generated-Title-1"]',
-        By.CSS_SELECTOR,
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        By.XPATH,
     ),
+    "obc_menu_name": ("//a[normalize-space()='Object Bucket Claims']", By.XPATH),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
     "storageclass_text_field": (
         'input[placeholder="Select StorageClass"]',
@@ -665,6 +669,11 @@ acm_configuration = {
     ),
 }
 
+acm_configuration_4_11 = {
+    "install-submariner-btn": ("install-submariner", By.ID),
+    "nat-t-checkbox": ("natt-enable", By.ID),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -692,6 +701,7 @@ add_capacity = {
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
+    "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -702,6 +712,8 @@ add_capacity_4_11 = {
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
+    "managed-csi_sc": ("managed-csi-link", By.ID),
+    "standard_sc": ("standard-link", By.ID),
 }
 
 block_pool = {
@@ -986,6 +998,11 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+        },
         "add_capacity": {**add_capacity, **add_capacity_4_11},
         "obc": obc,
     },

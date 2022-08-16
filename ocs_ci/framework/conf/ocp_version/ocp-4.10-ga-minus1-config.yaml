@@ -13,4 +13,4 @@ DEPLOYMENT:
   ocp_version_index: -2
 ENV_DATA:
   vm_template: 'rhcos-4.10.3-x86_64-vmware.x86_64'
-  acm_hub_channel: release-2.4
+  acm_hub_channel: release-2.5

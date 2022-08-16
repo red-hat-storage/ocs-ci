@@ -903,17 +903,45 @@ def run_must_gather(log_dir_path, image, command=None):
             cmd, out_yaml_format=False, timeout=must_gather_timeout
         )
     except CommandFailed as ex:
+        log.error(get_helper_pods_output())
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
     except TimeoutExpired as ex:
+        log.error(get_helper_pods_output())
         log.error(
             f"Timeout {must_gather_timeout}s for must-gather reached, command"
             f" exited with error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
     return mg_output
+
+
+def get_helper_pods_output():
+    """
+    Get the output of "oc describe mg-helper pods"
+
+    Returns:
+        str: the output of "oc describe pods mg-helper" and "oc logs mg-helper"
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
+
+    output_describe_mg_helper = ""
+    helper_pods = get_pod_name_by_pattern(pattern="helper")
+    for helper_pod in helper_pods:
+        try:
+            helper_pod_obj = get_pod_obj(
+                name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            output_describe_mg_helper += (
+                f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
+                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod)}"
+            )
+        except Exception as e:
+            log.error(e)
+    return output_describe_mg_helper
 
 
 def collect_noobaa_db_dump(log_dir_path):

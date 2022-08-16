@@ -528,6 +528,7 @@ def create_storage_class(
     encrypted=False,
     encryption_kms_id=None,
     fs_name=None,
+    volume_binding_mode="Immediate",
 ):
     """
     Create a storage class
@@ -547,6 +548,8 @@ def create_storage_class(
         encrypted (bool): True to create encrypted SC else False
         encryption_kms_id (str): ID of the KMS entry from connection details
         fs_name (str): the name of the filesystem for CephFS StorageClass
+        volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
+            pod attachment.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -596,6 +599,7 @@ def create_storage_class(
 
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
 
     try:
         del sc_data["parameters"]["userid"]
@@ -2158,9 +2162,16 @@ def create_multiple_pvc_parallel(sc_obj, namespace, number_of_pvc, size, access_
     # Check for all the pvcs in Bound state
     with ThreadPoolExecutor() as executor:
         for objs in pvc_objs_list:
-            obj_status_list.append(
-                executor.submit(wait_for_resource_state, objs, "Bound", 90)
-            )
+            if objs is not None:
+                if type(objs) is list:
+                    for obj in objs:
+                        obj_status_list.append(
+                            executor.submit(wait_for_resource_state, obj, "Bound", 90)
+                        )
+                else:
+                    obj_status_list.append(
+                        executor.submit(wait_for_resource_state, objs, "Bound", 90)
+                    )
     if False in [obj.result() for obj in obj_status_list]:
         raise TimeoutExpiredError
     return pvc_objs_list
@@ -2201,20 +2212,39 @@ def create_pods_parallel(
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
-            future_pod_objs.append(
-                executor.submit(
-                    create_pod,
-                    interface_type=interface,
-                    pvc_name=pvc_obj.name,
-                    do_reload=False,
-                    namespace=namespace,
-                    raw_block_pv=raw_block_pv,
-                    pod_dict_path=pod_dict_path,
-                    sa_name=sa_name,
-                    dc_deployment=dc_deployment,
-                    node_selector=node_selector,
-                )
-            )
+            if pvc_obj is not None:
+                if type(pvc_obj) is list:
+                    for pvc_ in pvc_obj:
+                        future_pod_objs.append(
+                            executor.submit(
+                                create_pod,
+                                interface_type=interface,
+                                pvc_name=pvc_.name,
+                                do_reload=False,
+                                namespace=namespace,
+                                raw_block_pv=raw_block_pv,
+                                pod_dict_path=pod_dict_path,
+                                sa_name=sa_name,
+                                dc_deployment=dc_deployment,
+                                node_selector=node_selector,
+                            )
+                        )
+                else:
+                    future_pod_objs.append(
+                        executor.submit(
+                            create_pod,
+                            interface_type=interface,
+                            pvc_name=pvc_obj.name,
+                            do_reload=False,
+                            namespace=namespace,
+                            raw_block_pv=raw_block_pv,
+                            pod_dict_path=pod_dict_path,
+                            sa_name=sa_name,
+                            dc_deployment=dc_deployment,
+                            node_selector=node_selector,
+                        )
+                    )
+
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
@@ -2243,9 +2273,16 @@ def delete_objs_parallel(obj_list):
     """
     threads = list()
     for obj in obj_list:
-        process = threading.Thread(target=obj.delete)
-        process.start()
-        threads.append(process)
+        if obj is not None:
+            if type(obj) is list:
+                for obj_ in obj:
+                    process = threading.Thread(target=obj_.delete)
+                    process.start()
+                    threads.append(process)
+            else:
+                process = threading.Thread(target=obj.delete)
+                process.start()
+                threads.append(process)
     for process in threads:
         process.join()
     return True

@@ -67,7 +67,7 @@ class ExternalCluster(object):
         rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
 
         # get ceph filesystem
-        ceph_fs_name = self.get_ceph_fs()
+        ceph_fs_name = config.ENV_DATA.get("cephfs_name") or self.get_ceph_fs()
 
         rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
 
@@ -351,8 +351,13 @@ def get_rgw_endpoint():
     for each in config.EXTERNAL_MODE["external_cluster_node_roles"].values():
         if "rgw" in each["role"]:
             if config.EXTERNAL_MODE.get("use_fqdn_rgw_endpoint"):
+                logger.info("using FQDN as rgw endpoint")
                 rgw_endpoint = each["hostname"]
+            elif config.EXTERNAL_MODE.get("use_ipv6_rgw_endpoint"):
+                logger.info("using IPv6 as rgw endpoint")
+                rgw_endpoint = each["ipv6_address"]
             else:
+                logger.info("using IPv4 as rgw endpoint")
                 rgw_endpoint = each["ip_address"]
             return rgw_endpoint
     if not rgw_endpoint:
