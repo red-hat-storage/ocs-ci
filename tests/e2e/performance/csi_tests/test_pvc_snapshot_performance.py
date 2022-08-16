@@ -622,7 +622,7 @@ class TestPvcSnapshotPerformance(PASTest):
             log.info(f"Taking snapshot of the PVC {pvc_name}")
             log.info(f"Snapshot name : {snap_name}")
 
-            start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_time = self.get_time("csi")
 
             test_results["creation_time"] = self.measure_create_snapshot_time(
                 pvc_name=pvc_name,
