@@ -663,9 +663,10 @@ class TestPvcSnapshotPerformance(PASTest):
             # Sleep for 1 Min. between test samples
             time.sleep(60)
 
-        # Cleanup the elasticsearch instance.
-        log.info("Deleting the elastic-search instance")
-        self.es.cleanup()
+        # Cleanup the elasticsearch instance, if needed.
+        if isinstance(self.es, ElasticSearch):
+            log.info("Deleting the elastic-search instance")
+            self.es.cleanup()
 
         creation_times = [t["creation_time"] for t in all_results]
         avg_c_time = statistics.mean(creation_times)
