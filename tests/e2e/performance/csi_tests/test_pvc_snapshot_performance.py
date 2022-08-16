@@ -1,7 +1,6 @@
 # Builtin modules
 import logging
 import time
-import datetime
 
 # 3ed party modules
 import pytest
@@ -270,7 +269,7 @@ class TestPvcSnapshotPerformance(PASTest):
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
 
-            start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_time = self.get_time("CSI")
 
             test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name,
