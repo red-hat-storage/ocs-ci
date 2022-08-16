@@ -344,6 +344,7 @@ class TestClusterFullAndRecovery(E2ETest):
             pod_fs1_obj.fillup_fs(
                 size="4096M",
             )
+        log.debug(f"Used Capacity is {used_capacity}")
         return used_capacity > expected_used_capacity
 
     def verify_alerts_via_prometheus(self, expected_alerts):
@@ -367,6 +368,9 @@ class TestClusterFullAndRecovery(E2ETest):
             actual_alerts.append(alert.get("labels").get("alertname"))
         for expected_alert in expected_alerts:
             if expected_alert not in actual_alerts:
-                log.error(f"{expected_alert} alert does not exist in alerts list")
+                log.error(
+                    f"{expected_alert} alert does not exist in alerts list."
+                    f"The actaul alerts: {actual_alerts}"
+                )
                 return False
         return True
