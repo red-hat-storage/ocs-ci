@@ -19,6 +19,8 @@ from ocs_ci.ocs.cluster import (
     change_ceph_full_ratio,
     get_percent_used_capacity,
     count_cluster_osd,
+    get_osd_utilization,
+    get_ceph_df_detail,
 )
 
 log = logging.getLogger(__name__)
@@ -345,6 +347,10 @@ class TestClusterFullAndRecovery(E2ETest):
                 size="4096M",
             )
         log.info(f"Used Capacity is {used_capacity}%")
+        ceph_df_detail = get_ceph_df_detail()
+        log.info(f"ceph df detail: {ceph_df_detail}")
+        osd_utilization = get_osd_utilization()
+        log.info(f"osd utilization: {osd_utilization}")
         return used_capacity > expected_used_capacity
 
     def verify_alerts_via_prometheus(self, expected_alerts):
