@@ -155,7 +155,7 @@ class TestClusterFullAndRecovery(E2ETest):
             "Verify Alerts are seen 'CephClusterCriticallyFull' and 'CephOSDNearFull'"
         )
         log.info("Verify used capacity bigger than 85%")
-        expected_alerts = ["CephClusterCriticallyFull", "CephOSDNearFull"]
+        expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
         sample = TimeoutSampler(
             timeout=600,
             sleep=50,
@@ -328,7 +328,7 @@ class TestClusterFullAndRecovery(E2ETest):
         used_capacity = get_percent_used_capacity()
         if expected_used_capacity < used_capacity + 3:
             self.count += 1
-        if self.count == 2:
+        if self.count == 3:
             log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
             pvc_obj_fs1 = pvc_factory(
                 interface=constants.CEPHFILESYSTEM,
@@ -344,7 +344,7 @@ class TestClusterFullAndRecovery(E2ETest):
             pod_fs1_obj.fillup_fs(
                 size="4096M",
             )
-        log.debug(f"Used Capacity is {used_capacity}")
+        log.info(f"Used Capacity is {used_capacity}%")
         return used_capacity > expected_used_capacity
 
     def verify_alerts_via_prometheus(self, expected_alerts):
