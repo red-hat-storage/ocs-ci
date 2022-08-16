@@ -359,6 +359,7 @@ class TestPvcSnapshotPerformance(PASTest):
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
                 namespace=self.snap_obj.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
             )
 
             # Confirm that the pod is running
