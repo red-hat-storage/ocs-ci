@@ -148,6 +148,15 @@ class MultiClusterConfig:
 
     @property
     def default_cluster_ctx(self):
+        """
+        Get the default cluster context.
+        The default cluster context will be defined by the default index as defined in the
+        'ENV DATA' param 'default_cluster_context_index'
+
+        Returns:
+            ocs_ci.framework.Config: The default cluster context
+
+        """
         # Get the default index. If not found, the default value is 0
         default_index = self.cluster_ctx.ENV_DATA.get(
             "default_cluster_context_index", 0
