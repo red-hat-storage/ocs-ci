@@ -11,16 +11,13 @@ import statistics
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
 import ocs_ci.ocs.exceptions as ex
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.framework.testlib import (
@@ -509,12 +506,19 @@ class TestPvcSnapshotPerformance(PASTest):
 
         """
 
+        # Loading the main template yaml file for the benchmark and update some
+        # fields with new values
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
         # Deploying elastic-search server in the cluster for use by the
         # SmallFiles workload, since it is mandatory for the workload.
         # This is deployed once for all test iterations and will be deleted
         # in the end of the test.
         if config.PERF.get("deploy_internal_es"):
             self.es = ElasticSearch()
+            sf_data["spec"]["elasticsearch"] = {
+                "url": f"http://{self.es.get_ip()}:{self.es.get_port()}"
+            }
         else:
             if config.PERF.get("internal_es_server") == "":
                 self.es = None
@@ -530,10 +534,7 @@ class TestPvcSnapshotPerformance(PASTest):
                     self.es = None
                     log.error("ElasticSearch doesn't exist ! The test cannot run")
                     return
-
-        # Loading the main template yaml file for the benchmark and update some
-        # fields with new values
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+                sf_data["spec"]["elasticsearch"] = {"url": self.es["url"]}
 
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
@@ -548,9 +549,6 @@ class TestPvcSnapshotPerformance(PASTest):
         sf_data["spec"]["workload"]["args"]["files"] = files
         sf_data["spec"]["workload"]["args"]["threads"] = threads
         sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-        sf_data["spec"]["elasticsearch"] = {
-            "url": f"http://{self.es.get_ip()}:{self.es.get_port()}"
-        }
 
         """
         Calculating the size of the volume that need to be test, it should
@@ -605,53 +603,19 @@ class TestPvcSnapshotPerformance(PASTest):
             test_results = {"creation_time": None, "csi_creation_time": None}
 
             # deploy the smallfile workload
-            log.info("Running SmallFile bench")
-            sf_obj = OCS(**sf_data)
-            sf_obj.create()
-
-            # wait for benchmark pods to get created - takes a while
-            for bench_pod in TimeoutSampler(
-                240,
-                10,
-                get_pod_name_by_pattern,
-                "smallfile-client",
-                BMO_NAME,
-            ):
-                try:
-                    if bench_pod[0] is not None:
-                        small_file_client_pod = bench_pod[0]
-                        break
-                except IndexError:
-                    log.info("Bench pod not ready yet")
-
-            bench_pod = OCP(kind="pod", namespace=BMO_NAME)
-            log.info("Waiting for SmallFile benchmark to Run")
-            assert bench_pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                resource_name=small_file_client_pod,
-                sleep=30,
-                timeout=600,
-            )
+            self.crd_data = sf_data
+            self.client_pod_name = "smallfile-client"
+            self.deploy_and_wait_for_wl_to_start(timeout=240)
             # Initialize the pvc_name variable so it will not be in loop scope only.
-            pvc_name = ""
-            for item in bench_pod.get()["items"]:
-                if item.get("metadata").get("name") == small_file_client_pod:
-                    for volume in item.get("spec").get("volumes"):
-                        if "persistentVolumeClaim" in volume:
-                            pvc_name = volume["persistentVolumeClaim"]["claimName"]
-                            break
+            pvc_name = (
+                OCP(kind="pvc", namespace=BMO_NAME)
+                .get()
+                .get("items")[0]
+                .get("metadata")
+                .get("name")
+            )
             log.info(f"Benchmark PVC name is : {pvc_name}")
-            # Creation of 1M files on CephFS can take a lot of time
-            timeout = 7200
-            while timeout >= 0:
-                logs = bench_pod.get_logs(name=small_file_client_pod)
-                if "RUN STATUS DONE" in logs:
-                    break
-                timeout -= 30
-                if timeout == 0:
-                    raise TimeoutError("Timed out waiting for benchmark to complete")
-                time.sleep(30)
-            log.info(f"Smallfile test ({test_num + 1}) finished.")
+            self.wait_for_wl_to_finish(sleep=30)
 
             # Taking snapshot of the PVC (which contain files)
             snap_name = pvc_name.replace("claim", "snapshot-")
@@ -686,7 +650,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
             # Delete the smallfile workload - which will delete also the PVC
             log.info("Deleting the smallfile workload")
-            if sf_obj.delete(wait=True):
+            if self.benchmark_obj.delete(wait=True):
                 log.info("The smallfile workload was deleted successfully")
 
             # Delete VolumeSnapshots
