@@ -337,8 +337,8 @@ class TestPvcSnapshotPerformance(PASTest):
             )
             restore_pvc_obj.reload()
             log.info("PVC was restored from the snapshot")
-            test_results["restore"]["time"] = helpers.measure_pvc_creation_time(
-                self.interface, restore_pvc_obj.name
+            test_results["restore"]["time"] = performance_lib.measure_pvc_creation_time(
+                self.interface, restore_pvc_obj.name, csi_start_time
             )
 
             test_results["restore"]["speed"] = int(
