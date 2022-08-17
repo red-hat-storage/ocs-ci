@@ -1720,19 +1720,34 @@ def add_new_nodes_and_label_upi_lso(
     return new_node_names
 
 
-def get_nodes_in_statuses(statuses):
+def get_nodes_in_statuses(statuses, node_objs=None):
     """
     Get all nodes in specific statuses
 
     Args:
         statuses (list): List of the statuses to search for the nodes
+        node_objs (list): The node objects to check their statues. If not specified,
+            it gets all the nodes.
 
     Returns:
         list: OCP objects representing the nodes in the specific statuses
 
     """
-    nodes = get_node_objs()
-    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]
+    if not node_objs:
+        node_objs = get_node_objs()
+
+    nodes_in_statuses = []
+    for n in node_objs:
+        try:
+            node_status = get_node_status(n)
+        except CommandFailed as e:
+            log.warning(f"Failed to get the node status due to the error: {str(e)}")
+            continue
+
+        if node_status in statuses:
+            nodes_in_statuses.append(n)
+
+    return nodes_in_statuses
 
 
 def get_node_osd_ids(node_name):
@@ -2412,9 +2427,8 @@ def wait_for_node_count_to_reach_status(
     for node_objs in TimeoutSampler(
         timeout=timeout, sleep=sleep, func=get_nodes, node_type=node_type
     ):
-        node_names_in_expected_status = [
-            n.name for n in node_objs if get_node_status(n) == expected_status
-        ]
+        nodes_in_expected_statuses = get_nodes_in_statuses([expected_status], node_objs)
+        node_names_in_expected_status = [n.name for n in nodes_in_expected_statuses]
         if len(node_names_in_expected_status) == node_count:
             log.info(
                 f"{node_count} of the nodes reached the expected status: {expected_status}"

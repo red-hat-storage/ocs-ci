@@ -94,4 +94,7 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
             )
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
-            self.sanity_helpers.health_check(tries=40)
+            self.sanity_helpers.health_check(cluster_check=False, tries=40)
+
+        # Check basic cluster functionality by creating some resources
+        self.create_resources()
