@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 )
 class TestLVMPVCResize(ManageTest):
     """
-    Testing PVC resize on LVM cluster
+    Testing PVC resize on LVM cluster beyond thinpool size, but within overprovisioning rate
 
     """
 
@@ -89,7 +89,7 @@ class TestLVMPVCResize(ManageTest):
         if volume_mode == constants.VOLUME_MODE_BLOCK:
             self.block = True
         self.pvc_size_at_start = self.int_tp_size * 0.7
-        self.pvc_size_resize = int(self.int_tp_size * 0.9)
+        self.pvc_size_resize = int(self.int_tp_size * 1.1)
         pvc_obj = pvc_factory(
             project=self.proj_obj,
             interface=None,
