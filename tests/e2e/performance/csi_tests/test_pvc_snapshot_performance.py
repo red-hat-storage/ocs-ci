@@ -230,6 +230,7 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.all_results["restore_time"] = []
         self.full_results.all_results["restore_speed"] = []
         self.full_results.all_results["restore_csi_time"] = []
+        self.full_results.all_results["dataset_inMiB"] = []
         for test_num in range(self.tests_numbers):
             test_results = {
                 "test_num": test_num + 1,
@@ -427,7 +428,7 @@ class TestPvcSnapshotPerformance(PASTest):
             self.full_results.all_results["restore_csi_time"].append(
                 tst["restore"]["csi_time"]
             )
-            self.full_results.all_results["dataset_inMiB"] = tst["dataset"]
+            self.full_results.all_results["dataset_inMiB"].append(tst["dataset"])
             log.info(
                 f"Test {tst['test_num']} results : dataset is {tst['dataset']} MiB. "
                 f"Take snapshot time is {tst['create']['time']} "
