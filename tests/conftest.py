@@ -3952,7 +3952,7 @@ def collect_logs_fixture(request):
             if config.REPORTING["collect_logs_on_success_run"]:
                 collect_ocs_logs("testcases", ocs=False, status_failure=False)
                 collect_ocs_logs("testcases", ocp=False, status_failure=False)
-                collect_pod_container_rpm_package("testcases")
+                collect_pod_container_rpm_package("deployment")
 
     request.addfinalizer(finalizer)
 
