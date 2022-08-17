@@ -1201,32 +1201,29 @@ class VSPHEREUPI(VSPHEREBASE):
             # Download terraform ignition provider. For OCP upgrade clusters,
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
+            terraform_provider_ignition_version = None
             terraform_plugins_path = ".terraform/plugins/linux_amd64/"
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
                 terraform_provider_ignition_file = "terraform-provider-ignition_v2.1.2"
             else:
                 terraform_provider_ignition_file = "terraform-provider-ignition"
-            terraform_ignition_provider_path = os.path.join(
-                terraform_data_dir,
-                terraform_plugins_path,
-                terraform_provider_ignition_file,
-            )
 
             # check the upgrade history of cluster and checkout to the
             # original installer release. This is due to the issue of not
             # supporting terraform state of OCP 4.5 in installer
             # release of 4.6 branch. More details in
             # https://github.com/red-hat-storage/ocs-ci/issues/2941
-            is_cluster_upgraded = False
             try:
                 upgrade_history = get_ocp_upgrade_history()
                 if len(upgrade_history) > 1:
-                    is_cluster_upgraded = True
                     original_installed_ocp_version = upgrade_history[-1]
-                    original_installed_ocp_version_major_minor = str(
+                    original_installed_ocp_version_major_minor_obj = (
                         version.get_semantic_version(
                             original_installed_ocp_version, only_major_minor=True
                         )
+                    )
+                    original_installed_ocp_version_major_minor = str(
+                        original_installed_ocp_version_major_minor_obj
                     )
                     installer_release_branch = (
                         f"release-{original_installed_ocp_version_major_minor}"
@@ -1237,14 +1234,30 @@ class VSPHEREUPI(VSPHEREBASE):
                         installer_release_branch,
                         force_checkout=True,
                     )
+                    if (
+                        original_installed_ocp_version_major_minor_obj
+                        == version.VERSION_4_10
+                    ):
+                        config.ENV_DATA[
+                            "original_installed_ocp_version_major_minor_obj"
+                        ] = version.VERSION_4_10
+                        terraform_provider_ignition_version = (
+                            constants.TERRAFORM_IGNITION_PROVIDER_VERSION
+                        )
+                        terraform_provider_ignition_file = "terraform-provider-ignition"
             except Exception as ex:
                 logger.error(ex)
 
-            if not (
-                os.path.exists(terraform_ignition_provider_path) or is_cluster_upgraded
-            ):
+            terraform_ignition_provider_path = os.path.join(
+                terraform_data_dir,
+                terraform_plugins_path,
+                terraform_provider_ignition_file,
+            )
+            if not os.path.exists(terraform_ignition_provider_path):
                 get_terraform_ignition_provider(
-                    terraform_data_dir, version=get_ignition_provider_version()
+                    terraform_data_dir,
+                    version=terraform_provider_ignition_version
+                    or get_ignition_provider_version(),
                 )
             terraform.initialize()
         else:
