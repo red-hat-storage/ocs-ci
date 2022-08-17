@@ -831,6 +831,82 @@ def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace
     return Pod(**ocs_provider_server[0])
 
 
+def get_lvm_vg_manager_pod(
+    label=constants.LVMO_POD_LABEL["411"]["vg-manager_label"],
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Get vg manager pod in the lvm cluster
+
+    Args:
+        label (str): Label associated with vg manager pod
+        namespace (str): Namespace in which vg manager pod is residing
+
+    Returns:
+        Pod: Pod object of vg manager pod
+
+    """
+    vg_manager = get_pods_having_label(label, namespace)
+    return Pod(**vg_manager[0])
+
+
+def get_lvm_operator_pod(
+    label=constants.LVMO_POD_LABEL["411"]["controller_manager_label"],
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Get lvm operator controller manager pod in the lvm cluster
+
+    Args:
+        label (str): Label associated with lvm operator controller manager pod
+        namespace (str): Namespace in which lvm operator controler manager pod is residing
+
+    Returns:
+        Pod: Pod object of lvm operator controller manager pod
+
+    """
+    lvm_operator = get_pods_having_label(label, namespace)
+    return Pod(**lvm_operator[0])
+
+
+def get_topolvm_controller_pod(
+    label=constants.LVMO_POD_LABEL["411"]["topolvm-controller_label"],
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Get topolvm controller pod in the lvm cluster
+
+    Args:
+        label (str): Label associated with topolvm controller pod
+        namespace (str): Namespace in which topolvm controler pod is residing
+
+    Returns:
+        Pod: Pod object of topolvm controller pod
+
+    """
+    topolvm_controller = get_pods_having_label(label, namespace)
+    return Pod(**topolvm_controller[0])
+
+
+def get_topolvm_node_pod(
+    label=constants.LVMO_POD_LABEL["411"]["topolvm-node_label"],
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Get topolvm node pod in the lvm cluster
+
+    Args:
+        label (str): Label associated with topolvm node pod
+        namespace (str): Namespace in which topolvm node pod is residing
+
+    Returns:
+        Pod: Pod object of topolvm node pod
+
+    """
+    topolvm_node_pod = get_pods_having_label(label, namespace)
+    return Pod(**topolvm_node_pod[0])
+
+
 def list_ceph_images(pool_name="rbd"):
     """
     Args:

@@ -562,3 +562,7 @@ class LvThinUtilNotChanged(Exception):
 
 class ThinPoolUtilityWrong(Exception):
     pass
+
+
+class LVMOHealthException(Exception):
+    pass
