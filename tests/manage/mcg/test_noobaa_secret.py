@@ -19,21 +19,9 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from botocore.exceptions import EndpointConnectionError
+from ocs_ci.ocs.bucket_utils import create_aws_bs_using_cli
 
 logger = logging.getLogger(__name__)
-
-
-def create_bs_using_cli(
-    mcg_obj, access_key, secret_key, backingstore_name, uls_name, region
-):
-
-    mcg_obj.exec_mcg_cmd(
-        f"backingstore create aws-s3 {backingstore_name} "
-        f"--access-key {access_key} "
-        f"--secret-key {secret_key} "
-        f"--target-bucket {uls_name} --region {region}",
-        use_yes=True,
-    )
 
 
 @pytest.fixture(scope="function")
@@ -228,7 +216,7 @@ class TestNoobaaSecrets:
         first_bs_name = create_unique_resource_name(
             resource_description="backingstore", resource_type="aws"
         )
-        create_bs_using_cli(
+        create_aws_bs_using_cli(
             mcg_obj=mcg_obj,
             backingstore_name=first_bs_name,
             access_key=access_key,
@@ -259,7 +247,7 @@ class TestNoobaaSecrets:
         second_bs_name = create_unique_resource_name(
             resource_description="backingstore", resource_type="aws"
         )
-        create_bs_using_cli(
+        create_aws_bs_using_cli(
             mcg_obj=mcg_obj,
             backingstore_name=second_bs_name,
             access_key=access_key,
