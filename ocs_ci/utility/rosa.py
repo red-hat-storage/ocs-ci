@@ -773,8 +773,10 @@ def upgrade_ocp(cluster):
         f"--schedule-time {update_time_str}"
     )
     utils.run_cmd(cmd, timeout=1200)
+    # Actual update process should start within 1 hour after sheduled time
+    # Updating might take an hour or a bit more, so a long timeout is needed
     sample = utils.TimeoutSampler(
-        timeout=7200,
+        timeout=10800,
         sleep=30,
         func=get_ocp_version,
         cluster=cluster,
