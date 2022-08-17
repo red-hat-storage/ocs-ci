@@ -461,6 +461,8 @@ class TestPvcSnapshotPerformance(PASTest):
         )
 
         # Write the test results into the ES server
+        self.results_path = helpers.get_full_test_logs_path(cname=self)
+        log.info(f"Logs file path name is : {self.full_log_path}")
         log.info("writing results to elastic search server")
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
@@ -700,6 +702,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         # Write the test results into the ES server
         log.info("writing results to elastic search server")
+        self.results_path = helpers.get_full_test_logs_path(cname=self)
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
             # write the ES link to the test results in the test log.
