@@ -76,6 +76,8 @@ class TestUpgradeOCP(ManageTest):
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
+            if ocp_upgrade_version:
+                target_image = ocp_upgrade_version
             if not ocp_upgrade_version:
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                 ocp_arch = config.UPGRADE["ocp_arch"]
