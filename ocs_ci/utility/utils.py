@@ -1857,41 +1857,41 @@ def parse_pgsql_logs(data):
     """
     match = data.split("PGBench Results")
     list_data = []
-    for i in range(2, len(match)):
+    for i in range(1, len(match)):
         log = "".join(match[i].split("\n"))
         pgsql_data = dict()
-        pgsql_data[i - 1] = {}
+        pgsql_data[i] = {}
         clients = re.search(r"scaling_factor\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["scaling_factor"] = clients.group(1)
+            pgsql_data[i]["scaling_factor"] = clients.group(1)
         clients = re.search(r"number_of_clients\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["num_clients"] = clients.group(1)
+            pgsql_data[i]["num_clients"] = clients.group(1)
         threads = re.search(r"number_of_threads\':\s+(\d+)", log)
         if threads and threads.group(1):
-            pgsql_data[i - 1]["num_threads"] = threads.group(1)
+            pgsql_data[i]["num_threads"] = threads.group(1)
         clients = re.search(r"number_of_transactions_per_client\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["number_of_transactions_per_client"] = clients.group(1)
+            pgsql_data[i]["number_of_transactions_per_client"] = clients.group(1)
         clients = re.search(
             r"number_of_transactions_actually_processed\':\s+(\d+),", log
         )
         if clients and clients.group(1):
-            pgsql_data[i - 1][
-                "number_of_transactions_actually_processed"
-            ] = clients.group(1)
+            pgsql_data[i]["number_of_transactions_actually_processed"] = clients.group(
+                1
+            )
         lat_avg = re.search(r"latency_average_ms\':\s+(\d+)", log)
         if lat_avg and lat_avg.group(1):
-            pgsql_data[i - 1]["latency_avg"] = lat_avg.group(1)
+            pgsql_data[i]["latency_avg"] = lat_avg.group(1)
         lat_stddev = re.search(r"latency_stddev_ms\':\s+(\d+)", log)
         if lat_stddev and lat_stddev.group(1):
-            pgsql_data[i - 1]["lat_stddev"] = lat_stddev.group(1)
+            pgsql_data[i]["lat_stddev"] = lat_stddev.group(1)
         tps_incl = re.search(r"tps_incl_con_est\':\s+(\w+)", log)
         if tps_incl and tps_incl.group(1):
-            pgsql_data[i - 1]["tps_incl"] = tps_incl.group(1)
+            pgsql_data[i]["tps_incl"] = tps_incl.group(1)
         tps_excl = re.search(r"tps_excl_con_est\':\s+(\w+)", log)
         if tps_excl and tps_excl.group(1):
-            pgsql_data[i - 1]["tps_excl"] = tps_excl.group(1)
+            pgsql_data[i]["tps_excl"] = tps_excl.group(1)
         list_data.append(pgsql_data)
 
     return list_data
