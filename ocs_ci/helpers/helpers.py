@@ -3836,8 +3836,6 @@ def get_cephfs_subvolumegroup():
     return subvolume_group_name
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
     """
     Creates a serviceaccount token secret
