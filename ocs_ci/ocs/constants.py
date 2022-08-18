@@ -812,6 +812,11 @@ OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
 
+# Podsecurity admission policies
+PSA_PRIVILEGED = "privileged"
+PSA_BASELINE = "baseline"
+PSA_RESTRICTED = "restricted"
+
 # Platforms
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"

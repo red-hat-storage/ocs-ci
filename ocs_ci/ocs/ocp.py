@@ -24,6 +24,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
+from ocs_ci.utility import version
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.framework import config
 
@@ -423,7 +424,7 @@ class OCP(object):
         status = self.exec_oc_cmd(command)
         return status
 
-    def new_project(self, project_name):
+    def new_project(self, project_name, policy=constants.PSA_BASELINE):
         """
         Creates a new project
 
@@ -433,10 +434,17 @@ class OCP(object):
         Returns:
             bool: True in case project creation succeeded, False otherwise
         """
-        command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(
+        ocp = OCP(kind="namespace")
+        command = f"oc create namespace {project_name}"
+        if f"namespace/{project_name} created" in run_cmd(
             f"{command}", threading_lock=self.threading_lock
         ):
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                label = (
+                    "security.openshift.io/scc.podSecurityLabelSync=false "
+                    f"pod-security.kubernetes.io/enforce={policy} --overwrite"
+                )
+                ocp.add_label(resource_name=project_name, label=label)
             return True
         return False
 
