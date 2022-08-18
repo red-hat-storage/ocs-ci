@@ -279,6 +279,15 @@ def pytest_collection_modifyitems(session, items):
                 )
                 items.remove(item)
 
+    # Skip PV services tests on MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        for item in items.copy():
+            if "/manage/pv_services/" in str(item.fspath) or "/ui/test_pvc_ui" in str(
+                item.fspath
+            ):
+                log.debug("Skipping all PV services tests on MCG only deployment")
+                items.remove(item)
+
 
 @pytest.fixture()
 def supported_configuration():
