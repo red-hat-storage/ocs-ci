@@ -374,7 +374,7 @@ IMMEDIATE_VOLUMEBINDINGMODE = "Immediate"
 
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
-NAMESPACE_QUOTA=os.path.join(TEMPLATE_NAMESPACE_DIR, "namespace_quota.yaml")
+NAMESPACE_QUOTA = os.path.join(TEMPLATE_NAMESPACE_DIR, "namespace_quota.yaml")
 
 MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
 
