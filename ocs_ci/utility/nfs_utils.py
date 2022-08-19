@@ -89,13 +89,12 @@ def nfs_disable(
     nfs_ganesha_pod_name,
 ):
     """
-    Args:nfs_ganesha_pod_name- name of nfs-ganesha pod returned from nfs_enable()
+    Disable nfs feature and ROOK_CSI_ENABLE_NFS
     Steps:
-    1. oc patch -n openshift-storage storageclusters.ocs.openshift.io ocs-storagecluster
-    --patch '{"spec": {"nfs":{"enable": false}}}' --type merge
-    2. oc patch cm rook-ceph-operator-config -n openshift-storage -p $'data:\n "ROOK_CSI_ENABLE_NFS":  "false"'
-    3. manually delete CephNFS, ocs nfs Service and the nfs StorageClass
-    4. Wait untill nfs-ganesha pod deleted
+    1:- Disable nfs feature for storage-cluster
+    2:- Disable ROOK_CSI_ENABLE_NFS via patch request
+    3:- Delete CephNFS, ocs nfs Service and the nfs StorageClass
+    4:- Wait untill nfs-ganesha pod deleted
 
     """
 
