@@ -181,10 +181,10 @@ class S3Client(CloudClient):
     ):
         super().__init__(*args, **kwargs)
 
-        secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
-        data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
-        key_id = auth_dict.get(f"{secret_prefix}_ACCESS_KEY_ID")
-        access_key = auth_dict.get(f"{secret_prefix}_SECRET_ACCESS_KEY")
+        self.secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
+        self.data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
+        key_id = auth_dict.get(f"{self.secret_prefix}_ACCESS_KEY_ID")
+        access_key = auth_dict.get(f"{self.secret_prefix}_SECRET_ACCESS_KEY")
         self.endpoint = auth_dict.get("ENDPOINT") or endpoint
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
@@ -197,7 +197,7 @@ class S3Client(CloudClient):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-        self.secret = self.create_s3_secret(secret_prefix, data_prefix)
+        self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
         self.nss_creds = {
             "access_key_id": self.access_key,
