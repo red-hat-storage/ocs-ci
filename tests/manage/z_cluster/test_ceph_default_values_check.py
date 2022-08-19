@@ -173,11 +173,12 @@ class TestCephDefaultValuesCheck(ManageTest):
             "match the ones stored in ocs-ci"
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version <= version.VERSION_4_9:
+        log.info(f"ocs version----{ocs_version}")
+        if ocs_version <= version.VERSION_4_8:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
             stored_values.remove("")
-        elif ocs_version >= version.VERSION_4_10:
-            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_10.split("\n")
+        elif ocs_version >= version.VERSION_4_9:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
             stored_values.remove("")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "

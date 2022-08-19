@@ -1688,8 +1688,8 @@ max_wal_size = 8GB
 shared_preload_libraries = 'pg_stat_statements'
 """
 
-# Values from configmap noobaa-postgres-config wrt OCP version 4.10 and above
-NOOBAA_POSTGRES_TUNING_VALUES_4_10 = """
+# Values from configmap noobaa-postgres-config wrt OCP version 4.9 and above
+NOOBAA_POSTGRES_TUNING_VALUES_4_9 = """
 max_connections = 600
 shared_buffers = 1GB
 effective_cache_size = 3GB
