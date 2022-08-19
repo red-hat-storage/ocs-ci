@@ -38,7 +38,6 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ClientDownloadError,
     CommandFailed,
-    ResourceAlreadyExists,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
@@ -633,11 +632,6 @@ def exec_cmd(
             and b"command terminated with exit code 1" in completed_process.stderr
         ):
             log.info(f"No results found for grep command: {masked_cmd}")
-        elif b"Error from server (AlreadyExists)" in completed_process.stderr:
-            raise ResourceAlreadyExists(
-                f"Resource Already Exists during execution of command: {masked_cmd}"
-                f"\nOutput is: {masked_stderr}"
-            )
         else:
             raise CommandFailed(
                 f"Error during execution of command: {masked_cmd}."

@@ -2,10 +2,6 @@ class CommandFailed(Exception):
     pass
 
 
-class ResourceAlreadyExists(Exception):
-    pass
-
-
 class UnexpectedDeploymentConfiguration(Exception):
     pass
 
