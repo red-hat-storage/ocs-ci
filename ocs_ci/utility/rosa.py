@@ -101,6 +101,9 @@ def create_cluster(cluster_name, version, region):
             aws.get_cluster_subnet_ids(provider_name)
         )
         cmd = f"{cmd} --subnet-ids {subnet_id}"
+    elif cluster_type.lower() == "provider" and config.ENV_DATA.get("subnet_ids"):
+        subnet_id = config.ENV_DATA.get("subnet_ids")
+        cmd = f"{cmd} --subnet-ids {subnet_id}"
     if private_link:
         cmd += " --private-link "
     utils.run_cmd(cmd, timeout=1200)
