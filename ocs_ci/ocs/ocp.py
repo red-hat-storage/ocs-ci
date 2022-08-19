@@ -435,14 +435,15 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        command = f"oc create namespace {project_name}"
-        if f"namespace/{project_name} created" in run_cmd(
+        command = f"oc new-project {project_name}"
+        if f'Now using project "{project_name}"' in run_cmd(
             f"{command}", threading_lock=self.threading_lock
         ):
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 label = (
                     "security.openshift.io/scc.podSecurityLabelSync=false "
-                    f"pod-security.kubernetes.io/enforce={policy} --overwrite"
+                    f"pod-security.kubernetes.io/enforce={policy} "
+                    f"pod-security.kubernetes.io/warn={policy} --overwrite"
                 )
                 ocp.add_label(resource_name=project_name, label=label)
             return True
