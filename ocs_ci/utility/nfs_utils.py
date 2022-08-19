@@ -89,9 +89,7 @@ def nfs_disable(
     nfs_ganesha_pod_name,
 ):
     """
-    Args:
-    nfs_ganesha_pod_name: name of nfs-ganesha pod returned from nfs_enable()
-
+    Args:nfs_ganesha_pod_name- name of nfs-ganesha pod returned from nfs_enable()
     Steps:
     1. oc patch -n openshift-storage storageclusters.ocs.openshift.io ocs-storagecluster
     --patch '{"spec": {"nfs":{"enable": false}}}' --type merge
