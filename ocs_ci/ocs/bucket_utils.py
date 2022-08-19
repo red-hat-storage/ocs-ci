@@ -486,8 +486,7 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     """
     mcg_obj.exec_mcg_cmd(
         f"backingstore create aws-s3 {backingstore_name} "
-        f"--access-key {cld_mgr.aws_client.access_key} "
-        f"--secret-key {cld_mgr.aws_client.secret_key} "
+        f"--secret-name {cld_mgr.aws_client.secret.name} "
         f"--target-bucket {uls_name} --region {region}",
         use_yes=True,
     )
@@ -1782,3 +1781,29 @@ def compare_object_checksums_between_bucket_and_local(
         pattern=pattern,
     )
     return set(written_objects).issubset(set(downloaded_objects))
+
+
+def create_aws_bs_using_cli(
+    mcg_obj, access_key, secret_key, backingstore_name, uls_name, region
+):
+    """
+    create AWS backingstore through CLI using access_key, secret_key
+    Args:
+        mcg_obj: MCG object
+        access_key: access key
+        secret_key: secret key
+        backingstore_name: unique name to the backingstore
+        uls_name: underlying storage name
+        region: region
+
+    Returns:
+        None
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create aws-s3 {backingstore_name} "
+        f"--access-key {access_key} "
+        f"--secret-key {secret_key} "
+        f"--target-bucket {uls_name} --region {region}",
+        use_yes=True,
+    )
