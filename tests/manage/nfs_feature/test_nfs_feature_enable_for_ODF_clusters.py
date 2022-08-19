@@ -222,12 +222,18 @@ class TestNfsEnable(ManageTest):
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @polarion_id("OCS-4273")
@@ -392,12 +398,18 @@ class TestNfsEnable(ManageTest):
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @polarion_id("OCS-4274")
@@ -532,11 +544,16 @@ class TestNfsEnable(ManageTest):
 
         log.info("Deleting PVCs")
         for pvc_obj in nfs_pvc_objs:
+            pv_obj = pvc_obj.backed_pv_obj
+            log.info(f"pv object-----{pv_obj}")
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(
                 resource_name=pvc_obj.name
             ), f"PVC {pvc_obj.name} is not deleted"
             log.info(f"Verified: PVC {pvc_obj.name} is deleted.")
+
+            log.info("Check nfs pv is deleted")
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @polarion_id("OCS-4293")
@@ -660,12 +677,18 @@ class TestNfsEnable(ManageTest):
                 pod_obj.name, 180
             ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVCs")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @polarion_id("OCS-4312")
@@ -802,12 +825,18 @@ class TestNfsEnable(ManageTest):
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @polarion_id("OCS-4275")
@@ -880,12 +909,18 @@ class TestNfsEnable(ManageTest):
                 pod_obj.name, 180
             ), f"Pod {pod_obj.name} is not deleted"
 
+            pv_obj = nfs_pvc_obj.backed_pv_obj
+            log.info(f"pv object-----{pv_obj}")
+
             log.info("Deleting PVC")
             nfs_pvc_obj.delete()
             nfs_pvc_obj.ocp.wait_for_delete(
                 resource_name=nfs_pvc_obj.name
             ), f"PVC {nfs_pvc_obj.name} is not deleted"
             log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+            log.info("Check nfs pv is deleted")
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier4c
     @polarion_id("OCS-4284")
@@ -973,12 +1008,18 @@ class TestNfsEnable(ManageTest):
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier4c
     @polarion_id("OCS-4296")
@@ -1158,6 +1199,9 @@ class TestNfsEnable(ManageTest):
         cmd_delete_deployment_config = "delete dc nfs-test-pod"
         self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment_config)
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         # Deletion of nfs PVC
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
@@ -1165,6 +1209,9 @@ class TestNfsEnable(ManageTest):
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier4c
     @polarion_id("OCS-4294")
@@ -1254,9 +1301,15 @@ class TestNfsEnable(ManageTest):
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
 
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete()
         nfs_pvc_obj.ocp.wait_for_delete(
             resource_name=nfs_pvc_obj.name
         ), f"PVC {nfs_pvc_obj.name} is not deleted"
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
