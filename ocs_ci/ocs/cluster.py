@@ -34,11 +34,13 @@ import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility import version
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     convert_device_size,
+    convert_bytes_to_unit,
     get_trim_mean,
     ceph_health_check,
 )
@@ -2189,6 +2191,7 @@ class LVM(object):
         self.ip = None
         self.vg_data = None
         self.node_ssh = None
+        self.new_prom = None
         func_list = [
             self.cluster_ip(),
             self.get_lvmcluster(),
@@ -2243,6 +2246,9 @@ class LVM(object):
         func_list.extend(extend_func_list)
 
         thread_init_class(func_list, shutdown=0)
+
+    def init_prom(self):
+        self.new_prom = PrometheusAPI()
 
     def get_lvmcluster(self):
         """
@@ -2638,6 +2644,87 @@ class LVM(object):
         return_output = self.node_ssh.exec_cmd(cmd=cmd)
         return_stdout = return_output[1]
         return return_stdout
+
+    def get_thin_provisioning_alerts(self):
+        """
+        Get the list of alerts that active in the cluster
+
+        Returns:
+            list: alrets name
+
+        """
+        if not isinstance(self.new_prom, PrometheusAPI):
+            self.init_prom()
+
+        alert_full = self.new_prom.get("alerts")
+        alerts_data = alert_full.json().get("data").get("alerts")
+        alerts_names = list()
+        for entity in alerts_data:
+            logger.debug(entity.get("labels").get("alertname"))
+            alerts_names.append(entity.get("labels").get("alertname"))
+
+        return alerts_names
+
+    def check_for_alert(self, alert_name):
+        """
+        Check to see if a given alert is available
+
+        Args:
+            alert_name (str): Alert name
+
+        Returns:
+            bool: True if alert is available else False
+
+        """
+        if alert_name in self.get_thin_provisioning_alerts():
+            return True
+
+        return False
+
+    def parse_topolvm_metrics(self, metrics):
+        """
+        Returns the name and value of topolvm metrics
+
+        Args:
+            metric_name (list): metrics name to be paesed
+
+        Returns:
+            dict: topolvm metrics by: names: value
+        """
+        if not isinstance(self.new_prom, PrometheusAPI):
+            self.init_prom()
+
+        metrics_short = dict()
+        for metric_name in metrics:
+            metric_full = self.new_prom.query(metric_name)
+            metric_value = metric_full[0].get("value")[1]
+            logger.info(f"metric: {metric_name} : {metric_value}")
+            metrics_short[metric_name] = metric_value
+
+        return metrics_short
+
+    def validate_metrics_vs_operating_system_stats(self, metric, expected_os_value):
+        """
+        Validate metrics vs operating system stats
+
+        Args:
+            metric (str): tololvm metric name
+            expected_os_value (str): linux "lvs" equivalent value
+
+        Returns:
+            bool: True if metric equals expected_os_value, False otherwise
+
+        """
+        logger.info(f"Comparing {metric} vs linux lvs output")
+        metric_value = self.parse_topolvm_metrics(constants.TOPOLVM_METRICS).get(metric)
+        converted_metric_value = convert_bytes_to_unit(metric_value)
+        if (abs(float(metric_value) - float(expected_os_value)) < 0.2) or (
+            abs(float(converted_metric_value[:-2]) - float(expected_os_value)) < 0.2
+        ):
+            return True
+        else:
+            logger.error(f"{metric} is not equal to os stat: {expected_os_value}")
+            return False
 
 
 def check_clusters():
