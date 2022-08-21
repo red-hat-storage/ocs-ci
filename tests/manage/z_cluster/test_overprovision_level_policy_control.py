@@ -46,10 +46,12 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     @pytest.mark.parametrize(
         argnames=["sc_name", "sc_type"],
         argvalues=[
-            # pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
-            # pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
+            pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2120121
             # pytest.param(*["sc-test-blk", constants.CEPHBLOCKPOOL]),
-            pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2120121
+            # pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
         ],
     )
     def test_over_provision_level_policy_control(
@@ -64,12 +66,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         """
         Test Process:
             1.Create project with “openshift-quota” label
-            2.Create new Storage Class
-            3.Add “overprovisionControl” section to storagecluster yaml file
-            4.Check storagecluster status
-            5.Create 3Gi pvc on project “ocs-quota-sc-test” with sc “sc-test”
-            6.Create 5Gi pvc on project “ocs-quota-sc-test” with sc “sc-test”
-            7.Verify 5Gi is not created because [7Gi<5Gi+3Gi]
+            2.Create new Storage Class or use ceph-rbd or ceph-fs
+            3.Add “overprovisionControl” section to storagecluster yaml file [max=8Gi]
+            4.Verify storagecluster on Ready state
+            5.Create 5Gi pvc on project “ocs-quota-sc-test” with sc “sc-test”
+            6.Create new pvc with 6Gi capacity and verify it failed [6Gi + 5Gi > 8Gi]
+            7.Resize PVC to 20Gi and verify it failed [20Gi > 8Gi]
+            8.Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]
+            9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
         quota_name = {
@@ -78,6 +82,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
+
         log.info("Create project with “openshift-quota” label")
         ns_quota = templating.load_yaml(constants.NAMESPACE_QUOTA)
         ns_quota_obj = OCS(**ns_quota)
@@ -123,7 +128,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         assert self.verify_substrings_in_string(
             output_string=output_clusterresourcequota, expected_strings=["8Gi", "0"]
         ), f"{output_clusterresourcequota}\n expected string does not exist."
-        pvc_obj_blk = pvc_factory(
+
+        log.info("Create 5Gi pvc on project ocs-quota-sc-test")
+        pvc_obj = pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,
             storageclass=sc_obj,
@@ -138,11 +145,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             output_string=output_clusterresourcequota,
             expected_strings=["5Gi", "8Gi"],
         ), f"{output_clusterresourcequota}\n expected string does not exist."
-
         pod_factory(
             interface=sc_type,
-            pvc=pvc_obj_blk,
+            pvc=pvc_obj,
             status=constants.STATUS_RUNNING,
+        )
+
+        log.info(
+            "Create new pvc with 6Gi capacity and verify it failed [6Gi + 5Gi > 8Gi]"
         )
         try:
             pvc_factory(
@@ -157,15 +167,17 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 output_string=str(e), expected_strings=["5Gi", "6Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
+        log.info("Resize PVC to 20Gi and verify it failed [20Gi > 8Gi]")
         try:
-            pvc_obj_blk.resize_pvc(new_size=20, verify=True)
+            pvc_obj.resize_pvc(new_size=20, verify=True)
         except Exception as e:
             log.info(e)
             assert self.verify_substrings_in_string(
                 output_string=str(e), expected_strings=["15Gi", "5Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
-        pvc_obj_blk.resize_pvc(new_size=6, verify=True)
+        log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
+        pvc_obj.resize_pvc(new_size=6, verify=True)
         output_clusterresourcequota = clusterresourcequota_obj.describe(
             resource_name=quota_name[sc_name]
         )
@@ -174,6 +186,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             output_string=output_clusterresourcequota, expected_strings=["8Gi", "6Gi"]
         ), f"{output_clusterresourcequota}\n expected string does not exist."
 
+        log.info(
+            "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
+        )
         pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,
