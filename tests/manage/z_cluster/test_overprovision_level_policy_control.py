@@ -24,21 +24,42 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     Test OverProvision Level Policy Control
     """
 
-    def teardown(self):
-        log.info("Delete overprovisionControl from storage cluster yaml file")
-        storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.STORAGECLUSTER,
-        )
-        params = '{"spec": {"overprovisionControl": []}}'
-        storagecluster_obj.patch(
-            params=params,
-            format_type="merge",
-        )
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            log.info("Delete overprovisionControl from storage cluster yaml file")
+            storagecluster_obj = OCP(
+                resource_name=constants.DEFAULT_CLUSTERNAME,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                kind=constants.STORAGECLUSTER,
+            )
+            params = '{"spec": {"overprovisionControl": []}}'
+            storagecluster_obj.patch(
+                params=params,
+                format_type="merge",
+            )
+            log.info("Verify storagecluster on Ready state")
+            verify_storage_cluster()
 
+        request.addfinalizer(finalizer)
+
+    @pytest.mark.parametrize(
+        argnames=["sc_name", "sc_type"],
+        argvalues=[
+            # pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
+            # pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            # pytest.param(*["sc-test-blk", constants.CEPHBLOCKPOOL]),
+            pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
+        ],
+    )
     def test_over_provision_level_policy_control(
-        self, teardown_project_factory, pvc_factory, pod_factory, storageclass_factory
+        self,
+        sc_name,
+        sc_type,
+        teardown_project_factory,
+        pvc_factory,
+        pod_factory,
+        storageclass_factory,
     ):
         """
         Test Process:
@@ -51,6 +72,12 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             7.Verify 5Gi is not created because [7Gi<5Gi+3Gi]
 
         """
+        quota_name = {
+            constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
+            constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
+            "sc-test-blk": "sc-test-blk-quota-sc-test",
+            "sc-test-fs": "sc-test-fs-quota-sc-test",
+        }
         log.info("Create project with “openshift-quota” label")
         ns_quota = templating.load_yaml(constants.NAMESPACE_QUOTA)
         ns_quota_obj = OCS(**ns_quota)
@@ -61,9 +88,10 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         teardown_project_factory(ocp_project_obj)
 
         log.info("Create new Storage Class")
-        sc_obj = storageclass_factory(
-            interface=constants.CEPHBLOCKPOOL, sc_name="sc-test"
-        )
+        if sc_name in (constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC):
+            sc_obj = None
+        else:
+            sc_obj = storageclass_factory(interface=sc_type, sc_name=sc_name)
 
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
@@ -71,8 +99,11 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.STORAGECLUSTER,
         )
+        sc_name_str = f'"{sc_name}"'
         params = (
-            '{"spec": {"overprovisionControl": [{"capacity": "8Gi","storageClassName": "sc-test", "quotaName": '
+            '{"spec": {"overprovisionControl": [{"capacity": "8Gi","storageClassName":'
+            + sc_name_str
+            + ', "quotaName": '
             '"quota-sc-test", "selector": {"labels": {"matchLabels": {"openshift-quota":"quota-sc-test"}}}}]}}'
         )
         storagecluster_obj.patch(
@@ -85,34 +116,37 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         log.info("Check clusterresourcequota output")
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
-        output_clusterresourcequota = clusterresourcequota_obj.describe()
+        output_clusterresourcequota = clusterresourcequota_obj.describe(
+            resource_name=quota_name[sc_name]
+        )
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
             output_string=output_clusterresourcequota, expected_strings=["8Gi", "0"]
         ), f"{output_clusterresourcequota}\n expected string does not exist."
-
         pvc_obj_blk = pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=sc_type,
             project=ocp_project_obj,
             storageclass=sc_obj,
             size=5,
             status=constants.STATUS_BOUND,
         )
-        output_clusterresourcequota = clusterresourcequota_obj.describe()
-        log.info({output_clusterresourcequota})
+        output_clusterresourcequota = clusterresourcequota_obj.describe(
+            resource_name=quota_name[sc_name]
+        )
+        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
             output_string=output_clusterresourcequota,
             expected_strings=["5Gi", "8Gi"],
         ), f"{output_clusterresourcequota}\n expected string does not exist."
 
         pod_factory(
-            interface=constants.CEPHFILESYSTEM,
+            interface=sc_type,
             pvc=pvc_obj_blk,
             status=constants.STATUS_RUNNING,
         )
         try:
             pvc_factory(
-                interface=constants.CEPHBLOCKPOOL,
+                interface=sc_type,
                 project=ocp_project_obj,
                 storageclass=sc_obj,
                 size=6,
@@ -127,9 +161,32 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             pvc_obj_blk.resize_pvc(new_size=20, verify=True)
         except Exception as e:
             log.info(e)
-            assert self.verify_subsring_in_string(
+            assert self.verify_substrings_in_string(
                 output_string=str(e), expected_strings=["15Gi", "5Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
+
+        pvc_obj_blk.resize_pvc(new_size=6, verify=True)
+        output_clusterresourcequota = clusterresourcequota_obj.describe(
+            resource_name=quota_name[sc_name]
+        )
+        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+        assert self.verify_substrings_in_string(
+            output_string=output_clusterresourcequota, expected_strings=["8Gi", "6Gi"]
+        ), f"{output_clusterresourcequota}\n expected string does not exist."
+
+        pvc_factory(
+            interface=sc_type,
+            project=ocp_project_obj,
+            storageclass=sc_obj,
+            size=1,
+        )
+        output_clusterresourcequota = clusterresourcequota_obj.describe(
+            resource_name=quota_name[sc_name]
+        )
+        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+        assert self.verify_substrings_in_string(
+            output_string=output_clusterresourcequota, expected_strings=["8Gi", "7Gi"]
+        ), f"{output_clusterresourcequota}\n expected string does not exist."
 
     def verify_substrings_in_string(self, output_string, expected_strings):
         """
