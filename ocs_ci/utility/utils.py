@@ -2940,6 +2940,35 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     return conversion[units_to_covert_to][units]
 
 
+def convert_bytes_to_unit(bytes_to_convert):
+    """
+    Convert bytes to bigger units like Kb, Mb, Gb or Tb.
+
+    Args:
+        bytes_to_convert (str): The bytes to convert.
+
+    Returns:
+        str: The converted bytes as biggest unit possible
+
+    """
+    if type(bytes_to_convert) != str:
+        log.error("Unable to convert, expected string")
+    if float(bytes_to_convert) < constants.BYTES_IN_KB:
+        return f"{bytes_to_convert}B"
+    if constants.BYTES_IN_KB <= float(bytes_to_convert) < constants.BYTES_IN_MB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_KB
+        return f"{size:.2f}KB"
+    if constants.BYTES_IN_MB <= float(bytes_to_convert) < constants.BYTES_IN_GB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_MB
+        return f"{size:.2f}MB"
+    if constants.BYTES_IN_GB <= float(bytes_to_convert) < constants.BYTES_IN_TB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_GB
+        return f"{size:.2f}GB"
+    if constants.BYTES_IN_TB <= float(bytes_to_convert):
+        size = float(bytes_to_convert) / constants.BYTES_IN_TB
+        return f"{size:.2f}TB"
+
+
 def prepare_customized_pull_secret(images=None):
     """
     Prepare customized pull-secret containing auth section related to given
