@@ -2119,6 +2119,100 @@ def is_ms_provider_cluster():
     )
 
 
+def get_osd_dump(pool_name):
+    """
+    Get the osd dump part of a give pool
+
+    Args:
+    pool_name (str): ceph pool name
+
+    Returns:
+        pool (dict): pool information from osd dump
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
+    for pool in osd_dump_dict["pools"]:
+        if pool["pool_name"] == pool_name:
+            return pool
+    assert False, "Failed to get the pool information from osd dump"
+
+
+def get_pool_num(pool_name):
+    """
+    Get the pool number of a given pool (e.g., ocs-storagecluster-cephblockpool -> 2)
+
+    Args:
+    pool_name (str): ceph pool name
+
+    Returns:
+        int: pool number
+
+    """
+    return int(get_osd_dump(pool_name)["pool"])
+
+
+def get_pgs_brief_dump():
+    """
+    Get pgs_brief dump from ceph pg dump
+
+    Returns:
+        pgs_brief_dict (dict): pgs_brief dump output
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    pgs_brief_dict = ct_pod.exec_ceph_cmd(f"ceph pg dump pgs_brief")
+
+    return pgs_brief_dict
+
+
+def get_all_pgid():
+    """
+    Get all the pgid's listed in pgs_brief dump
+
+    Returns:
+        list: List of all the pgid's in pgs_brief dump
+
+    """
+    pg_dump_dict = get_pgs_brief_dump()
+
+    return [pgid["pgid"] for pgid in pg_dump_dict["pg_stats"]]
+
+
+def get_specific_pool_pgid(pool_name):
+    """
+    Get all the pgid's of a specific pool
+
+    Args:
+    pool_name (str): ceph pool name
+
+    Returns:
+        list: List of all the pgid's of a given pool
+
+    """
+    pool_num = get_pool_num(pool_name)
+    all_pgid = get_all_pgid()
+
+    return list(filter(lambda x: x.startswith(f"{pool_num}."), all_pgid))
+
+
+def get_osd_pg_log_dups_tracked():
+    """
+    Get the default tracked number of osd pg log dups
+
+    Returns:
+        osd_pg_log_dups_count (int): Number of default tracked osd pg log dups
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    osd_pg_log_dups_count = ct_pod.exec_ceph_cmd(
+        "ceph config get osd osd_pg_log_dups_tracked"
+    )
+    logger.info(f"Default number of osd pg log dups:{osd_pg_log_dups_count}")
+
+    return int(osd_pg_log_dups_count)
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities

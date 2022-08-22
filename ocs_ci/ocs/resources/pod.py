@@ -2741,3 +2741,84 @@ def get_mon_label(mon_pod_obj):
 
     """
     return mon_pod_obj.get().get("metadata").get("labels").get("mon")
+
+
+def set_osd_maintenance_mode(osd_deployment):
+
+    """
+    Set osd in maintenance mode for running ceph-objectstore commands
+
+    Args:
+        osd_deployment (OCS): List of OSD deployment OCS instances
+
+    """
+    logger.info("Entering into the OSD maintenance mode")
+    # Scale down rook-ceph-operator and ocs-operator deployments to zero
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=0
+    )
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.OCS_CSV_PREFIX, replica_count=0
+    )
+    # Set ceph osd noout and pause flags
+    ct_pod = get_ceph_tools_pod()
+    logger.info("Setting osd noout flag")
+    ct_pod.exec_ceph_cmd("ceph osd set noout")
+    logger.info("Setting osd pause flag")
+    ct_pod.exec_ceph_cmd("ceph osd set pause")
+    # Take a backup of the list of osd deployments
+    logger.info("Backup OSD deployments")
+    for deployment in osd_deployment:
+        deployment_get = deployment.get()
+        templating.dump_data_to_temp_yaml(
+            deployment_get, f"backup_{deployment.name}.yaml"
+        )
+        patch_cmd = (
+            '{"spec": {"template": {"spec":{"containers": [{"name": "osd", '
+            '"command": ["sleep", "infinity"], "args":[]}]}}}}'
+        )
+        deployment.ocp.patch(resource_name=deployment.name, params=patch_cmd)
+    # Sleep for 60 sec for the OSD pods to respin
+    logger.info("Sleeping for 60s for the osd pods to stabilize")
+    time.sleep(60)
+    for pod in get_osd_pods():
+        helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
+
+
+def exit_osd_maintenance_mode(osd_deployment):
+    """
+    Exit from osd maintenance mode
+
+    Args:
+        osd_deployment (OCS): List of OSD deployment OCS instances
+
+    """
+    logger.info("Exiting the OSD from maintenance mode")
+    # Replace OSD deployment with the backup took while setting the osd in maintenance mode
+    for deployment in osd_deployment:
+        if os.path.isfile(f"backup_{deployment.name}.yaml"):
+            logger.info(f"Replacing the backup for {deployment.name}")
+            cmd = f"oc replace --force -f backup_{deployment.name}.yaml"
+            run_cmd(cmd=cmd)
+    # Scale up rook-ceph-operator and ocs-operator deployments to 1
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
+    )
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.OCS_CSV_PREFIX, replica_count=1
+    )
+    # Sleep for 60 sec for the OSD pods to respin
+    logger.info("Sleeping for 60s for the osd pods to stabilize")
+    time.sleep(60)
+    for pod in get_osd_pods():
+        helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
+    ct_pod = get_ceph_tools_pod()
+    # UnSet ceph osd noout and pause flags
+    logger.info("UnSet osd noout flag")
+    ct_pod.exec_ceph_cmd("ceph osd unset noout")
+    logger.info("UnSet osd pause flag")
+    ct_pod.exec_ceph_cmd("ceph osd unset pause")
+    # Remove the backup files
+    for deployment in osd_deployment:
+        if os.path.isfile(f"backup_{deployment.name}.yaml"):
+            os.remove(f"backup_{deployment.name}.yaml")
