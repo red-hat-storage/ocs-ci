@@ -2161,7 +2161,7 @@ def get_pgs_brief_dump():
 
     """
     ct_pod = pod.get_ceph_tools_pod()
-    pgs_brief_dict = ct_pod.exec_ceph_cmd(f"ceph pg dump pgs_brief")
+    pgs_brief_dict = ct_pod.exec_ceph_cmd("ceph pg dump pgs_brief")
 
     return pgs_brief_dict
 

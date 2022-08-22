@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @skipif_ocs_version("<4.11")
-@pytest.mark.polarion_id("OCS-2593")
+@pytest.mark.polarion_id("OCS-4471")
 @pytest.mark.bugzilla("2101798")
 class TestCephPgLogDupsTrimming(ManageTest):
     @pytest.fixture(autouse=True)
