@@ -73,9 +73,8 @@ class TestClusterFullAndRecovery(E2ETest):
         20.Change Ceph backfillfull_ratio from 95% to 80%
 
         """
-        self.count = 0
         self.banchmark_operator_teardown = False
-        project_name = "test849"
+        project_name = "test850"
         self.project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(self.project_obj)
 
@@ -142,7 +141,7 @@ class TestClusterFullAndRecovery(E2ETest):
 
         log.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
-            timeout=1800,
+            timeout=2500,
             sleep=40,
             func=self.verify_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
@@ -314,11 +313,9 @@ class TestClusterFullAndRecovery(E2ETest):
             f"to pod_blk1_obj {pod_blk1_obj.md5}"
         )
 
-    def verify_used_capacity_greater_than_expected(
-        self, expected_used_capacity, pvc_factory, pod_factory
-    ):
+    def verify_osd_used_capacity_greater_than_expected(self, expected_used_capacity):
         """
-        Verify cluster percent used capacity
+        Verify OSD percent used capacity greate than ceph_full_ratio
 
         Args:
             expected_used_capacity (float): expected used capacity
@@ -328,30 +325,16 @@ class TestClusterFullAndRecovery(E2ETest):
 
         """
         used_capacity = get_percent_used_capacity()
-        if expected_used_capacity < used_capacity + 3:
-            self.count += 1
-        if self.count == 3:
-            log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
-            pvc_obj_fs1 = pvc_factory(
-                interface=constants.CEPHFILESYSTEM,
-                project=self.project_obj,
-                size=5,
-                status=constants.STATUS_BOUND,
-            )
-            pod_fs1_obj = pod_factory(
-                interface=constants.CEPHFILESYSTEM,
-                pvc=pvc_obj_fs1,
-                status=constants.STATUS_RUNNING,
-            )
-            pod_fs1_obj.fillup_fs(
-                size="4096M",
-            )
         log.info(f"Used Capacity is {used_capacity}%")
         ceph_df_detail = get_ceph_df_detail()
         log.info(f"ceph df detail: {ceph_df_detail}")
-        osd_utilization = get_osd_utilization()
-        log.info(f"osd utilization: {osd_utilization}")
-        return used_capacity > expected_used_capacity
+        osds_utilization = get_osd_utilization()
+        log.info(f"osd utilization: {osds_utilization}")
+        for osd_id, osd_utilization in osds_utilization.items():
+            if osd_utilization > expected_used_capacity:
+                log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
+                return True
+        return False
 
     def verify_alerts_via_prometheus(self, expected_alerts):
         """
