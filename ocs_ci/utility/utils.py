@@ -3334,10 +3334,14 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
+    # If the cluster is upgraded from OCP 4.10, target_terraform_ignition_provider should
+    # be terraform_ignition_provider
     create_directory_path(terraform_plugins_path)
     if (
         version_module.get_semantic_ocp_version_from_config()
         >= version_module.VERSION_4_11
+        and config.ENV_DATA.get("original_installed_ocp_version_major_minor_obj")
+        != version_module.VERSION_4_10
     ):
         target_terraform_ignition_provider = terraform_plugins_path
     else:
