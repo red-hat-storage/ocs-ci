@@ -16,6 +16,22 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(autouse=True, scope="class")
+def setup_sc(storageclass_factory_class):
+    sc_fs_obj = storageclass_factory_class(
+        interface=constants.CEPHFILESYSTEM, sc_name="sc-test-fs"
+    )
+    sc_blk_obj = storageclass_factory_class(
+        interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
+    )
+    return {
+        constants.CEPHBLOCKPOOL_SC: None,
+        constants.CEPHFILESYSTEM_SC: None,
+        "sc-test-blk": sc_blk_obj,
+        "sc-test-fs": sc_fs_obj,
+    }
+
+
 @tier1
 @bugzilla("2024545")
 @pytest.mark.polarion_id("OCS-XYZ")
@@ -48,14 +64,13 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         argvalues=[
             pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
             pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
-            # https://bugzilla.redhat.com/show_bug.cgi?id=2120121
-            # pytest.param(*["sc-test-blk", constants.CEPHBLOCKPOOL]),
-            # https://bugzilla.redhat.com/show_bug.cgi?id=2120121
-            # pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
+            pytest.param(*["sc-test-blk", constants.CEPHBLOCKPOOL]),
+            pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
         ],
     )
     def test_over_provision_level_policy_control(
         self,
+        setup_sc,
         sc_name,
         sc_type,
         teardown_project_factory,
@@ -92,11 +107,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         )
         teardown_project_factory(ocp_project_obj)
 
-        log.info("Create new Storage Class")
-        if sc_name in (constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC):
-            sc_obj = None
-        else:
-            sc_obj = storageclass_factory(interface=sc_type, sc_name=sc_name)
+        sc_obj = setup_sc.get(sc_name)
 
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
