@@ -3195,6 +3195,11 @@ def set_selinux_permissions(workers=None):
     if not workers:
         from ocs_ci.ocs.node import get_typed_worker_nodes
 
+        if "rhel7" not in config.ENV_DATA.get("rhel_template", "None"):
+            log.debug(
+                f"selinux permission are not needed for {config.ENV_DATA.get('rhel_template')}"
+            )
+            return
         worker_nodes = get_typed_worker_nodes(os_id="rhel")
     else:
         worker_nodes = workers
