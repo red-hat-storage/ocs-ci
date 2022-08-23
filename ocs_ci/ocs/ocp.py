@@ -439,7 +439,7 @@ class OCP(object):
         if f'Now using project "{project_name}"' in run_cmd(
             f"{command}", threading_lock=self.threading_lock
         ):
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+            if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
                 label = (
                     "security.openshift.io/scc.podSecurityLabelSync=false "
                     f"pod-security.kubernetes.io/enforce={policy} "
