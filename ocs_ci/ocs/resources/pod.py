@@ -1710,7 +1710,6 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
 
     namespace = config.ENV_DATA["cluster_namespace"]
-    pod = OCP(kind=constants.POD, namespace=namespace)
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
         f"and upgraded."
