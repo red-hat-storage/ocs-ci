@@ -194,8 +194,6 @@ class SanityManagedService(Sanity):
         Init the sanity managed service class
         """
         super(Sanity, self).__init__()
-        # Save the original index
-        self.orig_index = config.cur_index
         # A dictionary of a consumer index per the fio_scale object
         self.consumer_i_per_fio_scale = {}
         # The 'create resources on MS consumers' factory. Will be initialized with the
@@ -269,34 +267,43 @@ class SanityManagedService(Sanity):
         using the method 'init_create_resources_on_ms_factory'.
 
         """
+        orig_index = config.cur_index
         if not self.create_resources_on_ms_consumers_factory:
             raise ValueError(
                 "You need to first init the 'Create resources on MS consumers' factory"
                 "using the method 'init_create_resources_on_ms_factory'"
             )
-        # Create the scale pods and PVCs using k8s on MS consumers factory
-        self.consumer_i_per_fio_scale = self.create_resources_on_ms_consumers_factory(
-            scale_count=self.scale_count,
-            pvc_per_pod_count=self.pvc_per_pod_count,
-            start_io=self.start_io,
-            io_runtime=self.io_runtime,
-            pvc_size=self.pvc_size,
-            max_pvc_size=self.max_pvc_size,
-            consumer_indexes=self.consumer_indexes,
-        )
+        try:
+            # Create the scale pods and PVCs using k8s on MS consumers factory
+            self.consumer_i_per_fio_scale = (
+                self.create_resources_on_ms_consumers_factory(
+                    scale_count=self.scale_count,
+                    pvc_per_pod_count=self.pvc_per_pod_count,
+                    start_io=self.start_io,
+                    io_runtime=self.io_runtime,
+                    pvc_size=self.pvc_size,
+                    max_pvc_size=self.max_pvc_size,
+                    consumer_indexes=self.consumer_indexes,
+                )
+            )
+        finally:
+            # Switch back to the original index
+            config.switch_ctx(orig_index)
 
     def delete_resources_on_ms_consumers(self):
         """
         Delete the resources from the MS consumers
 
         """
-        logger.info("Clean up the pods and PVCs from all consumers")
-        for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
-            config.switch_ctx(consumer_i)
-            fio_scale.cleanup()
-
-        # Switch back to the original index
-        config.switch_ctx(self.orig_index)
+        orig_index = config.cur_index
+        try:
+            logger.info("Clean up the pods and PVCs from all consumers")
+            for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
+                config.switch_ctx(consumer_i)
+                fio_scale.cleanup()
+        finally:
+            # Switch back to the original index
+            config.switch_ctx(orig_index)
 
     def health_check_ms(
         self,
@@ -316,10 +323,15 @@ class SanityManagedService(Sanity):
             consumers_tries: The number of tries to perform ceph health check on the MS consumer clusters
 
         """
-        self.health_check(cluster_check=cluster_check, tries=tries)
-        if consumers_ceph_health_check and not is_ms_consumer_cluster():
-            # Check the ceph health on the consumers
-            consumer_indexes = config.get_consumer_indexes_list()
-            for consumer_i in consumer_indexes:
-                config.switch_ctx(consumer_i)
-                ceph_health_check(tries=consumers_tries)
+        orig_index = config.cur_index
+        try:
+            self.health_check(cluster_check=cluster_check, tries=tries)
+            if consumers_ceph_health_check and not is_ms_consumer_cluster():
+                # Check the ceph health on the consumers
+                consumer_indexes = config.get_consumer_indexes_list()
+                for consumer_i in consumer_indexes:
+                    config.switch_ctx(consumer_i)
+                    ceph_health_check(tries=consumers_tries)
+
+        finally:
+            config.switch_ctx(orig_index)
