@@ -34,7 +34,7 @@ def setup_sc(storageclass_factory_class):
 
 @tier1
 @bugzilla("2024545")
-@pytest.mark.polarion_id("OCS-XYZ")
+@pytest.mark.polarion_id("OCS-4472")
 class TestOverProvisionLevelPolicyControl(ManageTest):
     """
     Test OverProvision Level Policy Control
