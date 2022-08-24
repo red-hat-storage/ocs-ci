@@ -64,7 +64,14 @@ class TestNodesRestart(ManageTest):
         ],
     )
     def test_nodes_restart(
-        self, nodes, pvc_factory, pod_factory, force, bucket_factory, rgw_bucket_factory, timeout =300
+        self,
+        nodes,
+        pvc_factory,
+        pod_factory,
+        force,
+        bucket_factory,
+        rgw_bucket_factory,
+        timeout=300,
     ):
         """
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
@@ -75,9 +82,7 @@ class TestNodesRestart(ManageTest):
         while True:
             nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
             if timeout < (time.time() - start_time):
-                msg = (
-                    f"Timeout when waiting for nodes to restart "
-                )
+                msg = "Timeout when waiting for nodes to restart"
                 raise TimeoutError(msg)
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(
