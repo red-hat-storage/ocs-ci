@@ -1453,6 +1453,11 @@ def update_csi_kms_vault_connection_details(update_config):
 
 def get_kms_deployment():
     provider = config.ENV_DATA["KMS_PROVIDER"]
+    if not config.ENV_DATA.get("encryption_at_rest"):
+        raise KMSNotSupported(
+            "Encryption should be enabled for KMS Deployments. "
+            "Choose vault config file from https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci"
+        )
     try:
         return kms_map[provider]()
     except KeyError:
