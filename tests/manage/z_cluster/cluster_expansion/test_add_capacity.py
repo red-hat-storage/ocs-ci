@@ -40,7 +40,7 @@ def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    if ui_add_capacity_conditions():
+    if ui_add_capacity_conditions() and not is_flexible_scaling_enabled():
         try:
             result = ui_add_capacity(osd_size)
         except Exception as e:
