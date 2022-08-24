@@ -307,9 +307,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         rec_policy = performance_lib.run_oc_command(
             f'get sc {Interface_Info[self.interface]["sc"]} -o jsonpath="'
             + '{.reclaimPolicy}"'
-        )
+        )[0].strip('"')
 
-        if rec_policy[0].strip('"') == constants.RECLAIM_POLICY_DELETE:
+        if rec_policy == constants.RECLAIM_POLICY_DELETE:
             log.info("Wait for all PVC(s) backed PV(s) to be deleted")
             # Timeout for each PV to be deleted is 20 sec.
             performance_lib.wait_for_resource_bulk_status(
