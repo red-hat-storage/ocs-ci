@@ -34,8 +34,6 @@ log = logging.getLogger(__name__)
 
 # Error message to look in a command output
 ERRMSG = "Error in command"
-# Time formatting in the csi-driver logs
-time_format = "%H:%M:%S.%f"
 
 
 @performance
@@ -271,6 +269,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snapshotclass_data = templating.load_yaml(yaml_files[interface])
 
         snapshotclass_data["metadata"]["name"] = snapclass_name
+        snapshotclass_data["metadata"][
+            "namespace"
+        ] = constants.OPENSHIFT_STORAGE_NAMESPACE
         ocs_obj = ocs.OCS(**snapshotclass_data)
         log.info(f"Creating new snapshot class : {snapclass_name}")
         try:
