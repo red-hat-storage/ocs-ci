@@ -381,6 +381,8 @@ class Pod(OCS):
             self.io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
         if invalidate is not None:
             self.io_params["invalidate"] = invalidate
+        elif storage_type == "block":
+            self.io_params["invalidate"] = 0
         if runtime != 0:
             self.io_params["runtime"] = runtime
         else:

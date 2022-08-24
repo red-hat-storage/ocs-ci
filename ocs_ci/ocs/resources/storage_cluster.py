@@ -764,7 +764,10 @@ def osd_encryption_verification():
     log.info("Get 'lsblk' command output on nodes where osd running")
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
-        lsblk_cmd = f"oc debug node/{worker_node} -- chroot /host lsblk"
+        lsblk_cmd = (
+            f"oc debug node/{worker_node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            "-- chroot /host lsblk"
+        )
         # It happens from time to time that we see this error:
         # error: unable to create the debug pod "node-name-internal-debug
         # Hence we need to add some re-try logic here

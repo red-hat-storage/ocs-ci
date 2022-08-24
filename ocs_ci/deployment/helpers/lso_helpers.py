@@ -326,7 +326,10 @@ def _get_disk_by_id(worker):
         str: stdout of disk by-id command
 
     """
-    cmd = f"oc debug nodes/{worker} " f"-- chroot /host ls -la /dev/disk/by-id/"
+    cmd = (
+        f"oc debug nodes/{worker} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
     return run_cmd(cmd)
 
 
