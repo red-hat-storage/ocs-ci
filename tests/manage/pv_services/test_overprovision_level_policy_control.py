@@ -5,8 +5,6 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -97,14 +95,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
-
         log.info("Create project with “openshift-quota” label")
-        ns_quota = templating.load_yaml(constants.NAMESPACE_QUOTA)
-        ns_quota_obj = OCS(**ns_quota)
-        ocs_project_obj = ns_quota_obj.create()
-        ocp_project_obj = OCP(
-            kind="Project", namespace=ocs_project_obj["metadata"]["name"]
+        project_name = "ocs-quota-sc-test"
+        ocp_project_label = OCP(kind=constants.NAMESPACE)
+        ocp_project_label.new_project(project_name=project_name)
+        ocp_project_label.add_label(
+            resource_name=project_name, label="openshift-quota=quota-sc-test"
         )
+        ocp_project_obj = OCP(kind="Project", namespace=project_name)
         teardown_project_factory(ocp_project_obj)
 
         sc_obj = setup_sc.get(sc_name)

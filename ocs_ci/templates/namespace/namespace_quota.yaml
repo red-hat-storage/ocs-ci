@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ocs-quota-sc-test
-  labels:
-    openshift-quota: quota-sc-test
