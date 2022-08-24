@@ -11,6 +11,7 @@ from ocs_ci.ocs.exceptions import (
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
     BlockPoolRawCapacityNotLoaded,
+    BlockPoolRawCapacityNotCorrect,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -119,6 +120,12 @@ class TestPoolUserInterface(ManageTest):
         if not blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name):
             raise BlockPoolRawCapacityNotLoaded(
                 f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
+            )
+
+        # Cross checking the raw capacity of the blockpool between CLI and UI
+        if not blockpool_ui_object.cross_check_raw_capacity(self.pool_name):
+            raise BlockPoolRawCapacityNotCorrect(
+                f"The Raw Capcity for the blockpool {self.pool_name} doesnt match in UI as shown in CLI."
             )
 
         # Checking Results for compression and replication

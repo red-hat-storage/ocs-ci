@@ -6,6 +6,10 @@ class UnexpectedDeploymentConfiguration(Exception):
     pass
 
 
+class BlockPoolRawCapacityNotCorrect(Exception):
+    pass
+
+
 class UnsupportedOSType(Exception):
     pass
 

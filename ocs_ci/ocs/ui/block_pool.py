@@ -216,3 +216,42 @@ class BlockPoolUI(PageNavigator):
         else:
             logger.warning("Block Pool Raw Capacity has not loaded in UI")
         return raw_capacity_loaded
+
+    def cross_check_raw_capacity(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is same in GUI as obtained from CLI
+        or returns False if the raw capacity of the block pool doesnt match with CLI
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is is same in GUI as obtained from CLI, otherwise False
+        """
+        logger.info(
+            "Checking if the Block Pool Raw Capacity is same in GUI as obtained from CLI"
+        )
+        if self.pool_raw_capacity_loaded(pool_name):
+            cmd = f"rados df"
+            ct_pod = pod.get_ceph_tools_pod()
+            df_op = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+            for pools in df_op["pools"]:
+                if pools["name"] == pool_name:
+                    raw_capacity = round(
+                        int(pools["size_kb"]) / 1024, 1
+                    )  # converting it into MiB because we are only running io in MiB in the previous step
+
+            logger.info(
+                f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
+            )
+
+            raw_capacity_in_UI = self.get_element_text(
+                (f"//div[@class='ceph-raw-card-legend__text']", By.XPATH)
+            )
+
+            if raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
+                logger.info("UI values didnt matched as per CLI for the Raw Capacity")
+                return True
+            else:
+                logger.error("UI values didnt matched as per CLI for the Raw Capacity")
+                return False
