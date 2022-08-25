@@ -182,8 +182,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             else:
                 log.info(f"The pool {self.sc_name} was deleted successfully")
 
-            # Deleting the namespace used by the test
-            self.delete_test_project()
+        # Deleting the namespace used by the test
+        self.delete_test_project()
 
         super(TestPvcMultiSnapshotPerformance, self).teardown()
 
