@@ -324,11 +324,17 @@ class CephCluster(object):
             and not config.COMPONENTS["disable_noobaa"]
         ):
             # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
-            if (
-                version.get_semantic_ocp_version_from_config() == version.VERSION_4_10
-                and version.get_semantic_ocs_version_from_config()
-                == version.VERSION_4_9
-                and config.DEPLOYMENT.get("live_deployment")
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if config.DEPLOYMENT.get("live_deployment") and (
+                (
+                    ocp_version == version.VERSION_4_10
+                    and ocs_version == version.VERSION_4_9
+                )
+                or (
+                    ocp_version == version.VERSION_4_11
+                    and ocs_version == version.VERSION_4_10
+                )
             ):
                 logger.info("skipping noobaa health check due to bug 2075422")
                 return
