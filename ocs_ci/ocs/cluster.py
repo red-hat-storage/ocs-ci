@@ -866,19 +866,22 @@ class CephCluster(object):
             logger.error(err_msg)
             raise exceptions.CephHealthException(err_msg)
 
-    def delete_filesystem(self):
+    def delete_filesystem(self, fs_name="ocs-storagecluster-cephfilesystem"):
         """
         Delete the ceph filesystem from the cluster, and wait until it recreated,
         then create the subvolumegroup on it.
 
         """
-        fs_name = "ocs-storagecluster-cephfilesystem"
 
         # Delete the filesystem
         try:
             self.CEPHFS.delete(resource_name=fs_name)
         except Exception as ex:
             logger.warning(f"Cephfs filesystem deletion failed ({ex}).")
+
+        if fs_name != "ocs-storagecluster-cephfilesystem":
+            # don't need to wait until filesystem is recreated.
+            return
 
         # The ceph filesystem is re-created automaticly
         logger.info(f"Wait until the CephFS {fs_name} is re-created")
