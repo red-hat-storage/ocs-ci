@@ -445,8 +445,9 @@ def create_ceph_file_system(
     Creates a Ceph file system.
 
     Args:
-        cephfs_name (str): The pool name to create
+        cephfs_name (str): The ceph FS name to create
         label (dict): The label to give to pool
+        namespace (str): The name space in which the ceph FS has to be created
 
     Returns:
         OCS: An OCS instance for the Ceph file system
