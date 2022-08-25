@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_resource, validate_cephfilesystem
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
@@ -11,14 +11,14 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
 cephfs_data["metadata"]["name"] = "test-ceph-fs"
-cephfs_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+cephfs_data["metadata"]["namespace"] = constants.OPENSHIFT_STORAGE_NAMESPACE
 cephfs_data["metadata"]["labels"] = {"use": "test"}
 
 
 class TestCephFileSystemCreation:
     """
     Testing Creation of a filesystem and checking its existence.
-    Also checking if the same filesystem can be created more than once or not.
+    Also checking if the same filesystem can't be created twice.
     """
 
     @pytest.fixture()
@@ -65,7 +65,8 @@ class TestCephFileSystemCreation:
                 raise CommandFailed
 
         ocp = OCP(
-            kind=constants.CEPHFILESYSTEM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            kind=constants.CEPHFILESYSTEM,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         cephfs = ocp.get(selector="use").get("items")
         assert len(cephfs) == 1, "New CephFS got crated with the same name."
