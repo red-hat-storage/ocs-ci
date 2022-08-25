@@ -2,17 +2,14 @@ import pytest
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.helpers import create_resource, validate_cephfilesystem
+from ocs_ci.helpers.helpers import (
+    create_ceph_file_system,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility import templating
 from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
-cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-cephfs_data["metadata"]["name"] = "test-ceph-fs"
-cephfs_data["metadata"]["namespace"] = constants.OPENSHIFT_STORAGE_NAMESPACE
-cephfs_data["metadata"]["labels"] = {"use": "test"}
 
 
 class TestCephFileSystemCreation:
@@ -24,25 +21,27 @@ class TestCephFileSystemCreation:
     @pytest.fixture()
     def cephFileSystem(self, request):
         """
-        Creating the CephFileSystem testCephFS for the test.
+        Creating the CephFileSystem test-ceph-fs for the test.
         """
         logger.info("Creating CephFileSystem in the namespace")
-        cephFS_obj = create_resource(**cephfs_data)
-        cephFS_obj.reload()
-        assert validate_cephfilesystem(
-            cephFS_obj.name
-        ), f"File system {cephFS_obj.name} does not exist"
-        logger.info("CephFile System Created. : testCephFS")
+        cephFS_obj = create_ceph_file_system(
+            cephfs_name="test-ceph-fs", label={"use": "test"}
+        )
+
+        if cephFS_obj:
+            logger.info("CephFile System Created. : test-ceph-fs")
+        else:
+            logger.error("Unable to create the Ceph File System")
 
         def teardown():
             """
-            Teardown of the CephFileSystem testCephFS after the test.
+            Teardown of the CephFileSystem test-ceph-fs after the test.
             """
             logger.info(
-                "Teardown of the test, deleting the test Ceph File System testCephFS"
+                "Teardown of the test, deleting the test Ceph File System test-ceph-fs"
             )
             cephFS_obj.delete()
-            logger.info("Deleted Ceph FIle System: testCephFS")
+            logger.info("Deleted Ceph FIle System: test-ceph-fs")
 
         request.addfinalizer(teardown)
 
@@ -53,8 +52,8 @@ class TestCephFileSystemCreation:
         """
         logger.info("Starting test of Ceph Filesystem Creation")
         try:
-            new_cepfs_obj = create_resource(**cephfs_data)
-            new_cepfs_obj.reload()
+            create_ceph_file_system(cephfs_name="test-ceph-fs", label={"use": "test"})
+
         except CommandFailed as e:
             if "Error from server (AlreadyExists)" in str(e):
                 logger.info("Test success!")
