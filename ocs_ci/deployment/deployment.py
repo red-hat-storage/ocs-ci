@@ -685,10 +685,15 @@ class Deployment(object):
             ]
             # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
             ocp_version = version.get_semantic_ocp_version_from_config()
-            if (
-                live_deployment
-                and ocp_version == version.VERSION_4_10
-                and ocs_version == version.VERSION_4_9
+            if live_deployment and (
+                (
+                    ocp_version == version.VERSION_4_10
+                    and ocs_version == version.VERSION_4_9
+                )
+                or (
+                    ocp_version == version.VERSION_4_11
+                    and ocs_version == version.VERSION_4_10
+                )
             ):
                 ocs_operator_names.remove(defaults.MCG_OPERATOR)
         else:
