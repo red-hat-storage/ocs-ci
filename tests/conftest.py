@@ -1964,7 +1964,10 @@ def memory_leak_function(request):
         while get_flag_status() == "running":
             for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
-                top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
+                top_cmd = (
+                    f"debug nodes/{worker} --to-namespaces={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+                    "-- chroot /host top -n 2 b"
+                )
                 with open("/tmp/file.txt", "w+") as temp:
                     temp.write(
                         str(oc.exec_oc_cmd(command=top_cmd, out_yaml_format=False))
