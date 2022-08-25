@@ -28,7 +28,8 @@ def nfs_enable(
     3:- Check nfs-ganesha server is up and running
     4:- Check csi-nfsplugin pods are up and running
 
-    Return: nfs-ganesha pod name
+    Returns:
+        str: nfs-ganesha pod name
 
     """
     nfs_spec_enable = '{"spec": {"nfs":{"enable": true}}}'
