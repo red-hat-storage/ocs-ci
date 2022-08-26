@@ -12,11 +12,13 @@ log = logging.getLogger(__name__)
 @polarion_id("OCS-4465")
 @bugzilla("2099965")
 class TestRbdImageMetadata:
-    """
-    Test if the rbd images have metdata being set
-    """
-
+    @tier2
+    @polarion_id("OCS-4465")
+    @bugzilla("2099965")
     def test_rbd_image_metadata(self, pvc_factory, pvc_clone_factory):
+        """
+        Test if the rbd images have metdata being set
+        """
 
         # create a pvc with ceph-rbd
         pvc_obj = pvc_factory(
