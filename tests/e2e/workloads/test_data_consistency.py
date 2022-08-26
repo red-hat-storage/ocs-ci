@@ -178,7 +178,6 @@ def test_log_reader_writer_parallel(project, tmp_path):
                 ocp_pod.wait_for_resource(
                     resource_count=deploy_dict["spec"]["replicas"],
                     condition=constants.STATUS_RUNNING,
-                    error_condition=constants.STATUS_ERROR,
                     timeout=300,
                     sleep=30,
                 )
