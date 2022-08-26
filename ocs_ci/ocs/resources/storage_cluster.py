@@ -655,10 +655,9 @@ def verify_storage_system():
     live_deployment = config.DEPLOYMENT.get("live_deployment")
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if (
-        live_deployment
-        and ocs_version == version.VERSION_4_9
-        and ocp_version == version.VERSION_4_10
+    if live_deployment and (
+        (ocp_version == version.VERSION_4_10 and ocs_version == version.VERSION_4_9)
+        or (ocp_version == version.VERSION_4_11 and ocs_version == version.VERSION_4_10)
     ):
         log.warning(
             "Because of the BZ 2075422, we are skipping storage system validation!"
@@ -668,10 +667,15 @@ def verify_storage_system():
         upgrade_ocs_version = version.get_semantic_version(
             config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
         )
-        if (
-            live_deployment
-            and ocp_version == version.VERSION_4_10
-            and upgrade_ocs_version == version.VERSION_4_10
+        if live_deployment and (
+            (
+                ocp_version == version.VERSION_4_10
+                and upgrade_ocs_version == version.VERSION_4_10
+            )
+            or (
+                ocp_version == version.VERSION_4_11
+                and upgrade_ocs_version == version.VERSION_4_11
+            )
         ):
             log.warning(
                 "Because of the BZ 2075422, we are skipping storage system validation after upgrade"
