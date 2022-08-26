@@ -8,9 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, bugz
 log = logging.getLogger(__name__)
 
 
-@tier2
-@polarion_id("OCS-4465")
-@bugzilla("2099965")
 class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")
@@ -20,7 +17,7 @@ class TestRbdImageMetadata:
         Test if the rbd images have metdata being set
         """
 
-        # create a pvc with ceph-rbd
+        # create a pvc with ceph-rbd sc
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             status=constants.STATUS_BOUND,
