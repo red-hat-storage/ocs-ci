@@ -3,16 +3,21 @@ This module will have all DR related workload classes
 
 """
 
+import logging
 import os
 from subprocess import TimeoutExpired
+from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.helpers.helpers import delete_volume_in_backend
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility.utils import clone_repo, run_cmd
 from ocs_ci.utility import templating
+
+log = logging.getLogger(__name__)
 
 
 class DRWorkload(object):
@@ -33,6 +38,87 @@ class DRWorkload(object):
 
     def verify_workload_deployment(self):
         raise NotImplementedError("Method not implemented")
+
+    def delete_workload(self, force=False):
+        raise NotImplementedError("Method not implemented")
+
+    @staticmethod
+    def resources_cleanup(namespace):
+        """
+        Cleanup workload and replication resources in a given namespace from managed clusters.
+        Useful for removing leftover resources to avoid further test failures.
+
+        Args:
+            namespace(str): the namespace of the workload
+
+        """
+        resources = [
+            constants.POD,
+            constants.VOLUME_REPLICATION_GROUP,
+            constants.VOLUME_REPLICATION,
+            constants.PVC,
+            constants.PV,
+        ]
+        rbd_images = []
+        cephfs_subvolumes = []
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            for resource in resources:
+                sleep(10)  # Wait 10 seconds before getting the list of items
+                log.info(f"Cleaning up {resource} resources")
+                ocp_obj = ocp.OCP(kind=resource, namespace=namespace)
+                item_list = ocp_obj.get()["items"]
+                for item in item_list:
+                    resource_name = item["metadata"]["name"]
+                    try:
+                        if resource == constants.PV:
+                            if item["spec"]["claimRef"]["namespace"] != namespace:
+                                continue
+                            ocp_obj.delete(resource_name=resource_name)
+                            ocp_obj.wait_for_delete(resource_name=resource_name)
+                            if (
+                                item["spec"]["storageClassName"]
+                                == constants.DEFAULT_STORAGECLASS_RBD
+                            ):
+                                rbd_images.append(
+                                    item["spec"]["csi"]["volumeAttributes"]["imageName"]
+                                )
+                            else:
+                                cephfs_subvolumes.append(
+                                    item["spec"]["csi"]["volumeAttributes"][
+                                        "subvolumeName"
+                                    ]
+                                )
+                        else:
+                            ocp_obj.delete(resource_name=resource_name, wait=False)
+                            ocp_obj.patch(
+                                resource_name=resource_name,
+                                params='{"metadata": {"finalizers":null}}',
+                                format_type="merge",
+                            )
+                            ocp_obj.wait_for_delete(resource_name=resource_name)
+
+                    except CommandFailed as ex:
+                        if "NotFound" in str(ex):
+                            log.info(
+                                f"{resource} {resource_name} got deleted successfully"
+                            )
+                        else:
+                            raise ex
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            for image in rbd_images:
+                delete_volume_in_backend(
+                    img_uuid="-".join(image.split("-")[2:]),
+                    pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                    disable_mirroring=True,
+                )
+            for subvolume in cephfs_subvolumes:
+                delete_volume_in_backend(
+                    img_uuid="-".join(subvolume.split("-")[2:]),
+                    pool_name=defaults.CEPHFILESYSTEM_NAME,
+                )
 
 
 class BusyBox(DRWorkload):
@@ -142,7 +228,7 @@ class BusyBox(DRWorkload):
 
         except (TimeoutExpired, TimeoutExpiredError, TimeoutError):
             if force:
-                dr_helpers.resources_cleanup(self.workload_namespace)
+                self.resources_cleanup(self.workload_namespace)
             else:
                 raise
 

@@ -4,7 +4,6 @@ Helper functions specific for DR
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import delete_volume_in_backend
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -536,63 +535,3 @@ def wait_for_all_resources_deletion(
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=timeout, sleep=5
         )
-
-
-def resources_cleanup(namespace):
-    """
-    Cleanup workload and replication resources from managed clusters.
-    Useful for removing resources to avoid further test failures due to leftovers
-
-    Args:
-        namespace(str): the namespace of the workload
-
-    """
-    resources = [
-        constants.POD,
-        constants.VOLUME_REPLICATION_GROUP,
-        constants.VOLUME_REPLICATION,
-        constants.PVC,
-        constants.PV,
-    ]
-    rbd_images = []
-    for cluster in get_non_acm_cluster_config():
-        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        for resource in resources:
-            ocp_obj = ocp.OCP(kind=resource, namespace=namespace)
-            for item in ocp_obj.get()["items"]:
-                resource_name = item["metadata"]["name"]
-
-                if resource == constants.PV:
-                    if item["spec"]["claimRef"]["namespace"] != namespace:
-                        continue
-                    rbd_images.append(
-                        item["spec"]["csi"]["volumeAttributes"]["imageName"]
-                    )
-                    reclaim_policy = item["spec"]["persistentVolumeReclaimPolicy"]
-                    if reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
-                        params = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
-                        ocp_obj.patch(resource_name=resource_name, params=params)
-                    else:
-                        ocp_obj.delete(resource_name=resource_name)
-
-                is_deleted = ocp_obj.check_resource_existence(
-                    should_exist=False, timeout=10, resource_name=resource_name
-                )
-                if not is_deleted:
-                    ocp_obj.delete(resource_name=resource_name, wait=False)
-                    if ocp_obj.is_exist(resource_name=resource_name):
-                        ocp_obj.patch(
-                            resource_name=resource_name,
-                            params='{"metadata": {"finalizers":null}}',
-                            format_type="merge",
-                        )
-                    ocp_obj.wait_for_delete(resource_name=resource_name)
-
-    for cluster in get_non_acm_cluster_config():
-        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        for rbd_image in rbd_images:
-            delete_volume_in_backend(
-                img_uuid="-".join(rbd_image.split("-")[2:]),
-                pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
-                disable_mirroring=True,
-            )
