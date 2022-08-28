@@ -2915,7 +2915,7 @@ class AZInfo(object):
         return prev
 
 
-def convert_device_size(unformatted_size, units_to_covert_to):
+def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000):
     """
     Convert a string representing a size to an int according to the given units
     to convert to
@@ -2923,6 +2923,7 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     Args:
         unformatted_size (str): The size to convert (i.e, '1Gi'/'100Mi')
         units_to_covert_to (str): The units to convert the size to (i.e, TB/GB/MB)
+        convert_size (int): set convert by 1000 or 1024
 
     Returns:
         int: The converted size
@@ -2930,14 +2931,84 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     """
     units = unformatted_size[-2:]
     abso = int(unformatted_size[:-2])
-    conversion = {
-        "TB": {"Ti": abso, "Gi": abso / 1000, "Mi": abso / 1e6, "Ki": abso / 1e9},
-        "GB": {"Ti": abso * 1000, "Gi": abso, "Mi": abso / 1000, "Ki": abso / 1e6},
-        "MB": {"Ti": abso * 1e6, "Gi": abso * 1000, "Mi": abso, "Ki": abso / 1000},
-        "KB": {"Ti": abso * 1e9, "Gi": abso * 1e6, "Mi": abso * 1000, "Ki": abso},
-        "B": {"Ti": abso * 1e12, "Gi": abso * 1e9, "Mi": abso * 1e6, "Ki": abso * 1000},
+    conversion_1000 = {
+        "TB": {
+            "Ti": abso,
+            "Gi": abso / 1000,
+            "Mi": abso / 1e6,
+            "Ki": abso / 1e9,
+            "Bi": abso / 1e12,
+        },
+        "GB": {
+            "Ti": abso * 1000,
+            "Gi": abso,
+            "Mi": abso / 1000,
+            "Ki": abso / 1e6,
+            "Bi": abso / 1000,
+        },
+        "MB": {
+            "Ti": abso * 1e6,
+            "Gi": abso * 1000,
+            "Mi": abso,
+            "Ki": abso / 1000,
+            "Bi": abso / 1e6,
+        },
+        "KB": {
+            "Ti": abso * 1e9,
+            "Gi": abso * 1e6,
+            "Mi": abso * 1000,
+            "Ki": abso,
+            "Bi": abso / 1000,
+        },
+        "Bi": {
+            "Ti": abso * 1e12,
+            "Gi": abso * 1e9,
+            "Mi": abso * 1e6,
+            "Ki": abso * 1000,
+            "Bi": abso,
+        },
     }
-    return conversion[units_to_covert_to][units]
+    conversion_1024 = {
+        "TB": {
+            "Ti": abso,
+            "Gi": abso / 1024,
+            "Mi": abso / 1024**2,
+            "Ki": abso / 1024**3,
+            "Bi": abso / 1024**4,
+        },
+        "GB": {
+            "Ti": abso * 1024,
+            "Gi": abso,
+            "Mi": abso / 1024,
+            "Ki": abso / 1024**2,
+            "Bi": abso / 1024**3,
+        },
+        "MB": {
+            "Ti": abso * 1024**2,
+            "Gi": abso * 1024,
+            "Mi": abso,
+            "Ki": abso / 1024,
+            "Bi": abso / 1024**2,
+        },
+        "KB": {
+            "Ti": abso * 1024**3,
+            "Gi": abso * 1024**2,
+            "Mi": abso * 1024,
+            "Ki": abso,
+            "Bi": abso / 1024,
+        },
+        "Bi": {
+            "Ti": abso * 1024**4,
+            "Gi": abso * 1024**3,
+            "Mi": abso * 1024**2,
+            "Ki": abso * 1024,
+            "Bi": abso,
+        },
+    }
+    if convert_size == 1000:
+        return conversion_1000[units_to_covert_to][units]
+    elif convert_size == 1024:
+        return conversion_1024[units_to_covert_to][units]
 
 
 def convert_bytes_to_unit(bytes_to_convert):
