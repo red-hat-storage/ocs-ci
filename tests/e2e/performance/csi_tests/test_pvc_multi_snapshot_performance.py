@@ -22,12 +22,10 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources import ocs
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.performance_lib import run_oc_command
@@ -36,8 +34,6 @@ log = logging.getLogger(__name__)
 
 # Error message to look in a command output
 ERRMSG = "Error in command"
-# Time formatting in the csi-driver logs
-time_format = "%H:%M:%S.%f"
 
 
 @performance
@@ -76,18 +72,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.capacity_to_use = int(self.ceph_capacity * 0.7)
 
         # Creating new namespace for the test
-        self.nss_name = "pas-test-namespace"
-        log.info(f"Creating new namespace ({self.nss_name}) for the test")
-        try:
-            self.proj = helpers.create_project(project_name=self.nss_name)
-        except CommandFailed as ex:
-            if str(ex).find("(AlreadyExists)"):
-                log.warning("The namespace is already exists !")
-            log.error("Cannot create new project")
-            raise CommandFailed(f"{self.nss_name} was not created")
+        self.create_test_project()
 
         # Initialize a general Snapshot object to use in the test
-        self.snapshot = OCP(kind="volumesnapshot", namespace=self.nss_name)
+        self.snapshot = OCP(kind="volumesnapshot", namespace=self.namespace)
 
     def teardown(self):
         """
@@ -194,22 +182,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             else:
                 log.info(f"The pool {self.sc_name} was deleted successfully")
 
-            # Deleting the namespace used by the test
-            log.info(f"Deleting the test namespace : {self.nss_name}")
-            switch_to_default_rook_cluster_project()
-            try:
-                self.proj.delete(resource_name=self.nss_name)
-                self.proj.wait_for_delete(
-                    resource_name=self.nss_name, timeout=60, sleep=10
-                )
-            except CommandFailed:
-                log.error(f"Can not delete project {self.nss_name}")
-                raise CommandFailed(f"{self.nss_name} was not created")
-
-            # After deleting all data from the cluster, we need to wait until it will re-balance
-            ceph_health_check(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
-            )
+        # Deleting the namespace used by the test
+        self.delete_test_project()
 
         super(TestPvcMultiSnapshotPerformance, self).teardown()
 
@@ -295,6 +269,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snapshotclass_data = templating.load_yaml(yaml_files[interface])
 
         snapshotclass_data["metadata"]["name"] = snapclass_name
+        snapshotclass_data["metadata"][
+            "namespace"
+        ] = constants.OPENSHIFT_STORAGE_NAMESPACE
         ocs_obj = ocs.OCS(**snapshotclass_data)
         log.info(f"Creating new snapshot class : {snapclass_name}")
         try:
@@ -332,7 +309,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         with open(tmpfile, "w") as f:
             yaml.dump(self.snap_templ, f, default_flow_style=False)
 
-        res = run_oc_command(cmd=f"create -f {tmpfile}", namespace=self.nss_name)
+        res = run_oc_command(cmd=f"create -f {tmpfile}", namespace=self.namespace)
         if ERRMSG in res[0]:
             err_msg = f"Failed to create snapshot : {res}"
             log.error(err_msg)
@@ -345,7 +322,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snap_uid = None
         while timeout > 0:
             res = run_oc_command(
-                f"get volumesnapshot {snap_name} -o yaml", namespace=self.nss_name
+                f"get volumesnapshot {snap_name} -o yaml", namespace=self.namespace
             )
 
             if ERRMSG not in res[0]:
