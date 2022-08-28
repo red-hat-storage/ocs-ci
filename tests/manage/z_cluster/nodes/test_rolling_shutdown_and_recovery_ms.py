@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 @skipif_ibm_cloud
 @skipif_external_mode
 @ignore_leftovers
+@managed_service_required
 class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
     """
     Test rolling shutdown and recovery of the OCS worker nodes when using the Managed Service
@@ -73,7 +74,6 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @managed_service_required
     def test_rolling_shutdown_and_recovery_in_controlled_fashion(self, nodes):
         """
         Test rolling shutdown and recovery of the OCS worker nodes, when waiting for the pods to
