@@ -1,7 +1,9 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -11,7 +13,12 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_cache,
     write_random_test_objects_to_bucket,
 )
+<<<<<<< HEAD
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
+=======
+from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.couchbase import CouchBase
+>>>>>>> 9b1bd5d8 (Workloads on MS)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
@@ -20,7 +27,10 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
     validate_pv_delete,
+    default_storage_class,
 )
+from ocs_ci.ocs.jenkins import Jenkins
+from ocs_ci.ocs.pgsql import Postgresql
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +432,7 @@ def verify_mcg_system_recovery(
 
 
 @pytest.fixture(scope="class")
+<<<<<<< HEAD
 def benchmark_fio_factory_fixture(request):
     bmo_fio_obj = BenchmarkOperatorFIO()
 
@@ -453,3 +464,208 @@ def benchmark_fio_factory_fixture(request):
 
     request.addfinalizer(finalizer)
     return factory
+=======
+def jenkins_factory(request):
+    return jenkins_factory_fixture(request)
+
+
+def jenkins_factory_fixture(request):
+    """
+    jenkins_factory_fixture
+    """
+
+    jenkins_instances = []
+    consumer_indexes = []
+
+    def factory(
+        num_projects,
+        num_of_builds,
+        consumer_index,
+    ):
+        """
+        Args:
+            num_projects (int): CephBlockPool or CephFileSystem. This decides
+            num_of_builds (int):
+            consumer_index (int):
+
+        Returns:
+            object: helpers.create_pod instance
+
+        """
+        config.switch_ctx(consumer_index)
+        consumer_indexes.append(consumer_index)
+        jenkins = Jenkins()
+        jenkins_instances.append(jenkins)
+        jenkins.create_ocs_jenkins_template()
+        jenkins.number_projects = num_projects
+        jenkins.create_app_jenkins()
+        jenkins.create_jenkins_pvc()
+        jenkins.create_jenkins_build_config()
+        jenkins.wait_for_jenkins_deploy_status(status=constants.STATUS_COMPLETED)
+        jenkins.number_builds_per_project = num_of_builds
+        jenkins.start_build()
+        return jenkins
+
+    def finalizer():
+        """
+        Delete the Pod or the DeploymentConfig
+        """
+        config.switch_ctx(consumer_indexes[0])
+        logger.info(f"{consumer_indexes[0]}")
+        for jenkins_instance in jenkins_instances:
+            jenkins_instance.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def pgsql_factory(request):
+    return pgsql_factory_fixture(request)
+
+
+def pgsql_factory_fixture(request):
+    """
+    pgsql_factory_fixture
+    """
+
+    pgsql_instances = []
+    consumer_indexes = []
+
+    def factory(transactions, consumer_index):
+        """
+        Args:
+            transactions (int): CephBlockPool or CephFileSystem. This decides
+            consumer_index (int):
+
+        Returns:
+            object: helpers.create_pod instance
+
+        """
+        config.switch_ctx(consumer_index)
+        consumer_indexes.append(consumer_index)
+        pgsql = Postgresql()
+        pgsql_instances.append(pgsql)
+        pgsql.setup_postgresql(replicas=1)
+        pgsql.create_pgbench_benchmark(replicas=1, transactions=transactions)
+        return pgsql
+
+    def finalizer():
+        """
+        Delete the Pod or the DeploymentConfig
+        """
+        # config.switch_ctx(consumer_indexes[0])
+        logger.info(f"final {consumer_indexes[0]}")
+        for pgsql_instance in pgsql_instances:
+            pgsql_instance.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def couchbase_factory(request):
+    return couchbase_factory_fixture(request)
+
+
+def couchbase_factory_fixture(request):
+    """
+    pgsql_factory_fixture
+    """
+
+    couchbase_instances = []
+    consumer_indexes = []
+
+    def factory(replicas, consumer_index):
+        """
+        Args:
+            replicas (int): CephBlockPool or CephFileSystem. This decides
+            consumer_index (int):
+
+        Returns:
+            object: helpers.create_pod instance
+
+        """
+        config.switch_ctx(consumer_index)
+        consumer_indexes.append(consumer_index)
+        logger.info(f"setup {consumer_indexes[0]}")
+        couchbase = CouchBase()
+        couchbase.couchbase_subscription()
+        couchbase.create_cb_secrets()
+        couchbase.create_cb_cluster(replicas=replicas)
+        couchbase.create_data_buckets()
+        return couchbase
+
+    def finalizer():
+        """
+        Delete the Pod or the DeploymentConfig
+        """
+        config.switch_ctx(consumer_indexes[0])
+        logger.info(f"final {consumer_indexes[0]}")
+        for couchbase_instance in couchbase_instances:
+            couchbase_instance.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def amq_factory(request):
+    return amq_factory_fixture(request)
+
+
+def amq_factory_fixture(request):
+    """
+    amq_factory_fixture
+    """
+
+    amq_instances = []
+    consumer_indexes = []
+
+    def factory(consumer_index):
+        """
+        Args:
+            consumer_index (int):
+
+        Returns:
+            object: helpers.create_pod instance
+
+        """
+        config.switch_ctx(consumer_index)
+        consumer_indexes.append(consumer_index)
+        logger.info(f"setup {consumer_indexes[0]}")
+        amq = AMQ()
+        amq_instances.append(amq)
+        sc = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+        amq.setup_amq_cluster(sc.name)
+        amq.create_messaging_on_amq()
+        # Wait for some time to generate msg
+        waiting_time = 60
+        logger.info(f"Waiting for {waiting_time}sec to generate msg")
+        time.sleep(waiting_time)
+        # Check messages are sent and received
+        threads = amq.run_in_bg()
+        return threads
+
+    def finalizer():
+        """
+        Delete the Pod or the DeploymentConfig
+        """
+        config.switch_ctx(consumer_indexes[0])
+        logger.info(f"final {consumer_indexes[0]}")
+        for amq_instance in amq_instances:
+            amq_instance.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class", autouse=True)
+def get_consumer_clusters():
+    logger.info("Get Consumer Clusters on setup")
+    consumer_clusters = list()
+    for index in range(config.nclusters):
+        if config.clusters[index].ENV_DATA["cluster_type"] == "consumer":
+            consumer_clusters.append(index)
+    config.index_consumer_clusters = consumer_clusters
+>>>>>>> 9b1bd5d8 (Workloads on MS)
