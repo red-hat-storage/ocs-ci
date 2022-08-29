@@ -13,6 +13,8 @@ ENV_DATA:
   configs: 'aws,stage'
   addon_name: "ocs-provider-qe"
   region: 'us-east-1'
+  # Storage Cluster Size
+  size: '4'
 DEPLOYMENT:
   force_download_ocm_cli: True
   ocm_cli_version: '0.1.60'
