@@ -624,7 +624,13 @@ class Cosbench(object):
         """
         switch_to_project(constants.COSBENCH_PROJECT)
         logger.info("Deleting Cosbench pod, configmap and namespace")
-        self.cosbench_pod.delete()
+        if (
+            self.cosbench_pod.ocp.get(
+                resource_name=self.cosbench_pod.name, dont_raise=True
+            )
+            is not None
+        ):
+            self.cosbench_pod.delete()
         self.cosbench_config.delete()
         self.ns_obj.delete_project(self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
