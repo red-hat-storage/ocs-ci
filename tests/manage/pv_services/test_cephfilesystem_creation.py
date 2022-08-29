@@ -7,6 +7,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework.testlib import tier2
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ class TestCephFileSystemCreation:
 
         request.addfinalizer(teardown)
 
+    @tier2
     def test_Cephfilesystem_creation(self, cephFileSystem):
         """
         Trying to create more cephfilesystem using the same name.
