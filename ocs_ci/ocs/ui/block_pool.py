@@ -23,7 +23,6 @@ class BlockPoolUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         ocp_version = get_ocp_version()
-        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.bp_loc = locators[ocp_version]["block_pool"]
         self.sc_loc = locators[ocp_version]["storageclass"]
 
@@ -256,7 +255,7 @@ class BlockPoolUI(PageNavigator):
         Args:
             pool_name (str): Block pool name that is to be selected.
 
-        Returs:
+        Returns:
             True (bool): Successfull selection of the blockpool
         """
         self.navigate_overview_page()
