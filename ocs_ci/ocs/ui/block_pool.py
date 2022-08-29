@@ -236,15 +236,17 @@ class BlockPoolUI(PageNavigator):
                 f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
             )
 
-            raw_capacity_in_UI = self.get_element_text(
-                (f"//div[@class='ceph-raw-card-legend__text']", By.XPATH)
+            used_raw_capacity_in_UI = self.get_element_text(
+                self.bp_loc["used_raw_capacity_in_UI"]
             )
 
-            if raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
+            if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
                 logger.info("UI values didnt matched as per CLI for the Raw Capacity")
                 return True
             else:
-                logger.error("UI values didnt matched as per CLI for the Raw Capacity")
+                logger.error(
+                    f"UI value (i.e {used_raw_capacity_in_UI}) didnt matched as per CLI for the Raw Capacity"
+                )
                 return False
 
     def select_blockpool(self, pool_name):
