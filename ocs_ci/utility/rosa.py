@@ -3,7 +3,6 @@
 Module for interactions with Openshift Dedciated Cluster.
 """
 
-
 import json
 import logging
 import os
@@ -24,7 +23,6 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
-
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -68,8 +66,6 @@ def create_cluster(cluster_name, version, region):
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
-    cluster_type = config.ENV_DATA.get("cluster_type", "")
-    provider_name = config.ENV_DATA.get("provider_name", "")
     rosa_mode = config.ENV_DATA.get("rosa_mode", "")
     private_link = config.ENV_DATA.get("private_link", False)
     machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
@@ -82,28 +78,29 @@ def create_cluster(cluster_name, version, region):
     if rosa_mode == "auto":
         cmd += " --mode auto"
 
-    if (
-        config.ENV_DATA.get("appliance_mode", False)
-        and config.ENV_DATA.get("cluster_type", "") == "consumer"
-    ):
+    # OCM has a check for byo-vpc and now onwards use of osd vpc is result into
+    # https://issues.redhat.com/browse/ODFMS-262
+    # hence Addon based and appliance mode provider consumer must use byo-vpc.
+    # For quick fix we can use existing byo-vpc for all deployment as default
+    # The implementation is still flexi to provide subnets or vpc name from env parameter
+    # if parameters are not defined then existing byo-vpc will be used
+    if config.ENV_DATA.get("subnet_ids", ""):
+        subnet_ids = config.ENV_DATA.get("subnet_ids")
+    elif config.ENV_DATA.get("vpc_name", ""):
+        aws = AWSUtil()
+        subnet_ids = ",".join(
+            aws.get_cluster_subnet_ids(config.ENV_DATA.get("vpc_name"))
+        )
+        # TODO: improve this for enabling it for selecting private and public subnets
+        #  separately. This will enable to create private link cluster using byo-vpc name
+    else:
         subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
             "private_subnet"
         ]
         if not private_link:
             subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
-        cmd = f"{cmd} --subnet-ids {subnet_ids}"
+    cmd = f"{cmd} --subnet-ids {subnet_ids}"
 
-    elif cluster_type.lower() == "consumer" and config.ENV_DATA.get(
-        "provider_name", ""
-    ):
-        aws = AWSUtil()
-        subnet_id = config.ENV_DATA.get("subnet_ids") or ",".join(
-            aws.get_cluster_subnet_ids(provider_name)
-        )
-        cmd = f"{cmd} --subnet-ids {subnet_id}"
-    elif cluster_type.lower() == "provider" and config.ENV_DATA.get("subnet_ids"):
-        subnet_id = config.ENV_DATA.get("subnet_ids")
-        cmd = f"{cmd} --subnet-ids {subnet_id}"
     if private_link:
         cmd += " --private-link "
     utils.run_cmd(cmd, timeout=1200)
