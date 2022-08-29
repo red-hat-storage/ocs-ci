@@ -2,6 +2,7 @@ import logging
 import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.helpers_ui import get_blockpool_ui_element
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from selenium.webdriver.common.by import By
@@ -98,13 +99,8 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is not found in pool list, otherwise false
 
         """
-        self.navigate_overview_page()
-        self.navigate_block_pool_page()
-        self.page_has_loaded()
-        if self.ocp_version_full <= version.VERSION_4_8:
-            self.do_click((f"{pool_name}", By.LINK_TEXT))
-        else:
-            self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
+        logger.info(f"Deleting the blockpool: {pool_name}")
+        self.select_blockpool(pool_name)
 
         self.do_click(self.bp_loc["actions_inside_pool"])
         self.do_click(self.bp_loc["delete_pool_inside_pool"])
@@ -199,14 +195,9 @@ class BlockPoolUI(PageNavigator):
             bool: True if raw capacity of the blockpool is loaded, otherwise False
         """
         logger.info("Checking if the Block Pool Raw Capacity has loaded in UI")
-        self.navigate_overview_page()
-        self.navigate_block_pool_page()
-        self.page_has_loaded()
-        if self.ocp_version_full <= version.VERSION_4_8:
-            self.do_click((f"{pool_name}", By.LINK_TEXT))
-        else:
-            self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
-        time.sleep(5)
+
+        self.select_blockpool(pool_name)
+
         raw_capacity_loaded = self.check_element_text(
             "Available",
             "div[@class='ceph-raw-card-legend__title']",
@@ -255,3 +246,23 @@ class BlockPoolUI(PageNavigator):
             else:
                 logger.error("UI values didnt matched as per CLI for the Raw Capacity")
                 return False
+
+    def select_blockpool(self, pool_name):
+        """
+        Selects and clicks on the blocpool according to the blockpool name passed.
+
+        Args:
+            pool_name (str): Block pool name that is to be selected.
+
+        Returs:
+            True (bool): Successfull selection of the blockpool
+        """
+        self.navigate_overview_page()
+        self.navigate_block_pool_page()
+        self.page_has_loaded()
+        if self.ocp_version_full <= version.VERSION_4_8:
+            self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
+        else:
+            self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
+
+        return True

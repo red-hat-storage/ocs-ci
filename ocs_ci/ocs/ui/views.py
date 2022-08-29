@@ -881,6 +881,15 @@ storageclass = {
         "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
         By.XPATH,
     ),
+    "volume_binding_mode": (
+        "button[id='storage-class-volume-binding-mode']",
+        By.CSS_SELECTOR,
+    ),
+    "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
+    "storage_class_breadcrumb": (
+        "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
+        By.XPATH,
+    ),
 }
 
 storageclass_4_9 = {
