@@ -1853,7 +1853,8 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
             "rook-ceph-osd-prepare" not in p.name
             and "rook-ceph-drain-canary" not in p.name
         ):
-            restart_dict[p.name] = int(ocp_pod_obj.get_resource(p.name, "RESTARTS"))
+            pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
+            restart_dict[p.name] = int(pod_count.split()[0])
     logger.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
     return restart_dict
 
