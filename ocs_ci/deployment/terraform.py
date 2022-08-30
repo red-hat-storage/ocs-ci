@@ -121,3 +121,34 @@ class Terraform(object):
         logger.info(f"Destroying the module: {module}")
         cmd = f"terraform destroy -auto-approve -target={module} '-var-file={tfvars}' '{self.path}'"
         run_cmd(cmd, timeout=1200)
+
+    def change_statefile(self, module, resource_type, resource_name, instance):
+        """
+        Remove the records from the state file so that terraform will no longer be
+        tracking the corresponding remote objects.
+
+        Note: terraform state file should be present in the directory from where the
+        commands are initiated
+
+        Args:
+            module (str): Name of the module
+                e.g: compute_vm, module.control_plane_vm etc.
+            resource_type (str): Resource type
+                e.g: vsphere_virtual_machine, vsphere_compute_cluster etc.
+            resource_name (str): Name of the resource
+                e.g: vm
+            instance (str): Name of the instance
+                e.g: compute-0.j-056vu1cs33l-a.qe.rh-ocs.com
+
+        Examples::
+
+            terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
+            terraform.change_statefile(
+                module="compute_vm", resource_type="vsphere_virtual_machine",
+                resource_name="vm", instance="compute-0.j-056vu1cs33l-a.qe.rh-ocs.com"
+            )
+
+        """
+        logger.info("Modifying terraform state file")
+        cmd = f"terraform state rm 'module.{module}.{resource_type}.{resource_name}[\"{instance}\"]'"
+        run_cmd(cmd)
