@@ -40,10 +40,7 @@ def test_deployment(pvc_factory, pod_factory):
                     config.ENV_DATA["platform"].lower()
                     in constants.MANAGED_SERVICE_PLATFORMS
                 ):
-                    try:
-                        post_onboarding_verification()
-                    except exceptions.ResourceWrongStatusException as err_msg:
-                        log.warning(err_msg)
+                    post_onboarding_verification()
             else:
                 ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
                 if config.ENV_DATA["mcg_only_deployment"]:
