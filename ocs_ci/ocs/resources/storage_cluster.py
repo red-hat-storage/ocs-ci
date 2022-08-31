@@ -1407,8 +1407,6 @@ def verify_provider_storagecluster(sc_data):
     5. annotations:
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
-    6. requested capacity and granted capacity match
-    7. granted capacity value is valid
 
     Args:
         sc_data (dict): storagecluster data dictionary
