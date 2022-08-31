@@ -925,42 +925,11 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
             ):
                 log.info("No Extra PV found")
                 log.info("Adding Extra Disk to existing VSphere Worker node")
-                from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
-                from ocs_ci.utility.localstorage import check_pvs_created
-                from ocs_ci.ocs.node import get_nodes, add_disk_to_node
-                from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-                from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
-
-                if is_flexible_scaling_enabled():
-                    node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-                    add_disk_to_node(node_objs[0])
-                    check_pvs_created(num_pvs_required=1)
-                    new_storage_devices_sets_count = len(get_osd_pods()) + 1
-                else:
-                    add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+                add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
             else:
                 raise PVNotSufficientException(
                     f"No Extra PV found in {constants.OPERATOR_NODE_LABEL}"
                 )
-    from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions
-
-    if ui_add_capacity_conditions() and is_flexible_scaling_enabled():
-        try:
-            setup_ui = login_ui()
-            add_ui_obj = AddReplaceDeviceUI(setup_ui)
-            add_ui_obj.add_capacity_ui()
-            close_browser(setup_ui)
-        except Exception as e:
-            log.error(e)
-            sc = get_storage_cluster()
-            # adding the storage capacity to the cluster
-            params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                        "value": {new_storage_devices_sets_count}}}]"""
-            sc.patch(
-                resource_name=sc.get()["items"][0]["metadata"]["name"],
-                params=params.strip("\n"),
-                format_type="json",
-            )
     sc = get_storage_cluster()
     # adding the storage capacity to the cluster
     params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
