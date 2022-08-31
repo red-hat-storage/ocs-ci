@@ -1,5 +1,7 @@
 import logging
 import os
+import csv
+import filecmp
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers import helpers
@@ -36,7 +38,7 @@ class HsBench(object):
         self.bucket_prefix = self.hsbench_cr["bucket_prefix"]
         self.end_point = self.hsbench_cr["end_point"]
         self.hsbench_bin_dir = self.hsbench_cr["hsbench_bin_dir"]
-        self.output = self.hsbench_cr["output_file"]
+        self.result = self.hsbench_cr["output_file"]
         self.warp_dir = mkdtemp(prefix="hsbench-")
 
     def create_resource_hsbench(self):
@@ -119,6 +121,8 @@ class HsBench(object):
         end_point=None,
         num_bucket=None,
         object_size=None,
+        bucket_prefix=None,
+        result=None,
         validate=True,
     ):
         """
@@ -134,6 +138,8 @@ class HsBench(object):
             end_point (string): S3 end_point
             num_bucket (int): Number of bucket(s)
             object_size (int): Size of object
+            bucket_prefix (str): Prefix for buckets
+            result (str): Write CSV output to this file
             validate (Boolean): Validates whether running workload is completed.
 
         """
@@ -148,6 +154,8 @@ class HsBench(object):
         self.end_point = end_point if end_point else self.end_point
         self.num_bucket = num_bucket if num_bucket else self.num_bucket
         self.object_size = object_size if object_size else self.object_size
+        self.bucket_prefix = bucket_prefix if bucket_prefix else self.bucket_prefix
+        self.result = result if result else self.result
         self.pod_obj.exec_cmd_on_pod(
             f"{self.hsbench_bin_dir} "
             f"-a {self.access_key} "
@@ -160,41 +168,46 @@ class HsBench(object):
             f"-n {self.num_obj} "
             f"-m {self.run_mode} "
             f"-bp {self.bucket_prefix} "
-            f"-o {self.output}",
+            f"-o {self.result}",
             timeout=timeout,
         )
         if validate:
-            self.validate_hsbench_workload()
+            self.validate_hsbench_workload(result=result)
 
-    def validate_hsbench_workload(self):
+    def validate_hsbench_workload(self, result=None):
         """
         Validate if workload was running on the app-pod
 
         Raise:
             UnexpectedBehaviour: if result.csv file doesn't contain output data.
+
         """
-        cmd = (
-            f"cp {self.pod_obj.name}:/go/{self.output} "
-            f"{self.warp_dir}/{self.output}"
-        )
+        cmd = f"cp {self.pod_obj.name}:/go/{result} " f"{self.warp_dir}/{result}"
         self.ocp_obj.exec_oc_cmd(
             command=cmd,
             out_yaml_format=False,
             timeout=180,
         )
-        if os.path.getsize(f"{self.warp_dir}/{self.output}") != 0:
+        if os.path.getsize(f"{self.warp_dir}/{result}") != 0:
             log.info("Workload was running...")
         else:
             raise UnexpectedBehaviour(
-                f"Output file {self.output} is empty, "
+                f"Output file {result} is empty, "
                 "Warp workload doesn't run as expected..."
             )
 
-    def validate_s3_objects(self):
+    def validate_s3_objects(self, upgrade=None):
         """
-        Validate S3 objects created by hsbench on single bucket
+        Validate S3 objects using 'radosgw-admin' on single bucket
+        Validate objects in buckets after completed upgrade
+
+        Agr:
+            upgrade (str): Upgrade status
+        Raise:
+            UnexpectedBehaviour: If objects pre-upgrade and post-upgrade are not identical.
 
         """
+        # self.upgrade_stat = upgrade_stat if upgrade_stat else self.upgrade_stat
         for i in range(self.num_bucket):
             bucket_name = self.bucket_prefix + "00000000000" + str(i)
             num_objects = self.toolbox.exec_sh_cmd_on_pod(
@@ -209,6 +222,133 @@ class HsBench(object):
                 "Number objects in bucket don't match."
                 f"Expecting {self.num_obj} but getting {num_objects}"
             )
+            # Save objects to a file for validation
+            file_path = f"{self.warp_dir}/obj_{upgrade}_{bucket_name}"
+            object_list = self.toolbox.exec_sh_cmd_on_pod(
+                f"radosgw-admin bi list --bucket={bucket_name}"
+            )
+            f = open(file_path, "w")
+            f.write(object_list)
+
+        # Validate objects in buckets for post upgrade
+        if upgrade == "post_upgrade" and bucket_name != "new000000000000":
+            for i in range(self.num_bucket):
+                if os.path.exists(f"{self.warp_dir}/obj_{upgrade}_{bucket_name}"):
+                    log.info(
+                        f"Verifying objects in bucket {bucket_name} for post-upgrade..."
+                    )
+                    if filecmp.cmp(
+                        f"{self.warp_dir}/obj_pre_upgrade_{bucket_name}",
+                        f"{self.warp_dir}/obj_{upgrade}_{bucket_name}",
+                    ):
+                        log.info("Objects pre-upgrade and post-upgrade are identical.")
+                    else:
+                        raise UnexpectedBehaviour(
+                            f"Objects in bucket {bucket_name} pre-upgrade and post-upgrade are not identical."
+                        )
+                else:
+                    log.warning(f"No objects data to validate in bucket {bucket_name}")
+
+    def validate_hsbench_put_get_list_objects(
+        self, result=None, num_objs=None, put=None, get=None, list_obj=None
+    ):
+        """
+        Validate PUT, GET, LIST objects from previous hsbench operation
+
+        Agr:
+            result (str): Result file name
+            num_objs (str): Number of objects to validate
+            put (Boolean): Validate PUT operation
+            get (Boolean): Validate GET operation
+            list_obj (Boolean): Validate LIST operation
+
+        """
+        eval_data = {}
+        with open(f"{self.warp_dir}/{result}", "r") as file, open(
+            f"{self.warp_dir}/summary.csv", "w"
+        ) as out:
+            writer = csv.writer(out)
+            for row in csv.reader(file):
+                if row[1] == "TOTAL":
+                    writer.writerow(row)
+
+        with open(f"{self.warp_dir}/summary.csv", "r") as read_obj:
+            reader = csv.reader(read_obj)
+            for row in reader:
+                eval_data[row[3]] = row[4]
+
+        if put is True:
+            put_val = eval_data["PUT"]
+            log.info(f"Number of PUT objects is {put_val}")
+            if put_val != num_objs:
+                assert put_val, (
+                    "Number of PUT objects don't match with number objects."
+                    f"Expecting {num_objs} but getting {put_val}"
+                )
+        if get is True:
+            get_val = eval_data["GET"]
+            log.info(f"Number of GET objects is {get_val}")
+            if get_val != num_objs:
+                assert get_val, (
+                    "Number of GET objects don't match with number objects."
+                    f"Expecting {num_objs} but getting {get_val}"
+                )
+        if list_obj is True:
+            list_val = eval_data["LIST"]
+            log.info(f"Number of LIST objects is {list_val}")
+            if list_val != 0:
+                assert list_val, (
+                    "LIST objects doesn't show correctly."
+                    f"Expecting LIST objects is not zero but getting {list_val}"
+                )
+
+    def delete_objects_in_bucket(self, bucket_name=None):
+        """
+        Delete objects in a bucket
+
+        Agr:
+            bucket_name (str): Name of bucket
+
+        """
+        log.info("Deleting objects in bucket...")
+        self.toolbox.exec_sh_cmd_on_pod(
+            f"radosgw-admin object rm --object=000000000000 --bucket={bucket_name}"
+        )
+        num_object = self.toolbox.exec_sh_cmd_on_pod(
+            f"radosgw-admin bucket stats --bucket={bucket_name} | grep num_objects"
+        )
+        log.info(f"Number objects in {bucket_name} is {num_object}")
+        if num_object == (self.num_obj - 1):
+            log.info(f"Number objects in {bucket_name} is {num_object}")
+        assert num_object, (
+            f"Number object in bucket {bucket_name} is {num_object}"
+            f"Expecting {self.num_obj - 1} in {bucket_name}"
+        )
+
+    def delete_bucket(self, bucket_name=None):
+        """
+        Delete bucket
+
+        Agr:
+            bucket_name (str): Name of bucket
+
+        """
+        log.info("Deleting bucket with objects...")
+        self.toolbox.exec_sh_cmd_on_pod(
+            f"radosgw-admin bucket rm --bucket={bucket_name} --purge-objects"
+        )
+        num_bucket = self.toolbox.exec_sh_cmd_on_pod(
+            f"radosgw-admin bucket list | grep {self.bucket_prefix} | wc -l"
+        )
+        log.info(f"Number buckets are {num_bucket}")
+        log.info(f"Expecting buckets are {self.num_bucket - 1}")
+
+        if num_bucket == (self.num_bucket - 1):
+            log.info(f"Number buckets remaining {num_bucket}")
+        assert num_bucket, (
+            f"Number buckets are {num_bucket}."
+            f"Expecting {self.num_bucket - 1} buckets remaining"
+        )
 
     def validate_reshard_process(self):
         """

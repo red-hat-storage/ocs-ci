@@ -26,6 +26,8 @@ sc_name = constants.DEFAULT_STORAGECLASS_RGW
 scale_obc_count = 100
 # Number of obc creating by batch
 num_obc_batch = 50
+# Number of objects
+num_objs = 150000
 # Scale data file
 log_path = ocsci_log_path()
 obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
@@ -44,16 +46,29 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
     Validate objects in buckets in post upgrade.
 
     """
-
-    # Running hsbench to create buckets with objects before upgrade
+    # Running hsbench to create buckets with objects before upgrade.
+    #  PUT, GET and LIST objects of a bucket.
+    scale_noobaa_lib.hsbench_setup()
     scale_noobaa_lib.hsbench_io(
         namespace=namespace,
-        num_obj=150000,
+        num_obj=num_objs,
         num_bucket=10,
         object_size="100K",
+        run_mode="cxipgl",
+        result="result.csv",
         validate=True,
     )
-    # Create obc list without I/O and ensure obc in Bound state before upgrade
+    # Validate objects in bucket(s) after created
+    scale_noobaa_lib.validate_bucket(
+        num_objs,
+        upgrade="pre_upgrade",
+        result="result.csv",
+        put=True,
+        get=True,
+        list_obj=True,
+    )
+
+    # Create OBC without I/O and ensure OBC in Bound state before upgrade
     obc_scaled_list = []
     log.info(f"Start creating  {scale_obc_count} " f"OBC in a batch of {num_obc_batch}")
     for i in range(int(scale_obc_count / num_obc_batch)):
@@ -126,8 +141,40 @@ def test_scale_obc_rgw_post_upgrade():
     else:
         log.info(f" Expected all {len(obc_bound_list)} OBCs are in Bound state")
 
-    # Validate objects in bucket(s)
-    scale_noobaa_lib.validate_bucket()
+    # Validate existing objects in bucket(s)
+    scale_noobaa_lib.validate_bucket(
+        num_objs, upgrade="post_upgrade", result="result.csv", get=True, list_obj=True
+    )
+
+    # Delete objects in existing bucket
+    scale_noobaa_lib.delete_object(bucket_name="bp01000000000000")
+
+    # Delete existing bucket
+    scale_noobaa_lib.delete_bucket(bucket_name="bp01000000000001")
+
+    # Create new bucket with objects
+    scale_noobaa_lib.hsbench_io(
+        namespace=namespace,
+        num_obj=num_objs,
+        num_bucket=1,
+        object_size="100K",
+        run_mode="cxipgl",
+        bucket_prefix="new",
+        result="new_result.csv",
+        validate=True,
+    )
+    # Verify new bucket with objects after create:
+    scale_noobaa_lib.validate_bucket(
+        num_objs,
+        upgrade="post_upgrade",
+        result="new_result.csv",
+        put=True,
+        get=True,
+        list_obj=True,
+    )
+
+    # Delete object in new bucket
+    scale_noobaa_lib.delete_object(bucket_name="new000000000000")
 
     # Check ceph health status
     utils.ceph_health_check()

@@ -406,6 +406,7 @@ def get_noobaa_pods_status():
             ret_val = False
     return ret_val
 
+<<<<<<< HEAD
 
 def check_memory_leak_in_noobaa_endpoint_log():
     """
@@ -431,11 +432,25 @@ def check_memory_leak_in_noobaa_endpoint_log():
         raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
     else:
         log.info("No memory leak is seen in Noobaa endpoint logs")
+=======
+def hsbench_setup():
+    """
+    Setup and install hsbench
+
+    """
+    hsbenchs3.create_test_user()
+    hsbenchs3.create_resource_hsbench()
+    hsbenchs3.install_hsbench()
+
+
 def hsbench_io(
     namespace=None,
     num_obj=None,
     num_bucket=None,
     object_size=None,
+    run_mode=None,
+    bucket_prefix=None,
+    result=None,
     validate=None,
     timeout=None,
 ):
@@ -447,31 +462,44 @@ def hsbench_io(
         num_obj (int): Number of object(s)
         num_bucket (int): Number of bucket(s)
         object_size (str): Size of objects in bytes with postfix K, M, and G
+        run_mode (str): run mode
+        bucket_prefix (str): Prefix for buckets
+        result (str): Write CSV output to this file
         validate (bool): Validates whether running workload is completed.
         timeout (int): timeout in second
 
     """
-    # Setup and install hsbench
-    hsbenchs3.create_test_user()
-    hsbenchs3.create_resource_hsbench()
-    hsbenchs3.install_hsbench()
-
-    # Running hsbench
     hsbenchs3.run_benchmark(
         num_obj=num_obj,
         num_bucket=num_bucket,
         object_size=object_size,
+        run_mode=run_mode,
+        bucket_prefix=bucket_prefix,
+        result=result,
         validate=validate,
         timeout=timeout,
     )
 
 
-def validate_bucket():
+def validate_bucket(
+    num_objs=None, upgrade=None, result=None, put=None, get=None, list_obj=None
+):
     """
     Validate S3 objects created by hsbench on bucket(s)
 
     """
-    hsbenchs3.validate_s3_objects()
+    hsbenchs3.validate_s3_objects(upgrade=upgrade)
+    hsbenchs3.validate_hsbench_put_get_list_objects(
+        num_objs=num_objs, result=result, put=put, get=get, list_obj=list_obj
+    )
+
+
+def delete_object(bucket_name=None):
+    hsbenchs3.delete_objects_in_bucket(bucket_name=bucket_name)
+
+
+def delete_bucket(bucket_name=None):
+    hsbenchs3.delete_bucket(bucket_name=bucket_name)
 
 
 def hsbench_cleanup():
