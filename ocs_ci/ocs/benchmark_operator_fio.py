@@ -29,6 +29,7 @@ BMO_LABEL = "kernel-cache-dropper"
 class BenchmarkOperatorFIO(object):
     """
     Benchmark Operator FIO Class
+
     """
 
     def setup_benchmark_fio(
@@ -40,6 +41,18 @@ class BenchmarkOperatorFIO(object):
         storageclass=constants.DEFAULT_STORAGECLASS_RBD,
         timeout_completed=2400,
     ):
+        """
+        Setup of benchmark fio
+
+        Args:
+            total_size (int):
+            jobs (str): fio job types to run, for example the readwrite option
+            read_runtime (int): Amount of time in seconds to run read workloads
+            bs (str): the Block size that need to used for the prefill
+            storageclass (str): StorageClass to use for PVC per server pod
+            timeout_completed (int): timeout client pod move to completed state
+
+        """
         self.timeout_completed = timeout_completed
         self.total_size = total_size
         self.local_repo = tempfile.mkdtemp()
@@ -57,6 +70,10 @@ class BenchmarkOperatorFIO(object):
         self.ns_obj = OCP(kind="namespace")
 
     def calc_number_servers_file_size(self):
+        """
+        Calc the number of fio server based on file-size
+
+        """
         if self.total_size < 20:
             servers = self.total_size
             file_size = 1
@@ -70,6 +87,10 @@ class BenchmarkOperatorFIO(object):
         self.crd_data["spec"]["workload"]["args"]["servers"] = servers
 
     def label_worker_nodes(self):
+        """
+        Label Worker nodes for cache-dropping enable
+
+        """
         # to use the cache dropping pod, worker nodes need to be labeled.
         log.info("Labeling the worker nodes for cache-dropping enable.")
         try:
@@ -87,6 +108,10 @@ class BenchmarkOperatorFIO(object):
                 log.warning("Labeling nodes failed, Not all workers node are labeled !")
 
     def clone_benchmark_operator(self):
+        """
+        Clone benchmark-operator
+
+        """
         log.info(f"Clone {BMO_REPO} Repo to local dir {self.local_repo}")
         git.Repo.clone_from(BMO_REPO, self.local_repo)
 
@@ -118,10 +143,18 @@ class BenchmarkOperatorFIO(object):
             raise TimeoutExpiredError
 
     def create_benchmark_operator(self):
+        """
+        Create benchmark-operator
+
+        """
         benchmark_obj = OCS(**self.crd_data)
         benchmark_obj.create()
 
     def wait_for_wl_to_start(self):
+        """
+        Wait fio-servers move to Running state
+
+        """
         sample = TimeoutSampler(
             timeout=400,
             sleep=10,
@@ -135,6 +168,10 @@ class BenchmarkOperatorFIO(object):
             raise TimeoutExpiredError
 
     def wait_for_wl_to_complete(self):
+        """
+        Wait client pod move to completed state
+
+        """
         sample = TimeoutSampler(
             timeout=self.timeout_completed,
             sleep=40,
@@ -150,6 +187,13 @@ class BenchmarkOperatorFIO(object):
             raise TimeoutExpiredError
 
     def run_fio_benchmark_operator(self, is_completed=True):
+        """
+        Run FIO on benchmark-operator
+
+        Args:
+            is_completed (bool): if True, verify client pod move completed state.
+
+        """
         self.label_worker_nodes()
         self.clone_benchmark_operator()
         self.deploy()
@@ -179,6 +223,7 @@ class BenchmarkOperatorFIO(object):
         time.sleep(10)
 
     def pods_expected_status(self, pattern, expected_num_pods, expected_status):
+        """ """
         pod_names = get_pod_name_by_pattern(pattern=pattern, namespace=BMO_NS)
         if len(pod_names) != expected_num_pods:
             return False
