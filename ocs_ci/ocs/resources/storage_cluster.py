@@ -1407,6 +1407,8 @@ def verify_provider_storagecluster(sc_data):
     5. annotations:
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
+    6. requested capacity and granted capacity match
+    7. granted capacity value is valid
 
     Args:
         sc_data (dict): storagecluster data dictionary
@@ -1444,8 +1446,9 @@ def verify_consumer_storagecluster(sc_data):
     1. externalStorage: enable: true
     2. storageProviderEndpoint: IP:31659
     3. onboardingTicket is present
-    4. TODO: requestedCapacity
-    5. catsrc existence
+    4. catsrc existence
+    5. requested capacity matches granted capacity
+    6. requested and granted capacity fields have a valid value
 
     Args:
     sc_data (dict): storagecluster data dictionary
@@ -1470,6 +1473,13 @@ def verify_consumer_storagecluster(sc_data):
     assert catsrc_info["spec"]["displayName"].startswith(
         "Red Hat OpenShift Data Foundation Managed Service Consumer"
     )
+    requested_capacity = sc_data["spec"]["externalStorage"]["requestedCapacity"]
+    granted_capacity = sc_data["status"]["externalStorage"]["grantedCapacity"]
+    log.info(
+        f"Requested capacity: {requested_capacity}. Granted capacity: {granted_capacity}"
+    )
+    assert requested_capacity == granted_capacity
+    assert re.match("\\d+[PT]", granted_capacity)
 
 
 def get_ceph_clients():
