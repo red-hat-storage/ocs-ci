@@ -942,6 +942,53 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     return new_storage_devices_sets_count
 
 
+def add_capacity_lso():
+    from ocs_ci.ocs.cluster import (
+        is_flexible_scaling_enabled,
+        check_ceph_health_after_add_capacity,
+    )
+    from ocs_ci.ocs.node import add_disk_to_node, get_nodes
+    from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
+
+    num_osd_pods = len(get_osd_pods())
+    node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+    if is_flexible_scaling_enabled():
+        add_disk_to_node(node_objs[0])
+        num_available_pv = 1
+    else:
+        add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+        num_available_pv = 3
+    localstorage.check_pvs_created(num_pvs_required=num_available_pv)
+    if ui_add_capacity_conditions():
+        try:
+            osd_size = get_osd_size()
+            ui_add_capacity(osd_size)
+        except Exception as e:
+            logging.error(
+                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
+            )
+            change_count_storage_cluster(num_osd_pods + 1)
+    else:
+        change_count_storage_cluster(num_osd_pods + 1)
+
+    # Verify OSDs are encrypted.
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
+
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+
+
+def change_count_storage_cluster(count):
+    sc = get_storage_cluster()
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {count}}}]"""
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+
+
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
     Get storage cluster name
