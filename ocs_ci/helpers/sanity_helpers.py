@@ -189,27 +189,7 @@ class SanityManagedService(Sanity):
     Class for cluster health and functional validations for the Managed Service
     """
 
-    def __init__(self):
-        """
-        Init the sanity managed service class
-        """
-        super(Sanity, self).__init__()
-        # A dictionary of a consumer index per the fio_scale object
-        self.consumer_i_per_fio_scale = {}
-        # The 'create resources on MS consumers' factory. Will be initialized with the
-        # 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers' factory using the method
-        # 'init_create_resources_on_ms_factory'
-        self.create_resources_on_ms_consumers_factory = None
-        # All the variables below will be initialized in the method 'init_create_resources_on_ms_factory'.
-        self.scale_count = None
-        self.pvc_per_pod_count = None
-        self.start_io = None
-        self.io_runtime = None
-        self.pvc_size = None
-        self.max_pvc_size = None
-        self.consumer_indexes = None
-
-    def init_create_resources_on_ms_factory(
+    def __init__(
         self,
         create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
         scale_count=None,
@@ -221,9 +201,9 @@ class SanityManagedService(Sanity):
         consumer_indexes=None,
     ):
         """
+        Init the sanity managed service class.
         Init the 'create resources on MS consumers' factory.
-        This function uses the factory 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers'.
-        Note: You need to use this method before using the method 'create_resources_on_ms_consumers'
+        This method uses the 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers' factory.
 
         Args:
            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers (function): Factory for creating scale
@@ -241,12 +221,9 @@ class SanityManagedService(Sanity):
                on the current consumer. And if it's a provider it creates scale pods and PVCs on
                all the consumers.
         """
-        if consumer_indexes:
-            self.consumer_indexes = consumer_indexes
-        elif is_ms_consumer_cluster():
-            self.consumer_indexes = [config.cur_index]
-        else:
-            self.consumer_indexes = config.get_consumer_indexes_list()
+        super(SanityManagedService, self).__init__()
+        # A dictionary of a consumer index per the fio_scale object
+        self.consumer_i_per_fio_scale = {}
 
         self.create_resources_on_ms_consumers_factory = (
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
@@ -258,6 +235,13 @@ class SanityManagedService(Sanity):
         self.pvc_size = pvc_size
         self.max_pvc_size = max_pvc_size
 
+        if consumer_indexes:
+            self.consumer_indexes = consumer_indexes
+        elif is_ms_consumer_cluster():
+            self.consumer_indexes = [config.cur_index]
+        else:
+            self.consumer_indexes = config.get_consumer_indexes_list()
+
     def create_resources_on_ms_consumers(self):
         """
         Create resources on MS consumers.
@@ -268,11 +252,7 @@ class SanityManagedService(Sanity):
 
         """
         orig_index = config.cur_index
-        if not self.create_resources_on_ms_consumers_factory:
-            raise ValueError(
-                "You need to first init the 'Create resources on MS consumers' factory"
-                "using the method 'init_create_resources_on_ms_factory'"
-            )
+
         try:
             # Create the scale pods and PVCs using k8s on MS consumers factory
             self.consumer_i_per_fio_scale = (

@@ -28,9 +28,9 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
         Save the original index, and init the sanity instance
         """
         self.orig_index = config.cur_index
-        self.sanity_helpers = SanityManagedService()
-        # Init the 'create resources' factory with the default params
-        self.sanity_helpers.init_create_resources_on_ms_factory(
+        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers' factory to the
+        # init method and use the default params
+        self.sanity_helpers = SanityManagedService(
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
         )
 
@@ -61,7 +61,7 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
         assert (
             config.cur_index == self.orig_index
         ), "The current index is different from the original index"
-        log.info("The The current index is equal to the original index")
+        log.info("The current index is equal to the original index")
 
 
 @libtest
@@ -73,12 +73,24 @@ class TestSanityManagedServiceWithOptionalParams(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
         Save the original index, and init the sanity instance
         """
         self.orig_index = config.cur_index
-        self.sanity_helpers = SanityManagedService()
+
+        first_consumer_i = config.get_consumer_indexes_list()[0]
+        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers' factory to the
+        # init method and use the optional params
+        self.sanity_helpers = SanityManagedService(
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
+            scale_count=40,
+            pvc_per_pod_count=10,
+            start_io=True,
+            io_runtime=600,
+            max_pvc_size=25,
+            consumer_indexes=[first_consumer_i],
+        )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -95,18 +107,6 @@ class TestSanityManagedServiceWithOptionalParams(ManageTest):
     def test_sanity_ms_with_optional_params(
         self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
     ):
-        consumer_i = config.get_consumer_indexes_list()[0]
-        # Init the 'create resources' factory with the optional params
-        self.sanity_helpers.init_create_resources_on_ms_factory(
-            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
-            scale_count=40,
-            pvc_per_pod_count=10,
-            start_io=True,
-            io_runtime=600,
-            max_pvc_size=25,
-            consumer_indexes=[consumer_i],
-        )
-
         log.info("Start creating resources for the MS consumers")
         self.sanity_helpers.create_resources_on_ms_consumers()
         timeout = 60
@@ -121,4 +121,4 @@ class TestSanityManagedServiceWithOptionalParams(ManageTest):
         assert (
             config.cur_index == self.orig_index
         ), "The current index is different from the original index"
-        log.info("The The current index is equal to the original index")
+        log.info("The current index is equal to the original index")
