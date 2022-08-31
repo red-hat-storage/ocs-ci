@@ -2922,7 +2922,9 @@ def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000)
 
     Args:
         unformatted_size (str): The size to convert (i.e, '1Gi'/'100Mi')
+            acceptable units are: "Ti", "Gi", "Mi", "Ki", "Bi"
         units_to_covert_to (str): The units to convert the size to (i.e, TB/GB/MB)
+            acceptable units are: "TB", "GB", "MB", "KB", "BY"
         convert_size (int): set convert by 1000 or 1024
 
     Returns:
@@ -2960,7 +2962,7 @@ def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000)
             "Ki": abso,
             "Bi": abso / 1000,
         },
-        "Bi": {
+        "BY": {
             "Ti": abso * 1e12,
             "Gi": abso * 1e9,
             "Mi": abso * 1e6,
@@ -2997,7 +2999,7 @@ def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000)
             "Ki": abso,
             "Bi": abso / 1024,
         },
-        "Bi": {
+        "BY": {
             "Ti": abso * 1024**4,
             "Gi": abso * 1024**3,
             "Mi": abso * 1024**2,
