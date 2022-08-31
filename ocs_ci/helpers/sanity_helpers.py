@@ -247,9 +247,6 @@ class SanityManagedService(Sanity):
         Create resources on MS consumers.
         This function uses the factory "create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers"
         for creating the resources - Create scale pods, PVCs, and run IO using a Kube job on MS consumers.
-        Note: Before using this method, you need to first init the 'Create resources on MS consumers' factory
-        using the method 'init_create_resources_on_ms_factory'.
-
         """
         orig_index = config.cur_index
 
