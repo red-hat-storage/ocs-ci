@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_bmpsi,
     skipif_ibm_power,
-    skipif_flexible_scaling,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -40,7 +39,7 @@ def add_capacity_test():
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    if ui_add_capacity_conditions() and not is_flexible_scaling_enabled():
+    if ui_add_capacity_conditions():
         try:
             result = ui_add_capacity(osd_size)
         except Exception as e:
@@ -104,7 +103,6 @@ def add_capacity_test():
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
-@skipif_flexible_scaling
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
