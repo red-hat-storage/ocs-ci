@@ -482,9 +482,6 @@ def pagerduty_integration(request, pagerduty_service):
     teardown = config.RUN["cli_params"]["teardown"]
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
     ceph_cluster_installed = config.RUN.get("cephcluster")
-    if teardown or skip_ocs_deployment or not ceph_cluster_installed:
-        log.info("CephCluster is not available. Skipping PagerDuty integration.")
-        return None
     if (
         config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS
         or config.ENV_DATA.get("disable_pagerduty")
