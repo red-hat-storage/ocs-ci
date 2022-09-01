@@ -973,7 +973,7 @@ def add_capacity_lso():
             osd_size = get_osd_size()
             ui_add_capacity(osd_size)
         except Exception as e:
-            logging.error(
+            log.error(
                 f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
             )
             set_deviceset_count(deviceset_count + 1)
