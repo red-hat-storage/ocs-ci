@@ -7,7 +7,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
-    ignore_leftovers,
     managed_service_required,
 )
 
@@ -15,7 +14,6 @@ log = logging.getLogger(__name__)
 
 
 @libtest
-@ignore_leftovers
 @managed_service_required
 class TestSanityManagedServiceWithDefaultParams(ManageTest):
     """
@@ -65,7 +63,6 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
 
 
 @libtest
-@ignore_leftovers
 @managed_service_required
 class TestSanityManagedServiceWithOptionalParams(ManageTest):
     """
