@@ -804,10 +804,10 @@ def pod_attach_csi_time(
 
     for sublog in logs:
         for line in sublog:
-            if "GRPC call: /csi.v1.Node/NodeStageVolume" in line:
+            if f"{volume_handle} GRPC call: /csi.v1.Node/NodeStageVolume" in line:
                 node_stage_st = string_to_time(line.split()[1])
                 node_stage_id = line.split()[5]
-            if "GRPC call: /csi.v1.Node/NodePublishVolume" in line:
+            if f"{volume_handle} GRPC call: /csi.v1.Node/NodePublishVolume" in line:
                 node_publish_st = string_to_time(line.split()[1])
                 node_publish_id = line.split()[5]
 
@@ -883,12 +883,16 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
         start_time, end_time = pod_attach_csi_time(
             interface, pv_name, csi_start_time, namespace
         )[1]
+        logger.info(f"CSI start time = {start_time}, csi end time = {end_time}")
         start_times_list.append(start_time)
         end_times_list.append(end_time)
 
     start_times_list.sort()
     end_times_list.sort()
 
+    logger.info(
+        f"Pod stage start time is = {start_times_list[0]}, pod publish end time = {end_times_list[-1]}"
+    )
     # total bulk_attach_csi_time is the delta between the last node publish time and the first node stage time
     total_time = (end_times_list[-1] - start_times_list[0]).total_seconds()
     if total_time < 0:

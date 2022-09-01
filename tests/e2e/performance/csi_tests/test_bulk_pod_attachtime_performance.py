@@ -186,6 +186,9 @@ class TestBulkPodAttachPerformance(PASTest):
         csi_bulk_total_time = performance_lib.pod_bulk_attach_csi_time(
             self.interface, self.pvc_objs, csi_start_time, self.namespace
         )
+        log.info(
+            f"Bulk attach csi time of {bulk_size} pods is {csi_bulk_total_time} seconds"
+        )
 
         # Collecting environment information
         self.get_env_info()
