@@ -282,40 +282,44 @@ def get_admin_key_from_provider():
 
 def check_default_cluster_context_index_equal_to_current_index():
     """
-    Check that the default index is equal to the current index
+    Check that the default cluster index is equal to the current cluster index
 
     Returns:
-        bool: True, if the default index is equal to the current index
+        bool: True, if the default cluster index is equal to the current cluster index
 
     """
     default_index = config.ENV_DATA["default_cluster_context_index"]
-    logger.info(f"default index = {default_index}, current index = {config.cur_index}")
+    logger.info(
+        f"default cluster index = {default_index}, current cluster index = {config.cur_index}"
+    )
 
     if default_index != config.cur_index:
-        logger.warning("The default index is different from the current index")
+        logger.warning(
+            "The default cluster index is different from the current cluster index"
+        )
         return False
     else:
-        logger.info("The default index is equal to the current index")
+        logger.info("The default cluster index is equal to the current cluster index")
         return True
 
 
 def change_current_index_to_default_index():
     """
-    Change the current index to the default index
+    Change the current cluster index to the default cluster index
 
     """
     default_index = config.ENV_DATA["default_cluster_context_index"]
-    logger.info("Change the current index to the default index")
+    logger.info("Change the current cluster index to the default cluster index")
     config.switch_ctx(default_index)
 
 
 def check_and_change_current_index_to_default_index():
     """
-    Check that the default index is equal to the current index, and also change the current index
-    to the default index if they are not equal.
+    Check that the default cluster index was equal to the current cluster index, and also change
+    the current cluster index to the default cluster index if they are not equal.
 
     Returns:
-        bool: True, if the default index is equal to the current index
+        bool: True, if the default cluster index was equal to the current cluster index
 
     """
     is_equal = check_default_cluster_context_index_equal_to_current_index()

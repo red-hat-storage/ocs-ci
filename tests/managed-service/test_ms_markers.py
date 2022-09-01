@@ -30,12 +30,14 @@ class TestManagedServiceMarkers(ManageTest):
     @pytest.mark.first
     def test_default_cluster_context_index_equal_to_current_index(self):
         """
-        Test that the default index is equal to the current index. This test should run first
+        Test that the default cluster index is equal to the current cluster index. This test should run first
         """
         assert (
             check_and_change_current_index_to_default_index()
-        ), "The default index is different from the current index"
-        logger.info("The default index is equal to the current index as expected")
+        ), "The default cluster index is different from the current cluster index"
+        logger.info(
+            "The default cluster index is equal to the current cluster index as expected"
+        )
 
     @skipif_ms_consumer
     def test_marker_skipif_ms_consumer(self):
@@ -48,7 +50,9 @@ class TestManagedServiceMarkers(ManageTest):
         logger.info("The cluster is not a consumer cluster as expected")
 
         assert check_and_change_current_index_to_default_index()
-        logger.info("The default index is equal to the current index as expected")
+        logger.info(
+            "The default cluster index is equal to the current cluster index as expected"
+        )
 
     @skipif_ms_provider
     def test_marker_skipif_ms_provider(self):
@@ -61,7 +65,9 @@ class TestManagedServiceMarkers(ManageTest):
         logger.info("The cluster is not a provider cluster as expected")
 
         assert check_and_change_current_index_to_default_index()
-        logger.info("The default index is equal to the current index as expected")
+        logger.info(
+            "The default cluster index is equal to the current cluster index as expected"
+        )
 
     @runs_on_provider
     @pytest.mark.second_to_last
@@ -77,12 +83,12 @@ class TestManagedServiceMarkers(ManageTest):
     @pytest.mark.last
     def test_current_index_not_change_after_using_runs_on_provider(self):
         """
-        Test that the current index didn't change after using the 'runs_on_provider'
+        Test that the current cluster index didn't change after using the 'runs_on_provider'
         marker in the previous test.
         """
         assert (
             check_and_change_current_index_to_default_index()
-        ), "The current index has changed after using the 'runs_on_provider' marker"
+        ), "The current cluster index has changed after using the 'runs_on_provider' marker"
         logger.info(
-            "The current index didn't change after using the 'runs_on_provider' marker"
+            "The current cluster index didn't change after using the 'runs_on_provider' marker"
         )
