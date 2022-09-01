@@ -1564,7 +1564,7 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 # Magenta squad.
 SQUADS = {
     "Aqua": ["/lvmo/"],
-    "Brown": ["/z_cluster/"],
+    "Brown": ["/z_cluster/", "/nfs_feature/"],
     "Green": ["/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
