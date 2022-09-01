@@ -980,7 +980,7 @@ def add_capacity_lso():
     else:
         set_deviceset_count(deviceset_count + 1)
 
-    log.info("Verify OSDs are encrypted")
+    logging.info("Verify OSDs are encrypted")
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
 
