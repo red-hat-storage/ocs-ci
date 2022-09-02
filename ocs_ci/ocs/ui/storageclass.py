@@ -108,14 +108,14 @@ class StorageClassUI(PageNavigator):
         """
         Test for creation of storage class with encryption via UI
         Args:
-                backend_path (str): name of the vault backend path
-                reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
-                provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
-                vol_binding_mode (str): value of the volume binding mode,
-                                        it could be 'WaitForFirstConsumer' or 'Immediate'
-                service_name (str): the default value is None which can be changed in the function call
-                kms_address (str): the default value is None which can be changed in the function call
-                tls_server_name (str): the default value is None which can be changed in the function call
+            backend_path (str): name of the vault backend path
+            reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
+            provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
+            vol_binding_mode (str): value of the volume binding mode,
+                                    it could be 'WaitForFirstConsumer' or 'Immediate'
+            service_name (str): the default value is None which can be changed in the function call
+            kms_address (str): the default value is None which can be changed in the function call
+            tls_server_name (str): the default value is None which can be changed in the function call
         Returns:
                 sc_name (str) if the storage class creation is successful, returns False otherwise
         """
