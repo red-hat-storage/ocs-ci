@@ -98,9 +98,8 @@ class StorageClassUI(PageNavigator):
     def create_encrypted_storage_class_ui(
         self,
         backend_path=None,
-        vault_namespace=None,
         reclaim_policy="Delete",
-        provisioner="rbd",
+        provisioner=constants.OCS_PROVISIONERS[0],
         vol_binding_mode="Immediate",
         service_name=None,
         kms_address=None,
@@ -110,7 +109,6 @@ class StorageClassUI(PageNavigator):
         Test for creation of storage class with encryption via UI
         Args:
                 backend_path (str): name of the vault backend path
-                # vault_namespace (str): name of the vault namespace
                 reclaim_policy (str): value of the reclaim policy, it could be 'Delete' or 'Retain'
                 provisioner (str): type of provisioner used, it could be 'rbd' or 'cephfs'
                 vol_binding_mode (str): value of the volume binding mode,
@@ -121,10 +119,6 @@ class StorageClassUI(PageNavigator):
         Returns:
                 sc_name (str) if the storage class creation is successful, returns False otherwise
         """
-
-        # self.ocp_version = version.get_semantic_ocp_version_from_config()
-        # self.sc_loc = locators[self.ocp_version]["storageclass"]
-
         self.navigate_storageclasses_page()
         logger.info("Create Storage Class")
         self.do_click(self.sc_loc["create-sc"])
@@ -154,9 +148,9 @@ class StorageClassUI(PageNavigator):
 
         logger.info("Storage Class Provisioner")
         self.do_click(self.sc_loc["provisioner"])
-        if provisioner == "rbd":
+        if provisioner == constants.OCS_PROVISIONERS[0]:
             self.do_click(self.sc_loc["rbd-provisioner"])
-        elif provisioner == "cephfs":
+        elif provisioner == constants.OCS_PROVISIONERS[1]:
             self.do_click(self.sc_loc["cephfs-provisioner"])
         logger.info("Storage Class Storage Pool")
         self.do_click(self.sc_loc["storage-pool"])

@@ -28,7 +28,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.utility.utils import get_vault_cli, get_ocp_version
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import ocs
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ logger = logging.getLogger(__name__)
     argnames=["kv_version"],
     argvalues=[
         pytest.param("v1", marks=pytest.mark.polarion_id("OCS-2585")),
-        # pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
+        pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
 class TestPVEncryption(ManageTest):
@@ -73,8 +72,6 @@ class TestPVEncryption(ManageTest):
         logger.info("Create unique resource name")
         self.vault_resource_name = create_unique_resource_name("test", "vault")
         logger.info(f"Unique resource name created is {self.vault_resource_name}")
-        # logger.info("Create vault namespace")
-        # self.vault.vault_create_namespace(namespace=self.vault_resource_name)
         logger.info("Create backend path")
         self.vault.vault_create_backend_path(
             backend_path=self.vault_resource_name, kv_version=kv_version
@@ -97,6 +94,7 @@ class TestPVEncryption(ManageTest):
     @skipif_ocs_version("<4.8")
     def test_for_encrypted_pv_ui(
         self,
+        storageclass_factory_ui,
         project_factory,
         teardown_factory,
         pod_factory,
@@ -118,34 +116,25 @@ class TestPVEncryption(ManageTest):
 
         # Creating storage class via UI
 
-        sc_obj = StorageClassUI(setup_ui)
-
         logger.info("Creating Storage Class via UI")
-        sc_name = sc_obj.create_encrypted_storage_class_ui(
+        sc_obj = storageclass_factory_ui(
+            encryption=True,
             backend_path=self.vault_resource_name,
-            # vault_namespace=self.vault_resource_name,
             reclaim_policy="Delete",
-            provisioner="rbd",
+            provisioner=constants.OCS_PROVISIONERS[0],
             vol_binding_mode="WaitForFirstConsumer",
             service_name=self.vault_resource_name,
             kms_address="https://vault.qe.rh-ocs.com/",
             tls_server_name="vault.qe.rh-ocs.com",
         )
-        logger.info("Storage Class Created via UI")
-
-        # Calling the Teardown Factory Method to make sure Storage Class is deleted
-        sc_obj = ocs.OCS(
-            kind=constants.STORAGECLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        sc_obj._name = sc_name
-        teardown_factory(sc_obj)
+        sc_name = sc_obj.name
+        logger.info(f" Encrypted Storage Class with name {sc_name} is created via UI")
 
         # Create ceph-csi-kms-token in the tenant namespace
         logger.info("Creating ceph-csi-kms-token")
         self.vault.vault_path_token = self.vault.generate_vault_token()
         self.vault.create_vault_csi_kms_token(namespace=self.pro_obj.namespace)
         logger.info("ceph-csi-kms-token created")
-
         time.sleep(10)
 
         pvc_ui_obj = PvcUI(setup_ui)
@@ -161,7 +150,7 @@ class TestPVEncryption(ManageTest):
                 project_name, sc_name, pvc_name, mode, pvc_size, vol_mode
             )
 
-            logger.info("PVC Created via UI")
+            logger.info(f"PVC {pvc_name} Created via UI")
 
             pvc_objs = get_all_pvc_objs(namespace=project_name)
             pvc = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]
@@ -299,12 +288,6 @@ class TestPVEncryption(ManageTest):
                         f"Vault: Key deletion failed for {vol_handle}"
                     )
         # Deleting Storage Class via UI
+        sc_obj = StorageClassUI(setup_ui)
         logger.info("Deleting Storage Class via UI")
-        sc_deletion_check = sc_obj.delete_rbd_storage_class(sc_name=sc_name)
-
-        # If Storage Class Deletion failed via UI, Delete it using Teardown Factory
-        if sc_deletion_check:
-            sc_obj._is_deleted = True
-            logger.info(
-                "Storage Class Deletion failed via UI, Deleted using Teardown Factory"
-            )
+        sc_obj.delete_rbd_storage_class(sc_name=sc_name)
