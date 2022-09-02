@@ -79,12 +79,12 @@ def create_storageclassclaim(
         storage_class_claim_name
         if storage_class_claim_name
         else create_unique_resource_name(
-            f"test-{interface_type}", constants.STORAGECLASSCLAIM.lower()
+            f"test-{interface_type.lower()}", constants.STORAGECLASSCLAIM.lower()
         )
     )
     if namespace:
         sc_claim_data["metadata"]["namespace"] = namespace
 
     sc_claim_obj = StorageClassClaim(**sc_claim_data)
-    created_sc_claim = sc_claim_obj.create(do_reload=True)
-    return created_sc_claim
+    sc_claim_obj.create(do_reload=True)
+    return sc_claim_obj
