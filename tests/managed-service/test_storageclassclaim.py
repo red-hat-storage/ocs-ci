@@ -15,7 +15,7 @@ class TestStorageClassClaim(ManageTest):
     Tests to verify storageclassclaim
     """
 
-    def test_change_reclaim_policy_of_pv(
+    def test_verify_storageclassclaim(
         self, project_factory, teardown_factory, create_pvcs_and_pods
     ):
         """
