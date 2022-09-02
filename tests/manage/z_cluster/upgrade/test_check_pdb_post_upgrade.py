@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     post_ocp_upgrade,
     bugzilla,
+    skipif_ms_consumer,
 )
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
@@ -25,6 +26,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
     """
 
     @post_ocs_upgrade
+    @skipif_ms_consumer
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-2449")
     def test_check_mon_pdb_post_upgrade(self):
