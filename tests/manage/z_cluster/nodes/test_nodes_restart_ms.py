@@ -291,7 +291,7 @@ class TestNodesRestartMS(ManageTest):
             )
             cephcluster_yaml = cephcluster.get().get("items")[0]
             expected_phase = (
-                "Ready" if cluster_index == self.provider_cluster_index else "Connected"
+                "Ready" if cluster_index == config.get_provider_index() else "Connected"
             )
             assert (
                 cephcluster_yaml["status"]["phase"] == expected_phase
