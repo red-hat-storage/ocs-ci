@@ -3135,6 +3135,10 @@ def amq_factory_fixture(request):
             sent and recieved to Producer and Consumer Pods respectively.
 
         """
+        if run_in_bg and not validate_messages:
+            raise Exception(
+                "run_in_bg is not allowed to call when validate_messages is set to False"
+            )
         # Setup kafka cluster
         amq.setup_amq_cluster(
             sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
