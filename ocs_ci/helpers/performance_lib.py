@@ -793,11 +793,15 @@ def pod_attach_csi_time(
             volume_handle = line.split()[1]
             break
     if volume_handle is None:
-        logger.error("Cannot get volume handle")
+        logger.error(f"Cannot get volume handle for pv {pv_name}")
         raise Exception("Cannot get volume handle")
 
     log_names = get_logfile_names(interface, provisioning=False)
     logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
+
+    logger.info(
+        f"Looking for pod attach time for pv {pv_name} and volume handle {volume_handle}"
+    )
 
     node_stage_st = None
     node_publish_st = None
