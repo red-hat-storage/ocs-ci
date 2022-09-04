@@ -146,7 +146,10 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             quota_name=quota_names[sc_name],
         )
         if not sample.wait_for_func_status(result=True):
-            err_str = f"Quota resource {quota_names[sc_name]} does not exist after 60 seconds {clusterresourcequota_obj.describe()}"
+            err_str = (
+                f"Quota resource {quota_names[sc_name]} does not exist "
+                f"after 60 seconds {clusterresourcequota_obj.describe()}"
+            )
             log.error(err_str)
             raise TimeoutExpiredError(err_str)
 
@@ -219,7 +222,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         log.info(
             "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
         )
-        pvc_obj = pvc_factory(
+        pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,
             storageclass=sc_obj,
