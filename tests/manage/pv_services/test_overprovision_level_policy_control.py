@@ -3,6 +3,8 @@ import pytest
 
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
@@ -57,6 +59,11 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             log.info("Verify storagecluster on Ready state")
             verify_storage_cluster()
 
+            if self.verify_quota_resource_exist(quota_name=self.quota_name):
+                log.info(f"Delete quota resource {self.quota_name}")
+                clusterresourcequota_obj = OCP(kind="clusterresourcequota")
+                clusterresourcequota_obj.delete(resource_name=self.quota_name)
+
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
@@ -91,12 +98,13 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
-        quota_name = {
+        quota_names = {
             constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
             constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
+        self.quota_name = quota_names[sc_name]
         log.info("Create project with “openshift-quota” label")
         project_name = "ocs-quota-sc-test"
         ocp_project_label = OCP(kind=constants.NAMESPACE)
@@ -130,10 +138,21 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
-        log.info("Check clusterresourcequota output")
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
+        sample = TimeoutSampler(
+            timeout=60,
+            sleep=4,
+            func=self.verify_quota_resource_exist,
+            quota_name=quota_names[sc_name],
+        )
+        if not sample.wait_for_func_status(result=True):
+            err_str = f"Quota resource {quota_names[sc_name]} does not exist after 60 seconds {clusterresourcequota_obj.describe()}"
+            log.error(err_str)
+            raise TimeoutExpiredError(err_str)
+
+        log.info("Check clusterresourcequota output")
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_name[sc_name]
+            resource_name=quota_names[sc_name]
         )
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
@@ -149,7 +168,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             status=constants.STATUS_BOUND,
         )
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_name[sc_name]
+            resource_name=quota_names[sc_name]
         )
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
@@ -190,7 +209,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
         pvc_obj.resize_pvc(new_size=6, verify=True)
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_name[sc_name]
+            resource_name=quota_names[sc_name]
         )
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
@@ -200,15 +219,16 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         log.info(
             "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
         )
-        pvc_factory(
+        pvc_obj = pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,
             storageclass=sc_obj,
             size=1,
         )
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_name[sc_name]
+            resource_name=quota_names[sc_name]
         )
+
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
             output_string=output_clusterresourcequota, expected_strings=["8Gi", "7Gi"]
@@ -231,3 +251,21 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 log.error(f"expected string:{expected_string} not in {output_string}")
                 return False
         return True
+
+    def verify_quota_resource_exist(self, quota_name):
+        """
+        Verify quota resource exist
+
+        Args:
+            quota_name (str): The name of quota
+
+        Returns:
+            bool: return True if quota_name exist in list, otherwise False
+
+        """
+        clusterresourcequota_obj = OCP(kind="clusterresourcequota")
+        quota_resources = clusterresourcequota_obj.get().get("items")
+        quota_resource_names = list()
+        for quota_resource in quota_resources:
+            quota_resource_names.append(quota_resource.get("metadata").get("name"))
+        return quota_name in quota_resource_names
