@@ -92,16 +92,16 @@ class TestBulkPodAttachPerformance(PASTest):
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 120],
+                *[constants.CEPHBLOCKPOOL, 4],
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 240],
+                *[constants.CEPHBLOCKPOOL, 8],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 120],
+                *[constants.CEPHFILESYSTEM, 4],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 240],
+                *[constants.CEPHFILESYSTEM, 8],
             ),
         ],
     )
@@ -181,6 +181,9 @@ class TestBulkPodAttachPerformance(PASTest):
         log.info("All POD(s) are in Running State.")
         bulk_end_time = time.time()
         bulk_total_time = bulk_end_time - bulk_start_time
+        log.info(
+            f"Bulk attach start time of {bulk_size} pods is {bulk_start_time} , end time is {bulk_end_time} "
+        )
         log.info(f"Bulk attach time of {bulk_size} pods is {bulk_total_time} seconds")
 
         csi_bulk_total_time = performance_lib.pod_bulk_attach_csi_time(
