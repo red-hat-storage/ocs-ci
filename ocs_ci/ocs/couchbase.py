@@ -188,7 +188,11 @@ class CouchBase(PillowFight):
         self.cb_create_bucket = True
 
     def run_workload(
-        self, replicas, num_items=None, num_threads=None, run_in_bg=False, timeout=1800
+        self,
+        replicas,
+        num_items=None,
+        num_threads=None,
+        run_in_bg=False,
     ):
         """
         Running workload with pillow fight operator
@@ -209,12 +213,17 @@ class CouchBase(PillowFight):
                 replicas=replicas,
                 num_items=num_items,
                 num_threads=num_threads,
-                timeout=timeout,
             )
             return self.result
         PillowFight.run_pillowfights(
             self, replicas=replicas, num_items=num_items, num_threads=num_threads
         )
+
+    def wait_for_pillowfights_to_complete(self, timeout=3600):
+        """
+        Wait for the pillowfight workload to complete
+        """
+        PillowFight.wait_for_pillowfights_to_complete(self, timeout=timeout)
 
     def analyze_run(self, skip_analyze=False):
         """

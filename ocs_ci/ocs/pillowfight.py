@@ -57,13 +57,10 @@ class PillowFight(object):
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
-    def run_pillowfights(
-        self, replicas=1, num_items=None, num_threads=None, timeout=1800
-    ):
+    def run_pillowfights(self, replicas=1, num_items=None, num_threads=None):
         """
         loop through all the yaml files extracted from the pillowfight repo
-        and run them.  Run oc logs on the results and save the logs in self.logs
-        directory
+        and run them.
 
         Args:
             replicas (int): Number of pod replicas
@@ -71,7 +68,6 @@ class PillowFight(object):
             num_threads (int): Number of threads
 
         """
-        ocp_local = OCP(namespace=self.namespace)
         self.replicas = replicas
         for i in range(self.replicas):
             # for basic-fillowfight.yaml
@@ -92,8 +88,18 @@ class PillowFight(object):
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
-        self.pods_info = {}
 
+    def wait_for_pillowfights_to_complete(self, timeout=1800):
+        """
+        Wait for the pillowfights to complete.
+        Run oc logs on the results and save the logs in self.logs directory
+
+        Raises:
+            Exception: If pillowfight fails to reach completed state
+
+        """
+        self.pods_info = {}
+        ocp_local = OCP(namespace=self.namespace)
         for pillowfight_pods in TimeoutSampler(
             timeout,
             9,
