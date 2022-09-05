@@ -173,7 +173,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
         if self.ocp_version == "4.9":
             self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version in ("4.10", "4.11"):
+        elif self.ocp_version in ("4.10", "4.11", "4.12"):
             self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
         if config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
