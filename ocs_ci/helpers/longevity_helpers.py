@@ -150,16 +150,21 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
     """
     accepted_creation_time = 1
     for pvc_obj in pvc_objs:
-        creation_time = performance_lib.measure_pvc_creation_time(
-            interface, pvc_obj.name, start_time
-        )
+        try:
+            creation_time = performance_lib.measure_pvc_creation_time(
+                interface, pvc_obj.name, start_time
+            )
 
-        if creation_time <= accepted_creation_time:
-            log.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
-        else:
+            if creation_time <= accepted_creation_time:
+                log.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
+            else:
+                log.error(
+                    f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
+                    f"{accepted_creation_time} seconds."
+                )
+        except Exception as err:
             log.error(
-                f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
-                f"{accepted_creation_time} seconds."
+                f"Below error occured while measuring the pvc time for {pvc_obj.name} \n {err}"
             )
 
 
