@@ -966,9 +966,14 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     remove_nodes([osd_node])
+    node_util.terminate_nodes([osd_node])
 
     log.info(f"name of deleted node = {osd_node_name}")
 
