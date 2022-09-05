@@ -225,7 +225,9 @@ class TestPodReattachTimePerformance(PASTest):
             self.pvc_obj = helpers.create_pvc(
                 sc_name=self.sc_obj.name, size="100Gi", namespace=self.namespace
             )
-            helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+            helpers.wait_for_resource_state(
+                self.pvc_obj, constants.STATUS_BOUND, timeout=240
+            )
 
             # Create a pod on one node
             logger.info(f"Creating Pod with pvc {self.pvc_obj.name} on node {node_one}")
