@@ -2932,6 +2932,7 @@ def pgsql_factory_fixture(request):
         samples=None,
         timeout=None,
         sc_name=None,
+        wait_for_pgbench_to_complete=True,
     ):
         """
         Factory to start pgsql workload
@@ -2943,8 +2944,8 @@ def pgsql_factory_fixture(request):
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
             samples (int): Number of samples to run
-
             timeout (int): Time in seconds to wait
+            wait_for_pgbench_to_complete (bool): If set to True, the fixture will wait for the pgbench run to complete
 
         """
         # Setup postgres
@@ -2961,14 +2962,15 @@ def pgsql_factory_fixture(request):
             timeout=timeout,
         )
 
-        # Wait for pg_bench pod to initialized and complete
-        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        if wait_for_pgbench_to_complete:
+            # Wait for pg_bench pod to initialized and complete
+            pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
 
-        # Get pgbench pods
-        pgbench_pods = pgsql.get_pgbench_pods()
+            # Get pgbench pods
+            pgbench_pods = pgsql.get_pgbench_pods()
 
-        # Validate pgbench run and parse logs
-        pgsql.validate_pgbench_run(pgbench_pods)
+            # Validate pgbench run and parse logs
+            pgsql.validate_pgbench_run(pgbench_pods)
         return pgsql
 
     def finalizer():
@@ -2988,13 +2990,14 @@ def jenkins_factory_fixture(request):
     """
     jenkins = Jenkins()
 
-    def factory(num_projects=1, num_of_builds=1):
+    def factory(num_projects=1, num_of_builds=1, wait_for_build_to_complete=True):
         """
         Factory to start jenkins workload
 
         Args:
             num_projects (int): Number of Jenkins projects
             num_of_builds (int): Number of builds per project
+            wait_for_build_to_complete (bool): If set to True, the fixture will wait for the Jenkins build to complete
 
         """
         # Jenkins template
@@ -3013,10 +3016,11 @@ def jenkins_factory_fixture(request):
         jenkins.number_builds_per_project = num_of_builds
         # Start Builds
         jenkins.start_build()
-        # Wait build reach 'Complete' state
-        jenkins.wait_for_build_to_complete()
-        # Print table of builds
-        jenkins.print_completed_builds_results()
+        if wait_for_build_to_complete:
+            # Wait build reach 'Complete' state
+            jenkins.wait_for_build_to_complete()
+            # Print table of builds
+            jenkins.print_completed_builds_results()
 
         return jenkins
 
@@ -3044,6 +3048,7 @@ def couchbase_factory_fixture(request):
         sc_name=None,
         num_items=None,
         num_threads=None,
+        wait_for_pillowfights_to_complete=True,
     ):
         """
         Factory to start couchbase workload
@@ -3052,6 +3057,8 @@ def couchbase_factory_fixture(request):
             replicas (int): Number of couchbase workers to be deployed
             run_in_bg (bool): Run IOs in background as option
             skip_analyze (bool): Skip logs analysis as option
+            wait_for_pillowfight_to_complete (bool): If set to True, the fixture will wait for the pillowfight
+            workload to reach compelete state
 
         """
         # Create Couchbase subscription
@@ -3069,8 +3076,9 @@ def couchbase_factory_fixture(request):
             run_in_bg=run_in_bg,
             num_items=num_items,
             num_threads=num_threads,
-            timeout=2100,
         )
+        if wait_for_pillowfights_to_complete:
+            couchbase.wait_for_pillowfights_to_complete()
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)
 
@@ -3106,6 +3114,8 @@ def amq_factory_fixture(request):
         num_of_consumer_pods=1,
         value="10000",
         since_time=1800,
+        run_in_bg=True,
+        validate_messages=True,
     ):
         """
         Factory to start amq workload
@@ -3123,8 +3133,15 @@ def amq_factory_fixture(request):
             num_of_consumer_pods (int): Number of consumer pods to be created
             value (str): Number of messages to be sent and received
             since_time (int): Number of seconds to required to sent the msg
+            run_in_bg (bool): If set to True, validate of messages are done in a bg job
+            validate_messages (bool): If set to True, the fixture will validate that all the messages are
+            sent and recieved to Producer and Consumer Pods respectively.
 
         """
+        if run_in_bg and not validate_messages:
+            raise Exception(
+                "run_in_bg is not allowed to call when validate_messages is set to False"
+            )
         # Setup kafka cluster
         amq.setup_amq_cluster(
             sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
@@ -3146,12 +3163,18 @@ def amq_factory_fixture(request):
         log.info(f"Waiting for {waiting_time}sec to generate msg")
         time.sleep(waiting_time)
 
-        # Check messages are sent and received
-        threads = amq.run_in_bg(
-            namespace=kafka_namespace, value=value, since_time=since_time
-        )
+        if validate_messages:
+            if run_in_bg:
+                # Check messages are sent and received
+                threads = amq.run_in_bg(
+                    namespace=kafka_namespace, value=value, since_time=since_time
+                )
+                return amq, threads
+            else:
+                amq.validate_messages_are_produced()
+                amq.validate_messages_are_consumed()
 
-        return amq, threads
+        return amq
 
     def finalizer():
         """
