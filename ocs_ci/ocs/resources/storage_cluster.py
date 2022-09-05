@@ -959,6 +959,7 @@ def add_capacity_lso():
     )
     from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 
+    osd_numbers = get_osd_count()
     node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     deviceset_count = get_deviceset_count()
     if is_flexible_scaling_enabled():
@@ -979,6 +980,14 @@ def add_capacity_lso():
             set_deviceset_count(deviceset_count + 1)
     else:
         set_deviceset_count(deviceset_count + 1)
+
+    pod_obj = OCP(kind=constants.POD, namespace=constants.ROOK_CLUSTER_NAMESPACE)
+    pod_obj.wait_for_resource(
+        timeout=600,
+        condition=constants.STATUS_RUNNING,
+        selector=constants.OSD_APP_LABEL,
+        resource_count=osd_numbers + num_available_pv,
+    )
 
     # Verify OSDs are encrypted
     if config.ENV_DATA.get("encryption_at_rest"):
