@@ -8,7 +8,6 @@ from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
