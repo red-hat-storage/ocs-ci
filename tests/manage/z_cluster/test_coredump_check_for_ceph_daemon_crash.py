@@ -5,6 +5,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os
 from ocs_ci.framework.testlib import (
@@ -100,7 +101,10 @@ class TestKillCephDaemon(ManageTest):
             "Delete the contents of 'posted' directory "
             "`/var/lib/rook/openshift-storage/crash/posted/`"
         )
-        cmd_bash = f"oc debug nodes/{node_name} -- chroot /host /bin/bash -c "
+        cmd_bash = (
+            f"oc debug nodes/{node_name} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            "-- chroot /host /bin/bash -c "
+        )
         cmd_delete_files = '"rm -rf /var/lib/rook/openshift-storage/crash/posted/*"'
         cmd = cmd_bash + cmd_delete_files
         run_cmd(cmd=cmd)
@@ -108,7 +112,11 @@ class TestKillCephDaemon(ManageTest):
         for daemon_type in daemon_types:
             log.info(f"find ceph-{daemon_type} process-id")
             cmd_pid = f"pidof ceph-{daemon_type}"
-            cmd_gen = "oc debug node/" + node_name + " -- chroot /host "
+            cmd_gen = (
+                "oc debug node/"
+                + node_name
+                + f" --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host "
+            )
             cmd = cmd_gen + cmd_pid
             out = run_cmd(cmd=cmd)
             pids = out.strip().split()
