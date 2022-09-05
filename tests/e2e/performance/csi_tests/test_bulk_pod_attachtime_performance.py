@@ -92,16 +92,16 @@ class TestBulkPodAttachPerformance(PASTest):
         argnames=["interface_type", "bulk_size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 4],
+                *[constants.CEPHBLOCKPOOL, 120],
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 8],
+                *[constants.CEPHBLOCKPOOL, 240],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 4],
+                *[constants.CEPHFILESYSTEM, 120],
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 8],
+                *[constants.CEPHFILESYSTEM, 240],
             ),
         ],
     )
