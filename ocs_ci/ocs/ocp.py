@@ -200,7 +200,10 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        debug_cmd = f'debug nodes/{node} -- chroot /host /bin/bash -c "{cmd}"'
+        debug_cmd = (
+            f"debug nodes/{node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f' -- chroot /host /bin/bash -c "{cmd}"'
+        )
         out = str(
             self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
         )

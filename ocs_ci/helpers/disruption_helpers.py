@@ -164,7 +164,8 @@ class Disruptions:
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name}"
+            f" --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -205,7 +206,8 @@ class Disruptions:
 
         # Command to kill the daemon
         kill_cmd = (
-            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host  "
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
+            f"--to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -233,7 +235,8 @@ class Disruptions:
         )
         awk_print = "'{print $1}'"
         pid_cmd = (
-            f"oc {self.kubeconfig_parameter()}debug node/{node_name} -- chroot /host ps ax | grep"
+            f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
+            f"--to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         try:

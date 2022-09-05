@@ -493,7 +493,10 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         log.info(f"Killing daemons of {daemons_to_kill}")
         for node_name, pids in nodes_and_pids.items():
             # Command to kill the daemon
-            kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
+            kill_cmd = (
+                f"oc debug node/{node_name} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+                f"-- chroot /host kill -9 {pids}"
+            )
             # Create node-kill process map for verifying the result
             node_and_kill_proc[node_name] = executor.submit(run_cmd, kill_cmd)
 
