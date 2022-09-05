@@ -87,15 +87,18 @@ class PlatformNodesFactory:
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
+            "vsphere_upi": VMWareUPINodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
+            deployment_type = config.ENV_DATA["deployment_type"]
             if cluster.is_lso_cluster():
                 platform += "_lso"
-            elif config.ENV_DATA["deployment_type"] == "ipi":
-                platform += "_ipi"
+            elif deployment_type in ("ipi", "upi"):
+                platform += f"_{deployment_type}"
+
         return self.cls_map[platform]()
 
 
@@ -1805,6 +1808,31 @@ class VSPHEREUPINode(VMWareNodes):
             for node_count in range(1, count + 1)
         ]
 
+    def change_terraform_statefile_after_remove_vm(self, vm_name):
+        """
+        Remove the records from the state file, so that terraform will no longer be tracking the
+        corresponding remote objects of the vSphere VM object we removed.
+
+        Args:
+            vm_name (str): The VM name
+
+        """
+        if vm_name.startswith("compute-"):
+            module = "compute_vm"
+        else:
+            module = "control_plane_vm"
+        instance = f"{vm_name}.{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+
+        os.chdir(self.terraform_data_dir)
+        logger.info(f"Modifying terraform state file of the removed vm {vm_name}")
+        self.terraform.change_statefile(
+            module=module,
+            resource_type="vsphere_virtual_machine",
+            resource_name="vm",
+            instance=instance,
+        )
+        os.chdir(self.previous_dir)
+
 
 class BaremetalNodes(NodesBase):
     """
@@ -2712,3 +2740,42 @@ class VMWareIPINodes(VMWareNodes):
             logger.warning("Didn't find all the VM objects for all the nodes")
 
         return vms
+
+
+class VMWareUPINodes(VMWareNodes):
+    """
+    VMWare UPI nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs.
+        The VMs will be deleted only from the inventory and not from the disk.
+        After deleting the VMs, it will also modify terraform state file of the removed VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        # Save the names of the VMs before removing them
+        vms = self.get_vms(nodes)
+        vm_names = [vm.name for vm in vms]
+
+        super().terminate_nodes(nodes, wait)
+
+        if config.ENV_DATA.get("rhel_user"):
+            node_type = constants.RHEL_OS
+        else:
+            node_type = constants.RHCOS
+        node_cls_obj = VSPHEREUPINode(
+            node_conf={}, node_type=node_type, compute_count=0
+        )
+        logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
+        for vm_name in vm_names:
+            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
