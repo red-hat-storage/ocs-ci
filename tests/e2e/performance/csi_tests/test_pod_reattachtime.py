@@ -65,8 +65,8 @@ class TestPodReattachTimePerformance(PASTest):
         self.delete_test_project()
 
         # Delete the Storage Pool
-        logger.info(f"Try to delete the Storage pool {self.pool_name}")
         try:
+            logger.info(f"Try to delete the Storage pool {self.pool_name}")
             self.delete_ceph_pool(self.pool_name)
         except Exception:
             pass
