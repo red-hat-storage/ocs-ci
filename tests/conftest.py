@@ -4838,7 +4838,6 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
                 backend_path=backend_path,
-                vault_namespace=vault_namespace,
                 reclaim_policy=reclaim_policy,
                 provisioner=provisioner,
                 vol_binding_mode=vol_binding_mode,

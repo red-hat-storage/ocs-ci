@@ -88,7 +88,6 @@ class TestPVEncryption(ManageTest):
         # Delete the resources in vault
         self.vault.remove_vault_backend_path()
         self.vault.remove_vault_policy()
-        # self.vault.remove_vault_namespace()
 
     @tier1
     @skipif_ocs_version("<4.8")
