@@ -20,13 +20,6 @@ log = logging.getLogger(__name__)
                 pytest.mark.bugzilla("1772990"),
             ],
         ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-1179"),
-                pytest.mark.bugzilla("1772990"),
-            ],
-        ),
     ],
 )
 class TestRwoUsingMultiplePods(ManageTest):

@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -13,6 +14,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers import helpers
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,7 @@ class TestDynamicPvc(ManageTest):
         RWO Dynamic PVC creation tests with Reclaim policy set to Retain/Delete
 
         """
+        ocs_version = config.ENV_DATA["ocs_version"]
         access_mode = constants.ACCESS_MODE_RWO
         expected_failure_str = "Multi-Attach error for volume"
         storage_type = "fs"
@@ -174,23 +177,27 @@ class TestDynamicPvc(ManageTest):
         pod.get_fio_rw_iops(pod_obj1)
         md5sum_pod1_data = pod.cal_md5sum(pod_obj=pod_obj1, file_name=file_name)
 
-        # Verify that second pod is still in ContainerCreating state and not
-        # able to attain Running state due to expected failure
-        logger.info(
-            f"Verify that second pod {pod_obj2.name} is still in ContainerCreating state"
-        )
-        helpers.wait_for_resource_state(
-            resource=pod_obj2, state=constants.STATUS_CONTAINER_CREATING
-        )
-        self.verify_expected_failure_event(
-            ocs_obj=pod_obj2, failure_str=expected_failure_str
-        )
+        # If ODF < 4.12 verify that second pod is still in ContainerCreating state
+        #  and not able to attain Running state due to expected failure
+        if (
+            Version.coerce(ocs_version) < Version.coerce("4.12")
+            or interface_type == constants.CEPHBLOCKPOOL
+        ):
+            logger.info(
+                f"Verify that second pod {pod_obj2.name} is still in ContainerCreating state"
+            )
+            helpers.wait_for_resource_state(
+                resource=pod_obj2, state=constants.STATUS_CONTAINER_CREATING
+            )
+            self.verify_expected_failure_event(
+                ocs_obj=pod_obj2, failure_str=expected_failure_str
+            )
 
-        logger.info(
-            f"Deleting first pod so that second pod can attach PVC {pvc_obj.name}"
-        )
-        pod_obj1.delete()
-        pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
+            logger.info(
+                f"Deleting first pod so that second pod can attach PVC {pvc_obj.name}"
+            )
+            pod_obj1.delete()
+            pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
 
         # Wait for second pod to be in Running state
         helpers.wait_for_resource_state(
