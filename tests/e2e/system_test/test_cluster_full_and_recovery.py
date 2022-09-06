@@ -44,6 +44,7 @@ class TestClusterFullAndRecovery(E2ETest):
         snapshot_factory,
         pvc_factory,
         pod_factory,
+        project_factory,
     ):
         """
         1.Create PVC1 [FS + RBD]
@@ -69,9 +70,7 @@ class TestClusterFullAndRecovery(E2ETest):
 
         """
         self.benchmark_operator_teardown = False
-        project_name = "test850"
-        self.project_obj = helpers.create_project(project_name=project_name)
-        teardown_project_factory(self.project_obj)
+        self.project_obj = project_factory(project_name="system-test-full1")
 
         log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
         pvc_obj_rbd1 = pvc_factory(
@@ -138,10 +137,8 @@ class TestClusterFullAndRecovery(E2ETest):
         sample = TimeoutSampler(
             timeout=2500,
             sleep=40,
-            func=self.verify_used_capacity_greater_than_expected,
+            func=self.verify_osd_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
-            pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
         )
         if not sample.wait_for_func_status(result=True):
             log.error("The after 1800 seconds the used capacity smaller than 85%")
