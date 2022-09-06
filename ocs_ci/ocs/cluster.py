@@ -2121,7 +2121,7 @@ def is_ms_provider_cluster():
 
 def get_osd_dump(pool_name):
     """
-    Get the osd dump part of a give pool
+    Get the osd dump part of a given pool
 
     Args:
     pool_name (str): ceph pool name
@@ -2130,8 +2130,7 @@ def get_osd_dump(pool_name):
         pool (dict): pool information from osd dump
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
+    osd_dump_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph osd dump")
     for pool in osd_dump_dict["pools"]:
         if pool["pool_name"] == pool_name:
             return pool
@@ -2160,8 +2159,7 @@ def get_pgs_brief_dump():
         pgs_brief_dict (dict): pgs_brief dump output
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    pgs_brief_dict = ct_pod.exec_ceph_cmd("ceph pg dump pgs_brief")
+    pgs_brief_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph pg dump pgs_brief")
 
     return pgs_brief_dict
 
