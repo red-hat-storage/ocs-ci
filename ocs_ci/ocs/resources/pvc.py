@@ -429,8 +429,8 @@ def create_pvc_snapshot(
     """
     ocp_version = version.get_semantic_ocp_version_from_config()
     snapshot_data = templating.load_yaml(snap_yaml)
-    if ocp_version >= version.VERSION_4_11:
-        snapshot_data["apiVersion"] = "snapshot.storage.k8s.io/v1"
+    if ocp_version < version.VERSION_4_9:
+        snapshot_data["apiVersion"] = "snapshot.storage.k8s.io/v1beta1"
     snapshot_data["metadata"]["name"] = snap_name
     snapshot_data["metadata"]["namespace"] = namespace
     if sc_name:
