@@ -82,7 +82,6 @@ class Longevity(object):
         Initializer function
         """
         lcl = locals()
-        self.ceph_obj = CephCluster()
         self.tmp_path = pathlib.Path(ocsci_log_path())
         self.cluster_sanity_check_dir = os.path.join(
             self.tmp_path,
@@ -619,7 +618,7 @@ class Longevity(object):
         if cluster_health:
             # Cluster health
             log.info("Checking the overall health of the cluster")
-            self.ceph_obj.cluster_health_check()
+            CephCluster().cluster_health_check()
             log.info("Checking storage pods status")
             # Validate storage pods are running
             wait_for_pods_to_be_running(timeout=600)
