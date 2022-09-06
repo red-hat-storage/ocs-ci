@@ -74,6 +74,7 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-4637")
     def test_rolling_shutdown_and_recovery_in_controlled_fashion(self, nodes):
         """
         Test rolling shutdown and recovery of the OCS worker nodes, when waiting for the pods to
