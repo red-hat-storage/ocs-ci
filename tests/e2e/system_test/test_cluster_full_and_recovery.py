@@ -60,17 +60,17 @@ class TestClusterFullAndRecovery(E2ETest):
         11.Verify snapshots on false state
         12.Change Ceph full_ratiofrom from 85% to 95%
         13.Delete  benchmark-operator PVCs
-        14.Change Ceph backfillfull_ratio from 80% to 95%
-        15.Verify PVC2 [FS + RBD]  are moved to Bound state
-        16.Verify snapshots moved from false state to true state
-        17.Restore new pvc from snapshot pvc [RBD + FS]
-        18.Verify checksum PVC1 equal to PVC1_RESTORE
-        19.Change Ceph full_ratiofrom from 95% to 85%
-        20.Change Ceph backfillfull_ratio from 95% to 80%
+        14.Verify PVC2 [FS + RBD]  are moved to Bound state
+        15.Verify snapshots moved from false state to true state
+        16.Restore new pvc from snapshot pvc [RBD + FS]
+        17.Verify checksum PVC1 equal to PVC1_RESTORE
+        18.Change Ceph full_ratiofrom from 95% to 85%
 
         """
         self.benchmark_operator_teardown = False
-        self.project_obj = project_factory(project_name="system-test-full1")
+        project_name = "system-test-fullcluster"
+        self.project_obj = helpers.create_project(project_name=project_name)
+        teardown_project_factory(self.project_obj)
 
         log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
         pvc_obj_rbd1 = pvc_factory(
