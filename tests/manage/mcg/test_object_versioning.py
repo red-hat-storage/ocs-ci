@@ -5,7 +5,11 @@ import threading
 
 from uuid import uuid4
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    tier2,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.bucket_utils import (
     s3_put_bucket_versioning,
     s3_put_object,
@@ -36,6 +40,7 @@ class TestObjectVersioning:
 
     @tier2
     @bugzilla("2111544")
+    @skipif_ocs_version("<4.10")
     @pytest.mark.parametrize(
         argnames=["versioned"],
         argvalues=[
