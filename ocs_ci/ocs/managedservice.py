@@ -327,3 +327,21 @@ def check_and_change_current_index_to_default_index():
         change_current_index_to_default_index()
 
     return is_equal
+
+
+def get_managedocs_component_state(component):
+    """
+    Get the state of the given managedocs component:
+    alertmanager, prometheus or storageCluster.
+
+    Args:
+        component (str): the component of managedocs resource
+    Returns:
+        str: the state of the component
+    """
+    managedocs_obj = ocp.OCP(
+        kind="managedocs",
+        resource_name="managedocs",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    return managedocs_obj.get()["status"]["components"][component]["state"]
