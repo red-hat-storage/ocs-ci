@@ -20,7 +20,6 @@ def warps3(request):
 
     warps3 = warp.Warp()
     warps3.create_resource_warp()
-    warps3.install_warp()
 
     def teardown():
         warps3.cleanup()

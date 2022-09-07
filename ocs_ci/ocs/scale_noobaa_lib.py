@@ -2,7 +2,6 @@ import logging
 import time
 import re
 import datetime
-import os
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
@@ -14,8 +13,6 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.ocs.ocp import OCP
-import tempfile
-from ocs_ci.ocs.utils import collect_ocs_logs
 
 log = logging.getLogger(__name__)
 
@@ -417,30 +414,19 @@ def check_memory_leak_in_noobaa_endpoint_log():
         UnexpectedBehaviour: If memory leak error is existing in Noobaa endpoint logs.
 
     """
-
-    # Collect must gather logs
-    must_gather_logs = tempfile.mkdtemp()
-    collect_ocs_logs(dir_name=must_gather_logs, ocp=False)
-
-    # Verify if noobaa-enpoint logs contain memory leak
+    # Get noobaa pod logs
     mem_leak = False
-    mem_files = []
+    pod_list = []
     searchstring = "Possible EventEmitter memory leak detected"
-    log.info("Checking EventEmitter memory leak in must gather logs....")
-    for folder, dirs, files in os.walk(
-        # '/var/folders/ln/87z_5j8d6_1csh_r8v_d024w0000gn/T/tmp24d_fpg3_ocs_logs/ocs_must_gather'
-        f"{must_gather_logs}"
-    ):
-        for file in files:
-            if file.endswith(".log"):
-                fullpath = os.path.join(folder, file)
-                with open(fullpath, "r") as f:
-                    for line in f:
-                        if searchstring in line:
-                            log.info(f"File Log contains memory leak: {fullpath}")
-                            mem_files.append(fullpath)
-                            mem_leak = True
+    nb_pods = pod.get_noobaa_pods()
+    for p in nb_pods:
+        pod_logs = pod.get_pod_logs(pod_name=p.name)
+        for line in pod_logs:
+            if searchstring in line:
+                log.info(f"File Log contains memory leak: {p.name}")
+                pod_list.append(p.name)
+                mem_leak = True
     if mem_leak is True:
-        raise UnexpectedBehaviour(f"Log contains memory leak: {mem_files}")
+        raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
     else:
-        log.info("No memory leak is seen in Noobaa endpoint logs")
+        log.info(f"No memory leak is seen in Noobaa endpoint logs")

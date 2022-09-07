@@ -79,21 +79,6 @@ class Warp(object):
             deploy_pod_status=constants.STATUS_COMPLETED,
         )
 
-    def install_warp(self, timeout=1800):
-        """
-        Install minio warp S3 benchmark:
-        https://github.com/minio/warp
-
-        """
-        # Install warp
-        log.info(f"Installing warp S3 benchmark on testing pod {self.pod_obj.name}")
-        warp_path = "https://github.com/minio/warp/releases/download/v0.5.5/warp_0.5.5_Linux_x86_64.tar.gz"
-        self.pod_obj.exec_cmd_on_pod(f"wget {warp_path}", timeout=timeout)
-        self.pod_obj.exec_cmd_on_pod(
-            "tar -xzvf warp_0.5.5_Linux_x86_64.tar.gz", timeout=timeout
-        )
-        log.info("Successfully installing warp s3 benchmark")
-
     def run_benchmark(
         self,
         bucket_name=None,
