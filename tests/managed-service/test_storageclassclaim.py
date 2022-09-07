@@ -1,7 +1,12 @@
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1, polarion_id
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    polarion_id,
+    ms_consumer_required,
+)
 from ocs_ci.ocs.resources.storageclassclaim import create_storageclassclaim
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
 
@@ -10,6 +15,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @polarion_id("OCS-4628")
+@ms_consumer_required
 class TestStorageClassClaim(ManageTest):
     """
     Tests to verify storageclassclaim
