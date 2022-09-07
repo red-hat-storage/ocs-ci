@@ -236,11 +236,29 @@ class SanityManagedService(Sanity):
         self.max_pvc_size = max_pvc_size
 
         if consumer_indexes:
+            logger.info(
+                f"The consumer indexes for creating resources passed to the method are: {consumer_indexes}"
+            )
             self.consumer_indexes = consumer_indexes
-        elif is_ms_consumer_cluster():
-            self.consumer_indexes = [config.cur_index]
         else:
-            self.consumer_indexes = config.get_consumer_indexes_list()
+            logger.info(
+                "The consumer indexes were not passed to the method. Checking the cluster type..."
+            )
+            if is_ms_consumer_cluster():
+                logger.info(
+                    "The cluster is a consumer cluster. We will create the resources only for this cluster"
+                )
+                self.consumer_indexes = [config.cur_index]
+            else:
+                logger.info(
+                    "The cluster is a provider cluster. We will create the resources for "
+                    "all the consumer clusters"
+                )
+                self.consumer_indexes = config.get_consumer_indexes_list()
+
+        logger.info(
+            f"The consumer indexes for creating resources are: {self.consumer_indexes}"
+        )
 
     def create_resources_on_ms_consumers(self):
         """
