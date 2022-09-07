@@ -6,7 +6,12 @@ from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.framework import config
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    VERSION_4_12,
+)
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_ocp_version,
@@ -76,6 +81,16 @@ class TestUpgradeOCP(ManageTest):
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
+            semantic_ocp_upgrade_version = get_semantic_version(
+                ocp_upgrade_version, only_major_minor=True
+            )
+            # This is W/A for BZ:
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2124593
+            if semantic_ocp_upgrade_version >= VERSION_4_12:
+                label_pod_security_admission(
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    upgrade_version=semantic_ocp_upgrade_version,
+                )
             if ocp_upgrade_version:
                 target_image = ocp_upgrade_version
             if not ocp_upgrade_version:
