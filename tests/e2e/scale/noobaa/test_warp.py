@@ -2,7 +2,10 @@ import logging
 import pytest
 from ocs_ci.ocs import warp
 from ocs_ci.utility import utils
-from ocs_ci.ocs.scale_noobaa_lib import get_noobaa_pods_status
+from ocs_ci.ocs.scale_noobaa_lib import (
+    get_noobaa_pods_status,
+    check_memory_leak_in_noobaa_endpoint_log,
+)
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
@@ -70,3 +73,6 @@ class TestWarp(E2ETest):
 
         # Check noobaa pods status after running Warp benchmark
         get_noobaa_pods_status()
+
+        # Check noobaa endpoint logs
+        check_memory_leak_in_noobaa_endpoint_log()

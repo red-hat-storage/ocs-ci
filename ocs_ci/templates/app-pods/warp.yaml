@@ -20,7 +20,7 @@ spec:
           claimName: warp-s3
       containers:
       - name: warp
-        image: quay.io/tiffanyn108/warp:latest
+        image: quay.io/ocsci/warp:latest
         resources:
           limits:
             memory: "2048Mi"

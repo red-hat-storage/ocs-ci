@@ -2,18 +2,20 @@ import logging
 import time
 import re
 import datetime
+import os
 
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.utils import oc_get_all_obc_names
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.ocs.ocp import OCP
+import tempfile
+from ocs_ci.ocs.utils import collect_ocs_logs
 
 log = logging.getLogger(__name__)
 
@@ -400,9 +402,45 @@ def get_noobaa_pods_status():
     for nb_pod in pod_items:
         status = ocp_pod.get_resource_status(nb_pod.get("metadata").get("name"))
         if status == constants.STATUS_RUNNING:
-            log.info("Noobaa pod in running state")
+            log.info("Noobaa pod in running state...")
         else:
             log.error(f"Noobaa pod is in {status}, expected in Running state")
             ret_val = False
     return ret_val
 
+
+def check_memory_leak_in_noobaa_endpoint_log():
+    """
+    Check memory leak log in Noobaa endpoint logs.
+
+    Raises:
+        UnexpectedBehaviour: If memory leak error is existing in Noobaa endpoint logs.
+
+    """
+
+    # Collect must gather logs
+    must_gather_logs = tempfile.mkdtemp()
+    collect_ocs_logs(dir_name=must_gather_logs, ocp=False)
+
+    # Verify if noobaa-enpoint logs contain memory leak
+    mem_leak = False
+    mem_files = []
+    searchstring = "Possible EventEmitter memory leak detected"
+    log.info("Checking EventEmitter memory leak in must gather logs....")
+    for folder, dirs, files in os.walk(
+        # '/var/folders/ln/87z_5j8d6_1csh_r8v_d024w0000gn/T/tmp24d_fpg3_ocs_logs/ocs_must_gather'
+        f"{must_gather_logs}"
+    ):
+        for file in files:
+            if file.endswith(".log"):
+                fullpath = os.path.join(folder, file)
+                with open(fullpath, "r") as f:
+                    for line in f:
+                        if searchstring in line:
+                            log.info(f"File Log contains memory leak: {fullpath}")
+                            mem_files.append(fullpath)
+                            mem_leak = True
+    if mem_leak is True:
+        raise UnexpectedBehaviour(f"Log contains memory leak: {mem_files}")
+    else:
+        log.info("No memory leak is seen in Noobaa endpoint logs")

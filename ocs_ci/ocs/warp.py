@@ -15,7 +15,10 @@ log = logging.getLogger(__name__)
 
 class Warp(object):
     """
-    Warp S3 benchmark
+    Warp - S3 benchmarking tool: https://github.com/minio/warp
+    WARP is an open-source full-featured S3 performance assessment software
+    built to conduct tests between WARP clients and object storage hosts.
+    WARP measures GET and PUT performance from multiple clients against a MinIO cluster.
 
     """
 
