@@ -2297,7 +2297,12 @@ def get_pods_in_statuses(status_options, namespace=defaults.ROOK_CLUSTER_NAMESPA
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods_in_status_options = list()
     for p in pods:
-        pod_status = ocp_pod_obj.get_resource_status(p.name)
+        try:
+            pod_status = ocp_pod_obj.get_resource_status(p.name)
+        except CommandFailed as e:
+            logger.info(f"Can't get the pod status due to the error: {str(e)}")
+            pod_status = ""
+
         if pod_status in status_options:
             pods_in_status_options.append(p)
 
