@@ -162,7 +162,7 @@ class TestDynamicPvc(ManageTest):
         pod_obj2 = pod_factory(
             interface=interface_type,
             pvc=pvc_obj,
-            status=constants.STATUS_CONTAINER_CREATING,
+            status=None,
             node_name=worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML,
         )
