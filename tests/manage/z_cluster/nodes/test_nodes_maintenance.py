@@ -468,7 +468,6 @@ class TestNodesMaintenance(ManageTest):
         assert (
             not validate_existence_of_blocking_pdb()
         ), "Blocking PDBs exist, Can't perform drain"
-
         # Get 2 worker nodes to drain
         typed_nodes = get_nodes(num_of_nodes=2)
         assert len(typed_nodes) == 2, "Failed to find worker nodes for the test"
@@ -477,10 +476,15 @@ class TestNodesMaintenance(ManageTest):
 
         # Drain Node A and validate blocking PDBs
         drain_nodes([node_A])
-        assert (
-            validate_existence_of_blocking_pdb()
-        ), "Blocking PDBs not created post drain"
-
+        pdb_sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=validate_existence_of_blocking_pdb,
+        )
+        if not pdb_sample:
+            log.error("Failed to create PDBs post node A drain")
+        else:
+            log.info("PDBs are created post node A drain")
         # Inducing delay between 2 drains
         # Node-B drain expected to be in pending due to blocking PDBs
         time.sleep(30)
