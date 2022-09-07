@@ -52,7 +52,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 
 
 log = logging.getLogger(__name__)
@@ -1231,15 +1231,16 @@ def verify_managed_service_resources():
 
     # Verify managedocs components are Ready
     log.info("Getting managedocs components data")
-    managedocs_obj = OCP(
-        kind="managedocs",
-        resource_name="managedocs",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-    for component in {"alertmanager", "prometheus", "storageCluster"}:
-        assert (
-            managedocs_obj.get()["status"]["components"][component]["state"] == "Ready"
-        ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+    for component_name in {"alertmanager", "prometheus", "storageCluster"}:
+        for state in TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=managedservice.get_managedocs_component_state,
+            component=component_name,
+        ):
+            log.info(f"State of {component_name} is {state}")
+            if state == constants.STATUS_READY:
+                break
 
     # Verify that noobaa-operator replicas is set to 0
     noobaa_deployment = deployment.get_deployments_having_label(
