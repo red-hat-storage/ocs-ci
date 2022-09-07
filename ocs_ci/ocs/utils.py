@@ -1314,17 +1314,20 @@ def thread_init_class(class_init_operations, shutdown):
             return
 
 
-def label_pod_security_admission(namespace=None):
+def label_pod_security_admission(namespace=None, upgrade_version=None):
     """
     Label PodSecurity admission
 
     Args:
         namespace (str): Namespace name
-
+        upgrade_version (semantic_version.Version): ODF semantic version for upgrade
+            if it's an upgrade run, otherwise None.
     """
     namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
     log.info(f"Labelling namespace {namespace} for PodSecurity admission")
-    if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
+    if version.get_semantic_ocp_running_version() >= version.VERSION_4_12 or (
+        upgrade_version and upgrade_version >= version.VERSION_4_12
+    ):
         ocp_obj = OCP(kind="namespace")
         label = (
             "security.openshift.io/scc.podSecurityLabelSync=false "
