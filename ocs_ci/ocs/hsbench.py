@@ -39,7 +39,7 @@ class HsBench(object):
         self.end_point = self.hsbench_cr["end_point"]
         self.hsbench_bin_dir = self.hsbench_cr["hsbench_bin_dir"]
         self.result = self.hsbench_cr["output_file"]
-        self.warp_dir = mkdtemp(prefix="hsbench-")
+        self.hsbench_dir = mkdtemp(prefix="hsbench-")
 
     def create_resource_hsbench(self):
         """
@@ -182,18 +182,18 @@ class HsBench(object):
             UnexpectedBehaviour: if result.csv file doesn't contain output data.
 
         """
-        cmd = f"cp {self.pod_obj.name}:/go/{result} " f"{self.warp_dir}/{result}"
+        cmd = f"cp {self.pod_obj.name}:/go/{result} " f"{self.hsbench_dir}/{result}"
         self.ocp_obj.exec_oc_cmd(
             command=cmd,
             out_yaml_format=False,
             timeout=180,
         )
-        if os.path.getsize(f"{self.warp_dir}/{result}") != 0:
+        if os.path.getsize(f"{self.hsbench_dir}/{result}") != 0:
             log.info("Workload was running...")
         else:
             raise UnexpectedBehaviour(
                 f"Output file {result} is empty, "
-                "Warp workload doesn't run as expected..."
+                "Hsbench workload doesn't run as expected..."
             )
 
     def validate_s3_objects(self, upgrade=None):
@@ -207,7 +207,6 @@ class HsBench(object):
             UnexpectedBehaviour: If objects pre-upgrade and post-upgrade are not identical.
 
         """
-        # self.upgrade_stat = upgrade_stat if upgrade_stat else self.upgrade_stat
         for i in range(self.num_bucket):
             bucket_name = self.bucket_prefix + "00000000000" + str(i)
             num_objects = self.toolbox.exec_sh_cmd_on_pod(
@@ -223,7 +222,7 @@ class HsBench(object):
                 f"Expecting {self.num_obj} but getting {num_objects}"
             )
             # Save objects to a file for validation
-            file_path = f"{self.warp_dir}/obj_{upgrade}_{bucket_name}"
+            file_path = f"{self.hsbench_dir}/obj_{upgrade}_{bucket_name}"
             object_list = self.toolbox.exec_sh_cmd_on_pod(
                 f"radosgw-admin bi list --bucket={bucket_name}"
             )
@@ -233,13 +232,13 @@ class HsBench(object):
         # Validate objects in buckets for post upgrade
         if upgrade == "post_upgrade" and bucket_name != "new000000000000":
             for i in range(self.num_bucket):
-                if os.path.exists(f"{self.warp_dir}/obj_{upgrade}_{bucket_name}"):
+                if os.path.exists(f"{self.hsbench_dir}/obj_{upgrade}_{bucket_name}"):
                     log.info(
                         f"Verifying objects in bucket {bucket_name} for post-upgrade..."
                     )
                     if filecmp.cmp(
-                        f"{self.warp_dir}/obj_pre_upgrade_{bucket_name}",
-                        f"{self.warp_dir}/obj_{upgrade}_{bucket_name}",
+                        f"{self.hsbench_dir}/obj_pre_upgrade_{bucket_name}",
+                        f"{self.hsbench_dir}/obj_{upgrade}_{bucket_name}",
                     ):
                         log.info("Objects pre-upgrade and post-upgrade are identical.")
                     else:
@@ -264,15 +263,15 @@ class HsBench(object):
 
         """
         eval_data = {}
-        with open(f"{self.warp_dir}/{result}", "r") as file, open(
-            f"{self.warp_dir}/summary.csv", "w"
+        with open(f"{self.hsbench_dir}/{result}", "r") as file, open(
+            f"{self.hsbench_dir}/summary.csv", "w"
         ) as out:
             writer = csv.writer(out)
             for row in csv.reader(file):
                 if row[1] == "TOTAL":
                     writer.writerow(row)
 
-        with open(f"{self.warp_dir}/summary.csv", "r") as read_obj:
+        with open(f"{self.hsbench_dir}/summary.csv", "r") as read_obj:
             reader = csv.reader(read_obj)
             for row in reader:
                 eval_data[row[3]] = row[4]
