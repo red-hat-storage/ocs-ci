@@ -8,6 +8,7 @@ spec:
   containers:
    - name: performance
      image: quay.io/ocsci/perf:latest
+     imagePullPolicy: IfNotPresent
      command: ['/bin/sh']
      stdin: true
      tty: true

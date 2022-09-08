@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier3,
     skipif_ocs_version,
     skipif_ocp_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc, ocs
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 
 @tier3
+@skipif_managed_service
 @bugzilla("1902711")
 @skipif_ocs_version("<4.7")
 @skipif_ocp_version("<4.7")

@@ -52,18 +52,18 @@ class TestOSDHeapProfile(ManageTest):
         out = pod_tool.exec_cmd_on_pod(
             command=f"ceph tell osd.{osd_id} heap start_profiler", out_yaml_format=False
         )
-        logging.info(f"command output:{out}")
+        log.info(f"command output:{out}")
         for string_err in strings_err:
             assert (
                 string_err not in out.lower()
             ), f"{string_err} on the output command {out}"
 
-        logging.info("Sleep 10 sec, for running heap profiler")
+        log.info("Sleep 10 sec, for running heap profiler")
         time.sleep(10)
 
         log.info("Dump heap profile")
         out = pod_tool.exec_sh_cmd_on_pod(command=f"ceph tell osd.{osd_id} heap dump")
-        logging.info(out)
+        log.info(out)
         for string_err in strings_err:
             assert (
                 string_err not in out.lower()

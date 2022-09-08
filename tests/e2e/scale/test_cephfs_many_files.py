@@ -31,7 +31,7 @@ def add_million_files(pod_name, ocp_obj):
     Returns:
         list: list of ten of the files created.
     """
-    logging.info(f"Creating {TFILES} files on Cephfs")
+    log.info(f"Creating {TFILES} files on Cephfs")
     onetenth = TFILES / 10
     endoften = onetenth - 1
     ntar_loc = mkdtemp()
@@ -45,7 +45,7 @@ def add_million_files(pod_name, ocp_obj):
             tmpfile.write(SAMPLE_TEXT)
         if i % onetenth == endoften:
             dispv = i + 1
-            logging.info(f"{dispv} local files created")
+            log.info(f"{dispv} local files created")
             test_file_list.append(fname.split(os.sep)[-1])
     tmploc = ntar_loc.split("/")[-1]
     run_cmd(f"tar cfz {tarfile} -C {new_dir} .", timeout=1800)
@@ -96,19 +96,19 @@ class MillionFilesOnCephfs(object):
         helpers.wait_for_resource_state(
             self.cephfs_pod, constants.STATUS_RUNNING, timeout=300
         )
-        logging.info("pvc and cephfs pod created")
+        log.info("pvc and cephfs pod created")
         self.ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         self.test_file_list = add_million_files(self.pod_name, self.ocp_obj)
-        logging.info("cephfs test files created")
+        log.info("cephfs test files created")
 
     def cleanup(self):
         self.cephfs_pod.delete()
         self.cephfs_pvc.delete()
-        logging.info("Teardown complete")
+        log.info("Teardown complete")
 
 
 @pytest.fixture(scope="class")
@@ -156,7 +156,7 @@ class TestMillionCephfsFiles(E2ETest):
             resource_to_delete (str): resource deleted for each testcase
 
         """
-        logging.info(f"Testing respin of {resource_to_delete}")
+        log.info(f"Testing respin of {resource_to_delete}")
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
         disruption.delete_resource()
@@ -171,4 +171,4 @@ class TestMillionCephfsFiles(E2ETest):
             ocp_obj.exec_oc_cmd(
                 f"exec {million_file_cephfs.pod_name} -- mv {fullnew} {sample}"
             )
-        logging.info("Tests complete")
+        log.info("Tests complete")

@@ -24,6 +24,7 @@ from ocs_ci.ocs.constants import (
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
     MANAGED_SERVICE_PLATFORMS,
+    HPCS_KMS_PROVIDER,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -70,6 +71,7 @@ scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+acm_import = pytest.mark.acm_import
 
 tier_marks = [
     tier1,
@@ -135,6 +137,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
         "AWS credentials weren't found in the local auth.yaml "
         "and couldn't be fetched from the cloud"
     ),
+)
+
+skipif_mcg_only = pytest.mark.skipif(
+    config.ENV_DATA["mcg_only_deployment"],
+    reason="This test cannot run on MCG-Only deployments",
 )
 
 google_api_required = pytest.mark.skipif(
@@ -206,9 +213,38 @@ managed_service_required = pytest.mark.skipif(
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
+ms_provider_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in MANAGED_SERVICE_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider"
+    ),
+    reason="Test runs ONLY on managed service provider cluster",
+)
+
+ms_consumer_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in MANAGED_SERVICE_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "consumer"
+    ),
+    reason="Test runs ONLY on managed service consumer cluster",
+)
+
 kms_config_required = pytest.mark.skipif(
-    load_auth_config().get("vault", {}).get("VAULT_ADDR") is None,
-    reason="Vault config not found in auth.yaml",
+    (
+        config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
+        and load_auth_config().get("vault", {}).get("VAULT_ADDR") is None
+    )
+    or (
+        not (
+            config.ENV_DATA["KMS_PROVIDER"].lower() == HPCS_KMS_PROVIDER
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_10
+            and load_auth_config().get("hpcs", {}).get("IBM_KP_SERVICE_INSTANCE_ID")
+            is not None,
+        )
+    ),
+    reason="KMS config not found in auth.yaml",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
@@ -239,6 +275,18 @@ skipif_openshift_dedicated = pytest.mark.skipif(
     reason="Test will not run on Openshift dedicated cluster",
 )
 
+skipif_ms_provider = pytest.mark.skipif(
+    config.default_cluster_ctx.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider",
+    reason="Test will not run on Managed service provider cluster",
+)
+
+skipif_ms_consumer = pytest.mark.skipif(
+    config.default_cluster_ctx.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "consumer",
+    reason="Test will not run on Managed service consumer cluster",
+)
+
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
     reason="Test will not run on ROSA cluster",
@@ -256,6 +304,11 @@ skipif_ibm_power = pytest.mark.skipif(
 skipif_disconnected_cluster = pytest.mark.skipif(
     config.DEPLOYMENT.get("disconnected") is True,
     reason="Test will not run on disconnected clusters",
+)
+
+skipif_proxy_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("proxy") is True,
+    reason="Test will not run on proxy clusters",
 )
 
 skipif_external_mode = pytest.mark.skipif(
@@ -328,7 +381,7 @@ skipif_ui_not_support = pytest.mark.skipif_ui_not_support
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
-
+skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
@@ -339,6 +392,7 @@ skipif_ibm_flash = pytest.mark.skipif(
 )
 
 # Squad marks
+aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
 blue_squad = pytest.mark.blue_squad
 brown_squad = pytest.mark.brown_squad
@@ -348,3 +402,6 @@ magenta_squad = pytest.mark.magenta_squad
 orange_squad = pytest.mark.orange_squad
 purple_squad = pytest.mark.purple_squad
 red_squad = pytest.mark.red_squad
+
+# Marks to identify the cluster type in which the test case should run
+runs_on_provider = pytest.mark.runs_on_provider

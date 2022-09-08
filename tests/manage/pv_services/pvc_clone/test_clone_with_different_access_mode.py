@@ -154,9 +154,9 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         # Verify md5sum
         for pod_obj in clone_pod_objs:
             file_name_pod = (
-                file_name
-                if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM)
-                else pod_obj.get_storage_path(storage_type="block")
+                pod_obj.get_storage_path(storage_type="block")
+                if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK)
+                else file_name
             )
             pod.verify_data_integrity(
                 pod_obj,

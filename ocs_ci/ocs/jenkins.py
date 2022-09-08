@@ -25,6 +25,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.ocs.node import get_nodes, get_app_pod_running_nodes, get_worker_nodes
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_pvc,
@@ -227,6 +228,8 @@ class Jenkins(object):
         sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             if storagecluster_independent_check()
+            and config.ENV_DATA["platform"].lower()
+            not in constants.MANAGED_SERVICE_PLATFORMS
             else constants.DEFAULT_STORAGECLASS_RBD
         )
         for project in self.projects:
@@ -338,7 +341,8 @@ class Jenkins(object):
             ].append(
                 {
                     "name": "INSTALL_PLUGINS",
-                    "value": "pipeline-utility-steps:2.9.0,script-security:1.78,workflow-step-api:2.24",
+                    "value": "scm-api:2.6.5,pipeline-utility-steps:2.12.0,workflow-step-api:622."
+                    "vb_8e7c15b_c95a_,workflow-cps:2648.va9433432b33c,workflow-api:2.47",
                 }
             )
         ocs_jenkins_template_obj = OCS(**tmp_dict)

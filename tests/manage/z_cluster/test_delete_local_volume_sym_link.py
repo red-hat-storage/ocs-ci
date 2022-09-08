@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
-from ocs_ci.framework.testlib import E2ETest, tier4a
+from ocs_ci.framework.testlib import E2ETest, tier4b
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import skipif_no_lso
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -15,7 +15,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
-@tier4a
+@tier4b
 @skipif_no_lso
 @pytest.mark.polarion_id("OCS-2316")
 class TestDeleteLocalVolumeSymLink(E2ETest):

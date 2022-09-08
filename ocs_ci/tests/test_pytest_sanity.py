@@ -3,6 +3,8 @@
 import os
 import logging
 
+logger = logging.getLogger(name=__file__)
+
 
 def test_nontest_code_unexpected_in_tests_dir():
     """
@@ -22,7 +24,7 @@ def test_nontest_code_unexpected_in_tests_dir():
             if name.startswith("test_"):
                 continue
             # anything else in not valid, and should not be in tests directory
-            logging.error("file %s should not be present in tests dir", name)
+            logger.error("file %s should not be present in tests dir", name)
             invalid_files.append(os.path.join(root, name))
     # workaround for https://github.com/red-hat-storage/ocs-ci/issues/200
     invalid_files.remove("tests/fixtures.py")

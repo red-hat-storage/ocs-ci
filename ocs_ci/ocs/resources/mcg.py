@@ -27,20 +27,17 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
-from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
     calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
-    storagecluster_independent_check,
+    wait_for_resource_state,
 )
 import subprocess
 
@@ -80,7 +77,9 @@ class MCG:
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
-
+        wait_for_resource_state(
+            resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
         self.retrieve_noobaa_cli_binary()
 
         """
@@ -166,39 +165,6 @@ class MCG:
                 endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key,
-            )
-
-        if (
-            config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
-            or storagecluster_independent_check()
-        ):
-            if not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM and (
-                version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
-            ):
-                logger.info("Checking whether RGW pod is not present")
-                pods = pod.get_pods_having_label(
-                    label=constants.RGW_APP_LABEL, namespace=self.namespace
-                )
-                assert (
-                    not pods
-                ), "RGW pods should not exist in the current platform/cluster"
-
-        elif (
-            config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
-            and not config.ENV_DATA["mcg_only_deployment"]
-        ):
-            rgw_count = get_rgw_count(
-                config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
-            )
-            logger.info(
-                f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
-            )
-            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
-            assert rgw_pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=constants.RGW_APP_LABEL,
-                resource_count=rgw_count,
-                timeout=60,
             )
 
     def retrieve_nb_token(self):
@@ -365,6 +331,7 @@ class MCG:
             The server's response
 
         """
+        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
         payload = {
             "api": api,
             "method": method,
@@ -588,66 +555,6 @@ class MCG:
             },
         )
         logger.info(f"result from RPC call: {result}")
-        return target_bucket_name
-
-    def create_namespace_store(
-        self, nss_name, region, cld_mgr, cloud_uls_factory, platform
-    ):
-        """
-        Creates a new namespace store
-
-        Args:
-            nss_name (str): The name to be given to the new namespace store
-            region (str): The region name to be used
-            cld_mgr: A cloud manager instance
-            cloud_uls_factory: The cloud uls factory
-            platform (str): The platform resource name
-
-        Returns:
-            str: The name of the created target_bucket_name (cloud uls)
-        """
-        # Create the actual target bucket on AWS
-        uls_dict = cloud_uls_factory({platform: [(1, region)]})
-        target_bucket_name = list(uls_dict[platform])[0]
-
-        nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
-        nss_data["metadata"]["name"] = nss_name
-        nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-
-        NSS_MAPPING = {
-            constants.AWS_PLATFORM: {
-                "type": "aws-s3",
-                "awsS3": {
-                    "targetBucket": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "aws_client.secret.name")
-                    },
-                },
-            },
-            constants.AZURE_PLATFORM: {
-                "type": "azure-blob",
-                "azureBlob": {
-                    "targetBlobContainer": target_bucket_name,
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "azure_client.secret.name")
-                    },
-                },
-            },
-            constants.RGW_PLATFORM: {
-                "type": "s3-compatible",
-                "s3Compatible": {
-                    "targetBucket": target_bucket_name,
-                    "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
-                    "signatureVersion": "v2",
-                    "secret": {
-                        "name": get_attr_chain(cld_mgr, "rgw_client.secret.name")
-                    },
-                },
-            },
-        }
-
-        nss_data["spec"] = NSS_MAPPING[platform]
-        create_resource(**nss_data)
         return target_bucket_name
 
     def check_ns_resource_validity(
@@ -932,7 +839,7 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -950,15 +857,27 @@ class MCG:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
-        result = exec_cmd(
-            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}", **kwargs
-        )
+
+        if use_yes:
+            result = exec_cmd(
+                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                shell=True,
+                **kwargs,
+            )
+        else:
+            result = exec_cmd(
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                **kwargs,
+            )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
 
     @retry(
-        (NoobaaCliChecksumFailedException, CommandFailed), tries=5, delay=15, backoff=1
+        (NoobaaCliChecksumFailedException, CommandFailed, subprocess.TimeoutExpired),
+        tries=5,
+        delay=15,
+        backoff=1,
     )
     def retrieve_noobaa_cli_binary(self):
         """
@@ -996,7 +915,7 @@ class MCG:
             or not _compare_cli_hashes()
         ):
             logger.info(
-                f"The MCG CLI binary could not not found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
+                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
                 " attempting to copy it from the MCG operator pod"
             )
             local_mcg_cli_dir = os.path.dirname(

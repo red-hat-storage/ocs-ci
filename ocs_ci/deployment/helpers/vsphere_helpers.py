@@ -146,10 +146,12 @@ class VSPHEREHELPERS(object):
             )
 
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_9:
-                dict_data["vsphere"]["vcsa-qe"]["image_7"] = config.ENV_DATA[
+                config.ENV_DATA["rhel_template"] = config.ENV_DATA["rhel8_template"]
+                dict_data["vsphere"]["vcsa-qe"]["image_8"] = config.ENV_DATA[
                     "rhel_template"
                 ]
             else:
+                config.ENV_DATA["rhel_template"] = config.ENV_DATA["rhel7_template"]
                 dict_data["vsphere"]["vcsa-qe"]["image"] = config.ENV_DATA[
                     "rhel_template"
                 ]

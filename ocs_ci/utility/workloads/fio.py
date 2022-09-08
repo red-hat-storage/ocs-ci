@@ -68,7 +68,7 @@ def run(**kwargs):
     io_pod = kwargs.pop("pod")
     st_type = kwargs.pop("type")
     path = kwargs.pop("path")
-    timeout = 600  # default timeout for the FIO test
+    timeout = kwargs.get("timeout", 600)  # default timeout for the FIO test
 
     fio_cmd = "fio"
     args = ""

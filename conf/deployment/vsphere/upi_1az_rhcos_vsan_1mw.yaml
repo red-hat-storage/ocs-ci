@@ -1,0 +1,21 @@
+---
+# This config is suppose to work on most of DCs we have.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  lvmo_disks: 5
+  lvmo_disks_size: 150
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  sno: true
+  lvmo: true
+  worker_replicas: 0
+  master_replicas: 1
+  worker_num_cpus: '16'
+  master_num_cpus: '16'
+  master_memory: '65536'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-3950'

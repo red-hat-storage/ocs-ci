@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 from subprocess import TimeoutExpired
+from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 from gevent import sleep
@@ -748,6 +749,7 @@ def setup_ceph_toolbox(force_setup=False):
         force_setup (bool): force setup toolbox pod
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
@@ -763,7 +765,7 @@ def setup_ceph_toolbox(force_setup=False):
             return
     external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    if version.get_semantic_ocs_version_from_config() == version.VERSION_4_2:
+    if ocs_version == version.VERSION_4_2:
         tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
         tool_box_data["spec"]["template"]["spec"]["containers"][0][
             "image"
@@ -778,6 +780,13 @@ def setup_ceph_toolbox(force_setup=False):
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-external"
             keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
             env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
             # replace secret
             env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
@@ -894,17 +903,45 @@ def run_must_gather(log_dir_path, image, command=None):
             cmd, out_yaml_format=False, timeout=must_gather_timeout
         )
     except CommandFailed as ex:
+        log.error(get_helper_pods_output())
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
     except TimeoutExpired as ex:
+        log.error(get_helper_pods_output())
         log.error(
             f"Timeout {must_gather_timeout}s for must-gather reached, command"
             f" exited with error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
     return mg_output
+
+
+def get_helper_pods_output():
+    """
+    Get the output of "oc describe mg-helper pods"
+
+    Returns:
+        str: the output of "oc describe pods mg-helper" and "oc logs mg-helper"
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
+
+    output_describe_mg_helper = ""
+    helper_pods = get_pod_name_by_pattern(pattern="helper")
+    for helper_pod in helper_pods:
+        try:
+            helper_pod_obj = get_pod_obj(
+                name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            output_describe_mg_helper += (
+                f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
+                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod)}"
+            )
+        except Exception as e:
+            log.error(e)
+    return output_describe_mg_helper
 
 
 def collect_noobaa_db_dump(log_dir_path):
@@ -1258,3 +1295,44 @@ def get_primary_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def thread_init_class(class_init_operations, shutdown):
+    if len(class_init_operations) > 0:
+        executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
+        futures = []
+        i = 0
+        for operation in class_init_operations:
+            i += 1
+            future = executor.map(operation)
+            futures.append(future)
+            if i == shutdown:
+                future.add_done_callback(executor.shutdown(wait=False))
+                return
+        if shutdown == 0:
+            executor.shutdown(wait=True)
+            return
+
+
+def label_pod_security_admission(namespace=None, upgrade_version=None):
+    """
+    Label PodSecurity admission
+
+    Args:
+        namespace (str): Namespace name
+        upgrade_version (semantic_version.Version): ODF semantic version for upgrade
+            if it's an upgrade run, otherwise None.
+    """
+    namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+    log.info(f"Labelling namespace {namespace} for PodSecurity admission")
+    if version.get_semantic_ocp_running_version() >= version.VERSION_4_12 or (
+        upgrade_version and upgrade_version >= version.VERSION_4_12
+    ):
+        ocp_obj = OCP(kind="namespace")
+        label = (
+            "security.openshift.io/scc.podSecurityLabelSync=false "
+            f"pod-security.kubernetes.io/enforce={constants.PSA_PRIVILEGED} "
+            f"pod-security.kubernetes.io/warn={constants.PSA_BASELINE} "
+            f"pod-security.kubernetes.io/audit={constants.PSA_BASELINE} --overwrite"
+        )
+        ocp_obj.add_label(resource_name=namespace, label=label)

@@ -16,6 +16,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler
@@ -103,14 +104,6 @@ class OBC(object):
                 .get("serviceS3")
                 .get("externalDNS")[0]
             )
-            self.s3_resource = boto3.resource(
-                "s3",
-                verify=retrieve_verification_mode(),
-                endpoint_url=self.s3_external_endpoint,
-                aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.access_key,
-            )
-            self.s3_client = self.s3_resource.meta.client
 
         elif "rook" in obc_provisioner:
             scheme = (
@@ -119,6 +112,18 @@ class OBC(object):
             host = obc_configmap_data.get("BUCKET_HOST")
             port = obc_configmap_data.get("BUCKET_PORT")
             self.s3_internal_endpoint = f"{scheme}://{host}:{port}"
+            self.s3_external_endpoint, _, _ = RGW().get_credentials(
+                constants.CEPH_OBJECTSTOREUSER_SECRET
+            )
+
+        self.s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_external_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key,
+        )
+        self.s3_client = self.s3_resource.meta.client
 
 
 class ObjectBucket(ABC):
@@ -136,6 +141,7 @@ class ObjectBucket(ABC):
         rgw=None,
         bucketclass=None,
         replication_policy=None,
+        quota=None,
         *args,
         **kwargs,
     ):
@@ -162,6 +168,7 @@ class ObjectBucket(ABC):
                 }
             ]
         )
+        self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -372,14 +379,19 @@ class MCGS3Bucket(ObjectBucket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.mcg.s3_resource.create_bucket(Bucket=self.name)
+        if "s3resource" in kwargs:
+            self.s3resource = kwargs["s3resource"]
+        else:
+            self.s3resource = self.mcg.s3_resource
+
+        self.s3resource.create_bucket(Bucket=self.name)
 
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
         """
-        self.mcg.s3_resource.Bucket(self.name).object_versions.delete()
-        self.mcg.s3_resource.Bucket(self.name).delete()
+        self.s3resource.Bucket(self.name).object_versions.delete()
+        self.s3resource.Bucket(self.name).delete()
 
     @property
     def internal_status(self):
@@ -482,6 +494,8 @@ class RGWOCBucket(OCBucket):
             self.name = create_unique_resource_name("oc", "obc")
         obc_data["metadata"]["name"] = self.name
         obc_data["spec"]["bucketName"] = self.name
+        if self.quota:
+            obc_data["spec"]["additionalConfig"] = self.quota
         if storagecluster_independent_check():
             obc_data["spec"][
                 "storageClassName"

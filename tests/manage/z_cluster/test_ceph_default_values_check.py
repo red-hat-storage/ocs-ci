@@ -8,6 +8,8 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_external_mode,
     post_ocs_upgrade,
+    skipif_managed_service,
+    runs_on_provider,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
@@ -88,6 +90,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
     @tier1
+    @runs_on_provider
     @pytest.mark.skipif(
         config.DEPLOYMENT.get("ceph_debug"),
         reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
@@ -112,8 +115,12 @@ class TestCephDefaultValuesCheck(ManageTest):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version == version.VERSION_4_8:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
-        elif ocs_version >= version.VERSION_4_9:
+        elif ocs_version == version.VERSION_4_9:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
+        elif ocs_version == version.VERSION_4_10:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
+        elif ocs_version >= version.VERSION_4_11:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
@@ -147,6 +154,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @bugzilla("2012930")
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
+    @skipif_managed_service
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
@@ -164,8 +172,14 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the values configured in noobaa-postgres configmap "
             "match the ones stored in ocs-ci"
         )
-        stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
-        stored_values.remove("")
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        log.info(f"ocs version----{ocs_version}")
+        if ocs_version <= version.VERSION_4_8:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
+            stored_values.remove("")
+        elif ocs_version >= version.VERSION_4_9:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
+            stored_values.remove("")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "

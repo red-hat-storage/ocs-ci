@@ -1,4 +1,6 @@
 import logging
+import warnings
+import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
@@ -198,6 +200,7 @@ class ValidationUI(PageNavigator):
                 self.validation_loc["project-search-bar"], text="openshift-storage"
             )
             logger.info("Select 'openshift-storage' project")
+            time.sleep(2)
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
@@ -249,10 +252,57 @@ class ValidationUI(PageNavigator):
 
         self.odf_console_plugin_check()
         self.navigate_odf_overview_page()
+        logger.info(
+            "Wait and check for Storage System under Status card on Overview page"
+        )
+        storage_system_presence = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-status-card"],
+            timeout=30,
+            expected_text="Storage System",
+        )
+        if storage_system_presence:
+            logger.info("Click on 'Storage System' under Status card on Overview page")
+            self.do_click(self.validation_loc["storagesystem-status-card"])
+            block_and_file_health_message_check = (
+                self.wait_until_expected_text_is_found(
+                    locator=self.validation_loc["block-and-file-health-message"],
+                    timeout=5,
+                    expected_text="Block and File service is unhealthy",
+                )
+            )
+            if block_and_file_health_message_check:
+                logger.critical("Block and File service is unhealthy")
+                warnings.warn("Block and File service is unhealthy")
+            else:
+                pass
+            logger.info(
+                "Click on storage system hyperlink from Storage System pop-up "
+                "under Status Card on Data Foundation Overview page"
+            )
+            if config.DEPLOYMENT["external_mode"]:
+                self.do_click(
+                    self.validation_loc[
+                        "storage-system-external-status-card-hyperlink"
+                    ],
+                    enable_screenshot=True,
+                )
+            else:
+                self.do_click(
+                    self.validation_loc["storage-system-status-card-hyperlink"],
+                    enable_screenshot=True,
+                )
+            logger.info("Click on StorageSystems breadcrumb")
+            self.do_click((self.validation_loc["storagesystems"]))
+            logger.info("Navigate back to ODF Overview page")
+            self.do_click((self.validation_loc["odf-overview"]))
+        else:
+            logger.critical(
+                "Storage system under Status card on Data Foundation Overview tab is missing"
+            )
+
         system_capacity_check = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["system-capacity"],
             expected_text="System Capacity",
-            timeout=5,
         )
         if system_capacity_check:
             logger.info(
@@ -263,11 +313,13 @@ class ValidationUI(PageNavigator):
                 "System Capacity Card not found on OpenShift Data Foundation Overview page"
             )
         logger.info(
-            "Navigate to System Capacity Card and Click on 'ocs-storagecluster-storagesystem'"
+            "Navigate to System Capacity Card and Click on storage system hyperlink"
         )
         self.do_click(self.validation_loc["odf-capacityCardLink"])
-        navigate_to_storagesystem_details_page = self.check_element_text(
-            "StorageSystem details"
+        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-details"],
+            timeout=15,
+            expected_text="StorageSystem details",
         )
         if navigate_to_storagesystem_details_page:
             logger.info(
@@ -280,13 +332,25 @@ class ValidationUI(PageNavigator):
         logger.info("Click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate back to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]))
+        self.do_click((self.validation_loc["odf-overview"]))
         logger.info(
-            "Now navigate to Performance Card and Click on 'ocs-storagecluster-storagesystem'"
+            "Now search for 'Performance' Card on Data Foundation Overview page"
         )
-        self.do_click(self.validation_loc["odf-performanceCardLink"])
-        navigate_to_storagesystem_details_page = self.check_element_text(
-            "StorageSystem details"
+        performance_card = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["performance-card"],
+            expected_text="Performance",
+            timeout=15,
+        )
+        if performance_card:
+            self.do_click(self.validation_loc["odf-performanceCardLink"])
+        else:
+            logger.critical(
+                "Couldn't find 'Performance' card on Data Foundation Overview page"
+            )
+        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-details"],
+            timeout=15,
+            expected_text="StorageSystem details",
         )
         if navigate_to_storagesystem_details_page:
             logger.info(
@@ -298,9 +362,44 @@ class ValidationUI(PageNavigator):
             )
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
+        logger.info("Click on Backing Store")
+        self.do_click((self.validation_loc["backingstore"]))
+        logger.info("Click on Backing Store Hyperlink")
+        self.do_click(
+            (self.validation_loc["backingstore-link"]), enable_screenshot=True
+        )
+        logger.info("Verifying the status of 'noobaa-default-backing-store'")
+        backingstore_status = self.get_element_text(
+            self.validation_loc["backingstore-status"]
+        )
+        assert "Ready" == backingstore_status, (
+            f"backingstore status error | expected status:Ready \n "
+            f"actual status:{backingstore_status}"
+        )
+        logger.info("Verification of backingstore status is successful!")
+        logger.info("Click on backingstore breadcrumb")
+        self.do_click((self.validation_loc["backingstorage-breadcrumb"]))
+        logger.info("Click on Bucket Class")
+        self.do_click((self.validation_loc["bucketclass"]))
+        logger.info("Click on Bucket Class Hyperlink")
+        self.do_click((self.validation_loc["bucketclass-link"]), enable_screenshot=True)
+        logger.info("Verifying the status of 'noobaa-default-bucket-class'")
+        bucketclass_status = self.get_element_text(
+            self.validation_loc["bucketclass-status"]
+        )
+        assert "Ready" == bucketclass_status, (
+            f"bucketclass status error | expected status:Ready \n "
+            f"actual status:{bucketclass_status}"
+        )
+        logger.info("Verification of bucketclass status is successful!")
+        logger.info("Click on bucketclass breadcrumb")
+        self.do_click(
+            (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
+        )
+        logger.info("Click on Namespace Store")
+        self.do_click((self.validation_loc["namespace-store"]), enable_screenshot=True)
         logger.info("Navigate again to ODF Overview page")
-        self.do_click((self.validation_loc["overview"]), enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click((self.validation_loc["odf-overview"]), enable_screenshot=True)
         logger.info(
             "Successfully navigated back to ODF tab under Storage, test successful!"
         )
@@ -316,39 +415,53 @@ class ValidationUI(PageNavigator):
         logger.info("Click on 'Storage Systems' tab")
         self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
-        logger.info(
-            "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
-        )
-        self.do_click(
-            self.validation_loc["ocs-storagecluster-storagesystem"],
-            enable_screenshot=True,
-        )
+        if not config.DEPLOYMENT.get("external_mode"):
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
+            )
+            self.do_click(
+                self.validation_loc["ocs-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+        else:
+            logger.info(
+                "Click on 'ocs-external-storagecluster-storagesystem' link "
+                "from Storage Systems page for External Mode Deployment"
+            )
+            self.do_click(
+                self.validation_loc["ocs-external-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+        logger.info("Click on Overview tab")
+        self.do_click(self.validation_loc["overview"], enable_screenshot=True)
         logger.info("Click on 'Object' tab")
         self.do_click(self.validation_loc["object"], enable_screenshot=True)
         if not config.ENV_DATA["mcg_only_deployment"]:
             logger.info("Click on 'Block and File' tab")
             self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
-        logger.info("Click on Overview tab")
-        self.do_click(self.validation_loc["overview"])
-        logger.info("Click on 'BlockPools' tab")
-        self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
-        logger.info(
-            "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
-        )
-        self.do_click(
-            self.validation_loc["ocs-storagecluster-cephblockpool"],
-            enable_screenshot=True,
-        )
-        self.page_has_loaded(retries=15, sleep_time=2)
-        logger.info("Verifying the status of 'ocs-storagecluster-cephblockpool'")
-        cephblockpool_status = self.get_element_text(
-            self.validation_loc["ocs-storagecluster-cephblockpool-status"]
-        )
-        assert "Ready" == cephblockpool_status, (
-            f"cephblockpool status error | expected status:Ready \n "
-            f"actual status:{cephblockpool_status}"
-        )
-        logger.info("Verification of cephblockpool status is successful!")
+        if not config.DEPLOYMENT.get("external_mode"):
+            if not config.ENV_DATA["mcg_only_deployment"]:
+                logger.info("Click on 'BlockPools' tab")
+                self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
+                logger.info(
+                    "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
+                )
+                self.do_click(
+                    self.validation_loc["ocs-storagecluster-cephblockpool"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded(retries=15, sleep_time=2)
+                logger.info(
+                    "Verifying the status of 'ocs-storagecluster-cephblockpool'"
+                )
+                cephblockpool_status = self.get_element_text(
+                    self.validation_loc["ocs-storagecluster-cephblockpool-status"]
+                )
+                assert "Ready" == cephblockpool_status, (
+                    f"cephblockpool status error | expected status:Ready \n "
+                    f"actual status:{cephblockpool_status}"
+                )
+                logger.info("Verification of cephblockpool status is successful!")
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """

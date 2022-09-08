@@ -3,7 +3,9 @@ import time
 import logging
 import os
 import re
+import tempfile
 from uuid import uuid4
+import yaml
 
 import requests
 import json
@@ -12,19 +14,26 @@ from elasticsearch import Elasticsearch, exceptions as esexp
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    MissingRequiredConfigKeyError,
+    PVCNotCreated,
+    PodNotCreated,
+)
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
+from ocs_ci.utility import templating
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id
+from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +64,6 @@ class PASTest(BaseTest):
         self.initialize_test_crd()
 
         # Place holders for test results file (all sub-tests together)
-        self.results_path = ""
         self.results_file = ""
 
         # All tests need a uuid for the ES results, benchmark-operator base test
@@ -63,9 +71,19 @@ class PASTest(BaseTest):
         self.uuid = uuid4().hex
 
         # Getting the full path for the test logs
-        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split("]")[0]
-        self.full_log_path = self.full_log_path.replace("::", "/").replace("[", "-")
+        self.full_log_path = os.environ.get("PYTEST_CURRENT_TEST").split(" ")[0]
+        self.full_log_path = (
+            self.full_log_path.replace("::", "/").replace("[", "-").replace("]", "")
+        )
+        self.full_log_path = os.path.join(ocsci_log_path(), self.full_log_path)
         log.info(f"Logs file path name is : {self.full_log_path}")
+
+        # Getting the results path as a list
+        self.results_path = self.full_log_path.split("/")
+        self.results_path.pop()
+
+        # List of test(s) for checking the results
+        self.workloads = []
 
         # Collecting all Environment configuration Software & Hardware
         # for the performance report.
@@ -110,6 +128,9 @@ class PASTest(BaseTest):
                 time.sleep(120)
                 still_going_down = True
         log.info("Storage usage was cleandup")
+
+        # Add delay of 15 sec. after each test.
+        time.sleep(10)
 
     def initialize_test_crd(self):
         """
@@ -627,15 +648,23 @@ class PASTest(BaseTest):
             log.error(f"OS error: {err}")
 
     @staticmethod
-    def get_time():
+    def get_time(time_format=None):
         """
-        Getting the current GMT time in a specific format for the ES report
+        Getting the current GMT time in a specific format for the ES report,
+        or for seeking in the containers log
+
+        Args:
+            time_format (str): which thime format to return - None / CSI
 
         Returns:
             str : current date and time in formatted way
 
         """
-        return time.strftime("%Y-%m-%dT%H:%M:%SGMT", time.gmtime())
+        formated = "%Y-%m-%dT%H:%M:%SGMT"
+        if time_format and time_format.lower() == "csi":
+            formated = "%Y-%m-%dT%H:%M:%SZ"
+
+        return time.strftime(formated, time.gmtime())
 
     def check_tests_results(self):
         """
@@ -761,15 +790,6 @@ class PASTest(BaseTest):
             if odf_back_storage != "gp2":
                 platform = f"{platform}-{odf_back_storage}"
 
-        # Check if compression is enabled
-        my_obj = OCP(
-            kind="cephblockpool", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        for pool in my_obj.data.get("items"):
-            if pool.get("spec").get("compressionMode", None) is not None:
-                platform = f"{platform}-CMP"
-                break
-
         if self.dev_mode:
             port = "8181"
         else:
@@ -809,3 +829,197 @@ class PASTest(BaseTest):
             log.error(f"Can not push results into the performance Dashboard! [{ex}]")
 
         db.cleanup()
+
+    def add_test_to_results_check(self, test, test_count, test_name):
+        """
+        Adding test information to list of test(s) that we want to check the results
+        and push them to the dashboard.
+
+        Args:
+            test (str): the name of the test function that we want to check
+            test_count (int): number of test(s) that need to run - according to parametize
+            test_name (str): the test name in the Performance dashboard
+
+        """
+        self.workloads.append(
+            {"name": test, "tests": test_count, "test_name": test_name}
+        )
+
+    def check_results_and_push_to_dashboard(self):
+        """
+        Checking test(s) results - that all test(s) are finished OK, and push
+        the results into the performance dashboard
+
+        """
+
+        for wl in self.workloads:
+            self.number_of_tests = wl["tests"]
+
+            self.results_file = os.path.join(
+                "/", *self.results_path, wl["name"], "all_results.txt"
+            )
+            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
+            self.check_tests_results()
+            self.push_to_dashboard(test_name=wl["test_name"])
+
+    def create_test_project(self):
+        """
+        Creating new project (namespace) for performance test
+        """
+        self.namespace = helpers.create_unique_resource_name("pas-test", "namespace")
+        log.info(f"Creating new namespace ({self.namespace}) for the test")
+        try:
+            self.proj = helpers.create_project(project_name=self.namespace)
+        except CommandFailed as ex:
+            if str(ex).find("(AlreadyExists)"):
+                log.warning("The namespace already exists !")
+            log.error("Cannot create new project")
+            raise CommandFailed(f"{self.namespace} was not created")
+
+    def delete_test_project(self):
+        """
+        Deleting the performance test project (namespace)
+        """
+        log.info(f"Deleting the test namespace : {self.namespace}")
+        switch_to_default_rook_cluster_project()
+        try:
+            self.proj.delete(resource_name=self.namespace)
+            self.proj.wait_for_delete(
+                resource_name=self.namespace, timeout=60, sleep=10
+            )
+        except CommandFailed:
+            log.error(f"Cannot delete project {self.namespace}")
+            raise CommandFailed(f"{self.namespace} was not created")
+
+    def set_results_path_and_file(self, func_name):
+        """
+        Setting the results_path and results_file parameter for a specific test
+
+        Args:
+            func_name (str): the name of the function which use for the test
+        """
+
+        self.results_path = os.path.join("/", *self.results_path, func_name)
+        self.results_file = os.path.join(self.results_path, "all_results.txt")
+
+    def create_fio_pod_yaml(self, pvc_size=1, filesize=0):
+        """
+        This function create a new performance pod yaml file, which will trigger
+        the FIO command on starting and getting into Compleat state when finish
+
+        If the filesize argument is not provided, The FIO will fillup 70% of the
+        PVC which will attached to the pod.
+
+        Args:
+            pvc_size (int/float): the size of the pvc_which will attach to the pod (in GiB)
+            file_size (str): the filesize to write into (e.g 100Mi, 30Gi)
+
+        """
+        if filesize == 0:
+            file_size = f"{int(pvc_size * 1024 * 0.7)}M"
+        else:
+            file_size = filesize
+
+        # Creating the FIO command line parameters string
+        command = (
+            "--name=fio-fillup --filename=/mnt/test_file --rw=write --bs=1m"
+            f" --direct=1 --numjobs=1 --time_based=0 --runtime=36000 --size={file_size}"
+            " --ioengine=libaio --end_fsync=1 --output-format=json"
+        )
+        # Load the default POD yaml file and update it to run the FIO immediately
+        pod_data = templating.load_yaml(constants.PERF_POD_YAML)
+        pod_data["spec"]["containers"][0]["command"] = ["/usr/bin/fio"]
+        pod_data["spec"]["containers"][0]["args"] = command.split(" ")
+        pod_data["spec"]["containers"][0]["stdin"] = False
+        pod_data["spec"]["containers"][0]["tty"] = False
+        # FIO need to run only once
+        pod_data["spec"]["restartPolicy"] = "Never"
+
+        # Generate new POD yaml file
+        self.pod_yaml_file = tempfile.NamedTemporaryFile(prefix="PerfPod")
+        with open(self.pod_yaml_file.name, "w") as temp:
+            yaml.dump(pod_data, temp)
+
+    def create_testing_pvc_and_wait_for_bound(self):
+        log.info("Creating PVC for the test")
+        try:
+            self.pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name,
+                pvc_name="pvc-pas-test",
+                size=f"{self.pvc_size}Gi",
+                namespace=self.namespace,
+                # access_mode=Interfaces_info[self.interface]["accessmode"],
+            )
+        except Exception as e:
+            log.exception(f"The PVC was not created, exception [{str(e)}]")
+            raise PVCNotCreated("PVC did not reach BOUND state.")
+        # Wait for the PVC to be Bound
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", 1, self.namespace, constants.STATUS_BOUND, 120, 5
+        )
+        log.info(f"The PVC {self.pvc_obj.name} was created and in Bound state.")
+
+    def cleanup_testing_pvc(self):
+        try:
+            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
+            self.pvc_obj.delete()
+            # Wait for the PVC to be deleted
+            performance_lib.wait_for_resource_bulk_status(
+                "pvc", 0, self.namespace, constants.STATUS_BOUND, 60, 5
+            )
+            log.info("The PVC was deleted successfully")
+        except Exception:
+            log.warning("The PVC failed to delete")
+            pass
+
+        # Delete the backend PV of the PVC
+        try:
+            log.info(f"Try to delete the backend PV : {pv}")
+            performance_lib.run_oc_command(f"delete pv {pv}")
+        except Exception as ex:
+            err_msg = f"cannot delete PV [{ex}]"
+            log.error(err_msg)
+
+    def create_testing_pod_and_wait_for_completion(self, **kwargs):
+        # Creating pod yaml file to run as a Job, the command to run on the pod and
+        # arguments to it will replace in the create_pod function
+        self.create_fio_pod_yaml(
+            pvc_size=int(self.pvc_size), filesize=kwargs.pop("filesize", "1M")
+        )
+        # Create a pod
+        log.info(f"Creating Pod with pvc {self.pvc_obj.name}")
+
+        try:
+            self.pod_object = helpers.create_pod(
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                interface_type=self.interface,
+                pod_name="pod-pas-test",
+                pod_dict_path=self.pod_yaml_file.name,
+                **kwargs,
+            )
+        except Exception as e:
+            log.exception(
+                f"Pod attached to PVC {self.pod_object.name} was not created, exception [{str(e)}]"
+            )
+            raise PodNotCreated("Pod attached to PVC was not created.")
+
+        # Confirm that pod is running on the selected_nodes
+        log.info("Checking whether the pod is running")
+        helpers.wait_for_resource_state(
+            resource=self.pod_object,
+            state=constants.STATUS_COMPLETED,
+            timeout=600,
+        )
+
+    def cleanup_testing_pod(self):
+        try:
+            self.pod_object.delete()
+            # Wait for the POD to be deleted
+            performance_lib.wait_for_resource_bulk_status(
+                "pod", 0, self.namespace, constants.STATUS_RUNNING, 60, 5
+            )
+            log.info("The POD was deleted successfully")
+        except Exception:
+            log.warning("The POD failed to delete")
+            pass

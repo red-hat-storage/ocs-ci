@@ -6,10 +6,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
-    tier4,
-    tier4b,
+    tier4c,
     ignore_leftover_label,
     skipif_ocp_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers import disruption_helpers
@@ -18,10 +18,10 @@ from ocs_ci.helpers.helpers import wait_for_resource_state
 log = logging.getLogger(__name__)
 
 
-@tier4
-@tier4b
+@tier4c
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
+@skipif_managed_service
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.polarion_id("OCS-2369")
 class TestResourceDeletionDuringSnapshotRestore(ManageTest):

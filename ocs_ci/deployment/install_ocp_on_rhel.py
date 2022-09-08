@@ -75,6 +75,9 @@ class OCPINSTALLRHEL(object):
         # Install packages in pod
         self.rhelpod.install_packages(constants.RHEL_POD_PACKAGES)
 
+        # upload ocp repo to rhel pod and this repo is used for rhel worker nodes
+        upload(self.pod_name, get_ocp_repo(), constants.YUM_REPOS_PATH)
+
     def upload_helpers(self, ocp_repo):
         """
         Upload helper files to pod for OCP installation on RHEL
@@ -92,7 +95,11 @@ class OCPINSTALLRHEL(object):
 
         """
         upload(self.pod_name, self.ssh_key_pem, constants.POD_UPLOADPATH)
-        upload(self.pod_name, ocp_repo, constants.YUM_REPOS_PATH)
+        upload(
+            self.pod_name,
+            get_ocp_repo(config.ENV_DATA["rhel_version_for_ansible"]),
+            constants.YUM_REPOS_PATH,
+        )
         # prepare and copy credential files for mirror.openshift.com
         with prepare_mirror_openshift_credential_files() as (
             mirror_user_file,

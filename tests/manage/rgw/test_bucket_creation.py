@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
-from ocs_ci.ocs.resources.objectbucket import OBC, BUCKET_MAP
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 import botocore
 import re
@@ -30,8 +30,7 @@ class TestRGWBucketCreation:
         Test RGW OBC creation using the OC command.
         The factory checks the bucket's health by default.
         """
-        obc = rgw_bucket_factory(amount, interface)[0]
-        OBC(obc.name)
+        rgw_bucket_factory(amount, interface)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
@@ -42,7 +41,7 @@ class TestRGWBucketCreation:
         ],
     )
     def test_duplicate_bucket_creation(
-        self, rgw_obj, rgw_bucket_factory, amount, interface
+        self, rgw_endpoint, rgw_obj, rgw_bucket_factory, amount, interface
     ):
         """
         Negative test with duplicate bucket creation using OC commands

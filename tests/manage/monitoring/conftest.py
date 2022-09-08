@@ -11,8 +11,14 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_nodes,
+    unschedule_nodes,
+    schedule_nodes,
+)
+from ocs_ci.ocs import rados_utils
+from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
@@ -26,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def measure_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir, threading_lock):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -36,7 +42,9 @@ def measure_stop_ceph_mgr(measurement_dir):
             Ceph Manager pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
     mgr = mgr_deployments[0]["metadata"]["name"]
@@ -64,7 +72,12 @@ def measure_stop_ceph_mgr(measurement_dir):
         return oc.get(mgr)
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_mgr.json")
-    measured_op = measure_operation(stop_mgr, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_mgr, test_file, minimal_time=60 * 9)
+    else:
+        measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
@@ -76,7 +89,24 @@ def measure_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir):
+def create_mon_quorum_loss(create_mon_quorum_loss=False):
+    """
+    Number of mon to go down in the cluster, so that accordingly
+    CephMonQuorumRisk or CephMonQuorumLost alerts are seen
+
+    Args:
+        mon_quorum_lost (bool): True, if mon quorum to be lost. False Otherwise.
+
+    Returns:
+        mon_quorum_lost (bool): True, if all mons down expect one mon
+            so that mon quorum lost. Otherwise False
+
+    """
+    return create_mon_quorum_loss
+
+
+@pytest.fixture
+def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_lock):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -86,13 +116,19 @@ def measure_stop_ceph_mon(measurement_dir):
             Ceph Monitor pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
 
-    # get monitor deployments to stop, leave even number of monitors
-    split_index = len(mons) // 2 if len(mons) > 3 else 2
+    # get monitor deployments to stop,
+    # if mon quorum to be lost split_index will be 1
+    # else leave even number of monitors
+    split_index = (
+        1 if create_mon_quorum_loss else len(mons) // 2 if len(mons) > 3 else 2
+    )
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
@@ -123,8 +159,21 @@ def measure_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, "measure_stop_ceph_mon.json")
-    measured_op = measure_operation(stop_mon, test_file)
+    test_file = os.path.join(
+        measurement_dir, f"measure_stop_ceph_mon_{split_index}.json"
+    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 6 extra minutes so that alert is actually triggered and
+        # unscheduling worker nodes so that monitor is not replaced
+        worker_node_names = [
+            node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)
+        ]
+        unschedule_nodes(worker_node_names)
+        measured_op = measure_operation(stop_mon, test_file, minimal_time=60 * 20)
+        schedule_nodes(worker_node_names)
+    else:
+        measured_op = measure_operation(stop_mon, test_file)
 
     # expected minimal downtime of a mon inflicted by this fixture
     measured_op["min_downtime"] = run_time - (60 * 2)
@@ -140,18 +189,23 @@ def measure_stop_ceph_mon(measurement_dir):
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
-        msg = f"Downscaled monitors {mons_to_stop} were not replaced"
-        assert check_old_mons_deleted, msg
+        if (
+            not split_index == 1
+            and config.ENV_DATA["platform"].lower()
+            not in constants.MANAGED_SERVICE_PLATFORMS
+        ):
+            msg = f"Downscaled monitors {mons_to_stop} were not replaced"
+            assert check_old_mons_deleted, msg
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
 
 @pytest.fixture
-def measure_stop_ceph_osd(measurement_dir):
+def measure_stop_ceph_osd(measurement_dir, threading_lock):
     """
     Downscales Ceph osd deployment, measures the time when it was
     downscaled and alerts that were triggered during this event.
@@ -161,7 +215,9 @@ def measure_stop_ceph_osd(measurement_dir):
             Ceph osd pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get("cluster_namespace"),
+        threading_lock=threading_lock,
     )
     osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
     osds = [deployment.get("metadata").get("name") for deployment in osd_deployments]
@@ -196,19 +252,26 @@ def measure_stop_ceph_osd(measurement_dir):
         return osd_to_stop
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_osd.json")
-    measured_op = measure_operation(stop_osd, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_osd, test_file, minimal_time=60 * 19)
+    else:
+        measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
     # wait for ceph to return into HEALTH_OK state after osd deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    # The check is increased to cover for slow ops events in case of larger clusters
+    # with uploaded data
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
 
 @pytest.fixture
-def measure_corrupt_pg(measurement_dir):
+def measure_corrupt_pg(request, measurement_dir):
     """
     Create Ceph pool and corrupt Placement Group on one of OSDs, measures the
     time when it was corrupted and records alerts that were triggered during
@@ -216,30 +279,56 @@ def measure_corrupt_pg(measurement_dir):
 
     Returns:
         dict: Contains information about `start` and `stop` time for
-        corrupting Ceph Placement Group
+            corrupting Ceph Placement Group
     """
-    oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
-    )
-    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
-    osd_deployment = osd_deployments[0].get("metadata").get("name")
+    osd_deployment = deployment.get_osd_deployments()[0]
+    original_deployment_revision = osd_deployment.revision
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name("corrupted", "pool")
     ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
+    ct_pod.exec_ceph_cmd(f"ceph osd pool application enable {pool_name} rbd")
+
+    def teardown():
+        """
+        Make sure that corrupted pool is deleted and ceph health is ok
+        """
+        nonlocal pool_name
+        nonlocal osd_deployment
+        nonlocal original_deployment_revision
+        logger.info(f"Deleting pool {pool_name}")
+        ct_pod.exec_ceph_cmd(
+            f"ceph osd pool delete {pool_name} {pool_name} "
+            f"--yes-i-really-really-mean-it"
+        )
+        logger.info("Unsetting osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("Unsetting osd noscrub flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noscrub")
+        logger.info("Unsetting osd nodeep-scrub flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset nodeep-scrub")
+        logger.info(f"Checking that pool {pool_name} is deleted")
+        logger.info(
+            f"Restoring deployment {osd_deployment.name} "
+            f"to its original revision: {original_deployment_revision}"
+        )
+        if original_deployment_revision:
+            osd_deployment.set_revision(original_deployment_revision)
+            # unset original_deployment_revision because revision number is deleted when used
+            original_deployment_revision = False
+        # wait for ceph to return into HEALTH_OK state after osd deployment
+        # is returned back to normal
+        ceph_health_check(tries=20, delay=15)
+
+    request.addfinalizer(teardown)
     logger.info("Setting osd noout flag")
     ct_pod.exec_ceph_cmd("ceph osd set noout")
     logger.info(f"Put object into {pool_name}")
     pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
-    logger.info(f"Looking for Placement Group with {pool_object} object")
-    pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
-    logger.info(f"Found Placement Group: {pg}")
-
-    dummy_deployment, dummy_pod = helpers.create_dummy_osd(osd_deployment)
 
     def corrupt_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 12 minutes and measure it.
+        Corrupt PG on one OSD in Ceph pool for 14 minutes and measure it.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -249,48 +338,30 @@ def measure_corrupt_pg(measurement_dir):
         minutest to start firing.
 
         Returns:
-            str: Name of corrupted deployment
+            str: Name of corrupted pod
         """
         # run_time of operation
-        run_time = 60 * 12
-        nonlocal oc
+        run_time = 60 * 14
         nonlocal pool_name
         nonlocal pool_object
-        nonlocal dummy_pod
-        nonlocal pg
         nonlocal osd_deployment
-        nonlocal dummy_deployment
 
-        logger.info(f"Corrupting {pg} PG on {osd_deployment}")
-        dummy_pod.exec_sh_cmd_on_pod(
-            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-            f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
-            f"set-bytes /etc/shadow --no-mon-config"
-        )
-        logger.info("Unsetting osd noout flag")
-        ct_pod.exec_ceph_cmd("ceph osd unset noout")
-        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
-        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
-        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
+        logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
+        rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return osd_deployment
+        return osd_deployment.name
 
     test_file = os.path.join(measurement_dir, "measure_corrupt_pg.json")
-    measured_op = measure_operation(corrupt_pg, test_file)
-    logger.info(f"Deleting pool {pool_name}")
-    ct_pod.exec_ceph_cmd(
-        f"ceph osd pool delete {pool_name} {pool_name} "
-        f"--yes-i-really-really-mean-it"
-    )
-    logger.info(f"Checking that pool {pool_name} is deleted")
 
-    logger.info(f"Deleting deployment {dummy_deployment}")
-    oc.delete(resource_name=dummy_deployment)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(corrupt_pg, test_file, minimal_time=60 * 17)
+    else:
+        measured_op = measure_operation(corrupt_pg, test_file)
 
-    # wait for ceph to return into HEALTH_OK state after osd deployment
-    # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    teardown()
 
     return measured_op
 
@@ -709,7 +780,7 @@ def workload_idle(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_rgw(measurement_dir, request, rgw_deployments):
+def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
     """
     Downscales RGW deployments, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -720,7 +791,9 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
 
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
 
     def stop_rgw():
@@ -744,7 +817,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
         return rgw_deployments
 
     test_file = os.path.join(measurement_dir, "measure_stop_rgw.json")
-    measured_op = measure_operation(stop_rgw, test_file)
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_rgw, test_file, minimal_time=60 * 8)
+    else:
+        measured_op = measure_operation(stop_rgw, test_file)
 
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
@@ -814,41 +892,66 @@ def measure_noobaa_ns_target_bucket_deleted(
 
 
 @pytest.fixture
-def measure_stop_worker_node(measurement_dir, nodes):
+def measure_stop_worker_nodes(request, measurement_dir, nodes):
     """
-    Stop one worker node, measure the time when it was stopped and monitors
-    alerts that were triggered during this event.
+    Stop worker nodes that doesn't contain RGW (so that alerts are triggered
+    correctly), measure the time when it was stopped and monitors alerts that
+    were triggered during this event.
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
             worker node
 
     """
-    node = get_nodes(node_type="worker")[0]
+    mgr_pod = pod.get_mgr_pods()[0]
+    mgr_node = pod.get_pod_node(mgr_pod)
+    test_nodes = [
+        worker_node
+        for worker_node in get_nodes(node_type=constants.WORKER_MACHINE)
+        if worker_node.name != mgr_node.name
+    ]
 
-    def stop_node():
+    def stop_nodes():
         """
-        Turn off one worker node for 6 minutes.
+        Turn off test nodes for 5 minutes.
 
         Returns:
-            str: Node that was turned down
+            list: Names of nodes that were turned down
 
         """
         # run_time of operation
-        run_time = 60 * 6
-        nonlocal node
-        logger.info(f"Turning off node {node.name}")
-        nodes.stop_nodes(nodes=[node])
+        run_time = 60 * 5
+        nonlocal test_nodes
+        node_names = [node.name for node in test_nodes]
+        logger.info(f"Turning off nodes {node_names}")
+        nodes.stop_nodes(nodes=test_nodes)
         # Validate node reached NotReady state
-        wait_for_nodes_status(node_names=[node.name], status=constants.NODE_NOT_READY)
+        wait_for_nodes_status(node_names=node_names, status=constants.NODE_NOT_READY)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return node.name
+        return node_names
 
-    test_file = os.path.join(measurement_dir, "measure_stop_node.json")
-    measured_op = measure_operation(stop_node, test_file)
-    logger.info(f"Turning on node {node.name}")
-    nodes.start_nodes(nodes=[node])
+    def finalizer():
+        nodes.restart_nodes_by_stop_and_start_teardown()
+        assert ceph_health_check(), "Ceph cluster health is not OK"
+        logger.info("Ceph cluster health is OK")
+
+    request.addfinalizer(finalizer)
+
+    test_file = os.path.join(measurement_dir, "measure_stop_nodes.json")
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        # It seems that it takes longer to propagate incidents to PagerDuty.
+        # Adding 3 extra minutes
+        measured_op = measure_operation(stop_nodes, test_file, minimal_time=60 * 8)
+    else:
+        measured_op = measure_operation(stop_nodes, test_file)
+    logger.info("Turning on nodes")
+    try:
+        nodes.start_nodes(nodes=test_nodes)
+    except CommandFailed:
+        logger.warning(
+            "Nodes were not found: they were probably recreated. Check ceph health below"
+        )
     # Validate all nodes are in READY state and up
     retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
         wait_for_nodes_status

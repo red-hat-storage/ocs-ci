@@ -25,7 +25,7 @@ def pytest_collection_modifyitems(items):
     ):
         for item in items.copy():
             if "manage/mcg" in str(item.fspath):
-                log.info(
+                log.debug(
                     f"Test {item} is removed from the collected items"
                     f" mcg is not supported on {config.ENV_DATA['platform'].lower()}"
                 )
@@ -37,7 +37,7 @@ def pytest_collection_modifyitems(items):
                 cloud_platform.upper() in item.name.upper()
                 for cloud_platform in CLOUD_PLATFORMS
             ):
-                log.info(
+                log.debug(
                     f"{item} will be skipped since cloud tests cannot be run on disconnected clusters"
                 )
                 items.remove(item)

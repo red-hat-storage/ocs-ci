@@ -24,6 +24,7 @@ KUBECONFIG_LOCATION = "auth/kubeconfig"  # relative from cluster_dir
 API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
+RBD_NAME = "rbd"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
@@ -84,10 +85,55 @@ VAULT_CSI_CONNECTION_CONF = {
         "VAULT_CACERT": "ocs-kms-ca-secret",
         "VAULT_TLS_SERVER_NAME": "",
         "VAULT_NAMESPACE": "",
-        "VAULT_TOKEN_NAME": "ocs-kms-token",
+        "VAULT_TOKEN_NAME": "ceph-csi-kms-token",
         "VAULT_CACERT_FILE": "fullchain.pem",
         "VAULT_CLIENT_CERT_FILE": "cert.pem",
         "VAULT_CLIENT_KEY_FILE": "privkey.pem",
         "VAULT_BACKEND": "kv-v2",
     }
 }
+VAULT_TENANT_SA_CONNECTION_CONF = {
+    "1-vault": {
+        "encryptionKMSType": "vaulttenantsa",
+        "vaultAddress": "https://vault.qe.rh-ocs.com:8200",
+        "vaultAuthPath": "",
+        "vaultAuthNamespace": "",
+        "vaultNamespace": "",
+        "vaultBackendPath": "kv-v2",
+        "vaultCAFromSecret": "ocs-kms-ca-secret",
+        "vaultClientCertFromSecret": "ocs-kms-client-cert",
+        "vaultClientCertKeyFromSecret": "ocs-kms-client-key",
+        "vaultBackend": "kv-v2",
+    }
+}
+
+# External cluster username
+EXTERNAL_CLUSTER_USER = "client.healthchecker"
+EXTERNAL_CLUSTER_OBJECT_STORE_USER = "rgw-admin-ops-user"
+
+# External cluster CSI users
+ceph_csi_users = [
+    "client.csi-cephfs-node",
+    "client.csi-cephfs-provisioner",
+    "client.csi-rbd-node",
+    "client.csi-rbd-provisioner",
+]
+
+# Hpcs related defaults
+#
+# To be used for adding additional hpcs connections
+# to csi-kms-connection-details resource
+HPCS_CSI_CONNECTION_CONF = {
+    "1-hpcs": {
+        "KMS_PROVIDER": "ibmkeyprotect",
+        "KMS_SERVICE_NAME": "1-hpcs",
+        "IBM_KP_SERVICE_INSTANCE_ID": "",
+        "IBM_KP_SECRET_NAME": "ibm-kp-kms-test-secret",
+        "IBM_KP_BASE_URL": "",
+        "IBM_KP_TOKEN_URL": "https://iam.cloud.ibm.com/oidc/token",
+    }
+}
+
+# Must-gather:
+MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
+MUST_GATHER_UPSTREAM_TAG = "latest"

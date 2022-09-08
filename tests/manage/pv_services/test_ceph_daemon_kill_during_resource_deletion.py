@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.skip(
     reason="This test is disabled because this scenario is covered in the "
-    "test test_daemon_kill_during_pvc_pod_deletion_and_io.py"
+    "test test_daemon_kill_during_pvc_pod_creation_deletion_and_io.py"
 )
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_name"],
@@ -269,7 +269,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
 
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
-            cmd = f"oc debug nodes/{node} -- df"
+            cmd = f"oc debug nodes/{node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- df"
             df_on_node = run_cmd(cmd)
             for pv in pvs:
                 assert pv not in df_on_node, (

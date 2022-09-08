@@ -10,7 +10,9 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     NoSuchElementException,
+    StaleElementReferenceException,
 )
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
@@ -41,7 +43,6 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -51,24 +52,38 @@ class BaseUI:
 
     """
 
-    def __init__(self, driver):
+    def __init__(self, driver: WebDriver):
         self.driver = driver
-        self.screenshots_folder = os.path.join(
+        base_ui_logs_dir = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"screenshots_ui_{ocsci_config.RUN['run_id']}",
+            f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+        )
+        self.screenshots_folder = os.path.join(
+            base_ui_logs_dir,
+            "screenshots_ui",
+            get_current_test_name(),
+        )
+        self.dom_folder = os.path.join(
+            base_ui_logs_dir,
+            "dom",
             get_current_test_name(),
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.screenshots_folder}")
 
-    def do_click(self, locator, timeout=30, enable_screenshot=False):
+        if not os.path.isdir(self.dom_folder):
+            Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
+        logger.info(f"screenshots pictures:{self.dom_folder}")
+
+    def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
         """
         Click on Button/link on OpenShift Console
 
         locator (set): (GUI element needs to operate on (str), type (By))
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
+        copy_dom (bool): copy page source of the webpage
         """
         try:
             wait = WebDriverWait(self.driver, timeout)
@@ -79,8 +94,11 @@ class BaseUI:
             if screenshot:
                 self.take_screenshot()
             element.click()
+            if copy_dom:
+                self.copy_dom()
         except TimeoutException as e:
             self.take_screenshot()
+            self.copy_dom()
             logger.error(e)
             raise TimeoutException
 
@@ -224,7 +242,7 @@ class BaseUI:
             page_hash_new = get_page_hash()
             if retry_counter == retries:
                 raise PageNotLoaded(
-                    f"Current URL did not finish loading in {retries*sleep_time}"
+                    f"Current URL did not finish loading in {retries * sleep_time}"
                 )
         logger.info(f"page loaded: {self.driver.current_url}")
 
@@ -254,9 +272,23 @@ class BaseUI:
             self.screenshots_folder,
             f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
         )
-        logger.info(f"Creating snapshot: {filename}")
+        logger.debug(f"Creating screenshot: {filename}")
         self.driver.save_screenshot(filename)
         time.sleep(0.5)
+
+    def copy_dom(self):
+        """
+        Get page source of the webpage
+
+        """
+        filename = os.path.join(
+            self.dom_folder,
+            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+        )
+        logger.info(f"Copy DOM file: {filename}")
+        html = self.driver.page_source
+        with open(filename, "w") as f:
+            f.write(html)
 
     def do_clear(self, locator, timeout=30):
         """
@@ -318,12 +350,25 @@ class BaseUI:
 
         """
         try:
-            wait = WebDriverWait(self.driver, timeout=timeout, poll_frequency=1)
+            ignored_exceptions = (
+                NoSuchElementException,
+                StaleElementReferenceException,
+            )
+            wait = WebDriverWait(
+                self.driver,
+                timeout=timeout,
+                ignored_exceptions=ignored_exceptions,
+                poll_frequency=1,
+            )
             wait.until(ec.presence_of_element_located(locator))
             return True
-        except NoSuchElementException:
-            self.take_screenshot()
+        except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
+            self.take_screenshot()
+            return False
+        except TimeoutException:
+            logger.error(f"Timedout while waiting for element with {locator}")
+            self.take_screenshot()
             return False
 
 
@@ -358,7 +403,12 @@ class PageNavigator(BaseUI):
             else:
                 self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-            self.storage_class = "managed-premium_sc"
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            self.storage_class = "standard_sc"
 
     def navigate_overview_page(self):
         """
@@ -376,11 +426,17 @@ class PageNavigator(BaseUI):
     def navigate_odf_overview_page(self):
         """
         Navigate to OpenShift Data Foundation Overview Page
-
         """
         logger.info("Navigate to ODF tab under Storage section")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (
+            self.ocp_version_full >= version.VERSION_4_10
+            and ocs_version >= version.VERSION_4_10
+        ):
+            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        else:
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
 
@@ -451,7 +507,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
-        self.page_has_loaded(retries=25)
+        self.page_has_loaded(retries=25, sleep_time=5)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
@@ -493,7 +549,7 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(
             locator=self.page_nav["persistentvolumeclaims_page"],
-            enable_screenshot=False,
+            enable_screenshot=True,
         )
 
     def navigate_storageclasses_page(self):
@@ -608,6 +664,47 @@ class PageNavigator(BaseUI):
         self.navigate_to_ocs_operator_page()
         self.do_click(locator=self.page_nav["block_pool_link"])
 
+    def wait_for_namespace_selection(self, project_name):
+        """
+        If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
+        It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
+        namespace drop-down.
+        The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
+
+        Args:
+            project_name (str): Name of the project to be selected
+
+        Returns:
+            bool: True if the project is found, raises NoSuchElementException otherwise with a log message
+        """
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        if self.ocp_version_full >= version.VERSION_4_10:
+            default_projects_is_checked = self.driver.find_element_by_xpath(
+                "//span[@class='pf-c-switch__toggle']"
+            )
+
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
+                logger.info("Show default projects")
+                self.do_click(self.page_nav["show-default-projects"])
+
+        pvc_loc = locators[self.ocp_version]["pvc"]
+        logger.info(f"Wait and select namespace {project_name}")
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=10,
+        )
+        if wait_for_project:
+            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            logger.info(f"Namespace {project_name} selected")
+        else:
+            raise NoSuchElementException(f"Namespace {project_name} not found on UI")
+
     def verify_current_page_resource_status(self, status_to_check, timeout=30):
         """
         Compares a given status string to the one shown in the resource's UI page
@@ -647,6 +744,55 @@ class PageNavigator(BaseUI):
             return False
 
 
+def screenshot_dom_location(type_loc="screenshot"):
+    """
+    Get the location for copy DOM/screenshot
+
+    Args:
+        type_loc (str): if type_loc is "screenshot" the location for copy screeenshot else DOM
+
+    """
+    base_ui_logs_dir = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
+    )
+    if type_loc == "screenshot":
+        return os.path.join(
+            base_ui_logs_dir,
+            "screenshots_ui",
+            get_current_test_name(),
+        )
+    else:
+        return os.path.join(
+            base_ui_logs_dir,
+            "dom",
+            get_current_test_name(),
+        )
+
+
+def copy_dom(driver):
+    """
+    Copy DOM using python code
+
+    Args:
+        driver (Selenium WebDriver)
+
+    """
+    dom_folder = screenshot_dom_location(type_loc="dom")
+    if not os.path.isdir(dom_folder):
+        Path(dom_folder).mkdir(parents=True, exist_ok=True)
+    time.sleep(1)
+    filename = os.path.join(
+        dom_folder,
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+    )
+    logger.info(f"Copy DOM file: {filename}")
+    html = driver.page_source
+    with open(filename, "w") as f:
+        f.write(html)
+    time.sleep(0.5)
+
+
 def take_screenshot(driver):
     """
     Take screenshot using python code
@@ -655,11 +801,7 @@ def take_screenshot(driver):
         driver (Selenium WebDriver)
 
     """
-    screenshots_folder = os.path.join(
-        os.path.expanduser(ocsci_config.RUN["log_dir"]),
-        f"screenshots_ui_{ocsci_config.RUN['run_id']}",
-        get_current_test_name(),
-    )
+    screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
@@ -667,7 +809,7 @@ def take_screenshot(driver):
         screenshots_folder,
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
-    logger.info(f"Creating snapshot: {filename}")
+    logger.debug(f"Creating screenshot: {filename}")
     driver.save_screenshot(filename)
     time.sleep(0.5)
 
@@ -706,6 +848,9 @@ def login_ui(console_url=None):
             chrome_options.add_argument("--ignore-ssl-errors=yes")
             chrome_options.add_argument("--ignore-certificate-errors")
             chrome_options.add_argument("--allow-insecure-localhost")
+            if config.ENV_DATA.get("import_clusters_to_acm"):
+                # Dev shm should be disabled when sending big amonut characters, like the cert sections of a kubeconfig
+                chrome_options.add_argument("--disable-dev-shm-usage")
             capabilities = chrome_options.to_capabilities()
             capabilities["acceptInsecureCerts"] = True
 
@@ -717,7 +862,9 @@ def login_ui(console_url=None):
 
         # use proxy server, if required
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
             # there is a big difference between configuring not authenticated
@@ -771,22 +918,32 @@ def login_ui(console_url=None):
 
     wait = WebDriverWait(driver, 60)
     driver.maximize_window()
+    driver.implicitly_wait(10)
     driver.get(console_url)
-    if config.ENV_DATA["flexy_deployment"]:
+    # Validate proceeding to the login console before taking any action:
+    proceed_to_login_console(driver)
+    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
+        "import_clusters_to_acm"
+    ):
         try:
             element = wait.until(
                 ec.element_to_be_clickable(
-                    (login_loc["flexy_kubeadmin"][1], login_loc["flexy_kubeadmin"][0])
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
                 )
             )
             element.click()
         except TimeoutException as e:
             take_screenshot(driver)
+            copy_dom(driver)
             logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
     take_screenshot(driver)
+    copy_dom(driver)
     element.send_keys("kubeadmin")
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
@@ -813,4 +970,28 @@ def close_browser(driver):
     """
     logger.info("Close browser")
     take_screenshot(driver)
+    copy_dom(driver)
     driver.close()
+
+
+def proceed_to_login_console(driver: WebDriver):
+    """
+    Proceed to the login console, if needed to confirm this action in a page that appears before.
+    This is required to be as a solo function, because the driver initializes in the login_ui function.
+    Function needs to be called just before login
+
+    Args:
+        driver (Selenium WebDriver)
+
+    Returns:
+        None
+
+    """
+    login_loc = locators[get_ocp_version()]["login"]
+    if driver.title == login_loc["pre_login_page_title"]:
+        proceed_btn = driver.find_element(
+            by=login_loc["proceed_to_login_btn"][1],
+            value=login_loc["proceed_to_login_btn"][0],
+        )
+        proceed_btn.click()
+        WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))

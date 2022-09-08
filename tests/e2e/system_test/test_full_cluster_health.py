@@ -72,13 +72,13 @@ class TestFullClusterHealth(PASTest):
         """
 
         ceph_used_capacity_percent = get_percent_used_capacity()
-        logging.info(f"Ceph used capacity percent is {ceph_used_capacity_percent}%")
+        logger.info(f"Ceph used capacity percent is {ceph_used_capacity_percent}%")
 
         ceph_capacity = self.ceph_cluster.get_ceph_capacity()
-        logging.info(f"Total storage capacity is {ceph_capacity} GiB")
+        logger.info(f"Total storage capacity is {ceph_capacity} GiB")
 
         self.percent_to_fill = self.percent_to_fill - ceph_used_capacity_percent
-        logging.info(f"Percentage to fill is {self.percent_to_fill}%")
+        logger.info(f"Percentage to fill is {self.percent_to_fill}%")
 
         self.total_data_set = int(ceph_capacity * (int(self.percent_to_fill) / 100))
         self.filesize = int(

@@ -13,6 +13,7 @@ import pytest
 from junitparser import JUnitXml
 
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
     ClusterNameLengthError,
     ClusterNameNotProvidedError,
@@ -21,13 +22,13 @@ from ocs_ci.framework.exceptions import (
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    LOG_FORMAT,
     OCP_VERSION_CONF_DIR,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -40,16 +41,13 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
-from ocs_ci.utility.reporting import update_live_must_gather_image
 
 __all__ = [
     "pytest_addoption",
 ]
 
+current_factory = logging.getLogRecordFactory()
 log = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter(LOG_FORMAT))
-log.addHandler(handler)
 
 
 def _pytest_addoption_cluster_specific(parser):
@@ -124,6 +122,18 @@ def _pytest_addoption_cluster_specific(parser):
             dest=f"osd_size{suffix}",
             type=int,
             help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+        )
+        parser.addoption(
+            f"--lvmo-disks{suffix}",
+            dest=f"lvmo_disks{suffix}",
+            type=int,
+            help="Number of disks to add to node for LVMO",
+        )
+        parser.addoption(
+            f"--lvmo-disks-size{suffix}",
+            dest=f"lvmo_disks_size{suffix}",
+            type=int,
+            help="Size of the disks to add to lvmo in GB",
         )
 
 
@@ -305,6 +315,15 @@ def pytest_addoption(parser):
         loaded when run-ci starts
         """,
     )
+    parser.addoption(
+        "--install-lvmo",
+        dest="install_lvmo",
+        action="store_true",
+        default=False,
+        help="""
+            set for installing lvmo operator and lvmo cluster
+            """,
+    )
 
 
 def pytest_configure(config):
@@ -316,6 +335,8 @@ def pytest_configure(config):
 
     """
     set_log_level(config)
+    # Set the new factory for the logging of pytest
+    set_log_record_factory()
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -342,7 +363,6 @@ def pytest_configure(config):
             # Add OCS related versions to the html report and remove
             # extraneous metadata
             markers_arg = config.getoption("-m")
-
             # add logs url
             logs_url = ocsci_config.RUN.get("logs_url")
             if logs_url:
@@ -355,6 +375,12 @@ def pytest_configure(config):
                 log.info(
                     "Skipping versions collecting because: Deploy or destroy of "
                     "cluster is performed."
+                )
+                continue
+            elif markers_arg == "acm_import":
+                log.info(
+                    "Skipping auto pytest executions and version collecting because "
+                    "Import Clusters to ACM is performed."
                 )
                 continue
             elif ocsci_config.ENV_DATA["skip_ocs_deployment"]:
@@ -372,7 +398,9 @@ def pytest_configure(config):
                     del config._metadata[extra_meta]
 
             config._metadata["Test Run Name"] = get_testrun_name()
-            gather_version_info_for_report(config)
+            check_clusters()
+            if ocsci_config.RUN.get("cephcluster"):
+                gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 
@@ -489,8 +517,7 @@ def process_cluster_cli_params(config):
         config, "live_deploy", default=False
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
-    if live_deployment:
-        update_live_must_gather_image()
+
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
@@ -506,6 +533,19 @@ def process_cluster_cli_params(config):
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
+    install_lvmo = get_cli_param(config, "install_lvmo")
+    if install_lvmo:
+        ocsci_config.DEPLOYMENT["install_lvmo"] = True
+        number_of_disks = get_cli_param(config, "lvmo_disks")
+        if number_of_disks is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = 3
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = number_of_disks
+        disk_size = get_cli_param(config, "lvmo_disks_size")
+        if disk_size is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = 200
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = disk_size
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image
@@ -617,14 +657,33 @@ def pytest_runtest_makereport(item, call):
     # we only look at actual failing test calls, not setup/teardown
     if rep.failed and ocsci_config.RUN.get("cli_params").get("collect-logs"):
         test_case_name = item.name
-        ocp_logs_collection = True if rep.when == "call" else False
-        mcg = (
+        ocp_logs_collection = (
+            True
+            if any(
+                x in item.location[0]
+                for x in [
+                    "ecosystem",
+                    "e2e/performance",
+                    "test_ceph_csidriver_runs_on_non_ocs_nodes",
+                ]
+            )
+            else False
+        )
+        ocs_logs_collection = (
+            False
+            if any(x in item.location[0] for x in ["_ui", "must_gather"])
+            else True
+        )
+        mcg_logs_collection = (
             True if any(x in item.location[0] for x in ["mcg", "ecosystem"]) else False
         )
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
                 collect_ocs_logs(
-                    dir_name=test_case_name, ocp=ocp_logs_collection, mcg=mcg
+                    dir_name=test_case_name,
+                    ocp=ocp_logs_collection,
+                    ocs=ocs_logs_collection,
+                    mcg=mcg_logs_collection,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")

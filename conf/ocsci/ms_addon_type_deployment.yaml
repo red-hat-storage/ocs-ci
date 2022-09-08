@@ -1,0 +1,3 @@
+ENV_DATA:
+  # Use this config for add-on type deployments
+  appliance_mode : False

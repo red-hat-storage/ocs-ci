@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -11,6 +12,7 @@ from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resour
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 @ui
 @skipif_ocs_version("<4.6")
 @skipif_ui_not_support("pvc")
+@green_squad
 class TestPvcUserInterface(object):
     """
     Test PVC User Interface
@@ -47,10 +50,8 @@ class TestPvcUserInterface(object):
                 "Filesystem",
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd",
-                "ReadWriteOnce",
-                "11",
-                "Block",
+                *["ocs-storagecluster-ceph-rbd", "ReadWriteOnce", "11", "Block"],
+                marks=[skipif_ocs_version("<4.7")],
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
@@ -64,7 +65,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         pvc_size,
@@ -78,10 +79,17 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
 
         # Creating PVC via UI
         pvc_name = create_unique_resource_name("test", "pvc")
+
+        if config.DEPLOYMENT["external_mode"]:
+            if sc_name == constants.CEPHFILESYSTEM_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif sc_name == constants.CEPHBLOCKPOOL_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
         )
@@ -123,7 +131,9 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in (constants.DEFAULT_STORAGECLASS_RBD,):
+        if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
+            interface_type = constants.CEPHBLOCKPOOL
+        elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
         else:
             interface_type = constants.CEPHFILESYSTEM
@@ -136,7 +146,9 @@ class TestPvcUserInterface(object):
         )
 
         logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
-        wait_for_resource_state(resource=new_pod, state=constants.STATUS_RUNNING)
+        wait_for_resource_state(
+            resource=new_pod, state=constants.STATUS_RUNNING, timeout=120
+        )
 
         # Calling the Teardown Factory Method to make sure Pod is deleted
         teardown_factory(new_pod)
@@ -217,7 +229,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui,
+        setup_ui_class,
         sc_name,
         access_mode,
         clone_access_mode,
@@ -233,7 +245,13 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI(setup_ui_class)
+
+        if config.DEPLOYMENT["external_mode"]:
+            if sc_name == constants.CEPHFILESYSTEM_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif sc_name == constants.CEPHBLOCKPOOL_SC:
+                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
 
         # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")
@@ -260,8 +278,8 @@ class TestPvcUserInterface(object):
         pvc_ui_obj.pvc_clone_ui(
             project_name=project_name,
             pvc_name=pvc_name,
-            clone_name=clone_pvc_name,
-            clone_access_mode=clone_access_mode,
+            cloned_pvc_access_mode=clone_access_mode,
+            cloned_pvc_name=clone_pvc_name,
         )
 
         teardown_factory(

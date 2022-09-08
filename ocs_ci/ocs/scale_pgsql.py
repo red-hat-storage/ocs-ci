@@ -96,7 +96,7 @@ def add_worker_node(instance_type=None):
                     label_value="app-scale",
                 )
     scale_worker_list = machine.get_labeled_nodes(constants.SCALE_LABEL)
-    logging.info(f"Print existing scale worker {scale_worker_list}")
+    log.info(f"Print existing scale worker {scale_worker_list}")
 
     if (
         config.ENV_DATA["deployment_type"] == "ipi"

@@ -71,7 +71,7 @@ class TestPvcAssignPodNode(ManageTest):
 
         # Run IO
         logger.info(f"Running IO on pod {pod_obj.name}")
-        pod_obj.run_io(storage_type="fs", size="512M", runtime=30)
+        pod_obj.run_io(storage_type="fs", size="512M", runtime=30, invalidate=0)
         pod.get_fio_rw_iops(pod_obj)
 
     @acceptance
@@ -152,6 +152,7 @@ class TestPvcAssignPodNode(ManageTest):
                     size="512M",
                     runtime=30,
                     fio_filename=pod_obj.name,
+                    invalidate=0,
                 )
 
         # Check IO from all pods

@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import ui, skipif_ocs_version, tier2, skipif_ibm_cloud
+from ocs_ci.framework.pytest_customization.marks import purple_squad
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class TestPvcUserInterface(object):
     @skipif_ibm_cloud
     @tier2
     @skipif_ocs_version("<4.7")
+    @purple_squad
     @pytest.mark.parametrize(
         argnames=["title"],
         argvalues=[
@@ -30,12 +32,12 @@ class TestPvcUserInterface(object):
             ),
         ],
     )
-    def test_quickstart_presense(self, setup_ui, title):
+    def test_quickstart_presense(self, setup_ui_class, title):
         """
         Check that the quickstart with the given title is present in the UI
 
         """
-        quickstart_ui_obj = PageNavigator(setup_ui)
+        quickstart_ui_obj = PageNavigator(setup_ui_class)
         quickstart_ui_obj.navigate_quickstarts_page()
         quickstart_ui_obj.take_screenshot()
         logger.info(f"Expected quickstart title: {title}")

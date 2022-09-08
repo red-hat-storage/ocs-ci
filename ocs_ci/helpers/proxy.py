@@ -87,6 +87,6 @@ def update_container_with_proxy_env(job_pod_dict):
             container["env"].append({"name": "https_proxy", "value": https_proxy})
             container["env"].append({"name": "no_proxy", "value": no_proxy})
     except KeyError as err:
-        logging.warning(
+        logger.warning(
             "Http(s)_proxy variable wasn't configured, '%s' key not found.", err
         )

@@ -6,7 +6,12 @@ from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.framework import config
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    VERSION_4_12,
+)
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_ocp_version,
@@ -76,6 +81,18 @@ class TestUpgradeOCP(ManageTest):
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
+            semantic_ocp_upgrade_version = get_semantic_version(
+                ocp_upgrade_version, only_major_minor=True
+            )
+            # This is W/A for BZ:
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2124593
+            if semantic_ocp_upgrade_version >= VERSION_4_12:
+                label_pod_security_admission(
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    upgrade_version=semantic_ocp_upgrade_version,
+                )
+            if ocp_upgrade_version:
+                target_image = ocp_upgrade_version
             if not ocp_upgrade_version:
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                 ocp_arch = config.UPGRADE["ocp_arch"]
@@ -160,8 +177,9 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        new_ceph_cluster = CephCluster()
-        # Increased timeout because of this bug:
-        # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
-        new_ceph_cluster.wait_for_rebalance(timeout=3000)
-        ceph_health_check(tries=90, delay=30)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            new_ceph_cluster = CephCluster()
+            # Increased timeout because of this bug:
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
+            new_ceph_cluster.wait_for_rebalance(timeout=3000)
+            ceph_health_check(tries=160, delay=30)

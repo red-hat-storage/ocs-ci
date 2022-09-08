@@ -3,8 +3,8 @@ import pytest
 
 
 from ocs_ci.framework.testlib import (
-    tier4,
     tier4a,
+    tier4b,
     ignore_leftovers,
     ManageTest,
     cloud_platform_required,
@@ -12,22 +12,26 @@ from ocs_ci.framework.testlib import (
     skipif_no_lso,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery, get_pv_names
+from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.helpers.helpers import (
+    wait_for_ct_pod_recovery,
+    get_pv_names,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
 
 
-@tier4
-@tier4a
 @ignore_leftovers
 @skipif_vsphere_ipi
+@skipif_managed_service
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -39,7 +43,10 @@ class TestNodesRestart(ManageTest):
         Initialize Sanity instance
 
         """
-        self.sanity_helpers = Sanity()
+        if storagecluster_independent_check():
+            self.sanity_helpers = SanityExternalCluster()
+        else:
+            self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -53,6 +60,7 @@ class TestNodesRestart(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @tier4a
     @pytest.mark.parametrize(
         argnames=["force"],
         argvalues=[
@@ -77,6 +85,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     def test_rolling_nodes_restart(
@@ -94,6 +103,7 @@ class TestNodesRestart(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
@@ -246,6 +256,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
+    @tier4b
     @pytest.mark.parametrize(
         argnames=["operation"],
         argvalues=[
@@ -354,6 +365,7 @@ class TestNodesRestart(ManageTest):
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
 
+    @tier4b
     @skipif_no_lso
     @bugzilla("1873938")
     @pytest.mark.polarion_id("OCS-2448")

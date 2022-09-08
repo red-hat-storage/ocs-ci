@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.pytest_customization.marks import (
@@ -44,7 +43,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @pre_upgrade
 @brown_squad
@@ -59,7 +58,7 @@ def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_i
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @post_upgrade
 @brown_squad
@@ -116,7 +115,7 @@ def test_pod_log_after_upgrade():
     pod_objs = get_osd_pods() + get_mon_pods() + get_mgr_pods()
     pod_names = [osd_pod_obj.name for osd_pod_obj in pod_objs]
     expected_log_after_upgrade = "set uid:gid to 167:167 (ceph:ceph)"
-    logging.info(
+    log.info(
         f"Check that the log '{expected_log_after_upgrade}' "
         f"appears after the osd/mon/mg pod is initialized"
     )
@@ -126,9 +125,7 @@ def test_pod_log_after_upgrade():
             f"The expected log after upgrade '{expected_log_after_upgrade}' does not exist"
             f" on pod {pod_name}"
         )
-    logging.info(
-        f"The log '{expected_log_after_upgrade}' appears in all relevant pods."
-    )
+    log.info(f"The log '{expected_log_after_upgrade}' appears in all relevant pods.")
 
 
 @post_upgrade

@@ -239,7 +239,7 @@ class ClusterLoad:
                 # In other cases, when the first latency sample value is greater than 3 ms,
                 # the multiplication factor we check according to, is lower, in order to
                 # determine the cluster load faster.
-                if latency > latency_vals[0] * 2 ** 7 or (
+                if latency > latency_vals[0] * 2**7 or (
                     3 < latency_vals[0] < 50 and len(latency_vals) > 5
                 ):
                     logger.info(

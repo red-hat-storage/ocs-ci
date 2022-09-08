@@ -4,12 +4,13 @@ import pytest
 
 
 from ocs_ci.framework.testlib import (
-    tier4c,
+    tier4b,
     ignore_leftovers,
     ManageTest,
     bugzilla,
     skipif_external_mode,
     skipif_ibm_cloud,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.node import get_ocs_nodes
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -19,11 +20,12 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
-@tier4c
+@tier4b
 @pytest.mark.polarion_id("OCS-2633")
 @bugzilla("1895819")
 @skipif_ibm_cloud
 @skipif_external_mode
+@skipif_managed_service
 @ignore_leftovers
 class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
     """

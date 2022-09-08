@@ -20,8 +20,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier1,
     tier2,
-    tier4,
-    tier4a,
+    tier4c,
 )
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -928,8 +927,7 @@ class TestNamespace(MCGTest):
             amount=3,
         )
 
-    @tier4
-    @tier4a
+    @tier4c
     @pytest.mark.parametrize(
         argnames=["mcg_pod"],
         argvalues=[
@@ -1023,8 +1021,7 @@ class TestNamespace(MCGTest):
         )
 
     @pytest.mark.polarion_id("OCS-2293")
-    @tier4
-    @tier4a
+    @tier2
     def test_namespace_bucket_creation_with_many_resources_crd(
         self, namespace_store_factory, bucket_factory
     ):
@@ -1052,8 +1049,7 @@ class TestNamespace(MCGTest):
         )
 
     @pytest.mark.polarion_id("OCS-2325")
-    @tier4
-    @tier4a
+    @tier2
     def test_block_read_resource_in_namespace_bucket_crd(
         self,
         mcg_obj,
