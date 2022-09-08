@@ -429,4 +429,4 @@ def check_memory_leak_in_noobaa_endpoint_log():
     if mem_leak is True:
         raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
     else:
-        log.info(f"No memory leak is seen in Noobaa endpoint logs")
+        log.info("No memory leak is seen in Noobaa endpoint logs")
