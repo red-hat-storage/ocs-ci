@@ -103,9 +103,15 @@ class TestCephPgLogDupsTrimming(ManageTest):
         for per_osd_dups in total_dups_after_trim_list:
             assert (
                 per_osd_dups == default_osd_pg_log_dups
-            ), "pg log dups are not trimmed to the default tracked value:3000"
+            ), f"pg log dups are not trimmed to the default tracked value:{default_osd_pg_log_dups}"
         log.info(
-            "All the osd's pg log dups are trimmed to the default tracked value: 3000 "
+            f"All the osd's pg log dups are trimmed to the default tracked value:{default_osd_pg_log_dups}"
         )
         # Exit osd maintenance mode
         exit_osd_maintenance_mode(osd_dep_list_obj)
+
+        # Create PVC and write some IO
+        pvc_obj3 = pvc_factory(interface=constants.CEPHBLOCKPOOL, size="10")
+        pod_obj3 = pod_factory(pvc=pvc_obj3)
+        pod_obj3.run_io(size="5g", storage_type="fs")
+        pod_obj3.get_fio_results()

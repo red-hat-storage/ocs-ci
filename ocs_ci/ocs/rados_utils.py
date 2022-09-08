@@ -328,13 +328,13 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
 
 
 def inject_corrupted_dups_into_pg_via_cot(
-    osd_deployment, pgid, injected_dups_file_name_prefix="text"
+    osd_deployments, pgid, injected_dups_file_name_prefix="text"
 ):
     """
     Inject corrupted dups into a pg via COT
 
     Args:
-        osd_deployment (OCS): List of OSD deployment OCS instances
+        osd_deployments (OCS): List of OSD deployment OCS instances
         pgid (str): pgid for a pool eg: '1.55'
         injected_dups_file_name_prefix (str): File name prefix for injecting dups
 
@@ -350,10 +350,13 @@ def inject_corrupted_dups_into_pg_via_cot(
     with open(tmpfile.name, "w") as f:
         f.write(txt)
     # Copy the dups entries file to the osd running node and inject corrupted dups into the pg via COT
-    for deployment in osd_deployment:
+    for deployment in osd_deployments:
         osd_pod = deployment.pods[0]
         osd_id = osd_pod.labels["ceph-osd-id"]
         cmd = f"oc cp {tmpfile.name} /{osd_pod.name}:/tmp -n openshift-storage"
+        logger.info(
+            f"Inject corrupted dups into the pgid:{pgid} for osd:{osd_id} using json file data /n {txt}"
+        )
         run_cmd(cmd=cmd)
         osd_pod.exec_sh_cmd_on_pod(
             f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
@@ -362,12 +365,12 @@ def inject_corrupted_dups_into_pg_via_cot(
         )
 
 
-def get_pg_log_dups_count_via_cot(osd_deployment, pgid):
+def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
     """
     Get the pg log dup entries count via COT
 
     Args:
-        osd_deployment (OCS): List of OSD deployment OCS instances
+        osd_deployments (OCS): List of OSD deployment OCS instances
         pgid (str): pgid for a pool eg: '1.55'
 
     Return:
@@ -375,9 +378,12 @@ def get_pg_log_dups_count_via_cot(osd_deployment, pgid):
 
     """
     osd_pg_log_dups = []
-    for deployment in osd_deployment:
+    for deployment in osd_deployments:
         osd_pod = deployment.pods[0]
         osd_id = osd_pod.labels["ceph-osd-id"]
+        logger.info(
+            f"Get the pg dup entries count injected into pgid:{pgid} for osd:{osd_id}"
+        )
         osd_pod.exec_sh_cmd_on_pod(
             f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"

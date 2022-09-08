@@ -2142,7 +2142,7 @@ def get_pool_num(pool_name):
     Get the pool number of a given pool (e.g., ocs-storagecluster-cephblockpool -> 2)
 
     Args:
-    pool_name (str): ceph pool name
+        pool_name (str): ceph pool name
 
     Returns:
         int: pool number
