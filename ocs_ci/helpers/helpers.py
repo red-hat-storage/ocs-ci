@@ -3926,3 +3926,20 @@ def get_noobaa_db_used_space():
         f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
     )
     return df_out[-4]
+
+
+def clean_all_test_projects(project_name="test"):
+    oc_obj = OCP()
+    all_ns = oc_obj.exec_oc_cmd(
+        "get ns -ocustom-columns=NAME:.metadata.name", out_yaml_format=False
+    )
+    ns_list = all_ns.split("\n")
+    ns_to_delete = list()
+    for ns in ns_list:
+        if project_name in ns:
+            ns_to_delete.append(ns)
+    if not ns_to_delete:
+        logger.info("No test project found, Moving On")
+    for ns in ns_to_delete:
+        logger.info(f"Removing {ns}")
+        oc_obj.delete_project(ns)

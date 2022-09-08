@@ -152,7 +152,7 @@ CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
-LVMCLUSTER = "lvmcluster"
+LVMCLUSTER = "odf-lvmcluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 
 # Provisioners
