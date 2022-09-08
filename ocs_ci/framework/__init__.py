@@ -330,5 +330,27 @@ class MultiClusterConfig:
         """
         return self.ENV_DATA.get("cluster_name")
 
+    def is_provider_exist(self):
+        """
+        Check if the provider cluster exists in the clusters
+
+        Returns:
+            bool: True, if the provider cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "provider" in cluster_types
+
+    def is_consumer_exist(self):
+        """
+        Check if the consumer cluster exists in the clusters
+
+        Returns:
+            bool: True, if the consumer cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "consumer" in cluster_types
+
 
 config = MultiClusterConfig()

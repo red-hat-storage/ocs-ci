@@ -231,6 +231,15 @@ ms_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on managed service consumer cluster",
 )
 
+ms_provider_and_consumer_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.is_provider_exist()
+        and config.is_consumer_exist()
+    ),
+    reason="Test runs ONLY on Managed service with provider and consumer clusters",
+)
+
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
@@ -285,6 +294,13 @@ skipif_ms_consumer = pytest.mark.skipif(
     config.default_cluster_ctx.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
     and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "consumer",
     reason="Test will not run on Managed service consumer cluster",
+)
+
+skipif_ms_provider_and_consumer = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.is_provider_exist()
+    and config.is_consumer_exist(),
+    reason="Test will not run on Managed service with provider and consumer clusters",
 )
 
 skipif_rosa = pytest.mark.skipif(
