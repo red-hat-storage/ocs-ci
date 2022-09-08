@@ -159,21 +159,16 @@ def osd_device_replacement(nodes):
                 constants.STATUS_RELEASED,
                 constants.STATUS_FAILED,
             ]
-
-        assert (
-            osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses
-        ), logger.warning(
-            f"The old PV '{osd_pv_name}' is not in "
-            f"the expected statuses: {expected_old_pv_statuses}"
-        )
-
-    # Delete PV
-    logger.info(f"Verifying deletion of PV {osd_pv_name}")
     try:
-        osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
-    except TimeoutError:
-        osd_pv.delete()
-        osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+        if osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses:
+            try:
+                logger.info(f"Verifying deletion of PV {osd_pv_name}")
+                osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+            except TimeoutError:
+                osd_pv.delete()
+                osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+    except Exception as e:
+        logger.error(f"Old PV does not exist {e}")
 
     # If we use LSO, we need to create and attach a new disk manually
     if cluster.is_lso_cluster():
