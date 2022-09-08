@@ -429,6 +429,7 @@ def verify_mcg_system_recovery(
         )
 
     return mcg_system_recovery_check
+<<<<<<< HEAD
 
 
 @pytest.fixture(scope="class")
@@ -669,3 +670,5 @@ def get_consumer_clusters():
             consumer_clusters.append(index)
     config.index_consumer_clusters = consumer_clusters
 >>>>>>> 9b1bd5d8 (Workloads on MS)
+=======
+>>>>>>> c5c5c7f3 (use fixture from test/conftest)
