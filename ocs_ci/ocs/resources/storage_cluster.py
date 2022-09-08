@@ -981,7 +981,7 @@ def add_capacity_lso():
     else:
         set_deviceset_count(deviceset_count + 1)
 
-    pod_obj = OCP(kind=constants.POD, namespace=constants.ROOK_CLUSTER_NAMESPACE)
+    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     pod_obj.wait_for_resource(
         timeout=600,
         condition=constants.STATUS_RUNNING,
