@@ -1,9 +1,7 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -14,11 +12,14 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
 )
 <<<<<<< HEAD
+<<<<<<< HEAD
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 =======
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.couchbase import CouchBase
 >>>>>>> 9b1bd5d8 (Workloads on MS)
+=======
+>>>>>>> 133bb462 (fix code)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
@@ -27,10 +28,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
     validate_pv_delete,
-    default_storage_class,
 )
-from ocs_ci.ocs.jenkins import Jenkins
-from ocs_ci.ocs.pgsql import Postgresql
 
 logger = logging.getLogger(__name__)
 
