@@ -178,10 +178,6 @@ class OCPDeployment:
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
-        # Retrieve cluster metadata
-        metadata_file = os.path.join(self.cluster_path, "metadata.json")
-        with open(metadata_file) as f:
-            self.metadata = json.loads(f.read())
         utils.destroy_cluster(
             installer=self.installer,
             cluster_path=self.cluster_path,
