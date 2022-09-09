@@ -725,7 +725,6 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-scc-describe.txt",
     "obc_list",
     "subscription",
-    "odf-csi-addons-operator.yaml",
     "odf-operator.yaml",
 ]
 
@@ -858,6 +857,30 @@ GATHER_COMMANDS_VERSION = {
         ),
     },
     4.11: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_EXCLUDE_4_11)
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.12: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": list(
