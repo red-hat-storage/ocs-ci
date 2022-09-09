@@ -695,7 +695,7 @@ def _multi_obc_lifecycle_factory(
                 )
                 if bulk:
                     for bucket in buckets:
-                        bucket.verify_health(timeout=360)
+                        bucket.verify_health(timeout=600)
                 obc_objs.extend(buckets)
                 written_objs_names = write_empty_files_to_bucket(
                     mcg_obj, awscli_pod_session, buckets[0].name, test_directory_setup
