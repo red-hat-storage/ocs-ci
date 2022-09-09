@@ -963,11 +963,15 @@ def add_capacity_lso():
     node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
     deviceset_count = get_deviceset_count()
     if is_flexible_scaling_enabled():
+        log.info("Add 2 disk to same node")
         add_disk_to_node(node_objs[0])
-        num_available_pv = 1
+        add_disk_to_node(node_objs[0])
+        num_available_pv = 2
+        set_count = deviceset_count + 2
     else:
         add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
         num_available_pv = 3
+        set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions():
         try:
@@ -977,9 +981,9 @@ def add_capacity_lso():
             log.error(
                 f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
             )
-            set_deviceset_count(deviceset_count + 1)
+            set_deviceset_count(set_count)
     else:
-        set_deviceset_count(deviceset_count + 1)
+        set_deviceset_count(set_count)
 
     pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     pod_obj.wait_for_resource(
