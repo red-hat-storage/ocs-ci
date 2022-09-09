@@ -1430,11 +1430,8 @@ def verify_provider_storagecluster(sc_data):
             assert item["operator"] == "DoesNotExist"
     log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
     assert re.match(
-        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
-    )
-    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
-    assert re.match(
-        "\\d+(\\.\\d+){3}:31659", sc_data["status"]["storageProviderEndpoint"]
+        "(\\d+(\\.\\d+){3}|[\\w-]+(\\.[\\w-]+)+):\\d{5}",
+        sc_data["status"]["storageProviderEndpoint"],
     )
     annotations = sc_data["metadata"]["annotations"]
     log.info(f"Annotations: {annotations}")
