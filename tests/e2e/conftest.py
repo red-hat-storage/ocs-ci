@@ -11,6 +11,7 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_cache,
     write_random_test_objects_to_bucket,
 )
+from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
@@ -418,3 +419,37 @@ def verify_mcg_system_recovery(
         )
 
     return mcg_system_recovery_check
+
+
+@pytest.fixture(scope="class")
+def benchmark_fio_factory_fixture(request):
+    bmo_fio_obj = BenchmarkOperatorFIO()
+
+    def factory(
+        total_size=2,
+        jobs="read",
+        read_runtime=30,
+        bs="4096KiB",
+        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        timeout_completed=2400,
+    ):
+        bmo_fio_obj.setup_benchmark_fio(
+            total_size=total_size,
+            jobs=jobs,
+            read_runtime=read_runtime,
+            bs=bs,
+            storageclass=storageclass,
+            timeout_completed=timeout_completed,
+        )
+        bmo_fio_obj.run_fio_benchmark_operator()
+
+    def finalizer():
+        """
+        Clean up
+
+        """
+        # Clean up
+        bmo_fio_obj.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
