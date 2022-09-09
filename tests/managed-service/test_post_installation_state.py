@@ -29,39 +29,6 @@ class TestPostInstallationState(ManageTest):
 
     @acceptance
     @ms_provider_required
-    @pytest.mark.parametrize(
-        argnames=["resource"],
-        argvalues=[
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL.lower()],
-                marks=pytest.mark.polarion_id("OCS-3907"),
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEMSUBVOLUMEGROUP],
-                marks=pytest.mark.polarion_id("OCS-3908"),
-            ),
-        ],
-    )
-    def test_consumers_connected(self, resource):
-        """
-        Test run on provider cluster that at least one consumer is connected
-        and a unique cephblockpool and subvolumegroup are successfully created
-        on the provider cluster for each connected consumer.
-        """
-        consumer_names = managedservice.get_consumer_names()
-        log.info(f"Connected consumer names: {consumer_names}")
-        assert consumer_names, "No consumer clusters are connected"
-        for consumer_name in consumer_names:
-            resource_name = resource + "-" + consumer_name
-            resource_yaml = ocp.OCP(
-                kind=resource,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                resource_name=resource_name,
-            )
-            assert resource_yaml.get()["status"]["phase"] == "Ready"
-
-    @acceptance
-    @ms_provider_required
     @pytest.mark.polarion_id("OCS-3909")
     def test_consumers_ceph_resources(self):
         """
