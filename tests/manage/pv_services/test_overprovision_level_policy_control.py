@@ -73,8 +73,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         argvalues=[
             pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
             pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
-            pytest.param(*["sc-test-blk", constants.CEPHBLOCKPOOL]),
-            pytest.param(*["sc-test-fs", constants.CEPHFILESYSTEM]),
+            pytest.param(
+                *["sc-test-blk", constants.CEPHBLOCKPOOL],
+                marks=[skipif_ocs_version("<4.10")],
+            ),
+            pytest.param(
+                *["sc-test-fs", constants.CEPHFILESYSTEM],
+                marks=[skipif_ocs_version("<4.10")],
+            ),
         ],
     )
     def test_over_provision_level_policy_control(
