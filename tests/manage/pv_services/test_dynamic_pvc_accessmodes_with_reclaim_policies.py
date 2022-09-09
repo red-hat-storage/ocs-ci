@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -14,7 +13,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers import helpers
-from semantic_version import Version
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +127,7 @@ class TestDynamicPvc(ManageTest):
         RWO Dynamic PVC creation tests with Reclaim policy set to Retain/Delete
 
         """
-        ocs_version = config.ENV_DATA["ocs_version"]
+        # ocs_version = config.ENV_DATA["ocs_version"]
         access_mode = constants.ACCESS_MODE_RWO
         expected_failure_str = "Multi-Attach error for volume"
         storage_type = "fs"
@@ -180,7 +179,7 @@ class TestDynamicPvc(ManageTest):
         # If ODF < 4.12 verify that second pod is still in ContainerCreating state
         #  and not able to attain Running state due to expected failure
         if (
-            Version.coerce(ocs_version) < Version.coerce("4.12")
+            version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
             or interface_type == constants.CEPHBLOCKPOOL
         ):
             logger.info(
