@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -72,6 +73,9 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        if self.ocp_version_semantic == version.VERSION_4_12:
+            time.sleep(10)
+            label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
