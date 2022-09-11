@@ -10,6 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
 from ocs_ci.ocs.cluster import LVM
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.lvmo_utils import lvmo_health_check
 
 
 log = logging.getLogger(__name__)
@@ -223,3 +224,5 @@ class TestLvmCapacityAlerts(ManageTest):
             else:
                 log.info(f"size: {size['file_name']}")
                 assert self.lvm.check_for_alert(size.get("alert")), "Alert not found"
+
+        lvmo_health_check()
