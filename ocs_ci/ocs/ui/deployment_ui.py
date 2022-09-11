@@ -75,7 +75,9 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.ocp_version_semantic == version.VERSION_4_12:
             time.sleep(10)
-            label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+            label_pod_security_admission(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
