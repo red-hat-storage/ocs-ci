@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
+    aws_platform_required,
 )
 
 from ocs_ci.ocs.resources import pod, ocs
@@ -62,6 +63,7 @@ class TestDefaultNfsDisabled(ManageTest):
             log.error("nfs feature is enabled by default")
 
 
+@aws_platform_required
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
