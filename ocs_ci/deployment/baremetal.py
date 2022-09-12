@@ -197,12 +197,14 @@ class BAREMETALUPI(Deployment):
                 rhcos_images_file = yaml.safe_load(file_stream)
             ocp_version = get_ocp_version()
             logger.info(rhcos_images_file)
-            image_data = rhcos_images_file[ocp_version]
+
             # Download installer_initramfs
 
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 out = run_cmd(f"{self.installer} coreos print-stream-json")
                 coreos_print_stream_json = json.loads(out)
+            else:
+                image_data = rhcos_images_file[ocp_version]
 
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 initramfs_image_path = coreos_print_stream_json["architectures"][
