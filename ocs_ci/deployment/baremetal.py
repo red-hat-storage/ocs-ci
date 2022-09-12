@@ -10,7 +10,7 @@ import requests
 from semantic_version import Version
 
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility import psiutils, aws
+from ocs_ci.utility import psiutils, aws, version
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
@@ -200,11 +200,11 @@ class BAREMETALUPI(Deployment):
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
 
-            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 out = run_cmd(f"{self.installer} coreos print-stream-json")
                 coreos_print_stream_json = json.loads(out)
 
-            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 initramfs_image_path = coreos_print_stream_json["architectures"][
                     "x86_64"
                 ]["artifacts"]["metal"]["formats"]["pxe"]["initramfs"]["location"]
@@ -225,7 +225,7 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
-            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                 kernel_image_path = coreos_print_stream_json["architectures"]["x86_64"][
                     "artifacts"
                 ]["metal"]["formats"]["pxe"]["kernel"]["location"]
@@ -265,7 +265,7 @@ class BAREMETALUPI(Deployment):
 
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
                 # Download rootfs
-                if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+                if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
                     rootfs_image_path = coreos_print_stream_json["architectures"][
                         "x86_64"
                     ]["artifacts"]["metal"]["formats"]["pxe"]["rootfs"]["location"]
