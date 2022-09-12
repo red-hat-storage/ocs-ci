@@ -199,9 +199,20 @@ class BAREMETALUPI(Deployment):
             logger.info(rhcos_images_file)
             image_data = rhcos_images_file[ocp_version]
             # Download installer_initramfs
-            initramfs_image_path = (
-                constants.coreos_url_prefix + image_data["installer_initramfs_url"]
-            )
+
+            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+                out = run_cmd(f"{self.installer} coreos print-stream-json")
+                coreos_print_stream_json = json.loads(out)
+
+            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+                initramfs_image_path = (
+                    coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
+                    ['initramfs']['location']
+                )
+            else:
+                initramfs_image_path = (
+                    constants.coreos_url_prefix + image_data["installer_initramfs_url"]
+                )
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = (
                     "wget -O "
@@ -215,9 +226,15 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
-            kernel_image_path = (
-                constants.coreos_url_prefix + image_data["installer_kernel_url"]
-            )
+            if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+                kernel_image_path = (
+                    coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
+                    ['kernel']['location']
+                )
+            else:
+                kernel_image_path = (
+                    constants.coreos_url_prefix + image_data["installer_kernel_url"]
+                )
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
                     "wget -O "
@@ -249,10 +266,16 @@ class BAREMETALUPI(Deployment):
                     raise RhcosImageNotFound
 
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-                # Download metal_bios
-                rootfs_image_path = (
-                    constants.coreos_url_prefix + image_data["live_rootfs_url"]
-                )
+                # Download rootfs
+                if Version.coerce(ocp_version) >= Version.coerce("4.12"):
+                    rootfs_image_path = (
+                        coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
+                        ['rootfs']['location']
+                    )
+                else:
+                    rootfs_image_path = (
+                        constants.coreos_url_prefix + image_data["live_rootfs_url"]
+                    )
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
@@ -304,7 +327,7 @@ class BAREMETALUPI(Deployment):
                         server=self.host,
                         localpath=pxe_file_path,
                         remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
