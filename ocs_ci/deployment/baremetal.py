@@ -205,10 +205,9 @@ class BAREMETALUPI(Deployment):
                 coreos_print_stream_json = json.loads(out)
 
             if Version.coerce(ocp_version) >= Version.coerce("4.12"):
-                initramfs_image_path = (
-                    coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
-                    ['initramfs']['location']
-                )
+                initramfs_image_path = coreos_print_stream_json["architectures"][
+                    "x86_64"
+                ]["artifacts"]["metal"]["formats"]["pxe"]["initramfs"]["location"]
             else:
                 initramfs_image_path = (
                     constants.coreos_url_prefix + image_data["installer_initramfs_url"]
@@ -227,10 +226,9 @@ class BAREMETALUPI(Deployment):
                 raise RhcosImageNotFound
             # Download installer_kernel
             if Version.coerce(ocp_version) >= Version.coerce("4.12"):
-                kernel_image_path = (
-                    coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
-                    ['kernel']['location']
-                )
+                kernel_image_path = coreos_print_stream_json["architectures"]["x86_64"][
+                    "artifacts"
+                ]["metal"]["formats"]["pxe"]["kernel"]["location"]
             else:
                 kernel_image_path = (
                     constants.coreos_url_prefix + image_data["installer_kernel_url"]
@@ -268,10 +266,9 @@ class BAREMETALUPI(Deployment):
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
                 # Download rootfs
                 if Version.coerce(ocp_version) >= Version.coerce("4.12"):
-                    rootfs_image_path = (
-                        coreos_print_stream_json['architectures']['x86_64']['artifacts']['metal']['formats']['pxe']
-                        ['rootfs']['location']
-                    )
+                    rootfs_image_path = coreos_print_stream_json["architectures"][
+                        "x86_64"
+                    ]["artifacts"]["metal"]["formats"]["pxe"]["rootfs"]["location"]
                 else:
                     rootfs_image_path = (
                         constants.coreos_url_prefix + image_data["live_rootfs_url"]
@@ -327,7 +324,7 @@ class BAREMETALUPI(Deployment):
                         server=self.host,
                         localpath=pxe_file_path,
                         remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                                   f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
