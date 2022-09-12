@@ -199,20 +199,13 @@ class TestPvPool:
         bucketclass_dict,
     ):
         """
-        Test to modify the CPU and Memory resource limits for BS and see if its reflecting
+        Objective of the test are:
+            1) See if the CLI options to add resource parameters works while creating
+            Pv based backingstore.
+            2) Modifying the backingstores resource, reflects in the pv based backingstore
+            pods.
+
         """
-        # bucketclass_dict = {
-        #     "interface": "OC",
-        #     "backingstore_dict": {
-        #         "pv": [
-        #             (
-        #                 3,
-        #                 MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-        #                 "ocs-storagecluster-ceph-rbd",
-        #             )
-        #         ]
-        #     },
-        # }
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
         bucket_name = bucket.name
         pv_backingstore = bucket.bucketclass.backingstores[0]
@@ -222,9 +215,7 @@ class TestPvPool:
         for pod in get_pods_having_label(
             label=pv_pod_label, namespace=config.ENV_DATA["cluster_namespace"]
         ):
-            pv_pod_obj.extend(Pod(**pod))
-        # pv_pod_obj = Pod(**pv_pod_info)
-        # logger.info(f"Pod created for PV Backingstore {pv_bs_name}: {pv_pod_name}")
+            pv_pod_obj.append(Pod(**pod))
         req_cpu = "400m"
         req_mem = "600Mi"
         lim_cpu = "500m"

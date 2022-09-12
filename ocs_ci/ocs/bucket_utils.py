@@ -712,7 +712,7 @@ def cli_create_pv_backingstore(
     if req_mem:
         cmd += f" --request-memory {req_mem}"
     if lim_cpu:
-        cmd += f" --limit-cpu {lim_mem}"
+        cmd += f" --limit-cpu {lim_cpu}"
     if lim_mem:
         cmd += f" --limit-memory {lim_mem}"
     mcg_obj.exec_mcg_cmd(cmd)
