@@ -816,12 +816,14 @@ def take_screenshot(driver):
 
 @retry(TimeoutException, tries=3, delay=3, backoff=2)
 @retry(WebDriverException, tries=3, delay=3, backoff=2)
-def login_ui(console_url=None):
+def login_ui(console_url=None, username=None, password=None):
     """
     Login to OpenShift Console
 
     Args:
         console_url (str): ocp console url
+        username(str): User which is other than admin user,
+        password(str): Password of user other than admin user
 
     return:
         driver (Selenium WebDriver)
@@ -832,9 +834,9 @@ def login_ui(console_url=None):
         console_url = get_ocp_url()
         default_console = True
     logger.info("Get password of OCP console")
-    password = get_kubeadmin_password()
-    password = password.rstrip()
-
+    if password is None:
+        password = get_kubeadmin_password()
+        password = password.rstrip()
     ocp_version = get_ocp_version()
     login_loc = locators[ocp_version]["login"]
 
@@ -939,12 +941,30 @@ def login_ui(console_url=None):
             take_screenshot(driver)
             copy_dom(driver)
             logger.error(e)
+
+    if username is not None:
+        try:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["username_my_htpasswd"][1],
+                        login_loc["username_my_htpasswd"][0],
+                    )
+                )
+            )
+            element.click()
+        except TimeoutException as e:
+            take_screenshot(driver)
+            logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
     take_screenshot(driver)
+
     copy_dom(driver)
-    element.send_keys("kubeadmin")
+    if username is None:
+        username = "kubeadmin"
+    element.send_keys(username)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
     )
@@ -955,8 +975,11 @@ def login_ui(console_url=None):
         )
     )
     element.click()
-    if default_console:
+    if default_console is None and username is None:
         WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
+    if username is not None:
+        element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
+        element.click()
     return driver
 
 

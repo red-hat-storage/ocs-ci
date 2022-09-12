@@ -1,11 +1,14 @@
 import logging
+
+from ocs_ci.ocs import constants
 from time import sleep
-
+from ocs_ci.ocs.ocp import OCP
 from selenium.webdriver.support.wait import WebDriverWait
-
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility import version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
+from tests.conftest import delete_projects
 
 logger = logging.getLogger(__name__)
 
@@ -314,3 +317,34 @@ class ObcUI(PageNavigator):
 
         logger.info("Confirm OBC Deletion")
         self.do_click(self.generic_locators["confirm_action"])
+
+
+class ObcUi(ObcUI):
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.sc_loc = locators[self.ocp_version]["obc"]
+
+    def check_obc_option(self, text="Object Bucket Claims"):
+        """check OBC is visible to user after giving admin access"""
+
+        sc_name = create_unique_resource_name("namespace-", "interface")
+        self.do_click(self.sc_loc["Developer_dropdown"])
+        self.do_click(self.sc_loc["select_administrator"], timeout=5)
+        self.do_click(self.sc_loc["create_project"])
+        self.do_send_keys(self.sc_loc["project_name"], sc_name)
+        self.do_click(self.sc_loc["save_project"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        obc_found = self.wait_until_expected_text_is_found(
+            locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
+        )
+        if not obc_found:
+            logger.info("user is not able to access OBC")
+            self.take_screenshot()
+            return None
+        else:
+            logger.info("user is able to access OBC")
+
+        namespaces = []
+        namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
+        namespaces.append(namespace_obj)
+        delete_projects(namespaces)

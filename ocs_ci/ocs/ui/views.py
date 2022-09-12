@@ -14,6 +14,11 @@ login = {
     "click_login": ("//button[text()='Log in']", By.XPATH),
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
     "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
+    "username_my_htpasswd": (
+        'a[title="Log in with my_htpasswd_provider"]',
+        By.CSS_SELECTOR,
+    ),
+    "skip_tour": (By.CSS_SELECTOR, 'button[data-test="tour-step-footer-secondary"]'),
 }
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
@@ -251,6 +256,18 @@ bucketclass = {
 }
 
 obc = {
+    "create_project": ('//*[@id="yaml-create"]', By.XPATH),
+    "project_name": ('input[id="input-name"]', By.CSS_SELECTOR),
+    "save_project": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
+    "Developer_dropdown": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_administrator": (
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        By.XPATH,
+    ),
+    "obc_menu_name": ("//a[normalize-space()='Object Bucket Claims']", By.XPATH),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
     "storageclass_text_field": (
         'input[placeholder="Select StorageClass"]',
@@ -987,6 +1004,7 @@ locators = {
             **acm_configuration_4_11,
         },
         "add_capacity": {**add_capacity, **add_capacity_4_11},
+        "obc": obc,
     },
     "4.10": {
         "login": login,
