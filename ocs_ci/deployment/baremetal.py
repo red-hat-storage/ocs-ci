@@ -265,7 +265,10 @@ class BAREMETALUPI(Deployment):
 
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
                 # Download rootfs
-                if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_12
+                ):
                     rootfs_image_path = coreos_print_stream_json["architectures"][
                         "x86_64"
                     ]["artifacts"]["metal"]["formats"]["pxe"]["rootfs"]["location"]
