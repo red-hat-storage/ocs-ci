@@ -42,9 +42,10 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @skipif_ui_not_support("validation")
-    @skipif_ocs_version("<4.9")
     @black_squad
+    @polarion_id("OCS-4642")
+    @skipif_ocs_version("<4.9")
+    @skipif_ui_not_support("validation")
     def test_odf_storagesystems_ui(self, setup_ui_class):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9
