@@ -180,7 +180,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300, namespace=None):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -188,6 +188,7 @@ class OCP(object):
             node (str): Node name where the command to be executed
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
+            namespace (str): Namespace name which will be used to create debug pods
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -200,8 +201,9 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
+        namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
         debug_cmd = (
-            f"debug nodes/{node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"debug nodes/{node} --to-namespace={namespace} "
             f' -- chroot /host /bin/bash -c "{cmd}"'
         )
         out = str(
