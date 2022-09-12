@@ -53,7 +53,7 @@ class TestLongevity(E2ETest):
             multi_snapshot_factory,
             snapshot_restore_factory,
             teardown_factory,
-            apps_run_time=4320,
-            stage_run_time=4320,
+            apps_run_time=2160,
+            stage_run_time=720,
             concurrent=False,
         )
