@@ -279,7 +279,19 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                     )
                 if cloud == "pv":
-                    vol_num, size, storagecluster = uls_tup
+                    if len(uls_tup) == 3:
+                        vol_num, size, storagecluster = uls_tup
+                        req_cpu, req_mem, lim_cpu, lim_mem = (None, None, None, None)
+                    else:
+                        (
+                            vol_num,
+                            size,
+                            storagecluster,
+                            req_cpu,
+                            req_mem,
+                            lim_cpu,
+                            lim_mem,
+                        ) = uls_tup
                     if (
                         storagecluster == constants.DEFAULT_STORAGECLASS_RBD
                         and storagecluster_independent_check()
@@ -302,7 +314,15 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                     created_backingstores.append(backingstore_obj)
                     if method.lower() == "cli":
                         cmdMap[method.lower()][cloud.lower()](
-                            mcg_obj, backingstore_name, vol_num, size, storagecluster
+                            mcg_obj,
+                            backingstore_name,
+                            vol_num,
+                            size,
+                            storagecluster,
+                            req_cpu=req_cpu,
+                            req_mem=req_mem,
+                            lim_cpu=lim_cpu,
+                            lim_mem=lim_mem,
                         )
                     else:
                         cmdMap[method.lower()][cloud.lower()](
