@@ -25,12 +25,6 @@ log = logging.getLogger(__name__)
                 pytest.mark.polarion_id("OCS-896"),
             ],
         ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-897"),
-            ],
-        ),
     ],
 )
 class TestVerifyRwoUsingReplicatedPod(ManageTest):
