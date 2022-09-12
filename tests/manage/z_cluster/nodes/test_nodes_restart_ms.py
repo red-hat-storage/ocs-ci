@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     managed_service_required,
+    polarion_id,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -22,6 +23,8 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     get_nodes,
     wait_for_node_count_to_reach_status,
+    drain_nodes,
+    schedule_nodes,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -30,6 +33,9 @@ from ocs_ci.ocs.cluster import (
     is_ms_consumer_cluster,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -180,4 +186,116 @@ class TestNodesRestartMS(ManageTest):
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
 
+        self.create_resources()
+
+    @tier4a
+    @polarion_id("OCS-4482")
+    def test_node_maintenance_restart(self, nodes, pvc_factory, pod_factory):
+        """
+        - Mark as unschedulable and drain 1 worker node in the provider cluster
+        - Check cluster functionality by creating resources from the consumer cluster
+          (PVCs, pods - both CephFS and RBD)
+        - Restart the node
+        - Mark the node as schedulable
+        - Verify storagecluster, managedocs and cephcluster
+        - Check cluster functionality by creating resources from the consumer cluster
+          (PVCs, pods - both CephFS and RBD)
+
+        """
+        # Switch to provider cluster for the test
+        if is_ms_consumer_cluster():
+            logger.info(
+                "The test is applicable only for an MS provider cluster. "
+                "Switching to the provider cluster..."
+            )
+            config.switch_to_provider()
+
+        self.create_resources()
+
+        # Get 1 worker node
+        typed_nodes = get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=1)
+        assert typed_nodes, f"Failed to find a {constants.WORKER_MACHINE} node."
+        typed_node_name = typed_nodes[0].name
+
+        # Get the current reboot events from the node
+        reboot_events_cmd = (
+            f"get events -A --field-selector involvedObject.name="
+            f"{typed_node_name},reason=Rebooted -o yaml"
+        )
+
+        # Find the number of reboot events in the node
+        num_events = len(typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)["items"])
+
+        # Unschedule and drain the node
+        drain_nodes([typed_node_name])
+
+        # Create PVCs and pods
+        self.create_resources()
+
+        # Restart the node
+        nodes.restart_nodes(nodes=typed_nodes, wait=False)
+
+        # Verify that the node restarted
+        try:
+            wait_for_nodes_status(
+                node_names=[typed_node_name],
+                status=constants.NODE_NOT_READY_SCHEDULING_DISABLED,
+            )
+        except ResourceWrongStatusException:
+            # Sometimes, the node will be back to running state quickly so
+            # that the status change won't be detected. Verify the node was
+            # actually restarted by checking the reboot events count
+            new_num_events = len(
+                typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)["items"]
+            )
+            assert new_num_events > num_events, (
+                f"Reboot event not found." f"Node {typed_node_name} did not restart."
+            )
+
+        # Wait for the node to be Ready
+        wait_for_nodes_status(
+            node_names=[typed_node_name],
+            status=constants.NODE_READY_SCHEDULING_DISABLED,
+        )
+
+        # Mark the node as schedulable
+        schedule_nodes([typed_node_name])
+
+        # Performs necessary checks in the clusters
+        for cluster_index in [
+            config.get_provider_index()
+        ] + config.get_consumer_indexes_list():
+            config.switch_ctx(cluster_index)
+
+            # Verify storagecluster status
+            logger.info("Verifying storagecluster status")
+            verify_storage_cluster()
+
+            # Verify managedocs components are Ready
+            logger.info("Verifying managedocs components state")
+            managedocs_obj = OCP(
+                kind="managedocs",
+                resource_name="managedocs",
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            for component in {"alertmanager", "prometheus", "storageCluster"}:
+                assert (
+                    managedocs_obj.get()["status"]["components"][component]["state"]
+                    == "Ready"
+                ), f"{component} status is {managedocs_obj.get()['status']['components'][component]['state']}"
+
+            # Verify the phase of ceph cluster
+            logger.info("Verify the phase of ceph cluster")
+            cephcluster = OCP(
+                kind="CephCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            cephcluster_yaml = cephcluster.get().get("items")[0]
+            expected_phase = (
+                "Ready" if cluster_index == config.get_provider_index() else "Connected"
+            )
+            assert (
+                cephcluster_yaml["status"]["phase"] == expected_phase
+            ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
+
+        # Create PVCs and pods
         self.create_resources()
