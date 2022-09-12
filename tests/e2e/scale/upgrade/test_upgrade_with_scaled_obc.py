@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     skipif_bm,
+    skipif_managed_service,
     skipif_external_mode,
 )
 from ocs_ci.utility.utils import ocsci_log_path
@@ -32,6 +33,7 @@ obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
 @pre_upgrade
 @skipif_external_mode
 @skipif_bm
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-3987")
 def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
     """
@@ -80,6 +82,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
 @post_upgrade
 @skipif_external_mode
 @skipif_bm
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-3988")
 def test_scale_obc_post_upgrade():
     """
