@@ -185,7 +185,7 @@ class TestPvPool:
                         ]
                     },
                 },
-                marks=[tier2, pytest.mark.polarion_id("OCS-3932")],
+                marks=[tier2, pytest.mark.polarion_id("OCS-4643")],
             ),
         ],
     )
