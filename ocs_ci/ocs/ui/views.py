@@ -716,6 +716,10 @@ add_capacity_4_11 = {
     "standard_sc": ("standard-link", By.ID),
 }
 
+add_capacity_4_12 = {
+    "add_capacity_button": ("//span[text()='Add Capacity']", By.XPATH),
+}
+
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -979,6 +983,12 @@ validation_4_11 = {
 
 
 locators = {
+    "4.12": {
+        "login": {**login, **login_4_11},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+    },
     "4.11": {
         "login": {**login, **login_4_11},
         "page": {**page_nav, **page_nav_4_10},
