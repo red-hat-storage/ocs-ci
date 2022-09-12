@@ -993,6 +993,7 @@ HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 CHROME_BROWSER = "chrome"
 UI_DEPLOYMENT = "ui"
 SUPPORTED_BROWSERS = CHROME_BROWSER
+KUBEADMIN = "kubeadmin"
 
 # Managed service deployment constants
 OSD_DEPLOYER = "ocs-osd-deployer"
