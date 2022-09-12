@@ -6022,3 +6022,25 @@ def fedora_pod_fixture(request, scope_name):
     request.addfinalizer(fedora_pod_cleanup)
 
     return fedora_pod_obj
+
+@pytest.fixture()
+def scc_factory(request):
+    """
+    creates SecurityContextConstraints using this factory
+    """
+    scc_objs = []
+
+    def create_scc(scc_name=None, scc_dict=None, scc_dict_path=None):
+        scc_obj = helpers.create_scc(
+            scc_name=scc_name, scc_dict=scc_dict, scc_dict_path=scc_dict_path
+        )
+        scc_objs.append(scc_obj)
+        return scc_obj
+
+    def teardown():
+        for obj in scc_objs:
+            obj.delete()
+
+    request.addfinalizer(teardown)
+    return create_scc
+

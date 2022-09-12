@@ -122,6 +122,103 @@ def wait_for_resource_state(resource, state, timeout=60):
     logger.info(f"{resource.kind} {resource.name} reached state {state}")
 
 
+def create_scc(scc_name=None, scc_dict=None, scc_dict_path=None):
+    """
+    Create a SecurityContextConstraints
+
+    Args:
+        scc_name (str): Name of the SCC
+        scc_dict (dict): Dictionary containing the details
+                        on provileges, capabilities etc
+        scc_dict_path (str): Path to custom SCC yaml file
+
+    Returns:
+        scc_obj: OCS object for scc created
+
+    """
+    scc_dict_path = scc_dict_path if scc_dict_path else constants.SCC_YAML
+    scc_data = templating.load_yaml(scc_dict_path)
+    if scc_dict:
+        scc_dict_keys = scc_dict.keys()
+        scc_data["allowPrivilegedContainer"] = (
+            scc_dict["allowPrivilegedContainer"]
+            if "allowPrivilegedContainer" in scc_dict_keys
+            else False
+        )
+        scc_data["allowHostDirVolumePlugin"] = (
+            scc_dict["allowHostDirVolumePlugin"]
+            if "allowHostDirVolumePlugin" in scc_dict_keys
+            else False
+        )
+        scc_data["allowHostIPC"] = (
+            scc_dict["allowHostIPC"] if "allowHostIPC" in scc_dict_keys else False
+        )
+        scc_data["allowHostNetwork"] = (
+            scc_dict["allowHostNetwork"]
+            if "allowHostNetwork" in scc_dict_keys
+            else False
+        )
+        scc_data["allowHostPID"] = (
+            scc_dict["allowHostPID"] if "allowHostPID" in scc_dict_keys else False
+        )
+        scc_data["allowHostPorts"] = (
+            scc_dict["allowHostPorts"] if "allowHostPorts" in scc_dict_keys else False
+        )
+        scc_data["allowPrivilegeEscalation"] = (
+            scc_dict["allowPrivilegeEscalation"]
+            if "allowPrivilegeEscalation" in scc_dict_keys
+            else False
+        )
+        scc_data["readOnlyRootFilesystem"] = (
+            scc_dict["readOnlyRootFilesystem"]
+            if "readOnlyRootFilesystem" in scc_dict_keys
+            else False
+        )
+        if "runAsUser" in scc_dict_keys:
+            if "type" in scc_dict["runAsUser"]:
+                scc_data["runAsUser"] = scc_dict["runAsUser"]
+        else:
+            scc_data["runAsUser"] = {}
+        if "seLinuxContext" in scc_dict_keys:
+            if "type" in scc_dict["seLinuxContext"]:
+                scc_data["seLinuxContext"] = scc_dict["seLinuxContext"]
+        else:
+            scc_data["seLinuxContext"] = {}
+        if "fsGroup" in scc_dict_keys:
+            if "type" in scc_dict["fsGroup"]:
+                scc_data["fsGroup"] = scc_dict["fsGroup"]
+        else:
+            scc_data["fsGroup"] = {}
+        if "supplementalGroups" in scc_dict_keys:
+            if "type" in scc_dict["supplementalGroups"]:
+                scc_data["supplementalGroups"] = scc_dict["supplementalGroups"]
+        else:
+            scc_data["supplementalGroups"] = {}
+
+        scc_data["allowedCapabilities"] = (
+            scc_dict["allowedCapabilities"]
+            if "allowedCapabilities" in scc_dict_keys
+            else []
+        )
+        scc_data["users"] = scc_dict["users"] if "users" in scc_dict_keys else []
+        scc_data["requiredDropCapabilities"] = (
+            scc_dict["requiredDropCapabilities"]
+            if "requiredDropCapabilities" in scc_dict_keys
+            else []
+        )
+        scc_data["volumes"] = scc_dict["volumes"] if "volumes" in scc_dict_keys else []
+    scc_data["metadata"]["name"] = (
+        scc_name
+        if scc_name
+        else create_unique_resource_name(
+            resource_description="test", resource_type="scc"
+        )
+    )
+    scc_obj = create_resource(**scc_data)
+    logger.info(f"SCC created {scc_obj.name}")
+    return scc_obj
+
+
 def create_pod(
     interface_type=None,
     pvc_name=None,

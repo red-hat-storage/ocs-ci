@@ -2,32 +2,3 @@ apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
   name: scc-temp
-allowPrivilegedContainer: true
-allowHostDirVolumePlugin: false
-allowHostIPC: false
-allowHostNetwork: false
-allowHostPID: false
-allowHostPorts: false
-allowPrivilegeEscalation: true
-allowedCapabilities:
-- SETUID
-- SETGID
-readOnlyRootFilesystem: true
-runAsUser:
-  type: RunAsAny
-seLinuxContext:
-  type: RunAsAny
-fsGroup:
-  type: RunAsAny
-supplementalGroups:
-  type: RunAsAny
-users:
-- my-admin-user
-requiredDropCapabilities:
-- KILL
-- MKNOD
-volumes:
-- configMap
-- downwardAPI
-- emptyDir
-- persistentVolumeClaim
