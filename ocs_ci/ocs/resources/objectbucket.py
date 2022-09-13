@@ -392,7 +392,6 @@ class MCGS3Bucket(ObjectBucket):
         """
         response = self.s3client.get_bucket_versioning(Bucket=self.name)
         if "Status" in response.keys():
-            logger.info(f"bucket versioning: {response}")
             self.s3resource.Bucket(self.name).object_versions.delete()
         else:
             self.s3resource.Bucket(self.name).objects.all().delete()
