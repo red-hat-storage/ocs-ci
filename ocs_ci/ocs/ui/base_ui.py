@@ -963,7 +963,7 @@ def login_ui(console_url=None, username=None, password=None):
 
     copy_dom(driver)
     if username is None:
-        username = "kubeadmin"
+        username = constants.KUBEADMIN
     element.send_keys(username)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
@@ -975,9 +975,9 @@ def login_ui(console_url=None, username=None, password=None):
         )
     )
     element.click()
-    if default_console is None and username is None:
+    if default_console is True and username is constants.KUBEADMIN:
         WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
-    if username is not None:
+    if username is not constants.KUBEADMIN:
         element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
         element.click()
     return driver
