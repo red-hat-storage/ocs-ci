@@ -7,6 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import verify_quota_resource_exist
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -61,7 +62,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             log.info("Verify storagecluster on Ready state")
             verify_storage_cluster()
 
-            if self.verify_quota_resource_exist(quota_name=self.quota_name):
+            if verify_quota_resource_exist(quota_name=self.quota_name):
                 log.info(f"Delete quota resource {self.quota_name}")
                 clusterresourcequota_obj = OCP(kind="clusterresourcequota")
                 clusterresourcequota_obj.delete(resource_name=self.quota_name)
@@ -150,7 +151,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         sample = TimeoutSampler(
             timeout=60,
             sleep=4,
-            func=self.verify_quota_resource_exist,
+            func=verify_quota_resource_exist,
             quota_name=quota_names[sc_name],
         )
         if not sample.wait_for_func_status(result=True):
@@ -262,21 +263,3 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 log.error(f"expected string:{expected_string} not in {output_string}")
                 return False
         return True
-
-    def verify_quota_resource_exist(self, quota_name):
-        """
-        Verify quota resource exist
-
-        Args:
-            quota_name (str): The name of quota
-
-        Returns:
-            bool: return True if quota_name exist in list, otherwise False
-
-        """
-        clusterresourcequota_obj = OCP(kind="clusterresourcequota")
-        quota_resources = clusterresourcequota_obj.get().get("items")
-        quota_resource_names = list()
-        for quota_resource in quota_resources:
-            quota_resource_names.append(quota_resource.get("metadata").get("name"))
-        return quota_name in quota_resource_names
