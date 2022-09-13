@@ -128,12 +128,12 @@ class TestPodStartTime(PASTest):
                 raise ex.PodNotCreated("Pod on PVC was not created.")
             self.pod_result_list.append(pod_obj)
 
-            # Get the POD start time including the attache time
+            # Get the POD start time including the attach time
             self.start_time_dict_list.append(helpers.pod_start_time(pod_obj))
             self.csi_time_dict_list.append(
                 performance_lib.pod_attach_csi_time(
                     self.interface, pvc_obj.backed_pv, csi_start_time, self.namespace
-                )[0]
+                )
             )
 
     def init_full_results(self, full_results):

@@ -7,6 +7,7 @@ import logging
 import pytest
 import pathlib
 import time
+from datetime import datetime
 
 from ocs_ci.framework.testlib import performance, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
@@ -67,7 +68,7 @@ class TestBulkPodAttachPerformance(PASTest):
         )
         log.info("All POD(s) was deleted")
 
-        # Deleting PVC(s) for deletion time mesurment
+        # Deleting PVC(s) for deletion time measurement
         log.info("Try to delete all created PVCs")
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
@@ -144,7 +145,7 @@ class TestBulkPodAttachPerformance(PASTest):
         performance_lib.wait_for_resource_bulk_status(
             "pvc", bulk_size, self.namespace, constants.STATUS_BOUND, timeout, 10
         )
-        # in case of creation faliure, the wait_for_resource_bulk_status function
+        # in case of creation failure, the wait_for_resource_bulk_status function
         # will raise an exception. so in this point the creation succeed
         log.info("All PVCs was created and in Bound state.")
 
@@ -178,19 +179,31 @@ class TestBulkPodAttachPerformance(PASTest):
         performance_lib.wait_for_resource_bulk_status(
             "pod", bulk_size, self.namespace, constants.STATUS_RUNNING, timeout, 2
         )
-        log.info("All POD(s) are in Running State.")
+        log.info("All the POD(s) are in Running State.")
         bulk_end_time = time.time()
         bulk_total_time = bulk_end_time - bulk_start_time
-        log.info(
-            f"Bulk attach start time of {bulk_size} pods is {bulk_start_time} , end time is {bulk_end_time} "
+
+        bulk_start_time_str = datetime.fromtimestamp(bulk_start_time).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
         )
-        log.info(f"Bulk attach time of {bulk_size} pods is {bulk_total_time} seconds")
+        bulk_end_time_str = datetime.fromtimestamp(bulk_end_time).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )
+        log.info(
+            f"Total bulk attach start time of {bulk_size} pods is {bulk_start_time_str}"
+        )
+        log.info(
+            f"Total bulk attach end time of {bulk_size} pods is {bulk_end_time_str})"
+        )
+        log.info(
+            f"Total bulk attach time of {bulk_size} pods is {bulk_total_time} seconds"
+        )
 
         csi_bulk_total_time = performance_lib.pod_bulk_attach_csi_time(
             self.interface, self.pvc_objs, csi_start_time, self.namespace
         )
         log.info(
-            f"Bulk attach csi time of {bulk_size} pods is {csi_bulk_total_time} seconds"
+            f"CSI bulk attach time of {bulk_size} pods is {csi_bulk_total_time} seconds"
         )
 
         # Collecting environment information
