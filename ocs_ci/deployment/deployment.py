@@ -1268,6 +1268,9 @@ class Deployment(object):
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
             f"lvm-cluster-{file_version}.yaml",
         )
+
+        if int(lvmo_version_without_period) >= 411:
+            lvmo_version_without_period = "default"
         # this is a workaround for 2101343
         if 110 > int(minor) > 98 and major == "4.11.0":
             rolebinding_config_file = os.path.join(
@@ -1288,6 +1291,7 @@ class Deployment(object):
             resource_count=1,
             timeout=300,
         )
+        label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
         assert pod.wait_for_resource(
             condition="Running",

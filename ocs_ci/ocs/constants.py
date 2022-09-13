@@ -1852,7 +1852,7 @@ LVMO_POD_LABEL = {
         "topolvm-node_label": "app=topolvm-node",
         "vg-manager_label": "app=vg-manager",
     },
-    "411": {
+    "default": {
         "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
         "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
         "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
