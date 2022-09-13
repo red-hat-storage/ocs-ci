@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     add_chrony_to_ocp_deployment,
 )
+from ..ocs.utils import label_pod_security_admission
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +689,9 @@ def clean_disk():
     workers = get_nodes(node_type="worker")
 
     ocp_obj = ocp.OCP()
-    ocp_obj.new_project(project_name=bm_debug_ns, policy=constants.PSA_PRIVILEGED)
+    ocp_obj.new_project(project_name=bm_debug_ns)
+    label_pod_security_admission(namespace=bm_debug_ns)
+
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name,
