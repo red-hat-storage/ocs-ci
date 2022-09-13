@@ -460,11 +460,15 @@ def create_ceph_file_system(
     if label:
         cephfs_data["metadata"]["labels"] = label
 
-    cephfs_data = create_resource(**cephfs_data)
-    cephfs_data.reload()
+    try:
+        cephfs_data = create_resource(**cephfs_data)
+        cephfs_data.reload()
+    except Exception as e:
+        logger.error(e)
+        raise e
 
     assert validate_cephfilesystem(
-        cephfs_data.name
+        cephfs_data.name, namespace
     ), f"File system {cephfs_data.name} does not exist"
     return cephfs_data
 
@@ -832,7 +836,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name):
+def validate_cephfilesystem(fs_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -843,9 +847,7 @@ def validate_cephfilesystem(fs_name):
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
-    cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
+    cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
