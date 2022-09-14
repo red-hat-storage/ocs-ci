@@ -74,27 +74,29 @@ class TestWorkLoadsManagedService(object):
                         self.pgsql_deployment_status = True
                     except Exception as e:
                         log.error(e)
+
                 elif workload == "amq":
                     workloads_cluster_index["amq"] = sub_workloads[
                         len(sub_workloads) - 1
                     ]
                     try:
-                        amq_threads = amq_factory_fixture(
+                        amq, threads = amq_factory_fixture(
                             sc_name=constants.DEFAULT_STORAGECLASS_RBD,
-                            index_consumer=workloads_cluster_index["amq"],
-                            run_in_bg=False,
-                            validate_messages=False,
+                            consumer_index=workloads_cluster_index["amq"],
+                            run_in_bg=True,
+                            validate_messages=True,
                         )
                         self.amq_deployment_status = True
                     except Exception as e:
                         log.error(e)
+
                 elif workload == "couchbase":
                     workloads_cluster_index["couchbase"] = sub_workloads[
                         len(sub_workloads) - 1
                     ]
                     try:
                         couchbase_obj = couchbase_factory_fixture(
-                            index_consumer=workloads_cluster_index["couchbase"],
+                            consumer_index=workloads_cluster_index["couchbase"],
                             wait_for_pillowfights_to_complete=False,
                         )
                         self.couchbase_deployment_status = True
@@ -102,24 +104,47 @@ class TestWorkLoadsManagedService(object):
                         log.error(e)
 
         if self.jenkins_deployment_status:
-            # config.switch_ctx(workloads_cluster_index["jenkins"])
-            log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
-            jenkins_obj.wait_for_build_to_complete()
+            try:
+                # config.switch_ctx(workloads_cluster_index["jenkins"])
+                log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
+                jenkins_obj.wait_for_build_to_complete()
+            except Exception as e:
+                log.error(e)
+                self.jenkins_deployment_status = False
 
         if self.pgsql_deployment_status:
-            # config.switch_ctx(workloads_cluster_index["pgsql"])
-            log.info(f"consumer_index={workloads_cluster_index['pgsql']}")
-            pgsql_obj.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
-            pgbench_pods = pgsql_obj.get_pgbench_pods()
-            pgsql_obj.validate_pgbench_run(pgbench_pods)
+            try:
+                # config.switch_ctx(workloads_cluster_index["pgsql"])
+                log.info(f"consumer_index={workloads_cluster_index['pgsql']}")
+                pgsql_obj.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+                pgbench_pods = pgsql_obj.get_pgbench_pods()
+                pgsql_obj.validate_pgbench_run(pgbench_pods)
+            except Exception as e:
+                log.error(e)
+                self.pgsql_deployment_status = False
 
         if self.couchbase_deployment_status:
-            log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
-            # config.switch_ctx(workloads_cluster_index["couchbase"])
-            couchbase_obj.run_workload(replicas=3)
+            try:
+                log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
+                # config.switch_ctx(workloads_cluster_index["couchbase"])
+                couchbase_obj.run_workload(replicas=3)
+            except Exception as e:
+                log.error(e)
+                self.couchbase_deployment_status = False
 
         if self.amq_deployment_status:
-            log.info(f"consumer_index={workloads_cluster_index['amq']}")
-            # config.switch_ctx(workloads_cluster_index["amq"])
-            for thread in amq_threads:
-                thread.result(timeout=1800)
+            try:
+                log.info(f"consumer_index={workloads_cluster_index['amq']}")
+                # config.switch_ctx(workloads_cluster_index["amq"])
+                amq.validate_messages_are_produced()
+                amq.validate_messages_are_consumed()
+            except Exception as e:
+                log.error(e)
+                self.couchbase_deployment_status = False
+
+        assert [
+            self.jenkins_deployment_status,
+            self.pgsql_deployment_status,
+            self.amq_deployment_status,
+            self.couchbase_deployment_status,
+        ] == [True, True, True, True], "Not all Workloads pass"
