@@ -192,11 +192,11 @@ class TestDynamicPvc(ManageTest):
                 ocs_obj=pod_obj2, failure_str=expected_failure_str
             )
 
-            logger.info(
-                f"Deleting first pod so that second pod can attach PVC {pvc_obj.name}"
-            )
-            pod_obj1.delete()
-            pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
+        logger.info(
+            f"Deleting first pod so that second pod can attach PVC {pvc_obj.name}"
+        )
+        pod_obj1.delete()
+        pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
 
         # Wait for second pod to be in Running state
         helpers.wait_for_resource_state(
