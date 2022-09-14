@@ -12,7 +12,9 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ipi_deployment_required,
-    managed_service_required,
+    ms_provider_and_consumer_required,
+    skipif_ms_provider_and_consumer,
+    ms_consumer_required,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -60,7 +62,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         ceph_health_check()
         log.info("The resources created successfully using the kube job")
 
-    @managed_service_required
+    @ms_provider_and_consumer_required
     def test_create_scale_pods_and_pvcs_using_kube_job_ms(
         self, create_scale_pods_and_pvcs_using_kube_job
     ):
@@ -88,10 +90,32 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         config.switch_to_consumer()
         log.info("The resources created successfully using the kube job")
 
+    @skipif_ms_provider_and_consumer
+    @ms_consumer_required
+    def test_create_scale_pods_and_pvcs_with_ms_consumer(
+        self, create_scale_pods_and_pvcs_using_kube_job
+    ):
+        """
+        Test create scale pods and PVCs using a kube job with MS consumer
+        when we don't have a provider in the run
+        """
+        log.info("Start creating resources using kube job with MS consumer...")
+        create_scale_pods_and_pvcs_using_kube_job()
+        time_to_wait_for_io_running = 60
+        log.info(
+            f"Wait {time_to_wait_for_io_running} seconds for checking "
+            f"that the IO running as expected"
+        )
+        sleep(time_to_wait_for_io_running)
+        ceph_health_check()
+        log.info(
+            "The resources created successfully using the kube job with MS consumer"
+        )
+
 
 @tier1
 @ignore_leftovers
-@managed_service_required
+@ms_provider_and_consumer_required
 class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     """
     Test create scale pods and PVCs using a kube job with MS consumers
