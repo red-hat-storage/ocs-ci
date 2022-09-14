@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     bugzilla,
+    skipif_managed_service,
 )
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def setup_sc(storageclass_factory_class):
 @tier1
 @bugzilla("2024545")
 @pytest.mark.polarion_id("OCS-4472")
+@skipif_managed_service
 class TestOverProvisionLevelPolicyControl(ManageTest):
     """
     Test OverProvision Level Policy Control
