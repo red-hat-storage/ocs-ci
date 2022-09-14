@@ -832,7 +832,7 @@ def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace
 
 
 def get_lvm_vg_manager_pod(
-    label=constants.LVMO_POD_LABEL["411"]["vg-manager_label"],
+    label=constants.LVMO_POD_LABEL["default"]["vg-manager_label"],
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
 ):
     """
@@ -851,7 +851,7 @@ def get_lvm_vg_manager_pod(
 
 
 def get_lvm_operator_pod(
-    label=constants.LVMO_POD_LABEL["411"]["controller_manager_label"],
+    label=constants.LVMO_POD_LABEL["default"]["controller_manager_label"],
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
 ):
     """
@@ -870,7 +870,7 @@ def get_lvm_operator_pod(
 
 
 def get_topolvm_controller_pod(
-    label=constants.LVMO_POD_LABEL["411"]["topolvm-controller_label"],
+    label=constants.LVMO_POD_LABEL["default"]["topolvm-controller_label"],
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
 ):
     """
@@ -889,7 +889,7 @@ def get_topolvm_controller_pod(
 
 
 def get_topolvm_node_pod(
-    label=constants.LVMO_POD_LABEL["411"]["topolvm-node_label"],
+    label=constants.LVMO_POD_LABEL["default"]["topolvm-node_label"],
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
 ):
     """
