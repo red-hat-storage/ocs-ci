@@ -10,6 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_bmpsi,
     skipif_ibm_power,
+    skipif_no_lso,
+    skipif_lso,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -100,6 +102,7 @@ def add_capacity_test():
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
+@skipif_lso
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
@@ -113,6 +116,31 @@ class TestAddCapacity(ManageTest):
         Test to add variable capacity to the OSD cluster while IOs running
         """
         add_capacity_test()
+
+
+@ignore_leftovers
+@tier1
+@acceptance
+@polarion_id("OCS-1191")
+@pytest.mark.second_to_last
+@skipif_managed_service
+@skipif_aws_i3
+@skipif_bm
+@skipif_bmpsi
+@skipif_external_mode
+@skipif_ibm_power
+@skipif_managed_service
+@skipif_no_lso
+class TestAddCapacityLSO(ManageTest):
+    """
+    Automates adding variable capacity to lso cluster
+    """
+
+    def test_add_capacity_lso(self, reduce_and_resume_cluster_load):
+        """
+        Test to add variable capacity to the OSD cluster while IOs running
+        """
+        storage_cluster.add_capacity_lso()
 
 
 @skipif_ocs_version("<4.4")
