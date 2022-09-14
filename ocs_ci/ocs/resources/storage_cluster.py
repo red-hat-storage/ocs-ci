@@ -39,6 +39,8 @@ from ocs_ci.ocs.node import (
     get_osd_running_nodes,
     get_encrypted_osd_devices,
     verify_worker_nodes_security_groups,
+    add_disk_to_node,
+    get_nodes,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -947,6 +949,80 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
         format_type="json",
     )
     return new_storage_devices_sets_count
+
+
+def add_capacity_lso():
+    """
+    Add capacity on LSO cluster.
+
+    In this procedure we need to add the disk before add capacity via UI.
+    Because the UI backend check the pv and available state and base on it
+    change the count param on StorageCluster.
+
+    """
+    from ocs_ci.ocs.cluster import (
+        is_flexible_scaling_enabled,
+        check_ceph_health_after_add_capacity,
+    )
+    from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
+
+    osd_numbers = get_osd_count()
+    node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+    deviceset_count = get_deviceset_count()
+    if is_flexible_scaling_enabled():
+        log.info("Add 2 disk to same node")
+        add_disk_to_node(node_objs[0])
+        add_disk_to_node(node_objs[0])
+        num_available_pv = 2
+        set_count = deviceset_count + 2
+    else:
+        add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+        num_available_pv = 3
+        set_count = deviceset_count + 1
+    localstorage.check_pvs_created(num_pvs_required=num_available_pv)
+    if ui_add_capacity_conditions():
+        try:
+            osd_size = get_osd_size()
+            ui_add_capacity(osd_size)
+        except Exception as e:
+            log.error(
+                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
+            )
+            set_deviceset_count(set_count)
+    else:
+        set_deviceset_count(set_count)
+
+    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_obj.wait_for_resource(
+        timeout=600,
+        condition=constants.STATUS_RUNNING,
+        selector=constants.OSD_APP_LABEL,
+        resource_count=osd_numbers + num_available_pv,
+    )
+
+    # Verify OSDs are encrypted
+    if config.ENV_DATA.get("encryption_at_rest"):
+        osd_encryption_verification()
+
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+
+
+def set_deviceset_count(count):
+    """
+    Set osd count for Storage cluster.
+
+    Args:
+        count (int): the count param is storagecluster
+
+    """
+    sc = get_storage_cluster()
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {count}}}]"""
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
