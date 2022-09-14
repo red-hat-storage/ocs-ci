@@ -1269,8 +1269,9 @@ class Deployment(object):
             f"lvm-cluster-{file_version}.yaml",
         )
 
-        if int(lvmo_version_without_period) >= 411:
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
             lvmo_version_without_period = "default"
+
         # this is a workaround for 2101343
         if 110 > int(minor) > 98 and major == "4.11.0":
             rolebinding_config_file = os.path.join(
