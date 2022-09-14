@@ -383,14 +383,18 @@ class MCGS3Bucket(ObjectBucket):
             self.s3resource = kwargs["s3resource"]
         else:
             self.s3resource = self.mcg.s3_resource
-
+        self.s3client = self.mcg.s3_client
         self.s3resource.create_bucket(Bucket=self.name)
 
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
         """
-        self.s3resource.Bucket(self.name).object_versions.delete()
+        response = self.s3client.get_bucket_versioning(Bucket=self.name)
+        if "Status" in response.keys():
+            self.s3resource.Bucket(self.name).object_versions.delete()
+        else:
+            self.s3resource.Bucket(self.name).objects.all().delete()
         self.s3resource.Bucket(self.name).delete()
 
     @property
