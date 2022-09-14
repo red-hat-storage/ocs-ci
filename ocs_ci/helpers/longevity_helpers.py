@@ -692,6 +692,7 @@ def _multi_obc_lifecycle_factory(
                     interface=_interface,
                     bucketclass=_bucketclass,
                     verify_health=not bulk,
+                    timeout=300,
                 )
                 if bulk:
                     for bucket in buckets:
@@ -727,13 +728,18 @@ def _multi_obc_lifecycle_factory(
         target_buckets = list()
         source_buckets = list()
         for _num in range(num_of_obcs):
-            target_bucket = bucket_factory(bucketclass=target_bucketclass)[0]
+            target_bucket = bucket_factory(bucketclass=target_bucketclass, timeout=300)[
+                0
+            ]
             target_buckets.append(target_bucket)
             target_bucket_name = target_bucket.name
 
             replication_policy = ("basic-replication-rule", target_bucket_name, None)
             source_bucket = bucket_factory(
-                1, bucketclass=source_bucketclass, replication_policy=replication_policy
+                1,
+                bucketclass=source_bucketclass,
+                replication_policy=replication_policy,
+                timeout=300,
             )[0]
             source_buckets.append(source_bucket)
 
