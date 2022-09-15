@@ -835,7 +835,7 @@ def check_nodes_specs(min_memory, min_cpu):
     for node in nodes:
         real_cpu = int(node.get()["status"]["capacity"]["cpu"])
         real_memory = convert_device_size(
-            node.get()["status"]["capacity"]["memory"], "B"
+            node.get()["status"]["capacity"]["memory"], "BY"
         )
         if real_cpu < min_cpu or real_memory < min_memory:
             log.warning(
