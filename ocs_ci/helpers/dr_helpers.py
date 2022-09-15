@@ -549,3 +549,25 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def get_ramen_cluster_operator_pod(cluster_name):
+    """
+    Get ramen cluster operator pod from any managed clusters
+
+    Args:
+        cluster_name (str): Name of the managed cluster
+
+    Returns:
+        operator_pod (str): Returns the name of the ramen cluster operator pod
+
+    """
+    for i in range(config.nclusters):
+        if cluster_name == i:
+            config.switch_ctx(i)
+            logger.info(
+                f"Switched context to CLUSTER_NAME: {config.ENV_DATA['cluster_name']}"
+            )
+            operator_pod = get_all_pods(namespace=constants.OPENSHIFT_OPERATORS)
+
+    return operator_pod
