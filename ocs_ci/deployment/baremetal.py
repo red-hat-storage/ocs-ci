@@ -19,6 +19,7 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -35,7 +36,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     add_chrony_to_ocp_deployment,
 )
-from ..ocs.utils import label_pod_security_admission
 
 logger = logging.getLogger(__name__)
 
@@ -685,18 +685,17 @@ def clean_disk():
     Perform disk cleanup
     """
     lvm_to_clean = []
-    bm_debug_ns = "baremetal-debug-ns"
     workers = get_nodes(node_type="worker")
 
     ocp_obj = ocp.OCP()
-    ocp_obj.new_project(project_name=bm_debug_ns)
-    label_pod_security_admission(namespace=bm_debug_ns)
+    ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS)
+    label_pod_security_admission(namespace=constants.BM_DEBUG_NODE_NS)
 
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name,
             cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-            namespace=bm_debug_ns,
+            namespace=constants.BM_DEBUG_NODE_NS,
         )
         logger.info(out)
         lsblk_output = json.loads(str(out))
@@ -708,7 +707,7 @@ def clean_disk():
             )
 
             cmd = (
-                f"debug nodes/{worker.name} --to-namespace={bm_debug_ns} "
+                f"debug nodes/{worker.name} --to-namespace={constants.BM_DEBUG_NODE_NS} "
                 f"-- chroot /host {base_cmd}"
             )
             out = ocp_obj.exec_oc_cmd(
@@ -733,7 +732,7 @@ def clean_disk():
             )
 
             cmd = (
-                f"debug nodes/{worker.name} --to-namespace={bm_debug_ns} "
+                f"debug nodes/{worker.name} --to-namespace={constants.BM_DEBUG_NODE_NS} "
                 f"-- chroot /host {base_cmd}"
             )
             out = ocp_obj.exec_oc_cmd(
@@ -755,7 +754,7 @@ def clean_disk():
     for devices in lvm_to_clean:
         if devices.get("vg_name"):
             cmd = (
-                f"debug nodes/{devices['hostname']} --to-namespace={bm_debug_ns} "
+                f"debug nodes/{devices['hostname']} --to-namespace={constants.BM_DEBUG_NODE_NS} "
                 f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
             )
             logger.info("Removing vg")
@@ -769,14 +768,14 @@ def clean_disk():
             out = ocp_obj.exec_oc_debug_cmd(
                 node=devices["hostname"],
                 cmd_list=[f"pvremove {devices['pv_name']} -y"],
-                namespace=bm_debug_ns,
+                namespace=constants.BM_DEBUG_NODE_NS,
             )
             logger.info(out)
 
     for worker in workers:
         cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
         out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=[cmd], namespace=bm_debug_ns
+            node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
         )
         disk_to_ignore_cleanup_raw = json.loads(str(out))
         disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
@@ -791,7 +790,7 @@ def clean_disk():
         out = ocp_obj.exec_oc_debug_cmd(
             node=worker.name,
             cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-            namespace=bm_debug_ns,
+            namespace=constants.BM_DEBUG_NODE_NS,
         )
         lsblk_output = json.loads(str(out))
         lsblk_devices = lsblk_output["blockdevices"]
@@ -799,7 +798,7 @@ def clean_disk():
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"lsblk -b /dev/{lsblk_device['name']} --output NAME --json"],
-                namespace=bm_debug_ns,
+                namespace=constants.BM_DEBUG_NODE_NS,
             )
             lsblk_output = json.loads(str(out))
             lsblk_devices_to_clean = lsblk_output["blockdevices"]
@@ -812,17 +811,17 @@ def clean_disk():
                     out = ocp_obj.exec_oc_debug_cmd(
                         node=worker.name,
                         cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"],
-                        namespace=bm_debug_ns,
+                        namespace=constants.BM_DEBUG_NODE_NS,
                     )
                     logger.info(out)
                     out = ocp_obj.exec_oc_debug_cmd(
                         node=worker.name,
                         cmd_list=[f"sgdisk --zap-all /dev/{device_to_clean['name']}"],
-                        namespace=bm_debug_ns,
+                        namespace=constants.BM_DEBUG_NODE_NS,
                     )
                     logger.info(out)
 
-    ocp_obj.delete_project(project_name=bm_debug_ns)
+    ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
 
 class BaremetalPSIUPI(Deployment):
