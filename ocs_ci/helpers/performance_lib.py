@@ -793,23 +793,28 @@ def pod_attach_csi_time(
             volume_handle = line.split()[1]
             break
     if volume_handle is None:
-        logger.error("Cannot get volume handle")
+        logger.error(f"Cannot get volume handle for pv {pv_name}")
         raise Exception("Cannot get volume handle")
 
     log_names = get_logfile_names(interface, provisioning=False)
     logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
+
+    logger.info(
+        f"Looking for pod attach time for pv {pv_name} and volume handle {volume_handle}"
+    )
 
     node_stage_st = None
     node_publish_st = None
 
     for sublog in logs:
         for line in sublog:
-            if "GRPC call: /csi.v1.Node/NodeStageVolume" in line:
+            if f"{volume_handle} GRPC call: /csi.v1.Node/NodeStageVolume" in line:
                 node_stage_st = string_to_time(line.split()[1])
                 node_stage_id = line.split()[5]
-            if "GRPC call: /csi.v1.Node/NodePublishVolume" in line:
+            if f"{volume_handle} GRPC call: /csi.v1.Node/NodePublishVolume" in line:
                 node_publish_st = string_to_time(line.split()[1])
                 node_publish_id = line.split()[5]
+                node_publish_req_id = line.split()[7]
 
     if node_stage_st is None:
         logger.error("Cannot find node stage GRPC call")
@@ -819,8 +824,8 @@ def pod_attach_csi_time(
         logger.error("Cannot find node publish GRPC call")
         raise Exception("Cannot find node publish GRPC call")
 
-    logger.info(f"Node stage GRPC call start time is: {node_stage_st}")
-    logger.info(f"Node publish GRPC call start time is: {node_publish_st}")
+    logger.info(f"Node stage GRPC call start time is: {node_stage_st.time()}")
+    logger.info(f"Node publish GRPC call start time is: {node_publish_st.time()}")
 
     node_stage_et = None
     node_publish_et = None
@@ -828,7 +833,11 @@ def pod_attach_csi_time(
         for line in sublog:
             if "GRPC response:" in line and f"ID: {node_stage_id}" in line:
                 node_stage_et = string_to_time(line.split(" ")[1])
-            if "GRPC response:" in line and f"ID: {node_publish_id}" in line:
+            if (
+                "GRPC response:" in line
+                and f"ID: {node_publish_id}" in line
+                and f"Req-ID: {node_publish_req_id}" in line
+            ):
                 node_publish_et = string_to_time(line.split(" ")[1])
 
     if node_stage_et is None:
@@ -839,8 +848,8 @@ def pod_attach_csi_time(
         logger.error("Cannot find node publish GRPC response")
         raise Exception("Cannot find node publish GRPC response")
 
-    logger.info(f"Node stage GRPC response time is: {node_stage_et}")
-    logger.info(f"Node publish GRPC response time is: {node_publish_et}")
+    logger.info(f"Node stage GRPC response time is: {node_stage_et.time()}")
+    logger.info(f"Node publish GRPC response time is: {node_publish_et.time()}")
 
     node_stage_time = (node_stage_et - node_stage_st).total_seconds()
     if node_stage_time < 0:
@@ -857,9 +866,12 @@ def pod_attach_csi_time(
     logger.info(f"Node publish time is {node_publish_time} seconds")
 
     total_time = node_stage_time + node_publish_time
-    logger.info(f"Total csi pod attach time is {total_time} seconds")
+    logger.info(
+        f"Total csi pod attach time (stage + publish) for pvc with volume handle {volume_handle} "
+        f"is {total_time} seconds"
+    )
 
-    return (total_time, (node_stage_st, node_publish_et))
+    return total_time
 
 
 def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
@@ -875,22 +887,89 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
 
     """
 
-    start_times_list = []
-    end_times_list = []
+    pods_info = []
 
     for pvc in pvc_objs:
         pv_name = pvc.backed_pv
-        start_time, end_time = pod_attach_csi_time(
-            interface, pv_name, csi_start_time, namespace
-        )[1]
-        start_times_list.append(start_time)
-        end_times_list.append(end_time)
+        volume_handle = None
+        for line in run_oc_command(f"describe pv {pv_name}", namespace=namespace):
+            if "VolumeHandle:" in line:
+                volume_handle = line.split()[1]
+                break
+        if volume_handle is None:
+            logger.error(f"Cannot get volume handle for pv {pv_name}")
+            raise Exception("Cannot get volume handle")
+        pods_info.append(
+            {
+                "pv": pv_name,
+                "volume_handle": volume_handle,
+                "node_stage_st": None,
+                "node_publish_id": None,
+                "node_publish_req_id": None,
+                "node_publish_et": None,
+            }
+        )
 
-    start_times_list.sort()
-    end_times_list.sort()
+    log_names = get_logfile_names(interface, provisioning=False)
+    logs = read_csi_logs(
+        log_names, interface_data[interface]["csi_cnt"], csi_start_time
+    )
+
+    for sublog in logs:
+        for line in sublog:
+            for pod_info in pods_info:
+                if (
+                    f"{pod_info['volume_handle']} GRPC call: /csi.v1.Node/NodeStageVolume"
+                    in line
+                ):
+                    pod_info["node_stage_st"] = string_to_time(line.split()[1])
+                if (
+                    f"{pod_info['volume_handle']} GRPC call: /csi.v1.Node/NodePublishVolume"
+                    in line
+                ):
+                    pod_info["node_publish_id"] = line.split()[5]
+                    pod_info["node_publish_req_id"] = line.split()[7]
+                if (
+                    pod_info["node_publish_id"] is not None
+                    and "GRPC response:" in line
+                    and f"ID: {pod_info['node_publish_id']}" in line
+                    and f"Req-ID: {pod_info['node_publish_req_id']}" in line
+                ):
+                    pod_info["node_publish_et"] = string_to_time(line.split(" ")[1])
+
+    for pod_info in pods_info:
+        if pod_info["node_stage_st"] is None:
+            msg = (
+                f"Cannot find node stage GRPC call for pv = {pod_info['pv']} "
+                f"and volume handle = {pod_info['node_stage_st']}"
+            )
+            logger.error(msg)
+            raise Exception("msg")
+        if pod_info["node_publish_et"] is None:
+            msg = (
+                f"Cannot find node publish GRPC response for pv = {pod_info['pv']} "
+                f"and volume handle = {pod_info['node_stage_st']}"
+            )
+            logger.error(msg)
+            raise Exception("msg")
+
+        logger.info(
+            f"For pv {pv_name} : CSI start time = {pod_info['node_stage_st'].time()}, "
+            f"csi end time = {pod_info['node_publish_et'].time()}"
+        )
+
+    node_stage_start_times = [pod_info["node_stage_st"] for pod_info in pods_info]
+    node_stage_start_times.sort()
+    publish_stage_end_times = [pod_info["node_publish_et"] for pod_info in pods_info]
+    publish_stage_end_times.sort()
+
+    logger.info(f"CSI bulk attach start time is = {node_stage_start_times[0].time()}")
+    logger.info(f"CSI bulk attach end time = {publish_stage_end_times[-1].time()}")
 
     # total bulk_attach_csi_time is the delta between the last node publish time and the first node stage time
-    total_time = (end_times_list[-1] - start_times_list[0]).total_seconds()
+    total_time = (
+        publish_stage_end_times[-1] - node_stage_start_times[0]
+    ).total_seconds()
     if total_time < 0:
         # for start-time > end-time (before / after midnigth) adding 24H to the time.
         total_time += 24 * 60 * 60
@@ -898,4 +977,5 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
     logger.info(
         f"CSI time for bulk attach of {len(pvc_objs)} pvcs is {total_time} seconds"
     )
+
     return total_time
