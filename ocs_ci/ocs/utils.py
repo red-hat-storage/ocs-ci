@@ -1362,10 +1362,10 @@ def collect_pod_container_rpm_package(dir_name):
     create_directory_path(package_log_dir_path)
     log.info(f"Directory path for rpm logs is {package_log_dir_path}")
     pods = pod.get_all_pods(namespace=cluster_namespace)
+    ocp_obj = OCP(namespace=cluster_namespace)
     for pod_obj in pods:
         pod_object = pod_obj.get()
         pod_containers = pod_object.get("spec").get("containers")
-        ocp_obj = OCP(namespace=cluster_namespace)
         ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
         if pod_status == constants.STATUS_RUNNING:
