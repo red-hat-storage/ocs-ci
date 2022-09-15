@@ -60,7 +60,9 @@ class TestListOfObjects(PASTest):
         file_name = "/tmp/list_object"
         cmd = f"ls {full_object_path} --recursive >> {file_name}"
         fedora_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(cmd=cmd, mcg_obj=s3_obj), out_yaml_format=False
+            command=craft_s3_command(cmd=cmd, mcg_obj=s3_obj),
+            out_yaml_format=False,
+            timeout=9000
         )
 
         # Verify when listing any errors found
