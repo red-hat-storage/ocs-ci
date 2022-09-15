@@ -157,7 +157,7 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
-    @bugzilla("2073025")
+    @bugzilla("2117312")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     @managed_service_required
