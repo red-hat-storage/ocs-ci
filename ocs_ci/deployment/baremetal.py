@@ -351,7 +351,7 @@ class BAREMETALUPI(Deployment):
             api_record_ip_list = []
             apps_record_ip_list = []
             response_list = []
-            cluster_name = f"{constants.BM_DEFAULT_CLUSTER_NAME}"
+            cluster_name = config.ENV_DATA.get("cluster_name")
             self.aws.delete_hosted_zone(cluster_name=cluster_name, delete_zone=False)
             for machine in self.mgmt_details:
                 if (
@@ -494,7 +494,7 @@ class BAREMETALUPI(Deployment):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            install_config_obj["metadata"]["name"] = constants.BM_DEFAULT_CLUSTER_NAME
+            install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
