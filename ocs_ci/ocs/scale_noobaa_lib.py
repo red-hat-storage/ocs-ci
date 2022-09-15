@@ -7,12 +7,11 @@ from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.utils import oc_get_all_obc_names
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -380,3 +379,54 @@ def check_all_obcs_status(namespace=None):
         else:
             obc_not_bound_list.append(status)
     return obc_bound_list, obc_not_bound_list
+
+
+def get_noobaa_pods_status():
+    """
+    Check Noobaa pod status to ensure it is in Running state.
+
+    Args: None
+
+    Returns:
+        Boolean: True, if all Noobaa pods in Running state. False, otherwise
+
+    """
+    ret_val = True
+    ocp_pod = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_items = ocp_pod.get(selector=constants.NOOBAA_APP_LABEL).get("items")
+
+    # Check if noobaa pods are in running state
+    for nb_pod in pod_items:
+        status = ocp_pod.get_resource_status(nb_pod.get("metadata").get("name"))
+        if status == constants.STATUS_RUNNING:
+            log.info("Noobaa pod in running state...")
+        else:
+            log.error(f"Noobaa pod is in {status}, expected in Running state")
+            ret_val = False
+    return ret_val
+
+
+def check_memory_leak_in_noobaa_endpoint_log():
+    """
+    Check memory leak log in Noobaa endpoint logs.
+
+    Raises:
+        UnexpectedBehaviour: If memory leak error is existing in Noobaa endpoint logs.
+
+    """
+    # Get noobaa pod logs
+    mem_leak = False
+    pod_list = []
+    searchstring = "Possible EventEmitter memory leak detected"
+    nb_pods = pod.get_noobaa_pods()
+    for p in nb_pods:
+        pod_logs = pod.get_pod_logs(pod_name=p.name)
+        for line in pod_logs:
+            if searchstring in line:
+                log.info(f"File Log contains memory leak: {p.name}")
+                pod_list.append(p.name)
+                mem_leak = True
+    if mem_leak is True:
+        raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
+    else:
+        log.info("No memory leak is seen in Noobaa endpoint logs")
