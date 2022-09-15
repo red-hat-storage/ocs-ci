@@ -296,7 +296,15 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     return javas3_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
 
 
-def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
+def sync_object_directory(
+    podobj,
+    src,
+    target,
+    s3_obj=None,
+    signed_request_creds=None,
+    include=None,
+    exclude=None,
+):
     """
     Syncs objects between a target and source directories
 
@@ -308,9 +316,16 @@ def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds
                                  are in an MCG
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
+        include (str, optional): Don't exclude files or objects in the command that match the specified pattern
+        exclude (str, optional): Exclude all files or objects from the command that matches the specified pattern
+
     """
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
+    if include:
+        retrieve_cmd += f" --include='{include}'"
+    if exclude:
+        retrieve_cmd += f" --exclude='{exclude}'"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
