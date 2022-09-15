@@ -119,6 +119,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     skipif_ui_not_support,
     run_cmd,
+    exec_cmd,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
@@ -127,7 +128,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
-
+from ocs_ci.ocs.debug import CephObjectStoreTool, MonStoreTool
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -6127,3 +6128,69 @@ def scc_factory(request):
 
     request.addfinalizer(teardown)
     return create_scc
+
+
+@pytest.fixture(scope="session")
+def krew_install_factory(request):
+    """
+    Install krew plugin
+    """
+    krew_cmd = f"sh {constants.KREW_INSTALL_DIR}/krew_install.sh"
+    exec_cmd(cmd=krew_cmd)
+    return True
+
+
+@pytest.fixture(scope="session")
+def rook_ceph_plugin_install_factory(request, krew_install_factory):
+    """
+    Install rook-ceph plugin
+    """
+    OCP().exec_oc_cmd(command="krew install rook-ceph")
+
+
+@pytest.fixture()
+def ceph_objectstore_factory(request, rook_ceph_plugin_install_factory):
+    """
+    Setup CephObjectStoreTool instance
+    """
+    return ceph_objectstore_tool_fixture(request)
+
+
+def ceph_objectstore_tool_fixture(request):
+    """
+    Implementation of ceph_objectstore_factory()
+    """
+    cot_obj = CephObjectStoreTool()
+
+    def teardown():
+        deployment_in_debug = cot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            cot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return cot_obj
+
+
+@pytest.fixture()
+def ceph_monstore_factory(request, rook_ceph_plugin_install_factory):
+    """
+    Setup MonStoreTool instance
+    """
+    return ceph_monstore_tool_fixture(request)
+
+
+def ceph_monstore_tool_fixture(request):
+    """
+    Implementation of ceph_monstore_factory()
+    """
+    mot_obj = MonStoreTool()
+
+    def teardown():
+        deployment_in_debug = mot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            mot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return mot_obj
