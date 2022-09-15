@@ -1492,6 +1492,7 @@ BM_STATUS_ABSENT = "ABSENT"
 BM_STATUS_PRESENT = "PRESENT"
 BM_STATUS_RESPONSE_UPDATED = "UPDATED"
 BM_METAL_IMAGE = "rhcos-metal.x86_64.raw.gz"
+BM_DEBUG_NODE_NS = "baremetal-debug-ns"
 
 # RHV related constants
 RHV_CONFIG_FILEPATH = os.path.expanduser("~/.ovirt/ovirt-config.yaml")
