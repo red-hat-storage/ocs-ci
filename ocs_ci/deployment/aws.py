@@ -63,6 +63,9 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if ocp_version >= version.VERSION_4_12:
+            self.DEFAULT_STORAGECLASS = "gp2-csi"
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         super(AWSBase, self).deploy_ocp(log_cli_level)
