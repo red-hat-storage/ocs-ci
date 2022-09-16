@@ -6,3 +6,4 @@ ENV_DATA:
   dr_workload_subscription_dir: "rdr/busybox/app-busybox-1/subscriptions"
   # dr_policy_name: PLACEHOLDER
   # preferred_primary_cluster: PLACEHOLDER
+  mdr_scenario: False

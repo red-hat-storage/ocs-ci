@@ -147,6 +147,7 @@ NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 DRPOLICY = "DRPolicy"
+DRCLUSTER = "DRCluster"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
 CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
@@ -759,6 +760,8 @@ RBD_SIDECAR_COUNT = 18
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
+ACTION_FENCE = "Fenced"
+AcTION_UNFENCE = "Unfenced"
 
 # constants
 RBD_INTERFACE = "rbd"

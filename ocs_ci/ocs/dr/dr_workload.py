@@ -130,6 +130,7 @@ class BusyBox(DRWorkload):
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
 
         self.workload_namespace = None
@@ -216,7 +217,8 @@ class BusyBox(DRWorkload):
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
-        dr_helpers.wait_for_mirroring_status_ok()
+        if not config.ENV_DATA["mdr_scenario"]:
+            dr_helpers.wait_for_mirroring_status_ok()
 
     def delete_workload(self, force=False):
         """

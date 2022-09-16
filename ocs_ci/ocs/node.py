@@ -2568,3 +2568,25 @@ def consumers_verification_steps_after_provider_node_replacement():
 
     log.info("All the consumers verification steps finished successfully")
     return True
+
+
+def gracefully_reboot_nodes():
+    """
+    Gracefully reboot OpenShift Container Platform nodes
+
+    """
+    from ocs_ci.ocs import platform_nodes
+
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    for node in node_objs:
+        node_name = node.name
+        schedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node_name])
+        time.sleep(10)
+        wait_for_nodes_status(
+            node_names=[node_name], status=constants.NODE_READY, timeout=180
+        )
+        unschedule_nodes([node_name])

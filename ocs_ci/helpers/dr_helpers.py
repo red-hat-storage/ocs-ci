@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvc_objs
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -378,27 +378,28 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    logger.info(f"Waiting for {vr_count} VRs to be created")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_vr_count,
-        namespace=namespace,
-    )
-    sample.wait_for_func_value(vr_count)
+    if not config.ENV_DATA["mdr_scenario"]:
+        logger.info(f"Waiting for {vr_count} VRs to be created")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_vr_count,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(vr_count)
 
-    logger.info(f"Waiting for {vr_count} VRs to reach primary state")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=check_vr_state,
-        state="primary",
-        namespace=namespace,
-    )
-    if not sample.wait_for_func_status(result=True):
-        error_msg = "One or more VR haven't reached expected state primary within the time limit."
-        logger.error(error_msg)
-        raise TimeoutExpiredError(error_msg)
+        logger.info(f"Waiting for {vr_count} VRs to reach primary state")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=check_vr_state,
+            state="primary",
+            namespace=namespace,
+        )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = "One or more VR haven't reached expected state primary within the time limit."
+            logger.error(error_msg)
+            raise TimeoutExpiredError(error_msg)
 
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
@@ -429,18 +430,19 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
 
     """
     if check_state:
-        logger.info("Waiting for all VRs to reach secondary state")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=check_vr_state,
-            state="secondary",
-            namespace=namespace,
-        )
-        if not sample.wait_for_func_status(result=True):
-            error_msg = "One or more VR haven't reached expected state secondary within the time limit."
-            logger.error(error_msg)
-            raise TimeoutExpiredError(error_msg)
+        if not config.ENV_DATA["mdr_scenario"]:
+            logger.info("Waiting for all VRs to reach secondary state")
+            sample = TimeoutSampler(
+                timeout=timeout,
+                sleep=5,
+                func=check_vr_state,
+                state="secondary",
+                namespace=namespace,
+            )
+            if not sample.wait_for_func_status(result=True):
+                error_msg = "One or more VR haven't reached expected state secondary within the time limit."
+                logger.error(error_msg)
+                raise TimeoutExpiredError(error_msg)
 
         logger.info("Waiting for VRG to reach secondary state")
         sample = TimeoutSampler(
@@ -466,14 +468,15 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         logger.info(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    logger.info("Waiting for all VRs to be deleted")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_vr_count,
-        namespace=namespace,
-    )
-    sample.wait_for_func_value(0)
+    if not config.ENV_DATA["mdr_scenario"]:
+        logger.info("Waiting for all VRs to be deleted")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_vr_count,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(0)
 
 
 def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900):
@@ -549,3 +552,93 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def enable_fence(drcluster_name):
+    """
+    Once the managed cluster is fenced, all communication
+    from applications to the ODF external storage cluster will fail
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    assert drcluster_obj.patch(
+        params=fence_params, format_type="merge"
+    ), f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}"
+    logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def enable_unfence(drcluster_name):
+    """
+    The OpenShift cluster to be Unfenced is the one where applications
+     are not currently running and the cluster that was Fenced earlier.
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    unfence_params = f'{{"spec":{{"clusterFence":"{constants.AcTION_UNFENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    assert drcluster_obj.patch(
+        params=unfence_params, format_type="merge"
+    ), f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}"
+    logger.info(f"Successfully unfenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def get_fence_state(drcluster_name):
+    """
+    Returns the clusterfence state of given drcluster
+
+    Args:
+        drcluster_name (str): Name of the DRcluster
+
+    Returns:
+        state (str): If drcluster are fenced: Fenced or Unfenced,
+                     else None if not defined
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    state = drcluster_obj.get().get("spec").get("clusterFence")
+    config.switch_ctx(restore_index)
+    return state
+
+
+def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
+    """
+    Verifies the md5sum values of files are OK
+
+    Args:
+        namespace (str): Namespace where the workload running
+        path (str): Path of the hashfile saved of each files
+        timeout (int): Time taken in seconds to run command inside pod
+
+    Raises: If there is a mismatch in md5sum value or None
+
+    """
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        logger.info("Verify the md5sum values are OK")
+        cmd = f"md5sum -c {path}"
+        try:
+            pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+            logger.info(f"Pod {pod_obj.name}: All files checksums value matches")
+        except CommandFailed as ex:
+            logger.info(f"Pod {pod_obj.name}: One or more files or datas are modified")
+            raise ex
