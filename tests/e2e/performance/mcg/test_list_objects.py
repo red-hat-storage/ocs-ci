@@ -62,7 +62,7 @@ class TestListOfObjects(PASTest):
         fedora_pod_session.exec_cmd_on_pod(
             command=craft_s3_command(cmd=cmd, mcg_obj=s3_obj),
             out_yaml_format=False,
-            timeout=9000
+            timeout=9000,
         )
 
         # Verify when listing any errors found
