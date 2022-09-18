@@ -37,7 +37,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
-    get_ocp_version,
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
@@ -2174,17 +2173,10 @@ def run_osd_removal_job(osd_ids=None):
 
     """
     osd_ids_str = ",".join(map(str, osd_ids))
-    ocp_version = get_ocp_version()
-    ocs_version = config.ENV_DATA["ocs_version"]
-
-    if Version.coerce(ocs_version) >= Version.coerce(
-        "4.10"
-    ) and not check_safe_to_destroy_status(osd_ids_str):
-        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
-    elif Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
+    if check_safe_to_destroy_status(osd_ids_str):
+        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=false -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
+        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
