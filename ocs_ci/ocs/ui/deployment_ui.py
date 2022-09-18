@@ -73,11 +73,6 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
-        if self.ocp_version_semantic == version.VERSION_4_12:
-            time.sleep(10)
-            label_pod_security_admission(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
@@ -318,6 +313,11 @@ class DeploymentUI(PageNavigator):
             )
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
+        if self.ocp_version_semantic == version.VERSION_4_12:
+            time.sleep(10)
+            label_pod_security_admission(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
 
     def configure_encryption(self):
         """
