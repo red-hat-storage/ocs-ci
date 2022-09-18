@@ -2173,7 +2173,7 @@ def run_osd_removal_job(osd_ids=None):
 
     """
     osd_ids_str = ",".join(map(str, osd_ids))
-    if check_safe_to_destroy_status(osd_ids_str):
+    if any([check_safe_to_destroy_status(osd_id) for osd_id in osd_ids_str.split(",")]):
         cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=false -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
         cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
