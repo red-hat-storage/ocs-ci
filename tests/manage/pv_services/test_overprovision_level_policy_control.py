@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_ocs_version,
     skipif_managed_service,
+    skipif_external_mode,
 )
 
 log = logging.getLogger(__name__)
@@ -37,8 +38,9 @@ def setup_sc(storageclass_factory_class):
 
 @tier1
 @bugzilla("2024545")
-@pytest.mark.polarion_id("OCS-4472")
+@skipif_external_mode
 @skipif_managed_service
+@pytest.mark.polarion_id("OCS-4472")
 class TestOverProvisionLevelPolicyControl(ManageTest):
     """
     Test OverProvision Level Policy Control
