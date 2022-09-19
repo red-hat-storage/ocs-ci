@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -173,7 +174,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
         if self.ocp_version == "4.9":
             self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version in ("4.10", "4.11"):
+        elif self.ocp_version in ("4.10", "4.11", "4.12"):
             self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
         if config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
@@ -312,6 +313,11 @@ class DeploymentUI(PageNavigator):
             )
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
+        if self.ocp_version_semantic == version.VERSION_4_12:
+            time.sleep(10)
+            label_pod_security_admission(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
 
     def configure_encryption(self):
         """
