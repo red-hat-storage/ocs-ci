@@ -385,6 +385,7 @@ class PageNavigator(BaseUI):
         self.page_nav = locators[self.ocp_version]["page"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
         self.operator_name = (
             ODF_OPERATOR
             if self.ocs_version_semantic >= version.VERSION_4_9
@@ -404,7 +405,10 @@ class PageNavigator(BaseUI):
             elif aws_sc == "gp2-csi":
                 self.storage_class = "gp2-csi_sc"
             else:
-                self.storage_class = "gp2_sc"
+                if self.running_ocp_semantic_version >= version.VERSION_4_12:
+                    self.storage_class = "gp2-csi_sc"
+                else:
+                    self.storage_class = "gp2_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
             if self.ocp_version_semantic >= version.VERSION_4_11:
                 self.storage_class = "managed-csi_sc"
