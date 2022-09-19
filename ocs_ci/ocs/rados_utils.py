@@ -3,8 +3,10 @@ import logging
 import random
 import time
 import traceback
+import tempfile
 
 from ocs_ci.ocs.resources import pod
+from ocs_ci.helpers.helpers import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -323,3 +325,76 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     )
     osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
+
+
+def inject_corrupted_dups_into_pg_via_cot(
+    osd_deployments, pgid, injected_dups_file_name_prefix="text"
+):
+    """
+    Inject corrupted dups into a pg via COT
+
+    Args:
+        osd_deployments (OCS): List of OSD deployment OCS instances
+        pgid (str): pgid for a pool eg: '1.55'
+        injected_dups_file_name_prefix (str): File name prefix for injecting dups
+
+    """
+    # Create a text.json file with dup entries in it
+    txt = (
+        '[{"reqid": "client.4177.0:0", "version": "111\'999999999", "user_version": "0", '
+        '"generate": "4000", "return_code": "0"},]'
+    )
+    tmpfile = tempfile.NamedTemporaryFile(
+        prefix=f"{injected_dups_file_name_prefix}", suffix=".json", delete=False
+    )
+    with open(tmpfile.name, "w") as f:
+        f.write(txt)
+    # Copy the dups entries file to the osd running node and inject corrupted dups into the pg via COT
+    for deployment in osd_deployments:
+        osd_pod = deployment.pods[0]
+        osd_id = osd_pod.labels["ceph-osd-id"]
+        cmd = f"oc cp {tmpfile.name} /{osd_pod.name}:/tmp -n openshift-storage"
+        logger.info(
+            f"Inject corrupted dups into the pgid:{pgid} for osd:{osd_id} using json file data /n {txt}"
+        )
+        run_cmd(cmd=cmd)
+        osd_pod.exec_sh_cmd_on_pod(
+            f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {tmpfile.name}"
+        )
+
+
+def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
+    """
+    Get the pg log dup entries count via COT
+
+    Args:
+        osd_deployments (OCS): List of OSD deployment OCS instances
+        pgid (str): pgid for a pool eg: '1.55'
+
+    Return:
+        list: List of total number of pg dups per osd
+
+    """
+    osd_pg_log_dups = []
+    for deployment in osd_deployments:
+        osd_pod = deployment.pods[0]
+        osd_id = osd_pod.labels["ceph-osd-id"]
+        logger.info(
+            f"Get the pg dup entries count injected into pgid:{pgid} for osd:{osd_id}"
+        )
+        osd_pod.exec_sh_cmd_on_pod(
+            f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_id} --op log --pgid {pgid}  > /var/log/ceph/pg_log_{pgid}.txt"
+        )
+        # Install jquery in the pod and get the current pg log dups count
+        osd_pod.exec_sh_cmd_on_pod("yum install jq -y")
+        out = osd_pod.exec_sh_cmd_on_pod(
+            f"cat /var/log/ceph/pg_log_{pgid}.txt | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'"
+        )
+        total_dups = int(out.split("\n")[1])
+        osd_pg_log_dups.append(total_dups)
+
+    return osd_pg_log_dups
