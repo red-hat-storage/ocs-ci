@@ -1,11 +1,18 @@
 import logging
 import os
-import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml, dump_data_to_temp_yaml
-from ocs_ci.utility.lvmo_utils import delete_lvm_cluster
+from ocs_ci.utility.lvmo_utils import (
+    delete_lvm_cluster,
+    get_blockdevices,
+    get_disks_by_path,
+    lvmo_health_check,
+)
+from ocs_ci.framework.pytest_customization.marks import skipif_lvm_not_installed
+from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.ocs.ocp import OCP
 
 
 log = logging.getLogger(__name__)
@@ -34,8 +41,17 @@ def create_lvm_cluster_cr_with_device_selector(disks):
     return tmp_file_path
 
 
-@pytest.mark.parametrize(
-    argnames=["by"], argvalues=[pytest.param(*["name"])[pytest.param(*["path"])]]
-)
-def test_create_lvm_cluster_w_manual_disk_selection(by):
+@skipif_lvm_not_installed
+@skipif_ocs_version("<4.12")
+def test_create_lvm_cluster_w_manual_disk_selection(by="name"):
+
+    if by == "name":
+        disks = get_blockdevices()
+    elif by == "path":
+        disks = get_disks_by_path()
+
+    lvm_cr = create_lvm_cluster_cr_with_device_selector(disks[:3])
     delete_lvm_cluster()
+    oc_obj = OCP()
+    oc_obj.create(yaml_file=lvm_cr)
+    lvmo_health_check()

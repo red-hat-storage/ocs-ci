@@ -6,13 +6,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import check_pods_in_statuses
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import LVMOHealthException
+from ocs_ci.ocs.exceptions import CommandFailed, LVMOHealthException
 from ocs_ci.helpers.helpers import clean_all_test_projects
 
 
 log = logging.getLogger(__name__)
-
-storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
 
 
 def lvmo_health_check_base():
@@ -65,6 +63,7 @@ def lvmo_health_check(tries=20, delay=30):
 
 
 def get_disks_by_path():
+    storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     oc_obj = OCP()
     disks = oc_obj.exec_oc_debug_cmd(
         node=constants.SNO_NODE_NAME, cmd_list=["ls /dev/disk/by-path"]
@@ -79,7 +78,8 @@ def get_disks_by_path():
     return disks_by_path
 
 
-def get_disks_by_name():
+def get_blockdevices():
+    storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     disks_by_name = list()
     oc_obj = OCP()
     disks = oc_obj.exec_oc_debug_cmd(
@@ -96,4 +96,10 @@ def get_disks_by_name():
 def delete_lvm_cluster():
     clean_all_test_projects()
     lmvcluster = OCP(kind="LVMCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    lmvcluster.delete(resource_name=constants.LVMCLUSTER)
+    try:
+        lmvcluster.delete(resource_name=constants.LVMCLUSTER)
+    except CommandFailed as e:
+        if f'lvmclusters.lvm.topolvm.io "{constants.LVMCLUSTER}" not found' not in str(
+            e
+        ):
+            raise e
