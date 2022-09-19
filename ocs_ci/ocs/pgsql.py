@@ -57,10 +57,13 @@ class Postgresql(BenchmarkOperator):
     def setup_postgresql(self, replicas, sc_name=None):
         """
         Deploy postgres sql server
+
         Args:
             replicas (int): Number of postgresql pods to be deployed
+
         Raises:
             CommandFailed: If PostgreSQL server setup fails
+
         """
         log.info("Deploying postgres database")
         try:
@@ -113,6 +116,7 @@ class Postgresql(BenchmarkOperator):
     ):
         """
         Create pgbench benchmark pods
+
         Args:
             replicas (int): Number of pgbench pods to be deployed
             pgbench_name (str): Name of pgbench bechmark
@@ -123,8 +127,10 @@ class Postgresql(BenchmarkOperator):
             scaling_factor (int): scaling factor
             timeout (int): Time in seconds to wait
             wait (bool): On true waits till pgbench reaches Completed state
+
         Returns:
             List: pgbench pod objects list
+
         """
         pg_obj_list = []
         pgbench_name = pgbench_name if pgbench_name else "pgbench-benchmark"
@@ -178,24 +184,30 @@ class Postgresql(BenchmarkOperator):
     def get_postgres_pvc(self):
         """
         Get all postgres pvc
+
         Returns:
              List: postgres pvc objects list
+
         """
         return get_all_pvc_objs(namespace=BMO_NAME)
 
     def get_postgres_pods(self):
         """
         Get all postgres pods
+
         Returns:
             List: postgres pod objects list
+
         """
         return get_all_pods(namespace=BMO_NAME, selector=["postgres"])
 
     def get_pgbench_pods(self):
         """
         Get all pgbench pods
+
         Returns:
             List: pgbench pod objects list
+
         """
         return [
             get_pod_obj(pod, BMO_NAME)
@@ -205,8 +217,10 @@ class Postgresql(BenchmarkOperator):
     def delete_pgbench_pods(self, pg_obj_list):
         """
         Delete all pgbench pods on cluster
+
         Returns:
             bool: True if deleted, False otherwise
+
         """
         log.info("Delete pgbench Benchmark")
         for pgbench_pod in pg_obj_list:
@@ -215,8 +229,10 @@ class Postgresql(BenchmarkOperator):
     def is_pgbench_running(self):
         """
         Check if pgbench is running
+
         Returns:
             bool: True if pgbench is running; False otherwise
+
         """
         pod_objs = self.get_pgbench_pods()
         for pod in pod_objs:
@@ -233,8 +249,10 @@ class Postgresql(BenchmarkOperator):
     def get_pgbench_status(self, pgbench_pod_name):
         """
         Get pgbench status
+
         Args:
             pgbench_pod_name (str): Name of the pgbench pod
+
         Returns:
             str: state of pgbench pod (running/completed)
         """
@@ -250,9 +268,11 @@ class Postgresql(BenchmarkOperator):
     def wait_for_postgres_status(self, status=constants.STATUS_RUNNING, timeout=300):
         """
         Wait for postgres pods status to reach running/completed
+
         Args:
             status (str): status to reach Running or Completed
             timeout (int): Time in seconds to wait
+
         """
         log.info(f"Waiting for postgres pods to be reach {status} state")
         postgres_pod_objs = self.get_postgres_pods()
@@ -264,9 +284,11 @@ class Postgresql(BenchmarkOperator):
     def wait_for_pgbench_status(self, status, timeout=None):
         """
         Wait for pgbench benchmark pods status to reach running/completed
+
         Args:
             status (str): status to reach Running or Completed
             timeout (int): Time in seconds to wait
+
         """
         timeout = timeout if timeout else 900
         # Wait for pg_bench pods to initialized and running
@@ -286,10 +308,13 @@ class Postgresql(BenchmarkOperator):
     def validate_pgbench_run(self, pgbench_pods, print_table=True):
         """
         Validate pgbench run
+
         Args:
             pgbench pods (list): List of pgbench pods
+
         Returns:
-            pg_output (list): pgbench outputs in list
+            list: pgbench outputs in list
+
         """
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
@@ -346,8 +371,10 @@ class Postgresql(BenchmarkOperator):
     def get_pgsql_nodes(self):
         """
         Get nodes that contain a pgsql app pod
+
         Returns:
             list: Cluster node OCP objects
+
         """
         pgsql_pod_objs = self.pod_obj.get(
             selector=constants.PGSQL_APP_LABEL, all_namespaces=True
@@ -365,8 +392,10 @@ class Postgresql(BenchmarkOperator):
     def get_pgbench_running_nodes(self):
         """
         get nodes that contains pgbench pods
+
         Returns:
             list: List of pgbench running nodes
+
         """
         pgbench_nodes = [
             get_pod_node(pgbench_pod).name for pgbench_pod in self.get_pgbench_pods()
@@ -376,10 +405,13 @@ class Postgresql(BenchmarkOperator):
     def filter_pgbench_nodes_from_nodeslist(self, nodes_list):
         """
         Filter pgbench nodes from the given nodes list
+
         Args:
             nodes_list (list): List of nodes to be filtered
+
         Returns:
             list: List of pgbench not running nodes from the given nodes list
+
         """
         log.info("Get pgbench running nodes")
         pgbench_nodes = self.get_pgbench_running_nodes()
@@ -393,8 +425,7 @@ class Postgresql(BenchmarkOperator):
     def respin_pgsql_app_pod(self):
         """
         Respin the pgsql app pod
-        Returns:
-            pod status
+
         """
         app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, BMO_NAME)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
@@ -407,8 +438,10 @@ class Postgresql(BenchmarkOperator):
     def get_pgbech_pod_status_table(self, pgbench_pods):
         """
         Get pgbench pod data and print results on a table
+
         Args:
             pgbench pods (list): List of pgbench pods
+
         """
         pgbench_pod_table = PrettyTable()
         pgbench_pod_table.field_names = [
@@ -447,10 +480,12 @@ class Postgresql(BenchmarkOperator):
     def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
         """
         Collect pgbench output to google spreadsheet
+
         Args:
             pg_output (list):  pgbench outputs in list
             sheet_name (str): Name of the sheet
             sheet_index (int): Index of sheet
+
         """
         # Collect data and export to Google doc spreadsheet
         g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
@@ -524,8 +559,10 @@ class Postgresql(BenchmarkOperator):
             postgres_name (str): Name of the postgres pod
             run_benchmark (bool): On true, runs pgbench benchmark on postgres pod
             pgbench_name (str): Name of pgbench benchmark
+
         Returns:
-            pgsql_obj_list (list): List of pod objs created
+             list: List of pod objs created
+
         """
         pgsql_obj_list = []
         for pvc_obj in pvc_objs:
@@ -772,7 +809,7 @@ class Postgresql(BenchmarkOperator):
             drop_table (bool) : True if we want to delete the table, False otherwise.
 
         Returns:
-            last_valid_state (str)  : A string containing the last valid state of the table.
+             str  : A string containing the last valid state of the table.
 
         """
         row_index = 0
