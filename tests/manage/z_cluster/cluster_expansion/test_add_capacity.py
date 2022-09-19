@@ -121,7 +121,7 @@ class TestAddCapacity(ManageTest):
 @ignore_leftovers
 @tier1
 @acceptance
-@polarion_id("OCS-1191")
+@polarion_id("OCS-4647")
 @pytest.mark.second_to_last
 @skipif_managed_service
 @skipif_aws_i3
