@@ -40,8 +40,8 @@ class TestS3Routes:
                 nb_s3_route_obj.data["spec"]["tls"]["insecureEdgeTerminationPolicy"]
                 == "Redirect"
             ):
-                param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Allow","termination":"reencrypt"}}}'
-                nb_s3_route_obj.patch(params=param, format_type="merge")
+                s3_route_param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Allow","termination":"reencrypt"}}}'
+                nb_s3_route_obj.patch(params=s3_route_param, format_type="merge")
 
             if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
                 storage_cluster_obj = get_storage_cluster()
@@ -49,10 +49,10 @@ class TestS3Routes:
                     if storage_cluster_obj.data["items"][0]["spec"]["managedResources"][
                         "cephObjectStores"
                     ]["disableRoute"]:
-                        n_param = '[{"op": "remove", "path": "/spec/managedResources/cephObjectStores/disableRoute"}]'
+                        sc_param = '[{"op": "remove", "path": "/spec/managedResources/cephObjectStores/disableRoute"}]'
                         storage_cluster_obj.patch(
                             resource_name="ocs-storagecluster",
-                            params=n_param,
+                            params=sc_param,
                             format_type="json",
                         ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
                         sleep(RECONCILE_WAIT)
@@ -71,16 +71,16 @@ class TestS3Routes:
         request.addfinalizer(finalizer)
 
     @tier3
-    @bugzilla("")
-    @bugzilla("")
+    @bugzilla("2067079")
+    @bugzilla("2063691")
     @skipif_external_mode
-    @pytest.mark.polarion_id("")
+    @pytest.mark.polarion_id("OCS-4648")
     @skipif_ocs_version("<4.11")
     def test_s3_routes_reconcile(self):
         """
         Tests:
             1. Validates S3 route is not reconciled after changing insecureEdgeTerminationPolicy.
-            2. Validates rgw route is not recreated after changing disableRoute in the storage cluster crd.
+            2. Validates rgw route is not recreated after adding disableRoute in the storage cluster.
         """
         # S3 route
         nb_s3_route_obj = ocp.OCP(
@@ -88,15 +88,15 @@ class TestS3Routes:
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             resource_name="s3",
         )
-        param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Redirect","termination":"reencrypt"}}}'
-        nb_s3_route_obj.patch(params=param, format_type="merge")
+        s3_route_param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Redirect","termination":"reencrypt"}}}'
+        nb_s3_route_obj.patch(params=s3_route_param, format_type="merge")
         sleep(RECONCILE_WAIT)
         nb_s3_route_obj.reload_data()
-        logger.info("Validating updated s3 route persists and does not get reconciled")
+        logger.info("Validating updated s3 route persists")
         assert (
             nb_s3_route_obj.data["spec"]["tls"]["insecureEdgeTerminationPolicy"]
             == "Redirect"
-        ), "Failed, s3 route is not updated"
+        ), "Failed, s3 route is not updated, it has been reverted back to original"
 
         # RGW route
         if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
@@ -105,10 +105,10 @@ class TestS3Routes:
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             )
             storage_cluster_obj = get_storage_cluster()
-            n_param = '{"spec":{"managedResources":{"cephObjectStores":{"disableRoute":true}}}}'
+            sc_param = '{"spec":{"managedResources":{"cephObjectStores":{"disableRoute":true}}}}'
             assert storage_cluster_obj.patch(
                 resource_name="ocs-storagecluster",
-                params=n_param,
+                params=sc_param,
                 format_type="merge",
             ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
             rgw_route_obj.delete(resource_name=constants.RGW_ROUTE_INTERNAL_MODE)
@@ -116,4 +116,4 @@ class TestS3Routes:
             logger.info("Validating whether rgw route does not get recreated")
             assert not rgw_route_obj.is_exist(
                 resource_name=constants.RGW_ROUTE_INTERNAL_MODE
-            ), "Failed: RGW route exist"
+            ), "Failed: RGW route exist, it has been recreated by the system"
