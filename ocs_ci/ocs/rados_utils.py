@@ -374,7 +374,7 @@ def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
         pgid (str): pgid for a pool eg: '1.55'
 
     Return:
-        osd_pg_log_dups (list): List of total number of pg dups per osd
+        list: List of total number of pg dups per osd
 
     """
     osd_pg_log_dups = []

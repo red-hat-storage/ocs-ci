@@ -2124,10 +2124,10 @@ def get_osd_dump(pool_name):
     Get the osd dump part of a given pool
 
     Args:
-    pool_name (str): ceph pool name
+        pool_name (str): ceph pool name
 
     Returns:
-        pool (dict): pool information from osd dump
+        dict: pool information from osd dump
 
     """
     osd_dump_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph osd dump")
@@ -2156,7 +2156,7 @@ def get_pgs_brief_dump():
     Get pgs_brief dump from ceph pg dump
 
     Returns:
-        pgs_brief_dict (dict): pgs_brief dump output
+        dict: pgs_brief dump output
 
     """
     pgs_brief_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph pg dump pgs_brief")
@@ -2182,7 +2182,7 @@ def get_specific_pool_pgid(pool_name):
     Get all the pgid's of a specific pool
 
     Args:
-    pool_name (str): ceph pool name
+        pool_name (str): ceph pool name
 
     Returns:
         list: List of all the pgid's of a given pool
@@ -2199,7 +2199,7 @@ def get_osd_pg_log_dups_tracked():
     Get the default tracked number of osd pg log dups
 
     Returns:
-        osd_pg_log_dups_count (int): Number of default tracked osd pg log dups
+        int: Number of default tracked osd pg log dups
 
     """
     ct_pod = pod.get_ceph_tools_pod()
