@@ -990,6 +990,13 @@ locators = {
         "page": {**page_nav, **page_nav_4_10},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+        },
     },
     "4.11": {
         "login": {**login, **login_4_11},
