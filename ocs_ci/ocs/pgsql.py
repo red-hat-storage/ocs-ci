@@ -5,7 +5,9 @@ import logging
 import random
 import time
 from prettytable import PrettyTable
-from datetime import datetime
+import string
+import re
+from datetime import datetime, timedelta
 
 from ocs_ci.ocs.benchmark_operator import BenchmarkOperator, BMO_NAME
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -48,7 +50,6 @@ class Postgresql(BenchmarkOperator):
     def __init__(self, **kwargs):
         """
         Initializer function
-
         """
         super().__init__(**kwargs)
         BenchmarkOperator.deploy(self)
@@ -56,13 +57,10 @@ class Postgresql(BenchmarkOperator):
     def setup_postgresql(self, replicas, sc_name=None):
         """
         Deploy postgres sql server
-
         Args:
             replicas (int): Number of postgresql pods to be deployed
-
         Raises:
             CommandFailed: If PostgreSQL server setup fails
-
         """
         log.info("Deploying postgres database")
         try:
@@ -115,7 +113,6 @@ class Postgresql(BenchmarkOperator):
     ):
         """
         Create pgbench benchmark pods
-
         Args:
             replicas (int): Number of pgbench pods to be deployed
             pgbench_name (str): Name of pgbench bechmark
@@ -126,10 +123,8 @@ class Postgresql(BenchmarkOperator):
             scaling_factor (int): scaling factor
             timeout (int): Time in seconds to wait
             wait (bool): On true waits till pgbench reaches Completed state
-
         Returns:
             List: pgbench pod objects list
-
         """
         pg_obj_list = []
         pgbench_name = pgbench_name if pgbench_name else "pgbench-benchmark"
@@ -183,7 +178,6 @@ class Postgresql(BenchmarkOperator):
     def get_postgres_pvc(self):
         """
         Get all postgres pvc
-
         Returns:
              List: postgres pvc objects list
         """
@@ -200,10 +194,8 @@ class Postgresql(BenchmarkOperator):
     def get_pgbench_pods(self):
         """
         Get all pgbench pods
-
         Returns:
             List: pgbench pod objects list
-
         """
         return [
             get_pod_obj(pod, BMO_NAME)
@@ -213,10 +205,8 @@ class Postgresql(BenchmarkOperator):
     def delete_pgbench_pods(self, pg_obj_list):
         """
         Delete all pgbench pods on cluster
-
         Returns:
             bool: True if deleted, False otherwise
-
         """
         log.info("Delete pgbench Benchmark")
         for pgbench_pod in pg_obj_list:
@@ -225,10 +215,8 @@ class Postgresql(BenchmarkOperator):
     def is_pgbench_running(self):
         """
         Check if pgbench is running
-
         Returns:
             bool: True if pgbench is running; False otherwise
-
         """
         pod_objs = self.get_pgbench_pods()
         for pod in pod_objs:
@@ -245,13 +233,10 @@ class Postgresql(BenchmarkOperator):
     def get_pgbench_status(self, pgbench_pod_name):
         """
         Get pgbench status
-
         Args:
             pgbench_pod_name (str): Name of the pgbench pod
-
         Returns:
             str: state of pgbench pod (running/completed)
-
         """
         pod_obj = get_pod_obj(pgbench_pod_name, namespace=BMO_NAME)
         status = pod_obj.get().get("status").get("containerStatuses")[0].get("state")
@@ -265,11 +250,9 @@ class Postgresql(BenchmarkOperator):
     def wait_for_postgres_status(self, status=constants.STATUS_RUNNING, timeout=300):
         """
         Wait for postgres pods status to reach running/completed
-
         Args:
             status (str): status to reach Running or Completed
             timeout (int): Time in seconds to wait
-
         """
         log.info(f"Waiting for postgres pods to be reach {status} state")
         postgres_pod_objs = self.get_postgres_pods()
@@ -281,11 +264,9 @@ class Postgresql(BenchmarkOperator):
     def wait_for_pgbench_status(self, status, timeout=None):
         """
         Wait for pgbench benchmark pods status to reach running/completed
-
         Args:
             status (str): status to reach Running or Completed
             timeout (int): Time in seconds to wait
-
         """
         timeout = timeout if timeout else 900
         # Wait for pg_bench pods to initialized and running
@@ -305,13 +286,10 @@ class Postgresql(BenchmarkOperator):
     def validate_pgbench_run(self, pgbench_pods, print_table=True):
         """
         Validate pgbench run
-
         Args:
             pgbench pods (list): List of pgbench pods
-
         Returns:
             pg_output (list): pgbench outputs in list
-
         """
         all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
@@ -319,9 +297,11 @@ class Postgresql(BenchmarkOperator):
             output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             log.info("*******PGBench output log*********\n" f"{pg_output}")
+            # for data in all_pgbench_pods_output:
             for data in pg_output:
                 run_id = list(data.keys())
-                if "latency_avg" not in data[run_id[0]].keys():
+                latency_avg = data[run_id[0]]["latency_avg"]
+                if not latency_avg:
                     raise UnexpectedBehaviour(
                         "PGBench failed to run, " "no data found on latency_avg"
                     )
@@ -366,10 +346,8 @@ class Postgresql(BenchmarkOperator):
     def get_pgsql_nodes(self):
         """
         Get nodes that contain a pgsql app pod
-
         Returns:
             list: Cluster node OCP objects
-
         """
         pgsql_pod_objs = self.pod_obj.get(
             selector=constants.PGSQL_APP_LABEL, all_namespaces=True
@@ -387,10 +365,8 @@ class Postgresql(BenchmarkOperator):
     def get_pgbench_running_nodes(self):
         """
         get nodes that contains pgbench pods
-
         Returns:
             list: List of pgbench running nodes
-
         """
         pgbench_nodes = [
             get_pod_node(pgbench_pod).name for pgbench_pod in self.get_pgbench_pods()
@@ -400,13 +376,10 @@ class Postgresql(BenchmarkOperator):
     def filter_pgbench_nodes_from_nodeslist(self, nodes_list):
         """
         Filter pgbench nodes from the given nodes list
-
         Args:
             nodes_list (list): List of nodes to be filtered
-
         Returns:
             list: List of pgbench not running nodes from the given nodes list
-
         """
         log.info("Get pgbench running nodes")
         pgbench_nodes = self.get_pgbench_running_nodes()
@@ -420,10 +393,8 @@ class Postgresql(BenchmarkOperator):
     def respin_pgsql_app_pod(self):
         """
         Respin the pgsql app pod
-
         Returns:
             pod status
-
         """
         app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, BMO_NAME)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
@@ -436,10 +407,8 @@ class Postgresql(BenchmarkOperator):
     def get_pgbech_pod_status_table(self, pgbench_pods):
         """
         Get pgbench pod data and print results on a table
-
         Args:
             pgbench pods (list): List of pgbench pods
-
         """
         pgbench_pod_table = PrettyTable()
         pgbench_pod_table.field_names = [
@@ -478,12 +447,10 @@ class Postgresql(BenchmarkOperator):
     def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
         """
         Collect pgbench output to google spreadsheet
-
         Args:
             pg_output (list):  pgbench outputs in list
             sheet_name (str): Name of the sheet
             sheet_index (int): Index of sheet
-
         """
         # Collect data and export to Google doc spreadsheet
         g_sheet = GoogleSpreadSheetAPI(sheet_name=sheet_name, sheet_index=sheet_index)
@@ -523,7 +490,6 @@ class Postgresql(BenchmarkOperator):
     def cleanup(self):
         """
         Clean up
-
         """
         switch_to_project(BMO_NAME)
         log.info("Deleting postgres pods and configuration")
@@ -558,10 +524,8 @@ class Postgresql(BenchmarkOperator):
             postgres_name (str): Name of the postgres pod
             run_benchmark (bool): On true, runs pgbench benchmark on postgres pod
             pgbench_name (str): Name of pgbench benchmark
-
         Returns:
             pgsql_obj_list (list): List of pod objs created
-
         """
         pgsql_obj_list = []
         for pvc_obj in pvc_objs:
@@ -663,3 +627,193 @@ class Postgresql(BenchmarkOperator):
         pgbench_pods = self.get_pgbench_pods()
         # Validate pgbench run and parse logs
         self.validate_pgbench_run(pgbench_pods)
+
+    def generate_random_date(self, min_year=1900, max_year=datetime.now().year):
+        """
+        Generate a random date in yyyy-mm-dd format.
+
+        Args:
+            min_year (int) : The minimum year for which the date can be generated.
+            max_year (int) : The maximum year for which the date can be generated.
+
+        Returns:
+            str : Random date in yyyy-mm-dd format.
+
+        """
+        start = datetime(min_year, 1, 1, 00, 00, 00)
+        years = max_year - min_year + 1
+        end = start + timedelta(days=365 * years)
+        return (start + (end - start) * random.random()).strftime("%Y-%m-%d")
+
+    def generate_random_string(self, length):
+        """
+        Generate a random string of given length.
+
+        Args:
+            length (int) : The length of the string that needs to be generated.
+
+        Returns:
+            str : Random string of given length.
+
+        """
+        return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+    def run_pgsql_command(self, postgres_pod, command, select=False):
+        """
+        Run pgsql command on the postgres POD
+
+        Args:
+            postgres_pod (POD) : POD object on which postgres is running.
+            command (str) : The pgsql command that we want to run.
+            select (bool) : True if the command is of type select, False otherwise.
+
+        Returns:
+            str : Output of the select query.
+
+        """
+        out = postgres_pod.exec_cmd_on_pod(f'psql -U postgres -c "{command}" ')
+        if select:
+            ind = out.index("-")
+            result = list()
+            result.append("\n" + out[:ind])
+            result.append("-" * len(result[0]))
+            result.extend(
+                re.findall(r"\d+\s\|\s[A-Z0-9]+\s\|\s\d{4}-\d{2}-\d{2}\s", out)
+            )
+            result.append("-" * len(result[0]))
+            log.info("\n".join(result))
+            return out
+        log.info(out)
+
+    def run_insert_operation(self, num_of_ops, postgres_pod, row_index, table_name):
+        """
+        Insert num_of_ops number of rows in the table using run_pgsql_command.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be inserted.
+            postgres_pod (POD) : POD object on which postgres is running.
+            row_index (int) : Starting index of the rows to be inserted.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} insert operations.")
+        res = ""
+        for row_num in range(row_index + 1, row_index + num_of_ops + 1):
+            random_username = self.generate_random_string(50)
+            res += f"({row_num}, '{random_username}', '{self.generate_random_date()}'),"
+        self.run_pgsql_command(
+            postgres_pod,
+            f"INSERT INTO {table_name} VALUES {res[:-1]};",
+        )
+
+    def run_update_operation(self, num_of_ops, postgres_pod, max_row_index, table_name):
+        """
+        Update num_of_ops number of rows in the table.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be updated.
+            postgres_pod (POD) : POD object on which postgres is running.
+            max_row_index (int) : Maximum index of the row currently present in the table.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} update operations.")
+        self.run_pgsql_command(
+            postgres_pod,
+            (
+                f"UPDATE {table_name} SET username='{self.generate_random_string(50)}' "
+                f"WHERE row_id in {tuple(random.sample(range(1, max_row_index), num_of_ops))};"
+            ),
+        )
+
+    def run_delete_operation(self, num_of_ops, postgres_pod, max_row_index, table_name):
+        """
+        Delete num_of_ops number of rows from the table.
+
+        Args:
+            num_of_ops (int) : Total number of records we want to be deleted.
+            postgres_pod (POD) : POD object on which postgres is running.
+            max_row_index (int) : Maximum index of the row currently present in the table.
+            table_name (str) : Name of the table.
+
+        """
+        log.info(f"Running {num_of_ops} delete operations.")
+        self.run_pgsql_command(
+            postgres_pod,
+            f"DELETE FROM {table_name} WHERE row_id in {tuple(random.sample(range(1, max_row_index), num_of_ops))};",
+        )
+
+    def run_pgsql_queries(
+        self,
+        postgres_pod,
+        table_name,
+        total_rows,
+        num_of_ops,
+        run_time,
+        drop_table=True,
+    ):
+        """
+        Run queries on the Postgres database,
+        The steps include:
+        1. Create table <table_name> and insert <total_rows> number of records.
+        2. Repeat below steps in order for specified <run_time> duration:
+        a. Insert <num_of_ops> number of rows into the table.
+        b. Update <num_of_ops> number of rows into the table.
+        c. Update random number of rows based on matching year in the date column of records.
+        d. Delete <num_of_ops> number of rows from the table.
+
+        Args:
+            postgres_pod (POD) : POD object on which postgres is running.
+            table_name (str) : Name of the table that we want to create.
+            total_rows (int) : Total number of records that should be there inside the table.
+            num_of_ops (int) : Total number of records we want to be inserted/deleted/updated in each operation
+                                respectively.
+            run_time (int) : Total Run Time in minutes.
+            drop_table (bool) : True if we want to delete the table, False otherwise.
+
+        Returns:
+            last_valid_state (str)  : A string containing the last valid state of the table.
+
+        """
+        row_index = 0
+        last_valid_state = ""
+        self.run_pgsql_command(
+            postgres_pod,
+            f"CREATE TABLE {table_name} (row_id INT PRIMARY KEY, username VARCHAR (50) NOT NULL, date DATE NOT NULL);",
+        )
+        self.run_insert_operation(total_rows, postgres_pod, 0, table_name)
+        row_index += total_rows
+        self.run_pgsql_command(postgres_pod, f"SELECT * FROM {table_name};", True)
+
+        end_time = datetime.now() + timedelta(minutes=run_time)
+        while datetime.now() < end_time:
+            for sql_operation in range(0, 4):
+                if sql_operation == 0:
+                    self.run_insert_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                    row_index += num_of_ops
+                elif sql_operation == 1:
+                    self.run_update_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                elif sql_operation == 2:
+                    self.run_pgsql_command(
+                        postgres_pod,
+                        (
+                            f"UPDATE {table_name} SET date='{self.generate_random_date()}' "
+                            f"WHERE EXTRACT(YEAR FROM date) = {str(random.randint(1900, datetime.now().year))};"
+                        ),
+                    )
+                else:
+                    self.run_delete_operation(
+                        num_of_ops, postgres_pod, row_index, table_name
+                    )
+                last_valid_state = self.run_pgsql_command(
+                    postgres_pod, f"SELECT * FROM {table_name};", True
+                )
+
+        if drop_table:
+            self.run_pgsql_command(postgres_pod, f"DROP TABLE {table_name};")
+
+        return last_valid_state

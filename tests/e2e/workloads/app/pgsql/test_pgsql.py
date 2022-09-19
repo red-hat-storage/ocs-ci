@@ -26,12 +26,17 @@ def pgsql(request):
 @pytest.mark.polarion_id("OCS-807")
 class TestPgSQLWorkload(E2ETest):
     """
-    Deploy an PGSQL workload using operator
+    Deploy an PGSQL workload and run the workload
     """
 
-    def test_sql_workload_simple(self, pgsql):
+    total_rows = 100
+    run_time = 5
+    num_of_ops = 10
+    table_name = "testing1"
+
+    def test_sql_workload_simple_with_pgbench(self, pgsql):
         """
-        This is a basic pgsql workload
+        This is a basic pgsql workload with Pgbench
         """
         # Deployment postgres
         pgsql.setup_postgresql(replicas=1)
@@ -65,4 +70,25 @@ class TestPgSQLWorkload(E2ETest):
         # Export pgdata to google  google spreadsheet
         pgsql.export_pgoutput_to_googlesheet(
             pg_output=pg_out, sheet_name="E2E Workloads", sheet_index=0
+        )
+
+    def test_sql_workload_simple_without_pgbench(self, pgsql):
+        """
+        This is a basic pgsql workload without pgbench.
+        In this test we run the Postgres supported queries directly on the Postgres database
+        """
+        # Deployment postgres
+        pgsql.setup_postgresql(replicas=1)
+
+        # Wait for postgres pod to reach Running status
+        pgsql.wait_for_postgres_status()
+        postgres_pod = pgsql.get_postgres_pods()[0]
+
+        # Run pgsql workload
+        pgsql.run_pgsql_queries(
+            postgres_pod,
+            self.table_name,
+            self.total_rows,
+            self.num_of_ops,
+            self.run_time,
         )
