@@ -12,6 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
 from ocs_ci.ocs.node import get_nodes, get_compute_node_names
+from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
@@ -81,6 +82,9 @@ def setup_local_storage(storageclass):
         logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
+
+    # PodSecurity admission
+    label_pod_security_admission(namespace=lso_namespace)
 
     local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
     assert local_storage_operator.wait_for_resource(
