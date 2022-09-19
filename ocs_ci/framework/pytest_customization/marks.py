@@ -64,6 +64,9 @@ workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
 system_test = pytest.mark.system_test
 performance = pytest.mark.performance
+performance_a = pytest.mark.performance_a
+performance_b = pytest.mark.performance_b
+performance_c = pytest.mark.performance_c
 performance_extended = pytest.mark.performance_extended
 scale = pytest.mark.scale
 scale_long_run = pytest.mark.scale_long_run
@@ -83,6 +86,9 @@ tier_marks = [
     tier4c,
     tier_after_upgrade,
     performance,
+    performance_a,
+    performance_b,
+    performance_c,
     scale,
     scale_long_run,
     scale_changed_layout,

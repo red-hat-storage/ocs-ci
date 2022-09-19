@@ -8,7 +8,7 @@ import pytest
 import pathlib
 import time
 
-from ocs_ci.framework.testlib import performance, polarion_id
+from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.perftests import PASTest
@@ -25,6 +25,7 @@ Interfaces_info = {
 
 
 @performance
+@performance_a
 class TestBulkPodAttachPerformance(PASTest):
     """
     Test to measure performance of attaching pods to pvc in a bulk
