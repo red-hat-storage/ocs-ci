@@ -20,7 +20,8 @@ def switch_to_orig_index_at_last(func):
         try:
             return func(*args, **kwargs)
         finally:
-            logger.info("Switching back to the original cluster")
-            config.switch_ctx(orig_index)
+            if config.cur_index != orig_index:
+                logger.info("Switching back to the original cluster")
+                config.switch_ctx(orig_index)
 
     return inner

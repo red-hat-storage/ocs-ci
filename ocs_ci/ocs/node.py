@@ -34,7 +34,8 @@ from ocs_ci.ocs.resources.pv import (
     get_node_pv_objs,
 )
 from ocs_ci.utility.version import get_semantic_version
-from ocs_ci.utility.rosa import is_odf_addon_installed
+from ocs_ci.utility.rosa import is_odf_addon_installed, edit_addon_installation
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 
 log = logging.getLogger(__name__)
@@ -2470,3 +2471,90 @@ def check_for_zombie_process_on_node(node_name=None):
             log.error(f"Zombie process found on node: {node_obj.name}")
             log.error(f"pid and ppid details: {out}")
             raise exceptions.ZombieProcessFoundException
+
+
+@switch_to_orig_index_at_last
+def get_provider_internal_node_ips(
+    node_type=constants.WORKER_MACHINE, num_of_nodes=None
+):
+    """
+    Get the provider node ips according to the node type (e.g. worker, master) and the
+    number of requested node ips from that type
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+        num_of_nodes (int): The number of node ips to be returned
+
+    Returns:
+        list: The node ips
+
+    """
+    log.info("Switching to the provider cluster to get the provider node ips")
+    config.switch_to_provider()
+    provider_nodes = get_nodes(node_type, num_of_nodes)
+    provider_node_ips = [get_node_internal_ip(n) for n in provider_nodes]
+    log.info(f"Provider node ips: {provider_node_ips}")
+    return provider_node_ips
+
+
+def consumer_verification_steps_after_provider_node_replacement():
+    """
+    Check the consumer verification steps after a provider node replacement
+
+    Returns:
+        bool: True, if the consumer verification steps finished successfully. False, otherwise.
+
+    """
+    # Import inside the function to avoid circular loop
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_consumer_storage_provider_endpoint,
+        check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes,
+        check_consumer_storage_provider_endpoint_in_provider_wnodes,
+        wait_for_consumer_storage_provider_endpoint_in_provider_wnodes,
+    )
+
+    if not check_consumer_storage_provider_endpoint_in_provider_wnodes():
+        sp_endpoint_suffix = get_consumer_storage_provider_endpoint().split(":")[-1]
+        wnode_ip = get_provider_internal_node_ips()[0]
+
+        edit_addon_installation(
+            addon_param_key="storage-provider-endpoint",
+            addon_param_value=f"{wnode_ip}:{sp_endpoint_suffix}",
+        )
+        if not wait_for_consumer_storage_provider_endpoint_in_provider_wnodes():
+            log.warning(
+                "The consumer storage endpoint is not found in the provider worker node ips"
+            )
+            return False
+
+    if not check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
+        log.warning(
+            "Did not find all the mon endpoint ips in the provider worker node ips"
+        )
+        return False
+
+    log.info("The consumer verification steps finished successfully")
+    return True
+
+
+@switch_to_orig_index_at_last
+def consumers_verification_steps_after_provider_node_replacement():
+    """
+    Check all the consumers verification steps after a provider node replacement
+
+    Returns:
+        bool: True, if all the consumers verification steps finished successfully. False, otherwise.
+
+    """
+    consumer_indexes = config.get_consumer_indexes_list()
+    for consumer_i in consumer_indexes:
+        config.switch_ctx(consumer_i)
+        if not consumer_verification_steps_after_provider_node_replacement():
+            log.warning(
+                f"The consumer '{config.ENV_DATA['cluster_name']}' verification steps"
+                f" did not finish successfully"
+            )
+            return False
+
+    log.info("All the consumers verification steps finished successfully")
+    return True

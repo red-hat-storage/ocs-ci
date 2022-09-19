@@ -42,7 +42,7 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     add_disk_to_node,
     get_nodes,
-    get_node_internal_ip,
+    get_provider_internal_node_ips,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -1624,15 +1624,10 @@ def check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
     """
     rook_ceph_mon_per_endpoint_ip = get_rook_ceph_mon_per_endpoint_ip()
     log.info(f"rook ceph mon per endpoint ip: {rook_ceph_mon_per_endpoint_ip}")
-
-    log.info("Switching to the provider cluster to get the provider worker node ips")
-    config.switch_to_provider()
-    provider_wnodes = get_nodes()
-    provider_wnode_ips = [get_node_internal_ip(n) for n in provider_wnodes]
-    log.info(f"Provider worker node ips: {provider_wnode_ips}")
+    provider_wnode_ips = get_provider_internal_node_ips()
 
     for mon_name, endpoint_ip in rook_ceph_mon_per_endpoint_ip.items():
-        if endpoint_ip not in provider_wnodes:
+        if endpoint_ip not in provider_wnode_ips:
             log.warning(
                 f"The endpoint ip {endpoint_ip} of mon {mon_name} is not found "
                 f"in the provider worker node ips"
@@ -1674,21 +1669,16 @@ def check_consumer_storage_provider_endpoint_in_provider_wnodes():
     log.info(
         f"The consumer 'storageProviderEndpoint' ip is: {storage_provider_endpoint_ip}"
     )
-
-    log.info("Switching to the provider cluster to get the provider worker node ips")
-    config.switch_to_provider()
-    provider_wnodes = get_nodes()
-    provider_wnode_ips = [get_node_internal_ip(n) for n in provider_wnodes]
-    log.info(f"Provider worker node ips: {provider_wnode_ips}")
+    provider_wnode_ips = get_provider_internal_node_ips()
 
     if storage_provider_endpoint_ip in provider_wnode_ips:
         log.info(
-            "The consumer 'storageProviderEndpoint' ip found in the provider node ips"
+            "The consumer 'storageProviderEndpoint' ip found in the provider worker node ips"
         )
         return True
     else:
         log.warning(
-            "The consumer 'storageProviderEndpoint' ip was not found in the provider node ips"
+            "The consumer 'storageProviderEndpoint' ip was not found in the provider worker node ips"
         )
         return False
 
