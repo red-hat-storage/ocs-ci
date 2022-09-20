@@ -221,6 +221,9 @@ ENV_DATA:
   # used in external mode deployment
   restricted-auth-permission: false
 
+  # used in heterogeneous architecture
+  num_workers_additional: 0
+
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
