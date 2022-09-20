@@ -7,7 +7,7 @@ import pytest
 import statistics
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -95,6 +95,7 @@ class ClonesResultsAnalyse(ResultsAnalyse):
 
 
 @performance
+@performance_b
 class TestPVCClonePerformance(PASTest):
     """
     Test to verify clone creation and deletion performance for PVC with data written to it.

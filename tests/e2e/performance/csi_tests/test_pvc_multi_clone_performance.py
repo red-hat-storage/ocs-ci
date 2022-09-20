@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     performance,
+    performance_b,
 )
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, exceptions
@@ -42,6 +43,7 @@ ERR_MSG = "Error in command"
 
 
 @performance
+@performance_b
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
 class TestPvcMultiClonePerformance(PASTest):

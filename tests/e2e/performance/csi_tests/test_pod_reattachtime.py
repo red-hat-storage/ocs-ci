@@ -6,7 +6,7 @@ import time
 import statistics
 import os
 
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @performance
+@performance_a
 class TestPodReattachTimePerformance(PASTest):
     """
     Test to verify Pod Reattach Time Performance

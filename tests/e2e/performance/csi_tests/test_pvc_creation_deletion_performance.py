@@ -10,7 +10,7 @@ import statistics
 import tempfile
 import yaml
 
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
@@ -36,6 +36,7 @@ Operations_Mesurment = ["create", "delete", "csi_create", "csi_delete"]
 
 
 @performance
+@performance_a
 class TestPVCCreationDeletionPerformance(PASTest):
     """
     Test(s) to verify performance of PVC creation and deletion
