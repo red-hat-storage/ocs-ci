@@ -3929,6 +3929,14 @@ def get_noobaa_db_used_space():
 
 
 def clean_all_test_projects(project_name="test"):
+    """
+    Delete all namespaces with 'test' in its name
+    'test' can be replace with other string
+
+    Args:
+        project_name (str, optional): expression to be deleted. Defaults to "test".
+
+    """
     oc_obj = OCP()
     all_ns = oc_obj.exec_oc_cmd(
         "get ns -ocustom-columns=NAME:.metadata.name", out_yaml_format=False

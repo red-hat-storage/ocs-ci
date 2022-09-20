@@ -42,7 +42,7 @@ def create_lvm_cluster_cr_with_device_selector(disks):
 
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.12")
-def test_create_lvm_cluster_w_manual_disk_selection(by="name"):
+def test_create_lvm_cluster_w_manual_disk_selection(by="name", select_all=False):
     """
     Test creation of lvm cluster with manual disk selection,
     by disks name or by disks path
@@ -53,7 +53,12 @@ def test_create_lvm_cluster_w_manual_disk_selection(by="name"):
     elif by == "path":
         disks = get_disks_by_path()
 
-    disks_to_use = int(len(disks) / 2) + 1
+    if len(disks) == 1:
+        disks_to_use = 1
+    elif select_all:
+        disks_to_use = len(disks)
+    else:
+        disks_to_use = int(len(disks) / 2) + 1
     log.info(f"Creating cluster with {disks_to_use} disks")
     lvm_cr = create_lvm_cluster_cr_with_device_selector(disks[:disks_to_use])
     delete_lvm_cluster()

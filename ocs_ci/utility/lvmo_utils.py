@@ -12,6 +12,9 @@ from ocs_ci.helpers.helpers import clean_all_test_projects
 
 log = logging.getLogger(__name__)
 
+LS_DEVICE_BY_PATH = "ls /dev/disk/by-path"
+LS_DEVICE_BY_ID = "ls /dev/disk/by-id"
+
 
 def lvmo_health_check_base():
     """
@@ -63,22 +66,36 @@ def lvmo_health_check(tries=20, delay=30):
 
 
 def get_disks_by_path():
+    """
+    Get list of storage devices by it's path as listed on node
+
+    Returns:
+        list: list of storage devices full-path (str)
+    """
     storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     oc_obj = OCP()
     disks = oc_obj.exec_oc_debug_cmd(
-        node=constants.SNO_NODE_NAME, cmd_list=["ls /dev/disk/by-path"]
+        node=constants.SNO_NODE_NAME, cmd_list=[LS_DEVICE_BY_PATH]
     )
     raw_disks_list = disks.split("\n")
     raw_disks_list = list(filter(None, raw_disks_list))
     disks_by_path = list()
     for line in raw_disks_list[-storage_disks_count:]:
-        disk_name = "/dev/disk/by-path/" + line
-        disks_by_path.append(disk_name)
+        if "sda" not in line:
+            disk_name = "/dev/disk/by-path/" + line
+            disks_by_path.append(disk_name)
 
     return disks_by_path
 
 
 def get_blockdevices():
+    """
+    Gets list of storage devices by it's names
+
+    Returns:
+        list: list of storage devices full-names (str)
+
+    """
     storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     disks_by_name = list()
     oc_obj = OCP()
@@ -94,6 +111,12 @@ def get_blockdevices():
 
 
 def delete_lvm_cluster():
+    """
+    Delete lvm cluster if exists
+
+    raise:
+        execption if lvmcluster cant be deleted
+    """
     clean_all_test_projects()
     lmvcluster = OCP(kind="LVMCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     try:
