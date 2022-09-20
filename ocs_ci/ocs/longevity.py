@@ -225,7 +225,7 @@ class Longevity(object):
         return res_yaml_dict
 
     def validate_pvc_in_kube_job_reached_bound_state(
-        self, kube_job_obj_list, namespace, pvc_count
+        self, kube_job_obj_list, namespace, pvc_count, timeout=60
     ):
         """
         Validate PVCs in the kube job list reached BOUND state
@@ -259,6 +259,7 @@ class Longevity(object):
                 kube_job_obj=kube_job_obj_list[i],
                 namespace=namespace,
                 no_of_pvc=pvc_count,
+                timeout=timeout,
             )
             pvc_bound_list_of_list.append(pvc_bound)
             log.info(
@@ -395,7 +396,7 @@ class Longevity(object):
         return [pods_dict_list]
 
     def validate_pods_in_kube_job_reached_running_state(
-        self, kube_job_obj, namespace, pod_count=None, timeout=30
+        self, kube_job_obj, namespace, pod_count=None, timeout=60
     ):
         """
         Validate PODs in the kube job list reached RUNNING state
