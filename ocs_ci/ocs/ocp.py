@@ -475,21 +475,6 @@ class OCP(object):
             return True
         raise CommandFailed(f"{project_name} was not deleted")
 
-    def clean_all_test_projects(self, project_name="test"):
-        all_ns = self.exec_oc_cmd(
-            "get ns -ocustom-columns=NAME:.metadata.name", out_yaml_format=False
-        )
-        ns_list = all_ns.split("\n")
-        ns_to_delete = list()
-        for ns in ns_list:
-            if project_name in ns:
-                ns_to_delete.append(ns)
-        if not ns_to_delete:
-            log.info("No test project found, Moving On")
-        for ns in ns_to_delete:
-            log.info(f"Removing {ns}")
-            self.delete_project(ns)
-
     def login(self, user, password):
         """
         Logs user in
