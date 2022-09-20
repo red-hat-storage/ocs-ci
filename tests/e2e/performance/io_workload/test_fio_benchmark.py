@@ -12,7 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import performance, skipif_ocs_version
+from ocs_ci.framework.testlib import performance, performance_c, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
@@ -129,6 +129,7 @@ class FIOResultsAnalyse(PerfResult):
 
 
 @performance
+@performance_c
 class TestFIOBenchmark(PASTest):
     """
     Run FIO perf test using benchmark operator

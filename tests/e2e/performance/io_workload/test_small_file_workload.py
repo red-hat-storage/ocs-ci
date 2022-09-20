@@ -25,7 +25,7 @@ import pytest
 
 # Local modules
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import benchmark_operator, constants
 from ocs_ci.ocs.elasticsearch import ElasticSearch
@@ -361,6 +361,7 @@ class SmallFileResultsAnalyse(PerfResult):
 
 
 @performance
+@performance_a
 class TestSmallFileWorkload(PASTest):
     """
     Deploy benchmark operator and run SmallFile workload

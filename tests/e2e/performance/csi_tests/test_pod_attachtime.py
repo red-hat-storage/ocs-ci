@@ -8,7 +8,7 @@ import os
 import pytest
 import statistics
 
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 import ocs_ci.ocs.exceptions as ex
@@ -45,6 +45,7 @@ class ResultsAnalyse(PerfResult):
 
 
 @performance
+@performance_a
 class TestPodStartTime(PASTest):
     """
     Measure time to start pod with PVC attached

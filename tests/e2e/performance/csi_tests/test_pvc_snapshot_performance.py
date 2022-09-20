@@ -23,6 +23,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
     performance,
+    performance_b,
 )
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 
 
 @performance
+@performance_b
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
 class TestPvcSnapshotPerformance(PASTest):

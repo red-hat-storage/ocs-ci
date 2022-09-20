@@ -6,7 +6,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perf_pgsql import PerfPGSQL
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.testlib import performance, performance_c
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
@@ -27,6 +27,7 @@ def pgsql(request):
 
 
 @performance
+@performance_c
 @pytest.mark.polarion_id("OCS-2725")
 class TestPGSQLPodPerf(PASTest):
     """
