@@ -57,7 +57,9 @@ class PillowFight(object):
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
-    def run_pillowfights(self, replicas=1, num_items=None, num_threads=None, num_of_cycles=None):
+    def run_pillowfights(
+        self, replicas=1, num_items=None, num_threads=None, num_of_cycles=None
+    ):
         """
         loop through all the yaml files extracted from the pillowfight repo
         and run them.
