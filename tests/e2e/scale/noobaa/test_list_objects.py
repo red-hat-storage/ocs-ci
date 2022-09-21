@@ -3,14 +3,14 @@ import pytest
 
 from ocs_ci.ocs.bucket_utils import copy_objects, craft_s3_command
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.framework.testlib import performance, bugzilla, skipif_ocs_version
+from ocs_ci.framework.testlib import scale, bugzilla, skipif_ocs_version
 from ocs_ci.ocs.resources.mcg import MCG
 
 
 log = logging.getLogger(__name__)
 
 
-@performance
+@scale
 @bugzilla("2052079")
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-3926")
