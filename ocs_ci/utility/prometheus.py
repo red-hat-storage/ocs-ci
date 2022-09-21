@@ -12,6 +12,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import AlertingError, AuthError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
+from ocs_ci.utility.utils import TimeoutIterator
 
 logger = logging.getLogger(name=__file__)
 
@@ -414,27 +415,28 @@ class PrometheusAPI(object):
         logger.debug(f"verify={self._cacert}")
         logger.debug(f"params={payload}")
 
-        response = requests.get(
-            self._endpoint + pattern,
-            headers=headers,
-            verify=self._cacert,
-            params=payload,
-        )
-        if "Application is not available" in response.text:
-            logger.warning(f"There was an error in response: {response.text}")
-            logger.warning("Refreshing connection")
-            self.refresh_connection()
-            if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
-                logger.warning("Generating new certificate")
-                self.generate_cert()
-            logger.warning("Connection refreshed - trying the query again")
-            response = requests.get(
-                self._endpoint + pattern,
-                headers=headers,
-                verify=self._cacert,
-                params=payload,
-            )
-        return response
+        for response in TimeoutIterator(
+            timeout=300,
+            sleep=15,
+            func=requests.get,
+            func_kwargs={
+                "url": self._endpoint + pattern,
+                "headers": headers,
+                "verify": self._cacert,
+                "params": payload,
+            },
+        ):
+            if response.status_code == 503:
+                logger.warning(f"There was an error in response: {response.text}")
+                logger.warning("Refreshing connection")
+                self.refresh_connection()
+                if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+                    logger.warning("Generating new certificate")
+                    self.generate_cert()
+                logger.warning("Connection refreshed")
+            else:
+                break
+            return response
 
     def query(
         self,
