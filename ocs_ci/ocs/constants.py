@@ -265,8 +265,8 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
-GB = 1024 ** 3
-GB2KB = 1024 ** 2
+GB = 1024**3
+GB2KB = 1024**2
 GB2MB = 1024
 
 # Reclaim Policy
@@ -888,7 +888,7 @@ SNO_BOOTSTRAP_IGN = "bootstrap-in-place-for-live-iso.ign"
 TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 
 # Minimum storage needed for vSphere Datastore in bytes.
-MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024 ** 4
+MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
 VSPHERE_NODE_USER = "core"
@@ -1406,9 +1406,9 @@ AUTH_CONFIG_DOCS = (
 TP_CONVERSION = {" B/s": 0.000000976562, " KiB/s": 0.000976562, " MiB/s": 1}
 
 BYTES_IN_KB = 1024
-BYTES_IN_MB = 1024 ** 2
-BYTES_IN_GB = 1024 ** 3
-BYTES_IN_TB = 1024 ** 4
+BYTES_IN_MB = 1024**2
+BYTES_IN_GB = 1024**3
+BYTES_IN_TB = 1024**4
 
 
 # LSO
@@ -1501,7 +1501,7 @@ MAX_OSDS = 18
 
 # Minimum cluster requirements in term of node specs
 MIN_NODE_CPU = 16
-MIN_NODE_MEMORY = 64 * 10 ** 9
+MIN_NODE_MEMORY = 64 * 10**9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
