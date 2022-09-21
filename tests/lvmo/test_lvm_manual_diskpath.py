@@ -1,12 +1,14 @@
 import logging
 import os
 
+from tempfile import NamedTemporaryFile
+
 from ocs_ci.ocs import constants
 from ocs_ci.utility.templating import load_yaml, dump_data_to_temp_yaml
 from ocs_ci.utility.lvmo_utils import (
     delete_lvm_cluster,
-    get_blockdevices,
-    get_disks_by_path,
+    get_sno_blockdevices,
+    get_sno_disks_by_path,
     lvmo_health_check,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_lvm_not_installed
@@ -34,10 +36,12 @@ def create_lvm_cluster_cr_with_device_selector(disks):
     lvm_cr_dict["spec"]["storage"]["deviceClasses"][0]["deviceSelector"] = {
         "paths": disks
     }
-    tmp_file_path = "/tmp/lvm_cr.yaml"
-    dump_data_to_temp_yaml(lvm_cr_dict, tmp_file_path)
+    lvm_cluster_cr = NamedTemporaryFile(
+        mode="w+", prefix="lvm_cluster_cr", delete=False
+    )
+    dump_data_to_temp_yaml(lvm_cr_dict, lvm_cluster_cr.name)
 
-    return tmp_file_path
+    return lvm_cluster_cr.name
 
 
 @skipif_lvm_not_installed
@@ -49,9 +53,9 @@ def test_create_lvm_cluster_w_manual_disk_selection(by="name", select_all=False)
 
     """
     if by == "name":
-        disks = get_blockdevices()
+        disks = get_sno_blockdevices()
     elif by == "path":
-        disks = get_disks_by_path()
+        disks = get_sno_disks_by_path()
 
     if len(disks) == 1:
         disks_to_use = 1

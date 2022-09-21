@@ -3937,17 +3937,16 @@ def clean_all_test_projects(project_name="test"):
         project_name (str, optional): expression to be deleted. Defaults to "test".
 
     """
-    oc_obj = OCP()
-    all_ns = oc_obj.exec_oc_cmd(
-        "get ns -ocustom-columns=NAME:.metadata.name", out_yaml_format=False
+    oc_obj = OCP(kind="ns")
+    all_ns = oc_obj.get()
+    ns_list = all_ns["items"]
+    filtered_ns_to_delete = filter(
+        lambda i: (project_name in i.get("metadata").get("name")), ns_list
     )
-    ns_list = all_ns.split("\n")
-    ns_to_delete = list()
-    for ns in ns_list:
-        if project_name in ns:
-            ns_to_delete.append(ns)
+    ns_to_delete = list(filtered_ns_to_delete)
     if not ns_to_delete:
         logger.info("No test project found, Moving On")
+
     for ns in ns_to_delete:
-        logger.info(f"Removing {ns}")
-        oc_obj.delete_project(ns)
+        logger.info(f"Removing {ns['metadata']['name']}")
+        oc_obj.delete_project(ns["metadata"]["name"])

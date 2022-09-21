@@ -28,9 +28,9 @@ def lvmo_health_check_base():
     oc_obj = OCP(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         kind="lvmcluster",
-        resource_name="lvmcluster",
+        resource_name=constants.LVMCLUSTER,
     )
-    lvmcluster_status = oc_obj.get("lvmcluster")
+    lvmcluster_status = oc_obj.get(constants.LVMCLUSTER)
     if not (lvmcluster_status["status"]["ready"]):
         log.error("lvmcluster is not ready")
         raise LVMOHealthException(
@@ -65,7 +65,7 @@ def lvmo_health_check(tries=20, delay=30):
     )(lvmo_health_check_base)()
 
 
-def get_disks_by_path():
+def get_sno_disks_by_path():
     """
     Get list of storage devices by it's path as listed on node
 
@@ -88,7 +88,7 @@ def get_disks_by_path():
     return disks_by_path
 
 
-def get_blockdevices():
+def get_sno_blockdevices():
     """
     Gets list of storage devices by it's names
 
@@ -126,3 +126,5 @@ def delete_lvm_cluster():
             e
         ):
             raise e
+        else:
+            log.info("LVMCluster not found, procced with creation of new one")
