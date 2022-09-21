@@ -1368,7 +1368,17 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
-    ]
+    ],
+    "4.12": [
+        "cluster-logging",
+        "elasticsearch-operator",
+        "mcg-operator",
+        "ocs-operator",
+        "odf-csi-addons-operator",
+        "odf-lvm-operator",
+        "odf-multicluster-orchestrator",
+        "odf-operator",
+    ],
 }
 
 
