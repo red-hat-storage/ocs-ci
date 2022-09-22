@@ -212,19 +212,20 @@ class Pod(OCS):
             cmd = cmd + f" -c {container}"
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
-    def exec_sh_cmd_on_pod(self, command, sh="bash"):
+    def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
 
         Args:
             command (str): The command to execute on the given pod
+            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
             str: stdout of the command
         """
         cmd = f'exec {self.name} -- {sh} -c "{command}"'
-        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False, timeout=timeout)
 
     def get_labels(self):
         """

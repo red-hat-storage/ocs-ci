@@ -2311,6 +2311,62 @@ def awscli_pod_fixture(request, scope_name):
 
 
 @pytest.fixture(scope="session")
+def scale_cli_pod(request):
+    return scale_cli_fixture(request, scope_name="session")
+
+
+def scale_cli_fixture(request, scope_name):
+    """
+    Creates AWSCLI pod for relaying commands which consists of
+    thousands of directories consisting millions of objects under large_objects/
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
+
+    Returns:
+        pod: A pod running the AWS CLI and consisting of large number of objects
+    """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.SCALECLI_SERVICE_CA_YAML)
+    service_ca_configmap_name = create_unique_resource_name(
+        constants.SCALECLI_SERVICE_CA_CM_NAME, scope_name
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    log.info("Trying to create the SCALE CLI service CA")
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
+
+    # create scale-cli pod
+    pod_dict_path = constants.SCALECLI_POD_YAML
+    scalecli_pod_dict = templating.load_yaml(pod_dict_path)
+    scalecli_pod_dict["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    scalecli_pod_name = create_unique_resource_name("scale-cli", scope_name)
+    scalecli_pod_dict["metadata"]["name"] = scalecli_pod_name
+
+    update_container_with_mirrored_image(scalecli_pod_dict)
+
+    scalecli_pod_obj = Pod(**scalecli_pod_dict)
+    assert scalecli_pod_obj.create(
+        do_reload=True
+    ), f"Failed to create pod {scalecli_pod_name}"
+    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+    helpers.wait_for_resource_state(
+        scalecli_pod_obj, constants.STATUS_RUNNING, timeout=600
+    )
+
+    def scalecli_pod_cleanup():
+        scalecli_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(scalecli_pod_cleanup)
+
+    return scalecli_pod_obj
+
+
+@pytest.fixture(scope="session")
 def javasdk_pod_session(request):
     return javasdk_pod_fixture(request, scope_name="session")
 
