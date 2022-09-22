@@ -1,5 +1,6 @@
 import logging
 import os
+import pytest
 
 from tempfile import NamedTemporaryFile
 
@@ -46,7 +47,24 @@ def create_lvm_cluster_cr_with_device_selector(disks):
 
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.12")
-def test_create_lvm_cluster_w_manual_disk_selection(by="name", select_all=False):
+@pytest.mark.parametrize(
+    argnames=["by", "select_all"],
+    argvalues=[
+        pytest.param(
+            *["path", False],
+        ),
+        pytest.param(
+            *["path", True],
+        ),
+        pytest.param(
+            *["name", False],
+        ),
+        pytest.param(
+            *["name", True],
+        ),
+    ],
+)
+def test_create_lvm_cluster_w_manual_disk_selection(by, select_all):
     """
     Test creation of lvm cluster with manual disk selection,
     by disks name or by disks path
