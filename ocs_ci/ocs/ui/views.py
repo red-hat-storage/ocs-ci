@@ -47,6 +47,7 @@ deployment = {
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
+    "standard_csi_sc": ('a[id="standard-csi-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
@@ -177,6 +178,10 @@ deployment_4_11 = {
     "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
     "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
+}
+
+deployment_4_12 = {
+    "standard_csi_sc": ("standard-csi-link", By.ID),
 }
 
 generic_locators = {
@@ -717,6 +722,9 @@ add_capacity_4_11 = {
     "standard_sc": ("standard-link", By.ID),
     "localblock_sc": ("localblock-link", By.ID),
 }
+add_capacity_4_12 = {
+    "standard_csi_sc": ("standard-csi-link", By.ID),
+}
 
 add_capacity_4_12 = {
     "add_capacity_button": ("//span[text()='Add Capacity']", By.XPATH),
@@ -996,6 +1004,7 @@ locators = {
             **deployment_4_9,
             **deployment_4_10,
             **deployment_4_11,
+            **deployment_4_12,
         },
     },
     "4.11": {
@@ -1022,7 +1031,7 @@ locators = {
             **acm_configuration,
             **acm_configuration_4_11,
         },
-        "add_capacity": {**add_capacity, **add_capacity_4_11},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "obc": obc,
     },
     "4.10": {
