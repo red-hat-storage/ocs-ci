@@ -1195,7 +1195,7 @@ class Longevity(object):
                     run_time=stage_run_time,
                 ),
                 ThreadPoolExecutor(max_workers=1).submit(
-                    self.stage3,
+                    self.stage_3,
                     project_factory,
                     run_time=stage_run_time,
                 ),
