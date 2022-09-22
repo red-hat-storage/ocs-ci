@@ -34,6 +34,6 @@ class TestLongevity(E2ETest):
         log.info("Start running application workloads")
         start_apps_workload(
             workloads_list=["pgsql", "couchbase", "cosbench"],
-            run_time=2880,
+            run_time=180,
             run_in_bg=True,
         )

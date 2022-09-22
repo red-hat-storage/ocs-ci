@@ -38,7 +38,7 @@ from ocs_ci.ocs.registry import (
     change_registry_backend_to_ocs,
     check_if_registry_stack_exists,
 )
-from ocs_ci.ocs.longevity_helpers import (
+from ocs_ci.helpers.longevity_helpers import (
     create_restore_verify_snapshots,
     expand_verify_pvcs,
 )
@@ -66,9 +66,10 @@ log = logging.getLogger(__name__)
 supported_app_workloads = ["pgsql", "couchbase", "cosbench"]
 supported_ocp_workloads = ["logging", "monitoring", "registry"]
 
-STAGE_2_PREFIX = "stage-2-cycle-"
-STAGE_3_PREFIX = "stage-3-cycle-"
-STAGE_4_PREFIX = "stage-4-cycle-"
+STAGE_0_NAMESPACE = "ever-running-project"
+STAGE_2_NAMESPACE_PREFIX = "stage-2-cycle-"
+STAGE_3_NAMESPACE_PREFIX = "stage-3-cycle-"
+STAGE_4_NAMESPACE_PREFIX = "stage-4-cycle-"
 
 
 class Longevity(object):
@@ -81,7 +82,6 @@ class Longevity(object):
         Initializer function
         """
         lcl = locals()
-        self.ceph_obj = CephCluster()
         self.tmp_path = pathlib.Path(ocsci_log_path())
         self.cluster_sanity_check_dir = os.path.join(
             self.tmp_path,
@@ -225,7 +225,7 @@ class Longevity(object):
         return res_yaml_dict
 
     def validate_pvc_in_kube_job_reached_bound_state(
-        self, kube_job_obj_list, namespace, pvc_count
+        self, kube_job_obj_list, namespace, pvc_count, timeout=60
     ):
         """
         Validate PVCs in the kube job list reached BOUND state
@@ -259,6 +259,7 @@ class Longevity(object):
                 kube_job_obj=kube_job_obj_list[i],
                 namespace=namespace,
                 no_of_pvc=pvc_count,
+                timeout=timeout,
             )
             pvc_bound_list_of_list.append(pvc_bound)
             log.info(
@@ -395,7 +396,7 @@ class Longevity(object):
         return [pods_dict_list]
 
     def validate_pods_in_kube_job_reached_running_state(
-        self, kube_job_obj, namespace, pod_count=None, timeout=30
+        self, kube_job_obj, namespace, pod_count=None, timeout=60
     ):
         """
         Validate PODs in the kube job list reached RUNNING state
@@ -542,8 +543,6 @@ class Longevity(object):
         self.create_stage_builder_kube_job(
             kube_job_obj_list=obc_job_file, namespace=namespace
         )
-        # Wait 60 secs to ensure the obc on the list has status field populated
-        time.sleep(60)
         # Validate OBCs in kube job reached BOUND state
         self.validate_obcs_in_kube_job_reached_running_state(
             kube_job_obj=obc_job_file[0],
@@ -620,7 +619,7 @@ class Longevity(object):
         if cluster_health:
             # Cluster health
             log.info("Checking the overall health of the cluster")
-            self.ceph_obj.cluster_health_check()
+            CephCluster().cluster_health_check()
             log.info("Checking storage pods status")
             # Validate storage pods are running
             wait_for_pods_to_be_running(timeout=600)
@@ -722,7 +721,7 @@ class Longevity(object):
                     f.write(f"{key2} : {value}\n\n")
 
     def stage_0(
-        self, num_of_pvc, num_of_obc, namespace, pvc_size, ignore_teardown=True
+        self, project_factory, num_of_pvc, num_of_obc, pvc_size, ignore_teardown=True
     ):
         """
         This function creates the initial soft configuration required to start
@@ -739,6 +738,8 @@ class Longevity(object):
              kube_job_file_list (list): List of all PVC, POD, OBC yaml dicts
 
         """
+        namespace = project_factory(project_name=STAGE_0_NAMESPACE)
+
         # Create bulk PVCs of all types
         _, pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
             num_of_pvc=num_of_pvc, namespace=namespace, pvc_size=pvc_size
@@ -803,7 +804,9 @@ class Longevity(object):
             for bulk in (False, True):
                 current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
                 log.info(f"#################[{current_ops}]#################")
-                namespace = f"{STAGE_2_PREFIX}{cycle_no}-{current_ops.lower()}"
+                namespace = (
+                    f"{STAGE_2_NAMESPACE_PREFIX}{cycle_no}-{current_ops.lower()}"
+                )
                 project = project_factory(project_name=namespace)
                 multi_pvc_pod_lifecycle_factory(
                     num_of_pvcs=num_of_pvcs,
@@ -832,11 +835,11 @@ class Longevity(object):
             )
             time.sleep(delay)
 
-    def stage3(
+    def stage_3(
         self,
         project_factory,
-        num_of_pvc,
-        num_of_obc,
+        num_of_pvc=150,
+        num_of_obc=150,
         pvc_size=None,
         delay=60,
         run_time=1440,
@@ -868,7 +871,7 @@ class Longevity(object):
             log.info(
                 f"##############[STARTING STAGE3 CYCLE:{cycle_count}]####################"
             )
-            namespace = f"{STAGE_3_PREFIX}{cycle_count}"
+            namespace = f"{STAGE_3_NAMESPACE_PREFIX}{cycle_count}"
             project_factory(project_name=namespace)
             log.info(
                 "Creating the initial resources required for PVC/OBC/POD deletion operations concurrently"
@@ -1002,7 +1005,9 @@ class Longevity(object):
                 )
                 log.info(f"#################[{current_ops}]#################")
 
-                namespace = f"{STAGE_4_PREFIX}{cycle_no}-{current_ops.lower()}"
+                namespace = (
+                    f"{STAGE_4_NAMESPACE_PREFIX}{cycle_no}-{current_ops.lower()}"
+                )
                 project = project_factory(project_name=namespace)
                 executor = ThreadPoolExecutor(max_workers=1)
                 operation_pvc_dict = dict()
@@ -1135,6 +1140,115 @@ class Longevity(object):
 
             log.info(
                 f"#################[ENDING STAGE4 CYCLE:{cycle_no}]#################"
+            )
+
+    def longevity_all_stages(
+        self,
+        project_factory,
+        start_apps_workload,
+        multi_pvc_pod_lifecycle_factory,
+        multi_obc_lifecycle_factory,
+        pod_factory,
+        multi_pvc_clone_factory,
+        multi_snapshot_factory,
+        snapshot_restore_factory,
+        teardown_factory,
+        apps_run_time=540,
+        stage_run_time=180,
+        concurrent=False,
+    ):
+        """
+        Calling this function runs all the stages i.e Stage1, Stage2, Stage3, Stage4
+        of the ODF Longevity testing.
+
+        Args:
+            project_factory : Fixture to create a new Project.
+            start_apps_workload: Application workload fixture which reads the list of app workloads to run and
+                starts running those iterating over the workloads in the list for a specified duration
+            multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods, verify FIO and
+                                                measure pvc creation/deletion time and pod attach time
+            multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
+                                            measure their creation/deletion time.
+            pod_factory : Fixture to create new PODs.
+            multi_pvc_clone_factory : Fixture to create a clone from each PVC in the provided list of PVCs.
+            multi_snapshot_factory : Fixture to create a VolumeSnapshot of each PVC in the provided list of PVCs.
+            snapshot_restore_factory : Fixture to create a new PVCs out of the VolumeSnapshot provided.
+            teardown_factory : Fixture to tear down a resource that was created during the test.
+            apps_run_time (int) : start_apps_workload fixture run time in minutes
+            stage_run_time (int) : Stage2, Stage3, Stage4 run time in minutes
+            concurrent (bool): If set to True, Stage2,3,4 gets executed concurrently, by default set to False
+
+        """
+        if concurrent:
+            # Start all Longevity testing stages concurrently
+            stages_thread = [
+                ThreadPoolExecutor(max_workers=1).submit(
+                    start_apps_workload,
+                    workloads_list=["pgsql", "couchbase", "cosbench"],
+                    run_time=apps_run_time,
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.stage_2,
+                    project_factory,
+                    multi_pvc_pod_lifecycle_factory,
+                    multi_obc_lifecycle_factory,
+                    run_time=stage_run_time,
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.stage_3,
+                    project_factory,
+                    run_time=stage_run_time,
+                ),
+                ThreadPoolExecutor(max_workers=1).submit(
+                    self.stage_4,
+                    project_factory,
+                    multi_pvc_pod_lifecycle_factory,
+                    pod_factory,
+                    multi_pvc_clone_factory,
+                    multi_snapshot_factory,
+                    snapshot_restore_factory,
+                    teardown_factory,
+                ),
+            ]
+            # Wait for all the stages thread to complete
+            for thread in stages_thread:
+                thread.result()
+            log.info(
+                "Concurrent: One iteration of Longevity all stages execution completed successfully"
+            )
+
+        else:
+            # Start all Longevity stages in serial execution
+            stage1_thread = ThreadPoolExecutor(max_workers=1).submit(
+                start_apps_workload,
+                workloads_list=["pgsql", "couchbase", "cosbench"],
+                run_time=apps_run_time,
+            )
+
+            self.stage_2(
+                project_factory,
+                multi_pvc_pod_lifecycle_factory,
+                multi_obc_lifecycle_factory,
+                run_time=stage_run_time,
+            )
+
+            self.stage_3(
+                project_factory,
+                run_time=stage_run_time,
+            )
+            self.stage_4(
+                project_factory,
+                multi_pvc_pod_lifecycle_factory,
+                pod_factory,
+                multi_pvc_clone_factory,
+                multi_snapshot_factory,
+                snapshot_restore_factory,
+                teardown_factory,
+            )
+            # Wait for the applications thread (stage1) to complete
+            stage1_thread.result()
+            log.info(
+                "Sequential: One iteration of Longevity all stages execution completed successfully"
             )
 
 
