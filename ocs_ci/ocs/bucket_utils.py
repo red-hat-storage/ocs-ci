@@ -200,7 +200,14 @@ def list_objects_from_bucket(
 
 
 def copy_objects(
-    podobj, src_obj, target, s3_obj=None, signed_request_creds=None, **kwargs
+    podobj,
+    src_obj,
+    target,
+    s3_obj=None,
+    signed_request_creds=None,
+    recursive=False,
+    timeout=600,
+    **kwargs,
 ):
     """
     Copies a object onto a bucket using s3 cp command
@@ -210,13 +217,18 @@ def copy_objects(
         src_obj: full path to object
         target: target bucket
         s3_obj: obc/mcg object
+        recursive: On true, copy directories and their contents/files. False otherwise
+        timeout: timeout for the exec_oc_cmd, defaults to 600 seconds
 
     Returns:
         None
     """
 
     logger.info(f"Copying object {src_obj} to {target}")
-    retrieve_cmd = f"cp {src_obj} {target}"
+    if recursive:
+        retrieve_cmd = f"cp {src_obj} {target} --recursive"
+    else:
+        retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -233,6 +245,7 @@ def copy_objects(
         ),
         out_yaml_format=False,
         secrets=secrets,
+        timeout=timeout,
         **kwargs,
     )
 

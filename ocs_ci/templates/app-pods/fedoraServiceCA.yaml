@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fedora-service-ca
+  namespace: openshift-storage
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
