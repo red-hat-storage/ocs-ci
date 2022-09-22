@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fedora
+  namespace: openshift-storage
+spec:
+  containers:
+    - name: fedora
+      image: quay.io/ocsci/fedora-with-linuxtar-files:latest
+      # Override the default `aws` entrypoint in order to
+      # allow the pod to run continuously and act as a relay
+      command: ['/bin/sh']
+      stdin: true
+      tty: true
+      volumeMounts:
+      - name: service-ca
+        mountPath: /cert/service-ca.crt
+        subPath: service-ca.crt
+  volumes:
+  - name: service-ca
+    configMap:
+      name: fedora-service-ca

@@ -536,6 +536,12 @@ SERVICE_ACCOUNT_TOKEN_SECRET = os.path.join(
 
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
+FEDORA_SERVICE_CA_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedoraServiceCA.yaml")
+
+FEDORA_WITH_LINUXTAR_FILES_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "fedora_with_linuxtar_files.yaml"
+)
+
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
 
 GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
