@@ -57,7 +57,9 @@ class PillowFight(object):
         self.up_check = OCP(namespace=constants.COUCHBASE_OPERATOR)
         self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
-    def run_pillowfights(self, replicas=1, num_items=None, num_threads=None):
+    def run_pillowfights(
+        self, replicas=1, num_items=None, num_threads=None, num_of_cycles=None
+    ):
         """
         loop through all the yaml files extracted from the pillowfight repo
         and run them.
@@ -81,6 +83,10 @@ class PillowFight(object):
             # num of items
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
                 str(num_items) if num_items else "20000"
+            )
+            # num of cycles
+            pfight["spec"]["template"]["spec"]["containers"][0]["command"][10] = (
+                str(num_of_cycles) if num_of_cycles else "5"
             )
             # num of threads
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][13] = (

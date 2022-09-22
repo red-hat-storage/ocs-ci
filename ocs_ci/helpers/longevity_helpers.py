@@ -150,16 +150,21 @@ def measure_pvc_creation_time(interface, pvc_objs, start_time):
     """
     accepted_creation_time = 1
     for pvc_obj in pvc_objs:
-        creation_time = performance_lib.measure_pvc_creation_time(
-            interface, pvc_obj.name, start_time
-        )
+        try:
+            creation_time = performance_lib.measure_pvc_creation_time(
+                interface, pvc_obj.name, start_time
+            )
 
-        if creation_time <= accepted_creation_time:
-            log.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
-        else:
+            if creation_time <= accepted_creation_time:
+                log.info(f"PVC {pvc_obj.name} was created in {creation_time} seconds.")
+            else:
+                log.error(
+                    f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
+                    f"{accepted_creation_time} seconds."
+                )
+        except Exception as err:
             log.error(
-                f"PVC {pvc_obj.name} creation time is {creation_time} and is greater than "
-                f"{accepted_creation_time} seconds."
+                f"Below error occured while measuring the pvc time for {pvc_obj.name} \n {err}"
             )
 
 
@@ -658,7 +663,7 @@ def _multi_obc_lifecycle_factory(
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"rgw": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, None)]},
                     },
                 },
             ),
@@ -670,7 +675,7 @@ def _multi_obc_lifecycle_factory(
                     "namespace_policy_dict": {
                         "type": "Cache",
                         "ttl": 3600,
-                        "namespacestore_dict": {"rgw": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, None)]},
                     },
                     "placement_policy": {
                         "tiers": [
@@ -686,11 +691,10 @@ def _multi_obc_lifecycle_factory(
                     amount=num_of_obcs,
                     interface=_interface,
                     bucketclass=_bucketclass,
-                    verify_health=not bulk,
+                    timeout=300,
                 )
-                if bulk:
-                    for bucket in buckets:
-                        bucket.verify_health()
+                for bucket in buckets:
+                    bucket.verify_health(timeout=600)
                 obc_objs.extend(buckets)
                 written_objs_names = write_empty_files_to_bucket(
                     mcg_obj, awscli_pod_session, buckets[0].name, test_directory_setup
@@ -707,7 +711,7 @@ def _multi_obc_lifecycle_factory(
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Single",
-                "namespacestore_dict": {"rgw": [(1, None)]},
+                "namespacestore_dict": {"aws": [(1, None)]},
             },
         }
 
@@ -715,21 +719,28 @@ def _multi_obc_lifecycle_factory(
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Single",
-                "namespacestore_dict": {"rgw": [(1, None)]},
+                "namespacestore_dict": {"aws": [(1, None)]},
             },
         }
 
         target_buckets = list()
         source_buckets = list()
         for _num in range(num_of_obcs):
-            target_bucket = bucket_factory(bucketclass=target_bucketclass)[0]
+            target_bucket = bucket_factory(
+                bucketclass=target_bucketclass, verify_health=False
+            )[0]
             target_buckets.append(target_bucket)
             target_bucket_name = target_bucket.name
+            target_bucket.verify_health(timeout=300)
 
             replication_policy = ("basic-replication-rule", target_bucket_name, None)
             source_bucket = bucket_factory(
-                1, bucketclass=source_bucketclass, replication_policy=replication_policy
+                1,
+                bucketclass=source_bucketclass,
+                replication_policy=replication_policy,
+                verify_health=False,
             )[0]
+            source_bucket.verify_health(timeout=300)
             source_buckets.append(source_bucket)
 
             write_empty_files_to_bucket(

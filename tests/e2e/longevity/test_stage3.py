@@ -30,10 +30,10 @@ class TestLongevity(E2ETest):
         # Start Longevity Stage3
         long = Longevity()
         log.info("Starting Longevity Stage3 execution")
-        long.stage3(
+        long.stage_3(
             project_factory,
-            num_of_pvc=50,
-            num_of_obc=50,
+            num_of_pvc=150,
+            num_of_obc=150,
             run_time=180,
             delay=60,
         )

@@ -192,6 +192,7 @@ class CouchBase(PillowFight):
         replicas,
         num_items=None,
         num_threads=None,
+        num_of_cycles=None,
         run_in_bg=False,
     ):
         """
@@ -200,6 +201,7 @@ class CouchBase(PillowFight):
             replicas (int): Number of pods
             num_items (int): Number of items to be loaded to the cluster
             num_threads (int): Number of threads
+            num_of_cycles (int): Specify the number of times the workload should cycle
             run_in_bg (bool) : Optional run IOs in background
 
         """
@@ -213,10 +215,15 @@ class CouchBase(PillowFight):
                 replicas=replicas,
                 num_items=num_items,
                 num_threads=num_threads,
+                num_of_cycles=num_of_cycles,
             )
             return self.result
         PillowFight.run_pillowfights(
-            self, replicas=replicas, num_items=num_items, num_threads=num_threads
+            self,
+            replicas=replicas,
+            num_items=num_items,
+            num_threads=num_threads,
+            num_of_cycles=num_of_cycles,
         )
 
     def wait_for_pillowfights_to_complete(self, timeout=3600):
@@ -322,7 +329,9 @@ class CouchBase(PillowFight):
         # Start measuring time
         start_time = datetime.now()
         # Run couchbase workload
-        self.run_workload(replicas=3, num_items=50000, timeout=10800)
+        self.run_workload(
+            replicas=3, num_items=50000, num_of_cycles=150000, timeout=10800
+        )
         # Calculate the PillowFight pod run time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time
