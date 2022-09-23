@@ -314,8 +314,6 @@ def sync_object_directory(
                                  are in an MCG
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
-        include (str, optional): Don't exclude files or objects in the command that match the specified pattern
-        exclude (str, optional): Exclude all files or objects from the command that matches the specified pattern
 
     """
     logger.info(f"Syncing all objects and directories from {src} to {target}")
