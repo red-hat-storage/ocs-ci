@@ -302,8 +302,6 @@ def sync_object_directory(
     target,
     s3_obj=None,
     signed_request_creds=None,
-    include=None,
-    exclude=None,
 ):
     """
     Syncs objects between a target and source directories
@@ -322,10 +320,6 @@ def sync_object_directory(
     """
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
-    if include:
-        retrieve_cmd += f" --include='{include}'"
-    if exclude:
-        retrieve_cmd += f" --exclude='{exclude}'"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
