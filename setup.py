@@ -78,7 +78,7 @@ setup(
         "pytest-repeat",
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
-        "protobuf==3.20.1",
+        "protobuf==3.20.2",
         "ping3>=4.0.3",
     ],
     entry_points={
