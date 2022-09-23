@@ -9,18 +9,25 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
     sync_object_directory,
 )
-
+from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id
+from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)
 
 
-class TestCachedBuckets:
+class TestCachedBuckets(MCGTest):
+    """
+    Tests Noobaa cache bucket caching mechanism
+
+    """
+
+    @polarion_id("OCS-4651")
     def test_cached_buckets_with_s3_cp(
         self, bucket_factory, awscli_pod_session, test_directory_setup, mcg_obj, cld_mgr
     ):
         """
         This test make sure caching mechanism works between hub bucket & cache bucket
-        when we have TTL > 0
+        when we have TTL > 0 and we use `s3 cp` to download objects
 
         """
         TTL = 300000
@@ -128,9 +135,16 @@ class TestCachedBuckets:
         ), "Cached bucket didnt get updated after TTL expired!!!"
         logger.info("[Success] Cached bucket got updated with latest object!")
 
+    @bugzilla("2024107")
+    @polarion_id("OCS-4652")
     def test_cached_buckets_with_s3_sync(
         self, test_directory_setup, bucket_factory, cld_mgr, mcg_obj, awscli_pod_session
     ):
+        """
+        This test make sure caching mechanism works between hub bucket & cache bucket
+        when we have TTL > 0 and we use `s3 sync` to download objects
+
+        """
         TTL = 300000
         cache_bucketclass = {
             "interface": "OC",
@@ -173,19 +187,13 @@ class TestCachedBuckets:
             s3_obj=mcg_obj,
             amount=1,
         )
-        # copy_objects(
-        #     podobj=awscli_pod_session,
-        #     src_obj=f"s3://{cached_bucket}/fileobj0",
-        #     target=second_dir,
-        #     s3_obj=mcg_obj,
-        # )
         sync_object_directory(
             podobj=awscli_pod_session,
-            src=f"s3://{cached_bucket}/fileobj0",
+            src=f"s3://{cached_bucket}",
             target=second_dir,
             s3_obj=mcg_obj,
-            include="*/fileobj0",
-            exclude="*",
+            # include="*/fileobj0",
+            # exclude="*",
         )
 
         assert verify_s3_object_integrity(
@@ -216,21 +224,41 @@ class TestCachedBuckets:
 
         # make sure content between cahced & hub buckets are different when TTL isn't expired
         time.sleep(5)
-        # copy_objects(
-        #     podobj=awscli_pod_session,
-        #     src_obj=f"s3://{cached_bucket}/fileobj0",
-        #     target=second_dir,
-        #     s3_obj=mcg_obj,
-        # )
+        try:
+            sync_object_directory(
+                podobj=awscli_pod_session,
+                src=f"s3://{cached_bucket}",
+                target=second_dir,
+                s3_obj=mcg_obj,
+            )
+        except Exception as ex:
+            if "InvalidRange" not in ex.args[0]:
+                raise ex
+            logger.info(
+                "Expected, Sync fails which means cache bucket still doesnt have the update 10M object!"
+            )
+        else:
+            logger.info(
+                "[Not expected] Ideally sync should fail with Invalid Range exception!"
+            )
+            assert not verify_s3_object_integrity(
+                original_object_path=f"{first_dir}/fileobj0",
+                result_object_path=f"{second_dir}/fileobj0",
+                awscli_pod=awscli_pod_session,
+            ), "Cached bucket got updated too quickly!!"
+
+        # make sure content of cached & hub buckets are same after TTL is expired
+        time.sleep(TTL / 1000)
+        logger.info(f"After {TTL} expired!")
         sync_object_directory(
             podobj=awscli_pod_session,
-            src=f"s3://{cached_bucket}/fileobj0",
+            src=f"s3://{cached_bucket}",
             target=second_dir,
             s3_obj=mcg_obj,
         )
-        assert not verify_s3_object_integrity(
+        assert verify_s3_object_integrity(
             original_object_path=f"{first_dir}/fileobj0",
             result_object_path=f"{second_dir}/fileobj0",
             awscli_pod=awscli_pod_session,
-        ), "Cached bucket got updated too quickly!!"
-        logger.info("Expected, Hub bucket & cache bucket's have different contents!")
+        ), "Cached bucket didnt get updated after TTL expired!!!"
+        logger.info("[Success] Hub bucket & cache bucket's have same contents!")
