@@ -803,16 +803,14 @@ class OCP(object):
             selector=selector,
         )
         resource = re.split(r"\s{2,}", resource)
-
+        exception_list = ["RWO", "RWX", "ROX"]
         # get the list of titles
-        titles = [
-            i for i in resource if (i.isupper() and i not in ("RWO", "RWX", "ROX"))
-        ]
+        titles = [i for i in resource if (i.isupper() and i not in exception_list)]
 
         # Get the values from the output including access modes in capital
         # letters
         resource_info = [
-            i for i in resource if (not i.isupper() or i in ("RWO", "RWX", "ROX"))
+            i for i in resource if (not i.isupper() or i in exception_list)
         ]
         temp_list = shlex.split(resource_info[0])
         for i in temp_list:
@@ -820,6 +818,19 @@ class OCP(object):
                 titles.append(i)
             else:
                 resource_info[0] = i
+
+        # Fix for issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/6503
+        title_last_item = shlex.split(titles[-1])
+        updated_last_title_item = []
+        if len(title_last_item) > 1:
+            for i in title_last_item:
+                if i.isupper() and i not in exception_list:
+                    updated_last_title_item.append(i)
+                else:
+                    resource_info.insert(0, i)
+        if updated_last_title_item:
+            titles[-1] = " ".join(updated_last_title_item)
 
         # Get the index of column
         column_index = titles.index(column)
