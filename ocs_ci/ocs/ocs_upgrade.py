@@ -187,6 +187,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             old_images,
             selector=constants.MON_APP_LABEL,
             count=3,
+            timeout=820,
         )
         verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
         osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
