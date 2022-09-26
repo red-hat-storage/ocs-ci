@@ -441,8 +441,9 @@ class OCP(object):
         """
         ocp = OCP(kind="namespace")
         command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(
-            f"{command}", threading_lock=self.threading_lock
+        cmd_out = run_cmd(f"{command}", threading_lock=self.threading_lock)
+        if (f'Now using project "{project_name}"' in cmd_out) or (
+            f'Already on project "{project_name}"' in cmd_out
         ):
             if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
                 label = (
@@ -451,6 +452,7 @@ class OCP(object):
                     f"pod-security.kubernetes.io/warn={policy} --overwrite"
                 )
                 ocp.add_label(resource_name=project_name, label=label)
+                log.info("ADDED THE LABEL")
             return True
         return False
 
