@@ -30,6 +30,7 @@ from ocs_ci.ocs.resources.pod import (
     get_plugin_pods,
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
+    get_ceph_tools_pod,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -41,6 +42,8 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     add_disk_to_node,
     get_nodes,
+    get_worker_nodes,
+    get_node_objs,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -54,8 +57,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
 
 log = logging.getLogger(__name__)
 
@@ -1331,6 +1333,7 @@ def verify_managed_service_resources():
     sc_data = sc.get()["items"][0]
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
+        verify_provider_topology()
         verify_provider_resources()
     else:
         verify_consumer_storagecluster(sc_data)
@@ -1342,6 +1345,97 @@ def verify_managed_service_resources():
         )
         prometheus_version = prometheus_csv[0]["spec"]["version"]
         assert prometheus_version.startswith("4.10.")
+
+
+def verify_provider_topology():
+    """
+    Verify topology in a Managed Services provider cluster
+
+    1. Verify replica count
+    2. Verify total size
+    3. Verify OSD size
+    4. Verify worker node instance count
+    5. Verify worker node instance type
+    6. Verify OSD count
+
+    """
+    size = f"{config.ENV_DATA.get('size', 4)}Ti"
+    replica_count = 3
+    osd_size = 4
+    instance_type = "m5.xlarge"
+    size_map = {
+        "4Ti": {"total_size": 12, "osd_count": 3, "vcpu_ask": 6, "instance_count": 3},
+        "8Ti": {"total_size": 24, "osd_count": 6, "vcpu_ask": 12, "instance_count": 3},
+        "12Ti": {"total_size": 36, "osd_count": 9, "vcpu_ask": 18, "instance_count": 6},
+        "16Ti": {
+            "total_size": 48,
+            "osd_count": 12,
+            "vcpu_ask": 24,
+            "instance_count": 6,
+        },
+        "20Ti": {
+            "total_size": 60,
+            "osd_count": 15,
+            "vcpu_ask": 30,
+            "instance_count": 9,
+        },
+        "48Ti": {
+            "total_size": 144,
+            "osd_count": 36,
+            "vcpu_ask": 72,
+            "instance_count": 18,
+        },
+        "96Ti": {
+            "total_size": 288,
+            "osd_count": 72,
+            "vcpu_ask": 144,
+            "instance_count": 36,
+        },
+    }
+    cluster_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    storage_cluster = StorageCluster(
+        resource_name="ocs-storagecluster",
+        namespace=cluster_namespace,
+    )
+
+    # Verify replica count
+    assert (
+        int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
+        == replica_count
+    ), "Replica count is not as expected"
+
+    # Verify total size
+    ct_pod = get_ceph_tools_pod()
+    ceph_osd_df = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd df")
+    total_size = int(ceph_osd_df.get("summary").get("total_kb"))
+    total_size = convert_device_size(
+        unformatted_size=f"{total_size}Ki", units_to_covert_to="TB", convert_size=1024
+    )
+    assert total_size == size_map[size]["total_size"], "Total size is not as expected"
+
+    # Verify OSD size
+    assert get_osd_size() == osd_size, "OSD size is not as expected"
+
+    # Verify worker node instance count
+    worker_node_names = get_worker_nodes()
+    assert (
+        len(worker_node_names) == size_map[size]["instance_count"]
+    ), "Worker node instance count is not as expected"
+
+    # Verify worker node instance type
+    worker_nodes = get_node_objs(worker_node_names)
+    for node_obj in worker_nodes:
+        assert (
+            node_obj.get("metadata")
+            .get("labels")
+            .get("beta.kubernetes.io/instance-type")
+            == instance_type
+        ), f"Instance type of the worker node {node_obj.name} is not {instance_type}"
+
+    # Verify OSD count
+    assert get_osd_count == size_map[size]["osd_count"], "OSD count is not as expected"
+
+    # TODO: Verify vCPU Ask, Verify machine pools
 
 
 def verify_provider_resources():
