@@ -452,7 +452,6 @@ class OCP(object):
                     f"pod-security.kubernetes.io/warn={policy} --overwrite"
                 )
                 ocp.add_label(resource_name=project_name, label=label)
-                log.info("ADDED THE LABEL")
             return True
         return False
 
