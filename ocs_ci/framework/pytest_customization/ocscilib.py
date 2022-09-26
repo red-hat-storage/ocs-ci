@@ -664,7 +664,7 @@ def pytest_runtest_makereport(item, call):
                 for x in [
                     "ecosystem",
                     "e2e/performance",
-                    "test_ceph_csidriver_runs_on_non_ocs_nodes",
+                    "tests/manage/z_cluster/cluster_expansion",
                 ]
             )
             else False
