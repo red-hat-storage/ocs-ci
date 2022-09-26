@@ -20,6 +20,7 @@ class TestObjectExpiration(MCGTest):
 
     @skipif_ocs_version("<4.10")
     @bugzilla("2034661")
+    @bugzilla("2029298")
     @pytest.mark.polarion_id("OCS-3929")
     @tier1
     def test_object_expiration(self, mcg_obj, bucket_factory):

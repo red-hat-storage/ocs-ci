@@ -16,7 +16,7 @@ setup(
     license="MIT",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==36.0.2",
+        "cryptography==38.0.1",
         "docopt==0.6.2",
         "gevent==20.9.0",
         "reportportal-client==3.2.3",
