@@ -14,13 +14,20 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
-from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    tier1,
+    ignore_leftovers,
+    skipif_ocs_version,
+)
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version("4.12")
 @skipif_aws_i3
 @pytest.fixture()
 def setup_fixture(install_logging):
