@@ -1411,7 +1411,9 @@ def verify_provider_topology():
     total_size = convert_device_size(
         unformatted_size=f"{total_size}Ki", units_to_covert_to="TB", convert_size=1024
     )
-    assert total_size == size_map[size]["total_size"], "Total size is not as expected"
+    assert (
+        total_size == size_map[size]["total_size"]
+    ), f"Total size {total_size}Ti is not matching the expected total size {size_map[size]['total_size']}Ti"
 
     # Verify OSD size
     osd_pvc_objs = get_all_pvc_objs(
@@ -1424,9 +1426,10 @@ def verify_provider_topology():
 
     # Verify worker node instance count
     worker_node_names = get_worker_nodes()
-    assert (
-        len(worker_node_names) == size_map[size]["instance_count"]
-    ), "Worker node instance count is not as expected"
+    assert len(worker_node_names) == size_map[size]["instance_count"], (
+        f"Worker node instance count is not as expected. Actual instance count is {len(worker_node_names)}. "
+        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {worker_node_names}"
+    )
 
     # Verify worker node instance type
     worker_nodes = get_node_objs(worker_node_names)
@@ -1439,7 +1442,10 @@ def verify_provider_topology():
         ), f"Instance type of the worker node {node_obj.name} is not {instance_type}"
 
     # Verify OSD count
-    assert get_osd_count == size_map[size]["osd_count"], "OSD count is not as expected"
+    osd_count = get_osd_count()
+    assert (
+        osd_count == size_map[size]["osd_count"]
+    ), f"OSD count is not as expected. Actual:{osd_count}. Expected:{size_map[size]['osd_count']} "
 
     # TODO: Verify vCPU Ask, Verify machine pools
 
