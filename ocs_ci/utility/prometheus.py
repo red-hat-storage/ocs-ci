@@ -12,6 +12,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import AlertingError, AuthError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
+from ocs_ci.utility.utils import TimeoutIterator
 
 logger = logging.getLogger(name=__file__)
 
@@ -392,7 +393,7 @@ class PrometheusAPI(object):
         self._cacert = cert_file.name
         logger.info(f"Generated CA certification file: {self._cacert}")
 
-    def get(self, resource, payload=None):
+    def get(self, resource, payload=None, timeout=300):
         """
         Get alerts from Prometheus API.
 
@@ -402,6 +403,8 @@ class PrometheusAPI(object):
             payload (dict): Provide parameters to GET API call.
                 e.g. for `alerts` resource this can be
                 {'silenced': False, 'inhibited': False}
+            timeout (int): Number of seconds to wait for Prometheus endpoint to
+                get available if it is not available
 
         Returns:
             dict: Response from Prometheus alerts api
@@ -414,27 +417,37 @@ class PrometheusAPI(object):
         logger.debug(f"verify={self._cacert}")
         logger.debug(f"params={payload}")
 
-        response = requests.get(
-            self._endpoint + pattern,
-            headers=headers,
-            verify=self._cacert,
-            params=payload,
-        )
-        if "Application is not available" in response.text:
-            logger.warning(f"There was an error in response: {response.text}")
-            logger.warning("Refreshing connection")
-            self.refresh_connection()
-            if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
-                logger.warning("Generating new certificate")
-                self.generate_cert()
-            logger.warning("Connection refreshed - trying the query again")
-            response = requests.get(
+        if timeout:
+            for sample_response in TimeoutIterator(
+                timeout=timeout,
+                sleep=15,
+                func=requests.get,
+                func_kwargs={
+                    "url": self._endpoint + pattern,
+                    "headers": headers,
+                    "verify": self._cacert,
+                    "params": payload,
+                },
+            ):
+                response = sample_response
+                if response.status_code == 503:
+                    logger.warning(f"There was an error in response: {response.text}")
+                    logger.warning("Refreshing connection")
+                    self.refresh_connection()
+                    if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+                        logger.warning("Generating new certificate")
+                        self.generate_cert()
+                    logger.warning("Connection refreshed")
+                else:
+                    break
+            return response
+        else:
+            return requests.get(
                 self._endpoint + pattern,
                 headers=headers,
                 verify=self._cacert,
                 params=payload,
             )
-        return response
 
     def query(
         self,
