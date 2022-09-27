@@ -1185,7 +1185,10 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 
 def retrieve_verification_mode():
-    if config.ENV_DATA["platform"].lower() == "ibm_cloud":
+    if (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    ):
         verify = True
     elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         verify = get_root_ca_cert()
