@@ -1424,14 +1424,15 @@ def verify_provider_topology():
             pvc_obj.get()["status"]["capacity"]["storage"] == f"{osd_size}Ti"
         ), f"Size of OSD PVC {pvc_obj.name} is not {osd_size}Ti"
 
-    # Verify worker node instance count
-    worker_node_names = get_worker_nodes()
-    assert len(worker_node_names) == size_map[size]["instance_count"], (
-        f"Worker node instance count is not as expected. Actual instance count is {len(worker_node_names)}. "
-        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {worker_node_names}"
+    # Verify OSD running worker nodes count
+    osd_nodes = get_osd_running_nodes()
+    assert len(osd_nodes) == size_map[size]["instance_count"], (
+        f"Worker node instance count is not as expected. Actual instance count is {len(osd_nodes)}. "
+        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {osd_nodes}"
     )
 
     # Verify worker node instance type
+    worker_node_names = get_worker_nodes()
     worker_nodes = get_node_objs(worker_node_names)
     for node_obj in worker_nodes:
         assert (
