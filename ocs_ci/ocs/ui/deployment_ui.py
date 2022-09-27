@@ -115,6 +115,10 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["click_install_lso_page"], enable_screenshot=True
             )
+            # PodSecurity admission
+            label_pod_security_admission(
+                namespace=config.ENV_DATA["local_storage_namespace"]
+            )
             self.verify_operator_succeeded(operator="Local Storage")
 
     def install_storage_cluster(self):
