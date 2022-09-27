@@ -143,6 +143,7 @@ class FlexyBase(object):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             config.FLEXY["LAUNCHER_VARS"].update(
                 {
+                    "dynamic_bastion_host": "no",
                     "iaas_name": "vsphere_config",
                     "rhcos_image": config.ENV_DATA["vm_template"],
                 }
@@ -169,6 +170,7 @@ class FlexyBase(object):
                 cluster_domain = f".{cluster_name}.{base_domain}"
                 config.FLEXY["LAUNCHER_VARS"].update(
                     {
+                        "extract_installer_from_mirror_release_image": "yes",
                         "http_proxy": config.DEPLOYMENT["disconnected_http_proxy"],
                         "https_proxy": config.DEPLOYMENT.get(
                             "disconnected_https_proxy",
