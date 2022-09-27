@@ -33,7 +33,7 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
-from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_all_pvc_objs
 from ocs_ci.ocs.node import (
     get_osds_per_node,
     add_new_disk_for_vsphere,
@@ -1414,7 +1414,13 @@ def verify_provider_topology():
     assert total_size == size_map[size]["total_size"], "Total size is not as expected"
 
     # Verify OSD size
-    assert get_osd_size() == osd_size, "OSD size is not as expected"
+    osd_pvc_objs = get_all_pvc_objs(
+        namespace=cluster_namespace, selector=constants.OSD_PVC_GENERIC_LABEL
+    )
+    for pvc_obj in osd_pvc_objs:
+        assert (
+            pvc_obj.get()["status"]["capacity"]["storage"] == f"{osd_size}Ti"
+        ), f"Size of OSD PVC {pvc_obj.name} is not {osd_size}Ti"
 
     # Verify worker node instance count
     worker_node_names = get_worker_nodes()
