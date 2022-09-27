@@ -216,7 +216,7 @@ ENV_DATA:
   ms_env_type: 'staging'
   rosa_cli_version: '1.2.6'
   appliance_mode: true
-  ms_osd_pod_memory: "7Gi"
+  ms_osd_pod_memory: "6Gi"
 
   # used in external mode deployment
   restricted-auth-permission: false
