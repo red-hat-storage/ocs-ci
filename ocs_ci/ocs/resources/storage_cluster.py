@@ -1437,6 +1437,7 @@ def verify_provider_topology():
     for node_obj in worker_nodes:
         assert (
             node_obj.get("metadata")
+            .get("metadata")
             .get("labels")
             .get("beta.kubernetes.io/instance-type")
             == instance_type
