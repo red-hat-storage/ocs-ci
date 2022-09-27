@@ -2,6 +2,7 @@
 Helper functions specific for DR
 """
 import logging
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -9,6 +10,14 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvc_objs
+from ocs_ci.ocs.node import (
+    get_node_objs,
+    wait_for_nodes_status,
+    schedule_nodes,
+    unschedule_nodes,
+    drain_nodes,
+)
+from ocs_ci.ocs import platform_nodes
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
 
@@ -640,5 +649,39 @@ def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
             pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
             logger.info(f"Pod {pod_obj.name}: All files checksums value matches")
         except CommandFailed as ex:
-            logger.info(f"Pod {pod_obj.name}: One or more files or datas are modified")
+            if "computed checksums did NOT match" in str(ex):
+                logger.error(
+                    f"Pod {pod_obj.name}: One or more files or datas are modified"
+                )
             raise ex
+
+
+def gracefully_reboot_nodes(namespace, drcluster_name):
+    """
+    Gracefully reboot OpenShift Container Platform
+    nodes which was fenced before
+
+    Args:
+        namespace (str): Name of the namespace
+        drcluster_name (str): Name of the drcluster which need to be reboot
+
+    """
+
+    primary_cluster_name = get_current_primary_cluster_name(namespace=namespace)
+    if primary_cluster_name == drcluster_name:
+        set_current_primary_cluster_context(namespace)
+    else:
+        set_current_secondary_cluster_context(namespace)
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    waiting_time = 30
+    for node in node_objs:
+        node_name = node.name
+        unschedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node], wait=False)
+        logger.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+        schedule_nodes([node_name])
+    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
