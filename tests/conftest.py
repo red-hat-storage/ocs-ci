@@ -3278,7 +3278,7 @@ def amq_factory_fixture(request):
         """
         # Clean up
         if len(consumer_indexes) > 0:
-            config.switch_ctx(consumer_indexes[0])
+            # config.switch_ctx(consumer_indexes[0])
             log.info(f"{consumer_indexes[0]}")
         amq.cleanup()
 

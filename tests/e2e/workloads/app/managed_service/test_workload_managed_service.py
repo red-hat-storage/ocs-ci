@@ -80,11 +80,11 @@ class TestWorkLoadsManagedService(object):
                         len(sub_workloads) - 1
                     ]
                     try:
-                        amq, threads = amq_factory_fixture(
+                        amq = amq_factory_fixture(
                             sc_name=constants.DEFAULT_STORAGECLASS_RBD,
                             consumer_index=workloads_cluster_index["amq"],
-                            run_in_bg=True,
-                            validate_messages=True,
+                            run_in_bg=False,
+                            validate_messages=False,
                         )
                         self.amq_deployment_status = True
                     except Exception as e:
