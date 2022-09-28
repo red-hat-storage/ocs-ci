@@ -14,7 +14,6 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.resources.storage_cluster import get_osd_count
 from ocs_ci.utility.utils import convert_device_size, run_cmd
 
 log = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ def verify_provider_topology():
 
     """
     # importing here to avoid circular import
-    from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+    from ocs_ci.ocs.resources.storage_cluster import StorageCluster, get_osd_count
 
     size = f"{config.ENV_DATA.get('size', 4)}Ti"
     replica_count = 3
