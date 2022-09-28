@@ -37,7 +37,7 @@ class TestRbdSpaceReclaim(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             replica=self.pool_replica,
-            new_rbd_pool=False,
+            new_rbd_pool=True,
         )
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
