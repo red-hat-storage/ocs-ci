@@ -35,6 +35,7 @@ def setup_fixture(install_logging):
     """
     logger.info("Testcases execution post deployment of openshift-logging")
 
+
 @skipif_ocs_version("==4.12")
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
