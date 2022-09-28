@@ -27,7 +27,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 logger = logging.getLogger(__name__)
 
 
-@skipif_ocs_version("<4.12")
+@skipif_ocs_version("==4.12")
 @skipif_aws_i3
 @pytest.fixture()
 def setup_fixture(install_logging):
