@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_external_mode
-@skipif_ocs_version("<4.9")
 @pytest.mark.polarion_id("OCS-2231")
 @bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
@@ -156,6 +155,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
+    @skipif_ocs_version("<4.9")
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
