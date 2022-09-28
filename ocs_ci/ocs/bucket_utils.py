@@ -690,7 +690,15 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
 
 
 def cli_create_pv_backingstore(
-    mcg_obj, backingstore_name, vol_num, size, storage_class
+    mcg_obj,
+    backingstore_name,
+    vol_num,
+    size,
+    storage_class,
+    req_cpu=None,
+    req_mem=None,
+    lim_cpu=None,
+    lim_mem=None,
 ):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
@@ -700,6 +708,10 @@ def cli_create_pv_backingstore(
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+        req_cpu (str): requested cpu value
+        req_mem (str): requested memory value
+        lim_cpu (str): limit cpu value
+        lim_mem (str): limit memory value
 
     """
     cmd = (
@@ -708,6 +720,14 @@ def cli_create_pv_backingstore(
     )
     if storage_class:
         cmd += f" --storage-class {storage_class}"
+    if req_cpu:
+        cmd += f" --request-cpu {req_cpu}"
+    if req_mem:
+        cmd += f" --request-memory {req_mem}"
+    if lim_cpu:
+        cmd += f" --limit-cpu {lim_cpu}"
+    if lim_mem:
+        cmd += f" --limit-memory {lim_mem}"
     mcg_obj.exec_mcg_cmd(cmd)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
