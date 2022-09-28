@@ -115,19 +115,21 @@ def verify_provider_topology():
     log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
 
     # Verify OSD cpu
-    osd_cpu_limit = 2
-    osd_cpu_request = 1
+    osd_cpu_limit = "2"
+    osd_cpu_request = "1"
     osd_pods = get_osd_pods()
     log.info("Verifying OSD cpu")
     for osd_pod in osd_pods:
         for container in osd_pod.data["spec"]["containers"]:
             if container["name"] == "osd":
-                assert (
-                    container["resources"]["limits"]["cpu"] == osd_cpu_limit
-                ), f"OSD pod {osd_pod.name} container osd doesn't have cpu limit {osd_cpu_limit}"
-                assert (
-                    container["resources"]["requests"]["cpu"] == osd_cpu_request
-                ), f"OSD pod {osd_pod.name} container osd doesn't have cpu request {osd_cpu_request}"
+                assert container["resources"]["limits"]["cpu"] == osd_cpu_limit, (
+                    f"OSD pod {osd_pod.name} container osd doesn't have cpu limit {osd_cpu_limit}. "
+                    f"Limit is {container['resources']['limits']['cpu']}"
+                )
+                assert container["resources"]["requests"]["cpu"] == osd_cpu_request, (
+                    f"OSD pod {osd_pod.name} container osd doesn't have cpu request {osd_cpu_request}. "
+                    f"Request is {container['resources']['requests']['cpu']}"
+                )
     log.info("Verified OSD CPU")
 
     # Verify machine pools
