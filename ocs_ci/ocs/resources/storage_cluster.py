@@ -1364,31 +1364,27 @@ def verify_provider_topology():
     osd_size = 4
     instance_type = "m5.xlarge"
     size_map = {
-        "4Ti": {"total_size": 12, "osd_count": 3, "vcpu_ask": 6, "instance_count": 3},
-        "8Ti": {"total_size": 24, "osd_count": 6, "vcpu_ask": 12, "instance_count": 3},
-        "12Ti": {"total_size": 36, "osd_count": 9, "vcpu_ask": 18, "instance_count": 6},
+        "4Ti": {"total_size": 12, "osd_count": 3, "instance_count": 3},
+        "8Ti": {"total_size": 24, "osd_count": 6, "instance_count": 3},
+        "12Ti": {"total_size": 36, "osd_count": 9, "instance_count": 6},
         "16Ti": {
             "total_size": 48,
             "osd_count": 12,
-            "vcpu_ask": 24,
             "instance_count": 6,
         },
         "20Ti": {
             "total_size": 60,
             "osd_count": 15,
-            "vcpu_ask": 30,
             "instance_count": 9,
         },
         "48Ti": {
             "total_size": 144,
             "osd_count": 36,
-            "vcpu_ask": 72,
             "instance_count": 18,
         },
         "96Ti": {
             "total_size": 288,
             "osd_count": 72,
-            "vcpu_ask": 144,
             "instance_count": 36,
         },
     }
@@ -1449,7 +1445,46 @@ def verify_provider_topology():
         osd_count == size_map[size]["osd_count"]
     ), f"OSD count is not as expected. Actual:{osd_count}. Expected:{size_map[size]['osd_count']} "
 
-    # TODO: Verify vCPU Ask, Verify machine pools
+    # Verify OSD cpu
+    osd_cpu_limit = 2
+    osd_cpu_request = 1
+    osd_pods = get_osd_pods()
+    log.info("Verifying OSD cpu")
+    for osd_pod in osd_pods:
+        for container in osd_pod.data["spec"]["containers"]:
+            if container["name"] == "osd":
+                assert (
+                    container["resources"]["limits"]["cpu"] == osd_cpu_limit
+                ), f"OSD pod {osd_pod.name} container osd doesn't have cpu limit {osd_cpu_limit}"
+                assert (
+                    container["resources"]["requests"]["cpu"] == osd_cpu_request
+                ), f"OSD pod {osd_pod.name} container osd doesn't have cpu request {osd_cpu_request}"
+
+    # Verify machine pools
+    cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
+    out = run_cmd(cmd)
+    machine_pool_info_list = yaml.safe_load(out)
+    assert (
+        len(machine_pool_info_list) == 2
+    ), f"Number of machinepools is not 2. Machinepools details: {machine_pool_info_list}"
+    machine_pool_ids = []
+    ceph_osd_nodepool_info = None
+    for machine_pool_info in machine_pool_info_list:
+        machine_pool_ids.append(machine_pool_info["id"])
+        assert (
+            machine_pool_info["instance_type"] == instance_type
+        ), f"Instance type of machinepool {machine_pool_info['id']} is {machine_pool_info['instance_type']}"
+        if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
+            ceph_osd_nodepool_info = machine_pool_info
+    log.info(f"Machinepool IDs: {machine_pool_ids}")
+    assert ceph_osd_nodepool_info, "OSD node pool not found"
+    log.info(f"OSD node pool machinepool id is {ceph_osd_nodepool_info['id']}")
+    assert (
+        ceph_osd_nodepool_info["replicas"] == size_map[size]["instance_count"]
+    ), f"Replicas of OSD node pool machinepool is {ceph_osd_nodepool_info['replicas']}. Expected {size_map[size]['instance_count']}."
+    assert ("key", "node.ocs.openshift.io/osd") in ceph_osd_nodepool_info["taints"][
+        0
+    ].items(), f"Verification of taints failed for machinepool {ceph_osd_nodepool_info['id']}. Machinepool info: {ceph_osd_nodepool_info}"
 
 
 def verify_provider_resources():
