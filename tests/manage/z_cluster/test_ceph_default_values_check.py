@@ -2,7 +2,7 @@ import collections
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_external_mode
+@skipif_ocs_version("<4.9")
 @pytest.mark.polarion_id("OCS-2231")
 @bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
