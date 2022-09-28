@@ -1481,10 +1481,16 @@ def verify_provider_topology():
     log.info(f"OSD node pool machinepool id is {ceph_osd_nodepool_info['id']}")
     assert (
         ceph_osd_nodepool_info["replicas"] == size_map[size]["instance_count"]
-    ), f"Replicas of OSD node pool machinepool is {ceph_osd_nodepool_info['replicas']}. Expected {size_map[size]['instance_count']}."
+    ), (
+        f"Replicas of OSD node pool machinepool is {ceph_osd_nodepool_info['replicas']}. "
+        f"Expected {size_map[size]['instance_count']}."
+    )
     assert ("key", "node.ocs.openshift.io/osd") in ceph_osd_nodepool_info["taints"][
         0
-    ].items(), f"Verification of taints failed for machinepool {ceph_osd_nodepool_info['id']}. Machinepool info: {ceph_osd_nodepool_info}"
+    ].items(), (
+        f"Verification of taints failed for machinepool {ceph_osd_nodepool_info['id']}. "
+        f"Machinepool info: {ceph_osd_nodepool_info}"
+    )
 
 
 def verify_provider_resources():
