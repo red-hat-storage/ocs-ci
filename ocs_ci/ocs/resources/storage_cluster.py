@@ -44,6 +44,7 @@ from ocs_ci.ocs.node import (
     get_nodes,
     get_worker_nodes,
     get_node_objs,
+    get_node_pods,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -1489,6 +1490,27 @@ def verify_provider_topology():
         f"Verification of taints failed for machinepool {ceph_osd_nodepool_info['id']}. "
         f"Machinepool info: {ceph_osd_nodepool_info}"
     )
+
+    # Verify OSD running nodes
+    osd_node_objs = get_node_objs(osd_nodes)
+    for node_obj in osd_node_objs:
+        annotation = (
+            node_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("machine.openshift.io/machine")
+        )
+        assert (
+            ceph_osd_nodepool_info["id"] in annotation
+        ), f"OSD running node part of the machinepool {ceph_osd_nodepool_info['id']}"
+
+    # Verify that other pods are not running on OSD nodes
+    for node_obj in osd_node_objs:
+        pods_on_node = get_node_pods(node_name=node_obj.name)
+        for pod_name in pods_on_node:
+            assert pod_name.startswith(
+                ("rook-ceph-osd", "rook-ceph-crashcollector")
+            ), f"Pod {pod_name} is running on OSD running node {node_obj.name}"
 
 
 def verify_provider_resources():
