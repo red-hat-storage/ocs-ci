@@ -1,5 +1,4 @@
 import logging
-import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -11,11 +10,16 @@ logger = logging.getLogger(__name__)
 
 class RookCephPlugin(object):
     """
-    This helps you put the Mon/OSD deployments in debug mode
-
+    This helps you put the Mon/OSD deployments in debug mode without scaling down the rook-operator
+    or other steps involved using krew plugin. This will also take care of the plugin installation
+    if not already installed. Generally debug pods are used to perform debug ops, but they can also
+    be used for maintenance purpose. One can use offline tools like ceph-objectstore-tool, ceph-monstore-tool
+    using debug pods.
+    e.g: List all PGs: $ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --op --list-pgs
     """
 
-    krew_cmd = f"sh {constants.KREW_INSTALL_DIR}/krew_install.sh"
+    krew_install_cmd = f"sh {constants.KREW_INSTALL_DIR}/krew_install.sh"
+    rookceph_install_cmd = f"sh {constants.KREW_INSTALL_DIR}/rookcephplugin_install.sh"
 
     def __init__(
         self,
@@ -37,9 +41,9 @@ class RookCephPlugin(object):
             except Exception as ex:
                 logger.error("[Failed] Krew installation failed!")
                 raise ex
+            logger.info("Krew installed successfully!")
         else:
             logger.info("Krew is already installed!")
-        logger.info("Krew installed successfully!")
 
         if not self.check_for_rook_ceph():
             try:
@@ -47,13 +51,17 @@ class RookCephPlugin(object):
             except Exception as ex:
                 logger.error("[Failed] rook-ceph plugin installation failed")
                 raise ex
+            logger.info("Rook-ceph installed successfully!")
         else:
             logger.info("Rook-ceph is already installed!")
-        logger.info("Rook-ceph installed successfully!")
 
     def check_krew_installed(self):
         """
         Checks if krew is installed already
+
+        Returns:
+            installed(boolean): Returns True if installed, otherwise False
+
         """
         installed = True
         try:
@@ -66,6 +74,10 @@ class RookCephPlugin(object):
     def check_for_rook_ceph(self):
         """
         Checks if rook-ceph plugin is installed
+
+        Returns:
+            installed(boolean): Returns True if installed, otherwise False
+
         """
         installed = True
         try:
@@ -79,25 +91,29 @@ class RookCephPlugin(object):
         """
         Install krew
         """
-        exec_cmd(cmd=self.krew_cmd)
+        exec_cmd(cmd=self.krew_install_cmd)
         return True
 
     def install_rook_ceph_plugin(self):
         """
         Install rook-ceph plugin
         """
-        OCP().exec_oc_cmd(command="krew install rook-ceph")
+        exec_cmd(cmd=self.rookceph_install_cmd)
         return True
 
     def debug_start(self, deployment_name, alternate_image=None, timeout=800):
         """
         This starts the debug mode for the deployment
 
-            Args:
-                deployment_name (str): Name of the deployment that you want
-                it to be in debug mode i.e, either Mon or OSD deployments
+        Args:
+            deployment_name (str): Name of the deployment that you want
+            it to be in debug mode i.e, either Mon or OSD deployments
 
-                alternate_image (str): Alternate image that you want to pass
+            alternate_image (str): Alternate image that you want to pass
+
+        Returns:
+              True: if debug start is successful
+
         """
 
         if deployment_name in self.deployment_in_debug.keys():
@@ -110,8 +126,7 @@ class RookCephPlugin(object):
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
-        OCP().exec_oc_cmd(command=command, timeout=timeout)
-        time.sleep(5)
+        OCP().exec_oc_cmd(command=command, timeout=timeout, out_yaml_format=False)
         logger.info(f"{deployment_name} is successfully in mainetenance mode now!")
 
         self.deployment_in_debug[deployment_name] = True
@@ -121,8 +136,12 @@ class RookCephPlugin(object):
         """
         This stops the debug mode for the deployment
 
-            Args:
-                alternate_image (str): Alternate image that you want to pass
+        Args:
+            alternate_image (str): Alternate image that you want to pass
+
+        Returns:
+            True: if debug stop is successful
+
         """
         if deployment_name not in self.deployment_in_debug.keys():
             raise Exception("[Error] Deployment not in debug mode")
@@ -134,7 +153,7 @@ class RookCephPlugin(object):
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
-        OCP().exec_oc_cmd(command=command, timeout=timeout)
+        OCP().exec_oc_cmd(command=command, timeout=timeout, out_yaml_format=False)
         logger.info(
             f"{deployment_name} is successfully removed from mainetenance mode now!"
         )
@@ -146,7 +165,7 @@ class RookCephPlugin(object):
 class CephObjectStoreTool(RookCephPlugin):
     """
     This is to perform COT related operations on OSD debug pod
-
+    We can extend this class in future to perform various other ceph-objectstore-tool operations
     """
 
     def __init__(
@@ -161,6 +180,10 @@ class CephObjectStoreTool(RookCephPlugin):
         """
         Validate if the deployment is debug mode
         before performing COT operations
+
+        Args:
+            deployment_name(str): Name of the deployment
+
         """
         if not deployment_name:
             if not self.deployment_name:
@@ -216,7 +239,7 @@ class CephObjectStoreTool(RookCephPlugin):
 class MonStoreTool(RookCephPlugin):
     """
     This is to perform MonStoreTool related operations on Mon debug pod
-
+    We can extend this class in future to perform various other ceph-monstore-tool operations
     """
 
     def __init__(
@@ -231,6 +254,10 @@ class MonStoreTool(RookCephPlugin):
         """
         Validate if the deployment is debug mode
         before performing MonStoreTool operations
+
+        Args:
+            deployment_name(str): Name of the deployment
+
         """
         if not deployment_name:
             if not self.deployment_name:
@@ -271,6 +298,11 @@ class MonStoreTool(RookCephPlugin):
     def run_mot_get_monmap(self, deployment_name):
         """
         Runs MonStoreTool get monmap operation
+        Args:
+            deployment_name: deployment name
+
+        Returns:
+            out (str): out put for get monmap command
         """
         self.__validate_deployment(deployment_name)
         store_path = self.__get_store_path()
