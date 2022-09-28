@@ -1479,9 +1479,7 @@ def verify_provider_topology():
     log.info(f"Machinepool IDs: {machine_pool_ids}")
     assert ceph_osd_nodepool_info, "OSD node pool not found"
     log.info(f"OSD node pool machinepool id is {ceph_osd_nodepool_info['id']}")
-    assert (
-        ceph_osd_nodepool_info["replicas"] == size_map[size]["instance_count"]
-    ), (
+    assert ceph_osd_nodepool_info["replicas"] == size_map[size]["instance_count"], (
         f"Replicas of OSD node pool machinepool is {ceph_osd_nodepool_info['replicas']}. "
         f"Expected {size_map[size]['instance_count']}."
     )
