@@ -128,7 +128,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
-from ocs_ci.ocs.debug import CephObjectStoreTool, MonStoreTool
+from ocs_ci.ocs.debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -6225,25 +6225,15 @@ def scc_factory(request):
 
 
 @pytest.fixture(scope="session")
-def krew_install_factory(request):
-    """
-    Install krew plugin
-    """
-    krew_cmd = f"sh {constants.KREW_INSTALL_DIR}/krew_install.sh"
-    exec_cmd(cmd=krew_cmd)
-    return True
-
-
-@pytest.fixture(scope="session")
-def rook_ceph_plugin_install_factory(request, krew_install_factory):
+def krew_rook_ceph_install_factory(request):
     """
     Install rook-ceph plugin
     """
-    OCP().exec_oc_cmd(command="krew install rook-ceph")
+    RookCephPlugin()
 
 
 @pytest.fixture()
-def ceph_objectstore_factory(request, rook_ceph_plugin_install_factory):
+def ceph_objectstore_factory(request, krew_rook_ceph_install_factory):
     """
     Setup CephObjectStoreTool instance
     """
@@ -6267,7 +6257,7 @@ def ceph_objectstore_tool_fixture(request):
 
 
 @pytest.fixture()
-def ceph_monstore_factory(request, rook_ceph_plugin_install_factory):
+def ceph_monstore_factory(request, krew_rook_ceph_install_factory):
     """
     Setup MonStoreTool instance
     """
