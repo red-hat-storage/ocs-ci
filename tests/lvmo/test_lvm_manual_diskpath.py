@@ -7,7 +7,6 @@ from tempfile import NamedTemporaryFile
 from ocs_ci.ocs import constants
 from ocs_ci.utility.templating import load_yaml, dump_data_to_temp_yaml
 from ocs_ci.utility.lvmo_utils import (
-    delete_lvm_cluster,
     get_sno_blockdevices,
     get_sno_disks_by_path,
     lvmo_health_check,
@@ -64,7 +63,7 @@ def create_lvm_cluster_cr_with_device_selector(disks):
         ),
     ],
 )
-def test_create_lvm_cluster_w_manual_disk_selection(by, select_all):
+def test_create_lvm_cluster_w_manual_disk_selection(remove_lvm_cluster, by, select_all):
     """
     Test creation of lvm cluster with manual disk selection,
     by disks name or by disks path
@@ -83,7 +82,6 @@ def test_create_lvm_cluster_w_manual_disk_selection(by, select_all):
         disks_to_use = int(len(disks) / 2) + 1
     log.info(f"Creating cluster with {disks_to_use} disks")
     lvm_cr = create_lvm_cluster_cr_with_device_selector(disks[:disks_to_use])
-    delete_lvm_cluster()
     oc_obj = OCP()
     oc_obj.create(yaml_file=lvm_cr)
     lvmo_health_check()
