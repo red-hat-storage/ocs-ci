@@ -128,7 +128,7 @@ def verify_provider_topology():
                 assert (
                     container["resources"]["requests"]["cpu"] == osd_cpu_request
                 ), f"OSD pod {osd_pod.name} container osd doesn't have cpu request {osd_cpu_request}"
-    log.info(f"Verified OSD CPU")
+    log.info("Verified OSD CPU")
 
     # Verify machine pools
     cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
