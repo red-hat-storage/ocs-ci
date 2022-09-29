@@ -3931,7 +3931,7 @@ def get_noobaa_db_used_space():
 def clean_all_test_projects(project_name="test"):
     """
     Delete all namespaces with 'test' in its name
-    'test' can be replace with other string
+    'test' can be replaced with another string
 
     Args:
         project_name (str, optional): expression to be deleted. Defaults to "test".
