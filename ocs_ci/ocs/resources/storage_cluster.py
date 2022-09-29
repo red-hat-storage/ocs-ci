@@ -10,6 +10,7 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.managed_services import verify_provider_topology
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -55,7 +56,6 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-
 
 log = logging.getLogger(__name__)
 
@@ -1332,6 +1332,7 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
+        verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()
