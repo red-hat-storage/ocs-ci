@@ -424,9 +424,11 @@ class BAREMETALUPI(Deployment):
             dns_data_dict = {}
             ns_list_values = []
             for value in ns_list:
-                dns_data_dict['Value'] = value
+                dns_data_dict["Value"] = value
                 ns_list_values.append(dns_data_dict.copy())
-            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(domain=config.ENV_DATA["base_domain"])
+            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(
+                domain=config.ENV_DATA["base_domain"]
+            )
             logger.info(base_domain_zone_id)
             # for value in ns_list:
             response_list.append(
@@ -437,7 +439,7 @@ class BAREMETALUPI(Deployment):
                     type="NS",
                     operation_type="Add",
                     ttl=300,
-                    raw_data=True
+                    raw_data=True,
                 )
             )
             logger.info("Waiting for Record Response")
