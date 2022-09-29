@@ -322,7 +322,6 @@ class Postgresql(BenchmarkOperator):
             output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             log.info("*******PGBench output log*********\n" f"{pg_output}")
-            # for data in all_pgbench_pods_output:
             for data in pg_output:
                 run_id = list(data.keys())
                 latency_avg = data[run_id[0]]["latency_avg"]
@@ -719,8 +718,8 @@ class Postgresql(BenchmarkOperator):
             )
             result.append("-" * len(result[0]))
             log.info("\n".join(result))
-            return out
         log.info(out)
+        return out
 
     def run_insert_operation(self, num_of_ops, postgres_pod, row_index, table_name):
         """
