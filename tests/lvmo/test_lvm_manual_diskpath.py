@@ -11,7 +11,7 @@ from ocs_ci.utility.lvmo_utils import (
     get_sno_disks_by_path,
     lvmo_health_check,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_lvm_not_installed
+from ocs_ci.framework.pytest_customization.marks import skipif_lvm_not_installed, tier1
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.ocp import OCP
 
@@ -44,6 +44,7 @@ def create_lvm_cluster_cr_with_device_selector(disks):
     return lvm_cluster_cr.name
 
 
+@tier1
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.12")
 @pytest.mark.parametrize(
