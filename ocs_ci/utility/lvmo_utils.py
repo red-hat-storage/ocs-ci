@@ -12,8 +12,8 @@ from ocs_ci.helpers.helpers import clean_all_test_projects
 
 log = logging.getLogger(__name__)
 
-LS_DEVICE_BY_PATH = "ls /dev/disk/by-path"
-LS_DEVICE_BY_ID = "ls /dev/disk/by-id"
+LS_DEVICE_BY_PATH = "ls /dev/disk/by-path/*"
+LS_DEVICE_BY_ID = "ls /dev/disk/by-id/*"
 
 
 def lvmo_health_check_base():
@@ -65,32 +65,36 @@ def lvmo_health_check(tries=20, delay=30):
     )(lvmo_health_check_base)()
 
 
-def get_sno_disks_by_path():
+def get_sno_disks_by_path(node=constants.SNO_NODE_NAME):
     """
     Get list of storage devices by it's path as listed on node
+
+    args:
+        node (str): node name
 
     Returns:
         list: list of storage devices full-path (str)
     """
     storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     oc_obj = OCP()
-    disks = oc_obj.exec_oc_debug_cmd(
-        node=constants.SNO_NODE_NAME, cmd_list=[LS_DEVICE_BY_PATH]
-    )
+    disks = oc_obj.exec_oc_debug_cmd(node, cmd_list=[LS_DEVICE_BY_PATH])
     raw_disks_list = disks.split("\n")
     raw_disks_list = list(filter(None, raw_disks_list))
     disks_by_path = list()
     for line in raw_disks_list[-storage_disks_count:]:
         if "sda" not in line:
-            disk_name = "/dev/disk/by-path/" + line
+            disk_name = line
             disks_by_path.append(disk_name)
 
     return disks_by_path
 
 
-def get_sno_blockdevices():
+def get_sno_blockdevices(node=constants.SNO_NODE_NAME):
     """
     Gets list of storage devices by it's names
+
+    args:
+        node (str): node name
 
     Returns:
         list: list of storage devices full-names (str)
@@ -99,9 +103,7 @@ def get_sno_blockdevices():
     storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
     disks_by_name = list()
     oc_obj = OCP()
-    disks = oc_obj.exec_oc_debug_cmd(
-        node=constants.SNO_NODE_NAME, cmd_list=["lsblk --json"]
-    )
+    disks = oc_obj.exec_oc_debug_cmd(node, cmd_list=["lsblk --json"])
     disks = json.loads(disks)
     for disk in range(1, (storage_disks_count + 1)):
         disk_name = "/dev/" + (disks["blockdevices"][disk]["name"])
