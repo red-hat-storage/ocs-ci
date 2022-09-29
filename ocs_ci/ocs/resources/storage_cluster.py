@@ -1332,7 +1332,9 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
-        verify_provider_topology()
+        # TODO: Update the condition based on the deployer version when the feature is available in a particular version
+        if config.ENV_DATA["addon_name"] == "ocs-provider-dev":
+            verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()
