@@ -43,7 +43,7 @@ class TestPgSQLWorkload(E2ETest):
         postgres_pod = pgsql.get_postgres_pods()[0]
 
         # Run pgsql workload
-        last_valid_state = pgsql.run_pgsql_workload(
+        last_valid_state = pgsql.run_pgsql_queries(
             postgres_pod,
             self.table_name,
             self.total_rows,
