@@ -61,8 +61,11 @@ def verify_provider_topology():
     assert (
         int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
         == replica_count
-    ), "Replica count is not as expected"
-    log.info("Verified replica count")
+    ), (
+        f"Replica count is not as expected. Actual:{storage_cluster.data['spec']['storageDeviceSets'][0]['replica']}. "
+        f"Expected: {replica_count}"
+    )
+    log.info(f"Verified that the replica count is {replica_count}")
 
     # Verify total size
     ct_pod = get_ceph_tools_pod()
@@ -144,9 +147,10 @@ def verify_provider_topology():
     ceph_osd_nodepool_info = None
     for machine_pool_info in machine_pool_info_list:
         machine_pool_ids.append(machine_pool_info["id"])
-        assert (
-            machine_pool_info["instance_type"] == instance_type
-        ), f"Instance type of machinepool {machine_pool_info['id']} is {machine_pool_info['instance_type']}"
+        assert machine_pool_info["instance_type"] == instance_type, (
+            f"Instance type of machinepool {machine_pool_info['id']} is {machine_pool_info['instance_type']}. "
+            f"Expected instance type is {instance_type}"
+        )
         if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
             ceph_osd_nodepool_info = machine_pool_info
     log.info(f"Machinepool IDs: {machine_pool_ids}")
