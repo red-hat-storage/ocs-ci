@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs.pgsql import Postgresql
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import node
 
@@ -20,6 +20,7 @@ def pgsql(request):
     return pgsql
 
 
+@ignore_leftovers
 @workloads
 class TestPgSQLWorkload(E2ETest):
     """
