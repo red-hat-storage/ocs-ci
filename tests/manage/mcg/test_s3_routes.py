@@ -24,7 +24,7 @@ class TestS3Routes:
     Tests related to ODF S3 routes
     """
 
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(scope="function")
     def revert_routes(self, request):
         """
         Teardown function which reverts the routes and storage cluster option back to original.
@@ -86,7 +86,7 @@ class TestS3Routes:
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-4648")
     @skipif_ocs_version("<4.11")
-    def test_s3_routes_reconcile(self):
+    def test_s3_routes_reconcile(self, revert_routes):
         """
         Tests:
             1. Validates S3 route is not reconciled after changing insecureEdgeTerminationPolicy.
@@ -127,3 +127,93 @@ class TestS3Routes:
             assert not rgw_route_obj.is_exist(
                 resource_name=constants.RGW_ROUTE_INTERNAL_MODE
             ), "Failed: RGW route exist, it has been recreated by the system"
+
+    @pytest.fixture(scope="function")
+    def revert_lb_service(self, request):
+        """
+        Teardown function to revert back the enabled disableLoadBalancerService
+        """
+
+        def finalizer():
+            nb_obj = ocp.OCP(
+                kind=constants.NOOBAA_RESOURCE_NAME,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name=constants.NOOBAA_RESOURCE_NAME,
+            )
+            try:
+                if nb_obj.data["spec"]["disableLoadBalancerService"]:
+                    lb_param = (
+                        '[{"op": "remove", "path": "/spec/disableLoadBalancerService"}]'
+                    )
+                    logger.info("Revert disableLoadBalancerService")
+                    nb_obj.patch(params=lb_param, format_type="json")
+            except KeyError:
+                logger.info(
+                    "disableRoute does not exist in storage cluster, no need to revert"
+                )
+            nb_mgmt_svc_obj = ocp.OCP(
+                kind=constants.SERVICE,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name="noobaa-mgmt",
+            )
+            nb_s3_svc_obj = ocp.OCP(
+                kind=constants.SERVICE,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                resource_name="s3",
+            )
+            logger.info("Validating service type reverted to LoadBalancer")
+            assert (
+                nb_mgmt_svc_obj.data["spec"]["type"]
+                and nb_s3_svc_obj.data["spec"]["type"] == "LoadBalancer"
+            ), (
+                f'Failed, noobaa-mgmt type: {nb_mgmt_svc_obj.data["spec"]["type"]}, '
+                f's3 type: {nb_s3_svc_obj.data["spec"]["type"]}'
+            )
+            nb_route_obj = ocp.OCP(
+                kind=constants.ROUTE,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            )
+            assert nb_route_obj.is_exist(resource_name="s3") and nb_route_obj.is_exist(
+                resource_name="noobaa-mgmt"
+            ), "Failed: Nb routes missing"
+
+        request.addfinalizer(finalizer)
+
+    @tier3
+    @bugzilla("1954708")
+    @skipif_external_mode
+    @pytest.mark.polarion_id("OCS-4653")
+    @skipif_ocs_version("<4.10")
+    def test_disable_nb_lb(self, revert_lb_service):
+        """
+        Validates the functionality of disableLoadBalancerService param
+        """
+        nb_obj = ocp.OCP(
+            kind=constants.NOOBAA_RESOURCE_NAME,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+        )
+        lb_param = (
+            '[{"op": "add", "path": "/spec/disableLoadBalancerService", "value": true}]'
+        )
+        logger.info("Patching noobaa resource to enable disableLoadBalancerService")
+        nb_obj.patch(params=lb_param, format_type="json")
+
+        nb_mgmt_svc_obj = ocp.OCP(
+            kind=constants.SERVICE,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            resource_name="noobaa-mgmt",
+        )
+        nb_s3_svc_obj = ocp.OCP(
+            kind=constants.SERVICE,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            resource_name="s3",
+        )
+        logger.info("Validating service type changed to ClusterIP")
+        assert (
+            nb_mgmt_svc_obj.data["spec"]["type"]
+            and nb_s3_svc_obj.data["spec"]["type"] == "ClusterIP"
+        ), (
+            f'Failed: noobaa-mgmt type: {nb_mgmt_svc_obj.data["spec"]["type"]}, '
+            f's3 type {nb_s3_svc_obj.data["spec"]["type"]}'
+        )
