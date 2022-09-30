@@ -149,7 +149,7 @@ class TestS3Routes:
                     nb_obj.patch(params=lb_param, format_type="json")
             except KeyError:
                 logger.info(
-                    "disableRoute does not exist in storage cluster, no need to revert"
+                    "disableLoadBalancerService param does not exist, no need to revert"
                 )
             nb_mgmt_svc_obj = ocp.OCP(
                 kind=constants.SERVICE,
