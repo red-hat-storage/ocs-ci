@@ -264,8 +264,11 @@ class Deployment(object):
         """
         self.do_deploy_ocp(log_cli_level)
         # Deployment of network split scripts via machineconfig API happens
-        # before OCS deployment.
-        if config.DEPLOYMENT.get("network_split_setup"):
+        # after OCP deployment.
+        if (
+            config.DEPLOYMENT.get("network_split_setup")
+            and not config.ENV_DATA["skip_ocp_deployment"]
+        ):
             master_zones = config.ENV_DATA.get("master_availability_zones")
             worker_zones = config.ENV_DATA.get("worker_availability_zones")
             # special external zone, which is directly defined by ip addr list,
