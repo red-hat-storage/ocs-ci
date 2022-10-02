@@ -1,6 +1,8 @@
 import os
 import logging
 import time
+import shlex
+import subprocess
 
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
@@ -11,11 +13,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, acm_ui_specific
 from ocs_ci.utility.utils import (
     get_ocp_version,
     expose_ocp_version,
     run_cmd,
+    get_running_acm_version,
 )
 from ocs_ci.ocs.constants import (
     ACM_CLUSTER_DESTROY_TIMEOUT,
@@ -160,6 +163,10 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         self.destroy_failed_reason = None
         self.deployment_start_time = 0
         self.destroy_start_time = 0
+        self.acm_version = "_".join(get_running_acm_version().split(".")[:2])
+        print(self.acm_version)
+        # Update acm version specific dictionary
+        self.acm_page_nav.update(acm_ui_specific[f"acm_{self.acm_version}"])
 
     def create_cluster_prereq(self):
         raise NotImplementedError("Child class has to implement this method")
@@ -189,9 +196,12 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
                 log.error("Create cluster button not found")
                 raise ACMClusterDeployException("Can't continue with deployment")
             log.info("check 2:Found create cluster by index path")
+            time.sleep(10)
             self.do_click(locator=self.acm_page_nav["cc_create_cluster"], timeout=100)
             time.sleep(20)
-            if self.driver.current_url.endswith("create-cluster"):
+            if self.driver.current_url.endswith(
+                self.acm_page_nav["cc_create_cluster_endswith_url"]
+            ):
                 break
 
     def click_next_button(self):
@@ -530,13 +540,25 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         }
         self.fill_multiple_textbox(vsphere_creds_dict)
         self.click_next_button()
+        # Skip 2 sections
+        # "Configuration for disconnected installation" and "Proxy"
+        for i in range(2):
+            self.click_next_button()
 
         # Pull Secret and SSH
         # 1. Pull secret
         # 2. SSH Private key
         # 3. SSH Public key
-        with open(os.path.join(DATA_DIR, "pull-secret"), "r") as fp:
-            pull_secret = fp.read()
+        pull_secret_str = f"cat {os.path.join(DATA_DIR, 'pull-secret')}"
+        jq_trimmed = "jq -c"
+        json_out = subprocess.Popen(
+            shlex.split(pull_secret_str), stdout=subprocess.PIPE
+        )
+        out = subprocess.Popen(
+            shlex.split(jq_trimmed), stdin=json_out.stdout, stdout=subprocess.PIPE
+        )
+        pull_secret = out.communicate()[0].decode()
+
         ssh_pub_key_path = os.path.expanduser(self.cluster_conf.DEPLOYMENT["ssh_key"])
         ssh_priv_key_path = os.path.expanduser(
             self.cluster_conf.DEPLOYMENT["ssh_key_private"]
@@ -607,10 +629,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.click_next_button()
         self.fill_network_info()
         self.click_next_button()
-        # Skip proxy for now
-        self.click_next_button()
-        # Skip Automation for now
-        self.click_next_button()
+        # Skip proxy, disconnected install  and Automation for now
+        for i in range(3):
+            self.click_next_button()
         # We are at Review page
         self.do_click(
             locator=self.acm_page_nav["cc_deployment_yaml_toggle_button"], timeout=120
