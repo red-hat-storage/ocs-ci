@@ -2500,6 +2500,14 @@ def get_provider_internal_node_ips(
 def consumer_verification_steps_after_provider_node_replacement():
     """
     Check the consumer verification steps after a provider node replacement
+    The steps are as follows:
+
+    1. Check if the consumer "storageProviderEndpoint" IP is found in the provider worker node ips
+        1.1 If not found, edit the rosa addon installation - modify the param 'storage-provider-endpoint'
+            with the first provider worker node IP.
+        1.2 Wait and check again if the consumer "storageProviderEndpoint" IP is found in the
+            provider worker node IPs.
+    2. If found, also check that the rook ceph mon endpoint IPs are found in the provider worker node IPs.
 
     Returns:
         bool: True, if the consumer verification steps finished successfully. False, otherwise.
@@ -2540,7 +2548,9 @@ def consumer_verification_steps_after_provider_node_replacement():
 @switch_to_orig_index_at_last
 def consumers_verification_steps_after_provider_node_replacement():
     """
-    Check all the consumers verification steps after a provider node replacement
+    Check all the consumers verification steps after a provider node replacement.
+    On every consumer we will check the steps described in the function
+    'consumer_verification_steps_after_provider_node_replacement'.
 
     Returns:
         bool: True, if all the consumers verification steps finished successfully. False, otherwise.
