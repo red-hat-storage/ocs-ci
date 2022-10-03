@@ -35,10 +35,17 @@ class BenchmarkOperatorFIO(object):
     def setup_benchmark_fio(
         self,
         total_size=2,
+        filesize=1,
+        pvc_size=2,
+        samples=1,
+        servers=None,
         jobs="read",
         read_runtime=30,
+        write_runtime=30,
         bs="4096KiB",
         storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        fio_json_to_log=False,
+        job_timeout=10000,
         timeout_completed=2400,
     ):
         """
@@ -59,12 +66,20 @@ class BenchmarkOperatorFIO(object):
         self.crd_data = templating.load_yaml(
             "ocs_ci/templates/workloads/fio/benchmark_fio.yaml"
         )
+
         self.crd_data["spec"]["workload"]["args"]["jobs"] = jobs
-        self.crd_data["spec"]["workload"]["args"]["samples"] = 1
+        self.crd_data["spec"]["workload"]["args"]["samples"] = samples
         self.crd_data["spec"]["workload"]["args"]["read_runtime"] = read_runtime
         self.crd_data["spec"]["workload"]["args"]["bs"] = bs
         self.crd_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-        self.calc_number_servers_file_size()
+        if servers is None:
+            self.calc_number_servers_file_size()
+        else:
+            self.crd_data["spec"]["workload"]["args"]["servers"] = servers
+            self.crd_data["spec"]["workload"]["args"]["filesize"] = f"{filesize}GiB"
+            self.crd_data["spec"]["workload"]["args"]["storagesize"] = f"{pvc_size}Gi"
+            self.crd_data["spec"]["workload"]["args"]["job_timeout"] = job_timeout
+            self.crd_data["spec"]["workload"]["args"]["write_runtime"] = write_runtime
         self.worker_nodes = get_worker_nodes()
         self.pod_obj = OCP(namespace=BMO_NS, kind="pod")
         self.ns_obj = OCP(kind="namespace")
