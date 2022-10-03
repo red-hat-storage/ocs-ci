@@ -59,17 +59,17 @@ class TestRunInBg(E2ETest):
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(
             jobs="readwrite",
-            samples=1,
-            read_runtime=300,
+            samples=20,
+            read_runtime=16000,
             bs="4096KiB",
             storageclass=constants.DEFAULT_STORAGECLASS_RBD,
-            servers=2,
-            filesize=1,
-            pvc_size=2,
+            servers=20,
+            filesize=19,
+            pvc_size=20,
             job_timeout=18000,
-            write_runtime=300,
+            write_runtime=16000,
             fio_json_to_log=True,
-            timeout_completed=2400,
+            timeout_completed=24000,
         )
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=True)
 
