@@ -29,6 +29,7 @@ if config.ENV_DATA.get("vault_hcp"):
             "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4641")
         ),
     ]
+
 else:
     argvalues = [
         pytest.param(
@@ -69,7 +70,6 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         pv_encryption_kms_setup_factory,
         project_factory,
         storageclass_factory,
-        pod_factory,
     ):
         """
         Setup csi-kms-connection-details configmap
@@ -77,7 +77,8 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+
+        self.kms_vault = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
@@ -87,13 +88,14 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
-            encryption_kms_id=self.kms.kmsid,
+            encryption_kms_id=self.kms_vault.kmsid,
         )
 
     def test_encryptedrbd_pvc_status_with_tenant_configmap_override(
-        self, setup, multi_pvc_factory, kv_version, kms_provider, pod_factory, use_vault_namespace
+        self, setup, multi_pvc_factory, kv_version, kms_provider, pod_factory, use_vault_namespace,
     ):
 
+        self.kms = kms.Vault()
         vault_resource_name = create_unique_resource_name("test", "vault")
         if use_vault_namespace:
             self.kms.vault_create_namespace(namespace=vault_resource_name)
@@ -140,15 +142,14 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
 
-            if kms_provider == constants.VAULT_KMS_PROVIDER:
-                if kms.is_key_present_in_path(
-                    key=vol_handle, path=self.kms.vault_backend_path
-                ):
-                    log.info(f"Vault: Found key for {pvc_obj.name}")
-                else:
-                    raise ResourceNotFoundError(
-                        f"Vault: Key not found for {pvc_obj.name}"
-                    )
+            if kms.is_key_present_in_path(
+                key=vol_handle, path=self.kms.vault_backend_path
+            ):
+                log.info(f"Vault: Found key for {pvc_obj.name}")
+            else:
+                raise ResourceNotFoundError(
+                    f"Vault: Key not found for {pvc_obj.name}"
+                )
 
         self.pod_objs = create_pods(
             self.pvc_obj,
@@ -180,3 +181,5 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         pod_obj.ocp.wait_for_delete(
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
+
+        self.kms.remove_vault_backend_path()
