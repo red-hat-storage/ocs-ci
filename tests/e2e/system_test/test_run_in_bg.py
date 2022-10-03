@@ -71,6 +71,7 @@ class TestRunInBg(E2ETest):
             fio_json_to_log=True,
             timeout_completed=24000,
         )
+
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=True)
 
         pod_rbd_obj.md5_after = cal_md5sum(
