@@ -161,6 +161,7 @@ class TestS3Routes:
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 resource_name="s3",
             )
+            sleep(10)
             logger.info("Validating service type reverted to LoadBalancer")
             assert (
                 nb_mgmt_svc_obj.data["spec"]["type"]
@@ -209,6 +210,7 @@ class TestS3Routes:
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             resource_name="s3",
         )
+        sleep(10)
         logger.info("Validating service type changed to ClusterIP")
         assert (
             nb_mgmt_svc_obj.data["spec"]["type"]
