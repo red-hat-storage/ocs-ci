@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     KMSConnectionDetailsError,
     HPCSDeploymentError,
+    KMIPDeploymentError,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
@@ -1413,7 +1414,298 @@ class HPCS(KMS):
             raise NotFoundError("KMS flag not found")
 
 
-kms_map = {"vault": Vault, "hpcs": HPCS}
+class KMIP(KMS):
+    """
+    A class which handles deployment and other
+    configs related to KMIP (Thales CipherTrust Manager)
+
+    """
+
+    def __init__(self):
+        super().__init__("kmip")
+        self.kmip_endpoint = None
+        self.kmip_port = None
+        self.kmip_ca_cert = None
+        self.kmip_client_cert = None
+        self.kmip_client_key = None
+        self.kmip_secret_name = None
+        self.kmip_tls_server_name = None
+        self.kmip_key_identifier = None
+        self.kmsid = None
+
+    def deploy(self):
+        """
+        This function delegates the deployment of KMS using KMIP.
+        Thales CipherTrust Manager is the only supported vendor for now.
+
+        """
+        ocs_version = Version.get_semantic_ocs_version_from_config()
+        if ocs_version >= Version.VERSION_4_12:
+            self.deploy_kmip_ciphertrust()
+        else:
+            raise KMIPDeploymentError(
+                "Use of KMIP is not supported on clusters below ODF 4.12"
+            )
+
+    def deploy_kmip_ciphertrust(self):
+        """
+        This function configures the resources required to use Thales CipherTrust Manager with ODF
+
+        """
+        self.gather_init_kmip_conf()
+        self.create_odf_kmip_resources()
+
+    def gather_init_kmip_conf(self):
+        """
+        Initialize the variables from the KMIP configuration
+
+        """
+        self.kmip_conf = load_auth_config()["kmip"]
+        self.kmip_endpoint = self.kmip_conf["KMIP_ENDPOINT"]
+        self.kmip_port = self.kmip_conf["KMIP_PORT"]
+        self.kmip_ca_cert = self.kmip_conf["KMIP_CA_CERT"]
+        self.kmip_client_cert = self.kmip_conf["KMIP_CLIENT_CERT"]
+        self.kmip_client_key = self.kmip_conf["KMIP_CLIENT_KEY"]
+        self.kmip_tls_server_name = self.kmip_conf["KMIP_TLS_SERVER_NAME"]
+
+    def create_odf_kmip_resources(self):
+        """
+        Create secret containing certs and the ocs-kms-connection-details confignmap
+
+        """
+
+        self.kmip_secret_name = self.create_kmip_secret()
+        connection_data = templating.load_yaml(
+            constants.KMIP_OCS_KMS_CONNECTION_DETAILS
+        )
+        connection_data["data"][
+            "KMIP_ENDPOINT"
+        ] = f"{self.kmip_endpoint}:{self.kmip_port}"
+        connection_data["data"]["KMIP_SECRET_NAME"] = self.kmip_secret_name
+        connection_data["data"]["TLS_SERVER_NAME"] = self.kmip_tls_server_name
+        self.create_resource(connection_data, prefix="kms-connection")
+
+    def create_kmip_secret(self, type="ocs"):
+        """
+        Create secret containing the certificates and unique identifier (only for PV encryption)
+        from CipherTrust Manager KMS
+
+        Args:
+            type (str): csi, if the secret is being created for PV/Storageclass encryption
+                        ocs, if the secret is for clusterwide encryption
+
+        Returns:
+            (str): name of the kmip secret
+
+        """
+
+        if type == "csi":
+            kmip_kms_secret = templating.load_yaml(constants.KMIP_CSI_KMS_SECRET)
+            self.kmip_key_identifier = self.create_ciphertrust_key()
+            kmip_kms_secret["data"]["UNIQUE_IDENTIFIER"] = self.kmip_key_identifier
+
+        elif type == "ocs":
+            kmip_kms_secret = templating.load_yaml(constants.KMIP_OCS_KMS_SECRET)
+
+        else:
+            raise ValueError("The value should be either 'ocs' or 'csi'")
+
+        kmip_kms_secret["data"]["CA_CERT"] = self.kmip_ca_cert
+        kmip_kms_secret["data"]["CLIENT_CERT"] = self.kmip_client_cert
+        kmip_kms_secret["data"]["CLIENT_KEY"] = self.kmip_client_key
+        kmip_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
+            "thales-kmip", type
+        )
+        self.create_resource(kmip_kms_secret, prefix="thales-kmip-secret")
+        return kmip_kms_secret["metadata"]["name"]
+
+    def create_ciphertrust_key(self):
+        """
+        Create a key in Ciphertrust Manager to be used for PV encryption
+
+        """
+        # TO DO
+
+    def delete_ciphertrust_key(self, key_id):
+        """
+        Delete key from CipherTrust Manager
+
+        Args:
+            key_id (str): ID of the key to be deleted
+        """
+
+        # Check if the key is deletable and then proceed with deletion
+        key_info = self.get_key_info_ciphertrust(key_id)
+        if key_info["undeletable"]:
+            logger.warning(
+                f"The key wih ID {key_id} is marked as undeletable. Skipping key deletion"
+            )
+        else:
+            cmd = f"ksctl keys delete --type id --name {key_id}"
+            subprocess.check_output(shlex.split(cmd))
+            if self.check_key_exists_in_ciphertrust(key_id):
+                raise KMSResourceCleaneupError(f"Key deletion failed for ID {key_id}")
+            logger.info(f"Key deletion successful for key ID: {key_id}")
+
+    def check_key_exists_in_ciphertrust(self, key_id):
+        """
+        Check if a key with the key_id is present in CipherTrust Manager
+
+        Args:
+            key_id (str): ID of the key to be checked for
+
+        Returns:
+            (bool): True, if the key exists in CipherTrust Manager
+
+        """
+        cmd = f"ksctl keys get --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err:
+                return False
+        return True
+
+    def get_key_info_ciphertrust(self, key_id):
+        """
+        Retrieve information about a given key
+
+        Args:
+            key_id (str): ID of the key in CipherTrust
+
+        Returns
+            (dict): Dictionary with key details
+
+        """
+        cmd = f"ksctl keys get info --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err:
+                raise NotFoundError(f"KMIP: Key with ID {key_id} not found")
+        else:
+            return json.loads(out)
+
+    def get_key_list_ciphertrust(self):
+        """
+        Lists all keys in CipherTrust Manager
+
+        Returns:
+            (list): list containing the IDs of the keys
+
+        """
+        key_id_list = []
+        cmd = "ksctl key list"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        if json_out["total"] == 0:
+            raise NotFoundError("No keys found")
+        else:
+            for key in json_out["resources"]:
+                key_id_list.append(key["id"])
+            return key_id_list
+
+    def get_osd_key_ids(self):
+        """
+        Retrieve the key ID used for OSD encryption stored in their respective secrets
+
+        Returns:
+            (list): list of key IDs from all OSDs
+
+        """
+        key_ids = []
+        osds = pod.get_osd_pods()
+        for osd in osds:
+            pvc = (
+                osd.get()
+                .get("metadata")
+                .get("labels")
+                .get(constants.CEPH_ROOK_IO_PVC_LABEL)
+            )
+            cmd = (
+                rf"oc get secret rook-ceph-osd-encryption-key-{pvc} -o jsonpath=\"{{.data[\'dmcrypt-key\']}}\""
+                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            key_ids.append(base64.b64decode(run_cmd(cmd=cmd)).decode())
+        return key_ids
+
+    def get_noobaa_key_id(self):
+        """
+        Retrieve the key ID used for encryption by Noobaa
+
+        Returns:
+            (str): Key ID used by NooBaa for encryption
+
+        """
+        cmd = (
+            rf"oc get cm ocs-kms-connection-details -o jsonpath=\"{{.data[\'KMIP_SECRET_NAME\']}}\""
+            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        secret_name = run_cmd(cmd=cmd)
+
+        cmd = (
+            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'UniqueIdentifier\']}}\""
+            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        noobaa_key_id = base64.b64decode(run_cmd(cmd=cmd)).decode()
+        return noobaa_key_id
+
+    def post_deploy_verification(self):
+        """
+        Verify ODF deployment using KMIP
+
+        """
+        self.validate_ciphertrust_deployment()
+
+    def validate_ciphertrust_deployment(self):
+        """
+        Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
+
+        """
+        self.gather_init_kmip_conf()
+        key_id_list = self.get_key_list_ciphertrust()
+
+        # Check for OSD keys
+        osd_key_ids = self.get_osd_key_ids()
+        if all(id in key_id_list for id in osd_key_ids):
+            logger.info("KMIP: All OSD keys found in CipherTrust Manager")
+        else:
+            logger.error(
+                "KMIP: Only some or no OSD keys found in CipherTrust Manager"
+                f"Keys found in CipherTrust Manager: {key_id_list}"
+                f"OSD keys from the ODF cluster: {osd_key_ids}"
+            )
+            raise NotFoundError(
+                "KMIP: Only some or no OSD keys found in CipherTrust Manager"
+            )
+
+        # Check for NOOBAA key
+        noobaa_key_id = self.noobaa_key_id()
+        if noobaa_key_id in key_id_list:
+            logger.info("KMIP: Noobaa encryption key found in CipherTrust Manager")
+        else:
+            raise NotFoundError(
+                "KMIP: Noobaa encryption key found in CipherTrust Manager"
+            )
+
+        # Check kms enabled
+        if not is_kms_enabled():
+            logger.error("KMS not enabled on storage cluster")
+            raise NotFoundError("KMS flag not found")
+
+    def cleanup(self):
+        """
+        Cleanup for KMIP
+
+        """
+        logger.warning("Nothing to cleanup in CipherTrust Manager")
+
+
+kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP}
 
 
 def update_csi_kms_vault_connection_details(update_config):

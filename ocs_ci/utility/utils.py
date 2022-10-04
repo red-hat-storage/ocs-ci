@@ -3962,3 +3962,15 @@ def wipe_all_disk_partitions_for_node(node):
             if disk_to_wipe != root_disk:
                 disk_path = f"/dev/{disk_to_wipe}"
                 wipe_partition(node, disk_path)
+
+
+def get_ksctl_cli(bind_dir=None, force_download=False):
+    """
+    Download ksctl to interact with CipherTrust Manager via CLI
+
+    Args:
+        bind_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force vault cli download even if already present
+
+    """
+    # TODO:
