@@ -407,32 +407,34 @@ def namespace_store_factory(
         current_call_created_nss = []
         for platform, nss_lst in nss_dict.items():
             for nss_tup in nss_lst:
-                if platform.lower() == "nsfs":
-                    uls_name = nss_tup[0] or create_unique_resource_name(
-                        constants.PVC.lower(), platform
+                for _ in range(nss_tup[0]):
+                    if platform.lower() == "nsfs":
+                        uls_name = nss_tup[0] or create_unique_resource_name(
+                            constants.PVC.lower(), platform
+                        )
+                        pvc_factory_session(
+                            custom_data=template_pvc(uls_name, size=nss_tup[1])
+                        )
+                    else:
+                        uls_name = list(
+                            cloud_uls_factory_session({platform: [(1, nss_tup[1])]})[
+                                platform
+                            ]
+                        )[0]
+                    nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
+                    # Create the actual namespace resource
+                    cmdMap[method.lower()](
+                        nss_name, platform, mcg_obj_session, uls_name, cld_mgr, nss_tup
                     )
-                    pvc_factory_session(
-                        custom_data=template_pvc(uls_name, size=nss_tup[1])
+                    nss_obj = NamespaceStore(
+                        name=nss_name,
+                        method=method.lower(),
+                        mcg_obj=mcg_obj_session,
+                        uls_name=uls_name,
                     )
-                else:
-                    # Create the actual target bucket on the request service
-                    uls_dict = cloud_uls_factory_session({platform: [(1, nss_tup[1])]})
-                    uls_name = list(uls_dict[platform])[0]
-
-                nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
-                # Create the actual namespace resource
-                cmdMap[method.lower()](
-                    nss_name, platform, mcg_obj_session, uls_name, cld_mgr, nss_tup
-                )
-                nss_obj = NamespaceStore(
-                    name=nss_name,
-                    method=method.lower(),
-                    mcg_obj=mcg_obj_session,
-                    uls_name=uls_name,
-                )
-                created_nss.append(nss_obj)
-                current_call_created_nss.append(nss_obj)
-                nss_obj.verify_health()
+                    created_nss.append(nss_obj)
+                    current_call_created_nss.append(nss_obj)
+                    nss_obj.verify_health()
         return current_call_created_nss
 
     def nss_cleanup():
