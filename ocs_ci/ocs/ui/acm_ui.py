@@ -795,7 +795,12 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 class ACMOCPDeploymentFactory(object):
     def __init__(self):
         # All platform specific classes should have map here
-        self.platform_map = {"vsphereipi": ACMOCPPlatformVsphereIPI}
+        # For now point UPI to IPI deployment, because all DC credential
+        # file have UPI entries
+        self.platform_map = {
+            "vsphereipi": ACMOCPPlatformVsphereIPI,
+            "vsphereupi": ACMOCPPlatformVsphereIPI,
+        }
 
     def get_platform_instance(self, driver, cluster_config):
         """

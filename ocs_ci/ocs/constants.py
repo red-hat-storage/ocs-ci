@@ -169,6 +169,7 @@ PRIVILEGED = "privileged"
 ANYUID = "anyuid"
 OCSINITIALIZATION = "OCSInitialization"
 OCSINIT = "ocsinit"
+SUBSCRIPTION_WITH_ACM = "Subscription.operators.coreos.com"
 
 # Other
 SECRET = "Secret"

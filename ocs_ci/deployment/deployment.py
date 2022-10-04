@@ -242,6 +242,8 @@ class Deployment(object):
 
         """
         # Multicluster: Handle all ODF multicluster DR ops
+        if config.ENV_DATA.get("skip_dr_deployment", False):
+            return
         if config.multicluster:
             dr_conf = self.get_rdr_conf()
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
@@ -534,9 +536,13 @@ class Deployment(object):
             subscription_name (str): Subscription name pattern
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
+        if config.multicluster:
+            resource_kind = constants.SUBSCRIPTION_WITH_ACM
+        else:
+            resource_kind = constants.SUBSCRIPTION
+        ocp.OCP(kind=resource_kind, namespace=self.namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="subscription", namespace=self.namespace
+            300, 10, ocp.OCP, kind=resource_kind, namespace=self.namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
