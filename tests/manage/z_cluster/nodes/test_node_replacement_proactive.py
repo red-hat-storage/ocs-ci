@@ -117,6 +117,14 @@ def delete_and_create_osd_node(osd_node_name):
 
     old_osd_node_names = node.get_osd_running_nodes()
 
+    # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+    if is_ms_provider_cluster() and config.is_consumer_exist():
+        pytest.skip(
+            "The test will not run with an MS provider and MS consumer clusters due to the BZ "
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2131581. issue for tracking: "
+            "https://github.com/red-hat-storage/ocs-ci/issues/6540"
+        )
+
     # error message for invalid deployment configuration
     msg_invalid = (
         "ocs-ci config 'deployment_type' value "
