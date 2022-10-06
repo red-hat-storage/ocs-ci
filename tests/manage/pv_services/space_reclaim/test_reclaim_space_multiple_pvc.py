@@ -98,7 +98,8 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Create ReclaimSpaceJob
         for pvc_obj in [pvc_obj1, pvc_obj2, pvc_obj3]:
-            self.verify_reclaim_space_job = pvc_obj.create_reclaim_space_job()
+            self.reclaim_space_job = pvc_obj.create_reclaim_space_job()
+            self.verify_reclaim_space_job(self.reclaim_space_job)
 
         time.sleep(100)
 
@@ -166,7 +167,8 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Create the ReclaimSpaceJob
         for pvc_obj in self.pvc:
-            self.verify_reclaim_space_job = pvc_obj.create_reclaim_space_job()
+            self.reclaim_space_job = pvc_obj.create_reclaim_space_job()
+            self.verify_reclaim_space_job(self.reclaim_space_job)
 
         time.sleep(100)
 
@@ -196,6 +198,7 @@ class TestRbdSpaceReclaim(ManageTest):
                 timeout=120, sleep=5, func=reclaim_space_job.get
             ):
                 result = reclaim_space_job_yaml.get("status", {}).get("result")
+                log.info(f"reclaim_space_job_yaml {reclaim_space_job_yaml}")
                 if result == "Succeeded":
                     log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
                     break
