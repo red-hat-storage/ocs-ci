@@ -1491,6 +1491,7 @@ def get_pod_node(pod_obj):
 
     """
     node_name = pod_obj.get().get("spec").get("nodeName")
+    assert node_name, f"Node name not found for the pod {pod_obj.name}"
     return node.get_node_objs(node_names=node_name)[0]
 
 
