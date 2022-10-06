@@ -57,7 +57,7 @@ class NoobaaAccount(object):
         mcg,
         name,
         email,
-        buckets,
+        buckets=None,
         admin_access=False,
         s3_access=True,
         full_bucket_access=True,
@@ -79,17 +79,26 @@ class NoobaaAccount(object):
         """
         self.account_name = name
         self.email_id = email
-        params_dict = {
-            "email": email,
-            "name": name,
-            "has_login": admin_access,
-            "s3_access": s3_access,
-            "default_pool": backingstore_name,
-            "allowed_buckets": {
-                "full_permission": full_bucket_access,
-                "permission_list": buckets,
-            },
-        }
+        if buckets:
+            params_dict = {
+                "email": email,
+                "name": name,
+                "has_login": admin_access,
+                "s3_access": s3_access,
+                "default_pool": backingstore_name,
+                "allowed_buckets": {
+                    "full_permission": full_bucket_access,
+                    "permission_list": buckets,
+                },
+            }
+        else:
+            params_dict = {
+                "email": email,
+                "name": name,
+                "has_login": admin_access,
+                "s3_access": s3_access,
+                "default_pool": backingstore_name,
+            }
         params_dict if (
             version.get_semantic_ocs_version_from_config() < version.VERSION_4_9
         ) else params_dict.pop("default_pool")
@@ -139,16 +148,16 @@ def gen_bucket_policy(
     resources = list(
         map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list)
     )
-    version = datetime.date.today().strftime("%Y-%m-%d")
+    ver = datetime.date.today().strftime("%Y-%m-%d")
 
-    logger.info(f"version: {version}")
+    logger.info(f"version: {ver}")
     logger.info(f"principal_list: {principals}")
     logger.info(f"actions_list: {actions_list}")
     logger.info(f"resource: {resources_list}")
     logger.info(f"effect: {effect}")
     logger.info(f"sid: {sid}")
     bucket_policy = {
-        "Version": version,
+        "Version": ver,
         "Statement": [
             {
                 "Action": actions,
