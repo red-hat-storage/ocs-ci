@@ -9,10 +9,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     config,
 )
-from ocs_ci.helpers.helpers import (
-    create_unique_resource_name,
-    create_pods
-)
+from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.utility import kms
 
@@ -39,7 +36,6 @@ else:
             "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4640")
         ),
     ]
-
 
 @pytest.mark.parametrize(
     argnames=argnames,
@@ -78,7 +74,9 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
 
         log.info("Setting up csi-kms-connection-details configmap")
 
-        self.kms_vault = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+        self.kms_vault = pv_encryption_kms_setup_factory(
+            kv_version, use_vault_namespace
+        )
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project
@@ -90,9 +88,14 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             encrypted=True,
             encryption_kms_id=self.kms_vault.kmsid,
         )
-
     def test_encryptedrbd_pvc_status_with_tenant_configmap_override(
-        self, setup, multi_pvc_factory, kv_version, kms_provider, pod_factory, use_vault_namespace,
+        self,
+        setup,
+        multi_pvc_factory,
+        kv_version,
+        kms_provider,
+        pod_factory,
+        use_vault_namespace,
     ):
 
         self.kms = kms.Vault()
@@ -107,12 +110,14 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         # Create a configmap in the tenant namespace to override the vault namespace as shown below:
         if use_vault_namespace:
             self.kms.create_tenant_configmap(
-                self.proj_obj.namespace, vaultBackendPath=f"{vault_resource_name}",
-                vaultNamespace=f"{self.kms.vault_namespace}"
+                self.proj_obj.namespace,
+                vaultBackendPath=f"{vault_resource_name}",
+                vaultNamespace=f"{self.kms.vault_namespace}",
             )
         else:
             self.kms.create_tenant_configmap(
-                self.proj_obj.namespace, vaultBackendPath=f"{vault_resource_name}",
+                self.proj_obj.namespace,
+                vaultBackendPath=f"{vault_resource_name}",
             )
 
         # Create ceph-csi-kms-token in the tenant namespace
@@ -147,9 +152,7 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             ):
                 log.info(f"Vault: Found key for {pvc_obj.name}")
             else:
-                raise ResourceNotFoundError(
-                    f"Vault: Key not found for {pvc_obj.name}"
-                )
+                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
 
         self.pod_objs = create_pods(
             self.pvc_obj,
@@ -181,5 +184,5 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         pod_obj.ocp.wait_for_delete(
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
-
         self.kms.remove_vault_backend_path()
+        self.kms.remove_vault_namespace()
