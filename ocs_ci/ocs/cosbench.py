@@ -8,7 +8,11 @@ from datetime import datetime
 
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.ocp import OCP, switch_to_project
+from ocs_ci.ocs.ocp import (
+    OCP,
+    switch_to_project,
+    switch_to_default_rook_cluster_project,
+)
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -632,6 +636,7 @@ class Cosbench(object):
         ):
             self.cosbench_pod.delete()
         self.cosbench_config.delete()
+        switch_to_default_rook_cluster_project()
         self.ns_obj.delete_project(self.namespace)
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
 
