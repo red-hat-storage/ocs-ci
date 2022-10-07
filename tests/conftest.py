@@ -2263,7 +2263,9 @@ def awscli_pod_fixture(request, scope_name):
     ).wait_for_resource(
         resource_name=service_ca_configmap.name, column="DATA", condition="1"
     )
-    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+    helpers.wait_for_resource_state(
+        awscli_pod_obj, constants.STATUS_RUNNING, timeout=180
+    )
 
     def _awscli_pod_cleanup():
         s3cli_sts_obj.delete()
