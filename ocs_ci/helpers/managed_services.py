@@ -118,8 +118,8 @@ def verify_provider_topology():
     log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
 
     # Verify OSD cpu
-    osd_cpu_limit = "2"
-    osd_cpu_request = "1"
+    osd_cpu_limit = "1750m"
+    osd_cpu_request = "1750m"
     osd_pods = get_osd_pods()
     log.info("Verifying OSD cpu")
     for osd_pod in osd_pods:
