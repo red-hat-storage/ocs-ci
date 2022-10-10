@@ -2809,12 +2809,12 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    csv = ocp.OCP(
-        kind=constants.CLUSTER_SERVICE_VERSION,
+    sub = ocp.OCP(
+        kind=constants.SUBSCRIPTION,
         namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
     )
-    logging_csv = csv.get().get("items")
-    if logging_csv:
+    logging_sub = sub.get().get("items")
+    if logging_sub:
         log.info("Logging is already configured, Skipping Installation")
         return
 
@@ -2822,6 +2822,7 @@ def install_logging(request):
 
     # Gets OCP version to align logging version to OCP version
     ocp_version = version.get_semantic_ocp_version_from_config()
+
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
@@ -2843,6 +2844,14 @@ def install_logging(request):
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
+    # Checks for Elasticsearch operator
+    elastic_search_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
+    )
+    elastic_search_operator.wait_for_resource(
+        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    )
+
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
 
@@ -2861,8 +2870,14 @@ def install_logging(request):
     cluster_logging_operator = OCP(
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-    ocp_logging_obj.create_instance()
+    cluster_logging_operator.wait_for_resource(
+        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    )
+    if cluster_logging_operator:
+        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+        ocp_logging_obj.create_instance()
+    else:
+        log.error("The cluster logging operator pod is not created")
 
 
 @pytest.fixture
