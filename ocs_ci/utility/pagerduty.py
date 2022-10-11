@@ -296,7 +296,6 @@ class PagerDutyAPI(object):
             list: List of incident records
 
         """
-        payload = {"service_ids[]": pagerduty_service_ids}
         while timeout > 0:
             incidents_response = self.get(
                 "incidents",
