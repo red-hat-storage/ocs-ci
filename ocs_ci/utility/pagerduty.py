@@ -342,7 +342,7 @@ class PagerDutyAPI(object):
         else:
             time_wait = 1
         cleared_incidents = self.wait_for_incident_cleared(
-            summary=summary, timeout=time_wait, pagerduty_service_ids
+            summary=summary, timeout=time_wait, pagerduty_service_ids=pagerduty_service_ids
         )
         logger.info(f"Cleared incidents: {cleared_incidents}")
         if len(cleared_incidents) != 0:
