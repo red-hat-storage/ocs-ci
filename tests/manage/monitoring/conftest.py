@@ -75,7 +75,12 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_mgr, test_file, minimal_time=60 * 9)
+        measured_op = measure_operation(
+            stop_mgr,
+            test_file,
+            minimal_time=60 * 9,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
@@ -170,7 +175,12 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_loc
             node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)
         ]
         unschedule_nodes(worker_node_names)
-        measured_op = measure_operation(stop_mon, test_file, minimal_time=60 * 20)
+        measured_op = measure_operation(
+            stop_mon,
+            test_file,
+            minimal_time=60 * 20,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
         schedule_nodes(worker_node_names)
     else:
         measured_op = measure_operation(stop_mon, test_file)
@@ -255,7 +265,12 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_osd, test_file, minimal_time=60 * 19)
+        measured_op = measure_operation(
+            stop_osd,
+            test_file,
+            minimal_time=60 * 19,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
@@ -357,7 +372,12 @@ def measure_corrupt_pg(request, measurement_dir):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(corrupt_pg, test_file, minimal_time=60 * 17)
+        measured_op = measure_operation(
+            corrupt_pg,
+            test_file,
+            minimal_time=60 * 17,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(corrupt_pg, test_file)
 
@@ -678,7 +698,11 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     test_file = os.path.join(
         measurement_dir, "measure_noobaa_exceed__bucket_quota.json"
     )
-    measured_op = measure_operation(exceed_bucket_quota, test_file)
+    measured_op = measure_operation(
+        exceed_bucket_quota,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+    )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -772,7 +796,11 @@ def workload_idle(measurement_dir):
     else:
         logger.debug("io_in_bg not detected, good")
 
-    measured_op = measure_operation(do_nothing, test_file)
+    measured_op = measure_operation(
+        do_nothing,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+    )
     if restart_io_in_bg:
         logger.info("reverting load_status to resume io_in_bg")
         config.RUN["load_status"] = "to_be_resumed"
@@ -820,7 +848,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_rgw, test_file, minimal_time=60 * 8)
+        measured_op = measure_operation(
+            stop_rgw,
+            test_file,
+            minimal_time=60 * 8,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_rgw, test_file)
 
@@ -883,7 +916,11 @@ def measure_noobaa_ns_target_bucket_deleted(
         return ns_stores[0].uls_name
 
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
-    measured_op = measure_operation(delete_target_bucket, test_file)
+    measured_op = measure_operation(
+        delete_target_bucket,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+    )
     logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
@@ -942,7 +979,12 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_nodes, test_file, minimal_time=60 * 8)
+        measured_op = measure_operation(
+            stop_nodes,
+            test_file,
+            minimal_time=60 * 8,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_nodes, test_file)
     logger.info("Turning on nodes")
