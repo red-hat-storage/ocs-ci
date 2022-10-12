@@ -422,7 +422,8 @@ def install_odf_addon(cluster):
 
     if cluster_type.lower() == "provider":
         size = config.ENV_DATA.get("size", "")
-        cmd += f" --size {size}"
+        if size:
+            cmd += f" --size {size}"
         public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
         if not public_key:
             raise ConfigurationError(
