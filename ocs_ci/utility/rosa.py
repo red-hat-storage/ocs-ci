@@ -174,10 +174,12 @@ def appliance_mode_cluster(cluster_name):
         subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
     cmd = (
         f"rosa create service --type {addon_name} --name {cluster_name} "
-        f"--machine-cidr {machine_cidr} --size {size} "
+        f"--machine-cidr {machine_cidr} "
         f"--onboarding-validation-key {public_key_only} "
         f"--subnet-ids {subnet_ids}"
     )
+    if size:
+        cmd += f" --size {size}"
     if private_link:
         cmd += " --private-link "
     if notification_email_0:
@@ -422,8 +424,7 @@ def install_odf_addon(cluster):
 
     if cluster_type.lower() == "provider":
         size = config.ENV_DATA.get("size", "")
-        if size.isnumeric():
-            cmd += f" --size {size}"
+        cmd += f" --size {size}"
         public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
         if not public_key:
             raise ConfigurationError(
