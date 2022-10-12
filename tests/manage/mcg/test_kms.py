@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
-from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.framework.testlib import MCGTest, version
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources import pod
 
@@ -27,5 +27,8 @@ class TestNoobaaKMS(MCGTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
         )[0]
         operator_logs = pod.get_pod_logs(pod_name=operator_pod["metadata"]["name"])
-        assert "setKMSConditionStatus Init" in operator_logs
-        assert "setKMSConditionStatus Sync" in operator_logs
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_10:
+            assert "found root secret in external KMS successfully" in operator_logs
+        else:
+            assert "setKMSConditionStatus Init" in operator_logs
+            assert "setKMSConditionStatus Sync" in operator_logs
