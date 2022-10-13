@@ -687,6 +687,7 @@ EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 EXTERNAL_IBM_KP_KMS_SECRET = os.path.join(
     EXTERNAL_HPCS_TEMPLATES, "ibm-kp-kms-secret.yaml"
 )
+
 # KMIP KMS yamls
 KMIP_KMS_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "kmip")
 KMIP_OCS_KMS_CONNECTION_DETAILS = os.path.join(
@@ -697,6 +698,7 @@ KMIP_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 )
 KMIP_OCS_KMS_SECRET = os.path.join(KMIP_KMS_TEMPLATES, "thales-kmip-ocs-secret.yaml")
 KMIP_CSI_KMS_SECRET = os.path.join(TEMPLATE_CSI_RBD_DIR, "thales-kmip-csi-secret.yaml")
+
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"

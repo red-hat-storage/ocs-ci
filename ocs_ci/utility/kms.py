@@ -28,10 +28,11 @@ from ocs_ci.ocs.exceptions import (
     KMSConnectionDetailsError,
     HPCSDeploymentError,
     KMIPDeploymentError,
+    KMIPOperationError,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
     load_auth_config,
     run_cmd,
@@ -40,6 +41,7 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_cluster_name,
     get_ocp_version,
+    get_ksctl_cli,
     encode,
 )
 
@@ -1425,9 +1427,9 @@ class KMIP(KMS):
         super().__init__("kmip")
         self.kmip_endpoint = None
         self.kmip_port = None
-        self.kmip_ca_cert = None
-        self.kmip_client_cert = None
-        self.kmip_client_key = None
+        self.kmip_ca_cert_base64 = None
+        self.kmip_client_cert_base64 = None
+        self.kmip_client_key_base64 = None
         self.kmip_secret_name = None
         self.kmip_tls_server_name = None
         self.kmip_key_identifier = None
@@ -1439,8 +1441,7 @@ class KMIP(KMS):
         Thales CipherTrust Manager is the only supported vendor for now.
 
         """
-        ocs_version = Version.get_semantic_ocs_version_from_config()
-        if ocs_version >= Version.VERSION_4_12:
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
             self.deploy_kmip_ciphertrust()
         else:
             raise KMIPDeploymentError(
@@ -1453,6 +1454,8 @@ class KMIP(KMS):
 
         """
         self.gather_init_kmip_conf()
+        self.update_kmip_env_vars()
+        get_ksctl_cli()
         self.create_odf_kmip_resources()
 
     def gather_init_kmip_conf(self):
@@ -1460,20 +1463,33 @@ class KMIP(KMS):
         Initialize the variables from the KMIP configuration
 
         """
+        logger.info("Loading KMIP details from auth config")
         self.kmip_conf = load_auth_config()["kmip"]
         self.kmip_endpoint = self.kmip_conf["KMIP_ENDPOINT"]
+        self.kmip_ciphertrust_user = self.kmip_conf["KMIP_CTM_USER"]
+        self.kmip_ciphertrust_pwd = self.kmip_conf["KMIP_CTM_PWD"]
         self.kmip_port = self.kmip_conf["KMIP_PORT"]
-        self.kmip_ca_cert = self.kmip_conf["KMIP_CA_CERT"]
-        self.kmip_client_cert = self.kmip_conf["KMIP_CLIENT_CERT"]
-        self.kmip_client_key = self.kmip_conf["KMIP_CLIENT_KEY"]
+        self.kmip_ca_cert_base64 = self.kmip_conf["KMIP_CA_CERT_BASE64"]
+        self.kmip_client_cert_base64 = self.kmip_conf["KMIP_CLIENT_CERT_BASE64"]
+        self.kmip_client_key_base64 = self.kmip_conf["KMIP_CLIENT_KEY_BASE64"]
         self.kmip_tls_server_name = self.kmip_conf["KMIP_TLS_SERVER_NAME"]
+
+    def update_kmip_env_vars(self):
+        """
+        Set the environment variable for CipherTrust to allow running ksctl CLI cmds
+
+        """
+        logger.info("Updating environment variables for KMIP")
+        os.environ["KSCTL_USERNAME"] = self.kmip_ciphertrust_user
+        os.environ["KSCTL_PASSWORD"] = self.kmip_ciphertrust_pwd
+        os.environ["KSCTL_URL"] = f"https://{self.kmip_endpoint}"
+        os.environ["KSCTL_NOSSLVERIFY"] = "true"
 
     def create_odf_kmip_resources(self):
         """
         Create secret containing certs and the ocs-kms-connection-details confignmap
 
         """
-
         self.kmip_secret_name = self.create_kmip_secret()
         connection_data = templating.load_yaml(
             constants.KMIP_OCS_KMS_CONNECTION_DETAILS
@@ -1499,6 +1515,7 @@ class KMIP(KMS):
 
         """
 
+        logger.info(f"Creating {type} KMIP secret ")
         if type == "csi":
             kmip_kms_secret = templating.load_yaml(constants.KMIP_CSI_KMS_SECRET)
             self.kmip_key_identifier = self.create_ciphertrust_key()
@@ -1510,21 +1527,37 @@ class KMIP(KMS):
         else:
             raise ValueError("The value should be either 'ocs' or 'csi'")
 
-        kmip_kms_secret["data"]["CA_CERT"] = self.kmip_ca_cert
-        kmip_kms_secret["data"]["CLIENT_CERT"] = self.kmip_client_cert
-        kmip_kms_secret["data"]["CLIENT_KEY"] = self.kmip_client_key
+        kmip_kms_secret["data"]["CA_CERT"] = self.kmip_ca_cert_base64
+        kmip_kms_secret["data"]["CLIENT_CERT"] = self.kmip_client_cert_base64
+        kmip_kms_secret["data"]["CLIENT_KEY"] = self.kmip_client_key_base64
         kmip_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
             "thales-kmip", type
         )
         self.create_resource(kmip_kms_secret, prefix="thales-kmip-secret")
+        logger.info(f"KMIP secret {kmip_kms_secret['metadata']['name']} created")
         return kmip_kms_secret["metadata"]["name"]
 
-    def create_ciphertrust_key(self):
+    def create_ciphertrust_key(self, key_name):
         """
         Create a key in Ciphertrust Manager to be used for PV encryption
 
+        Args:
+            key_name (str): Name of the key to be created
+
+        Returns:
+            (str): ID of the key created in CipherTrust
+
         """
-        # TO DO
+        logger.info(f"Creating key {key_name} in CipherTrust")
+        cmd = f"ksctl keys create --name {key_name} --alg AES --size 256"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            raise KMIPOperationError("KMIP: Key creation failed", err)
+        key_info = json.loads(out)
+        return key_info["id"]
 
     def delete_ciphertrust_key(self, key_id):
         """
@@ -1534,18 +1567,22 @@ class KMIP(KMS):
             key_id (str): ID of the key to be deleted
         """
 
-        # Check if the key is deletable and then proceed with deletion
-        key_info = self.get_key_info_ciphertrust(key_id)
-        if key_info["undeletable"]:
-            logger.warning(
-                f"The key wih ID {key_id} is marked as undeletable. Skipping key deletion"
-            )
-        else:
-            cmd = f"ksctl keys delete --type id --name {key_id}"
-            subprocess.check_output(shlex.split(cmd))
-            if self.check_key_exists_in_ciphertrust(key_id):
-                raise KMSResourceCleaneupError(f"Key deletion failed for ID {key_id}")
-            logger.info(f"Key deletion successful for key ID: {key_id}")
+        logger.info(f"Deleting key with ID {key_id}")
+        cmd = f"ksctl keys delete --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err.decode():
+                logger.warning(f"Key with ID {key_id} does not exist")
+                return
+            else:
+                raise KMIPOperationError
+
+        if self.check_key_exists_in_ciphertrust(key_id):
+            raise KMSResourceCleaneupError(f"Key deletion failed for ID {key_id}")
+        logger.info(f"Key deletion successful for key ID: {key_id}")
 
     def check_key_exists_in_ciphertrust(self, key_id):
         """
@@ -1564,7 +1601,7 @@ class KMIP(KMS):
         )
         out, err = proc.communicate()
         if proc.returncode:
-            if "Resource not found" in err:
+            if "Resource not found" in err.decode():
                 return False
         return True
 
@@ -1579,13 +1616,14 @@ class KMIP(KMS):
             (dict): Dictionary with key details
 
         """
+        logger.info(f"Retrieving key info for key ID {key_id}")
         cmd = f"ksctl keys get info --type id --name {key_id}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         out, err = proc.communicate()
         if proc.returncode:
-            if "Resource not found" in err:
+            if "Resource not found" in err.decode():
                 raise NotFoundError(f"KMIP: Key with ID {key_id} not found")
         else:
             return json.loads(out)
@@ -1599,7 +1637,7 @@ class KMIP(KMS):
 
         """
         key_id_list = []
-        cmd = "ksctl key list"
+        cmd = "ksctl keys list"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         if json_out["total"] == 0:
@@ -1684,7 +1722,7 @@ class KMIP(KMS):
             )
 
         # Check for NOOBAA key
-        noobaa_key_id = self.noobaa_key_id()
+        noobaa_key_id = self.get_noobaa_key_id()
         if noobaa_key_id in key_id_list:
             logger.info("KMIP: Noobaa encryption key found in CipherTrust Manager")
         else:
@@ -1702,7 +1740,20 @@ class KMIP(KMS):
         Cleanup for KMIP
 
         """
-        logger.warning("Nothing to cleanup in CipherTrust Manager")
+        if not self.kmip_endpoint:
+            self.gather_init_kmip_conf()
+        self.update_kmip_env_vars()
+
+        # Retrieve OSD and NooBaa keys for deletion and delete
+        key_ids = self.get_osd_key_ids()
+        key_ids.append(self.get_noobaa_key_id())
+        if not key_ids:
+            logger.warning("No keys found to be deleted from CipherTrust")
+
+        else:
+            for key in key_ids:
+                self.delete_ciphertrust_key(key)
+            logger.info("Keys deleted from CipherTrust Manager")
 
 
 kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP}
