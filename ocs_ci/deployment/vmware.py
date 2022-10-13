@@ -1506,7 +1506,7 @@ class VSPHEREUPIFlexy(VSPHEREBASE):
 def change_vm_root_disk_size(machine_file):
     """
     Change the root disk size of VM from constants.CURRENT_VM_ROOT_DISK_SIZE
-    to constants.VM_ROOT_DISK_SIZE
+    to constants.VM_ROOT_DISK_SIZE or from ENV_DATA["vmw_root_disk_size"]
 
     Args:
          machine_file (str): machine file to change the disk size
@@ -1515,7 +1515,13 @@ def change_vm_root_disk_size(machine_file):
     current_vm_root_disk_size = (
         f"{disk_size_prefix}{constants.CURRENT_VM_ROOT_DISK_SIZE}"
     )
-    vm_root_disk_size = f"{disk_size_prefix}{constants.VM_ROOT_DISK_SIZE}"
+
+    if config.ENV_DATA["vmw_root_disk_size"]:
+        root_disk_size = config.ENV_DATA["vmw_root_disk_size"]
+    else:
+        root_disk_size = constants.VM_ROOT_DISK_SIZE
+
+    vm_root_disk_size = f"{disk_size_prefix}{root_disk_size}"
     replace_content_in_file(machine_file, current_vm_root_disk_size, vm_root_disk_size)
 
 

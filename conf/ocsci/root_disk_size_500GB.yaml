@@ -1,0 +1,4 @@
+---
+# This config will be applicable for VMware Deployment
+ENV_DATA:
+  vmw_root_disk_size: "500"
