@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name, get_snapshot_content_obj
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, bugzilla
 
@@ -17,6 +17,7 @@ class TestRbdImageMetadata:
         Test if the rbd images have metdata being set
         """
 
+        rbd_images = []
         # create a pvc with ceph-rbd sc
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -24,28 +25,29 @@ class TestRbdImageMetadata:
             volume_mode="Block",
         )
         log.info(f"PVC {pvc_obj.name} created!")
+        rbd_images.append(pvc_obj.get_rbd_image_name)
 
         # create a snapshot of the PVC
-        pvc_obj.create_snapshot(
+        snap_obj = pvc_obj.create_snapshot(
             snapshot_name=create_unique_resource_name("test", "snapshot"),
             wait=True,
         )
         log.info(f"Snapshot of PVC {pvc_obj.name} created!")
+        snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
+        snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
+        snap_image_name = f'csi-snap-{snap_handle.split("-", 5)[5]}'
+        rbd_images.append(snap_image_name)
 
         # create a clone of the PVC
-        pvc_clone_factory(pvc_obj)
+        clone_obj = pvc_clone_factory(pvc_obj)
         log.info(f"Clone of PVC {pvc_obj.name} created!")
-
-        # get all the images
-        ceph_tool_pod = get_ceph_tools_pod()
-        rbd_images = ceph_tool_pod.exec_cmd_on_pod(
-            command=f"rbd ls {constants.DEFAULT_CEPHBLOCKPOOL}"
-        ).split(" ")
+        rbd_images.append(clone_obj.get_rbd_image_name)
 
         # check the metadata on each images
+        ceph_tool_pod = get_ceph_tools_pod()
         for image in rbd_images:
             cmd = f"rbd image-meta list {constants.DEFAULT_CEPHBLOCKPOOL}/{image}"
-            metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd)
+            metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
             log.info(f"Metdata for {image}\n{metadata}")
             assert (
                 "There are 0 metadata on this image" in metadata
