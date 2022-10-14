@@ -1832,6 +1832,24 @@ def get_ocp_repo(rhel_major_version=None):
     return path
 
 
+def get_running_acm_version():
+    """
+    Get the currently deployed ACM version
+
+    Returns:
+        string: ACM version
+
+    """
+    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    jq_cmd = "jq -r .status.currentVersion"
+    json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
+    acm_version = subprocess.Popen(
+        shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+    )
+    json_out.stdout.close()
+    return acm_version.communicate()[0].decode()
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return

@@ -674,6 +674,14 @@ acm_configuration = {
     ),
 }
 
+acm_ui_specific = {
+    "acm_2_5": {
+        "cc_create_cluster_endswith_url": "create",
+    },
+    "acm_2_4": {"cc_create_cluster_endswith_url": "create-cluster"},
+}
+
+
 acm_configuration_4_11 = {
     "install-submariner-btn": ("install-submariner", By.ID),
     "nat-t-checkbox": ("natt-enable", By.ID),
