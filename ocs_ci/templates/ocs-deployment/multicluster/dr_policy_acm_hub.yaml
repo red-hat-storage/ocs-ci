@@ -2,13 +2,11 @@
 apiVersion: ramendr.openshift.io/v1alpha1
 kind: DRPolicy
 metadata:
-  name: odr-policy-east-west-rpo-5m
+  name: odr-policy-5m
+  labels:
+    cluster.open-cluster-management.io/backup: resource
 spec:
-  drClusterSet:
-  - name: PLACE_HOLDER_CLUSTER1 
-    region: east
-    s3ProfileName: '' 
-  - name: PLACE_HOLDER_CLUSTER2 
-    region: west
-    s3ProfileName: '' 
+  drClusters:
+  - PLACE_HOLDER_CLUSTER1 
+  - PLACE_HOLDER_CLUSTER2 
   schedulingInterval: 5m

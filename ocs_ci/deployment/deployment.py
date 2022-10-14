@@ -43,7 +43,6 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
-    RDRDeploymentException,
 )
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import setup_netsplit
@@ -243,6 +242,8 @@ class Deployment(object):
 
         """
         # Multicluster: Handle all ODF multicluster DR ops
+        if config.ENV_DATA.get("skip_dr_deployment", False):
+            return
         if config.multicluster:
             dr_conf = self.get_rdr_conf()
             deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
@@ -535,9 +536,13 @@ class Deployment(object):
             subscription_name (str): Subscription name pattern
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
+        if config.multicluster:
+            resource_kind = constants.SUBSCRIPTION_WITH_ACM
+        else:
+            resource_kind = constants.SUBSCRIPTION
+        ocp.OCP(kind=resource_kind, namespace=self.namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="subscription", namespace=self.namespace
+            300, 10, ocp.OCP, kind=resource_kind, namespace=self.namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
@@ -1725,15 +1730,20 @@ class RBDDRDeployOps(object):
                     "CephBlockPool", expected="true", got=out
                 )
             index = +1
+
         # Check for RBD mirroring pods
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        @retry(PodNotCreated, tries=1000, delay=5)
+        def _get_mirror_pod_count():
             mirror_pod = get_pod_count(label="app=rook-ceph-rbd-mirror")
             if not mirror_pod:
                 raise PodNotCreated(
                     f"RBD mirror pod not found on cluster: "
                     f"{cluster.ENV_DATA['cluster_name']}"
                 )
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            _get_mirror_pod_count()
             self.validate_csi_sidecar()
 
         # Reset CTX back to ACM
@@ -1853,17 +1863,15 @@ class MultiClusterDROperatorsDeploy(object):
         run_cmd(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}",
         )
-        self.deploy_dr_hub_operator()
+        # HUB operator will be deployed by multicluster orechestrator
+        self.verify_dr_hub_operator()
 
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
             rbddops.deploy()
-            self.meta_obj.deploy_and_configure()
 
         self.deploy_dr_policy()
-        self.meta_obj.conf.update({"dr_policy_name": self.dr_policy_name})
-        self.update_ramen_config_misc()
 
     def deploy_dr_multicluster_orchestrator(self):
         """
@@ -1946,24 +1954,14 @@ class MultiClusterDROperatorsDeploy(object):
         dr_ramen_configmap_yaml.flush()
         run_cmd(f"oc apply -f {dr_ramen_configmap_yaml.name}")
 
-    def deploy_dr_hub_operator(self):
-        # Create ODF HUB operator only on ACM HUB
-        dr_hub_operator_data = templating.load_yaml(constants.OPENSHIFT_DR_HUB_OPERATOR)
-        dr_hub_operator_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="dr_hub_operator_", delete=False
-        )
+    def verify_dr_hub_operator(self):
+        # ODF HUB operator only on ACM HUB
         package_manifest = PackageManifest(
             resource_name=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
         )
         current_csv = package_manifest.get_current_csv(
             channel=self.channel, csv_pattern=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
         )
-        dr_hub_operator_data["spec"]["channel"] = self.channel
-        dr_hub_operator_data["spec"]["startingCSV"] = current_csv
-        templating.dump_data_to_temp_yaml(
-            dr_hub_operator_data, dr_hub_operator_yaml.name
-        )
-        run_cmd(f"oc create -f {dr_hub_operator_yaml.name}")
         logger.info("Sleeping for 90 seconds after subscribing ")
         time.sleep(90)
         dr_hub_csv = CSV(
@@ -1975,20 +1973,22 @@ class MultiClusterDROperatorsDeploy(object):
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
-        s3profiles = self.meta_obj.get_s3_profiles()
         # Update DR cluster name and s3profile name
-        for (cluster, name_entry) in zip(
-            get_non_acm_cluster_config(), dr_policy_hub_data["spec"]["drClusterSet"]
-        ):
-            name_entry["name"] = cluster.ENV_DATA["cluster_name"]
-            for profile_name in s3profiles:
-                if cluster.ENV_DATA["cluster_name"] in profile_name:
-                    name_entry["s3ProfileName"] = profile_name
-            if not name_entry["s3ProfileName"]:
-                raise RDRDeploymentException(
-                    f"Not able to find s3profile for cluster {cluster.ENV_DATA['cluster_name']},"
-                    f"Regional DR deployment will not succeed"
-                )
+        dr_policy_hub_data["spec"]["drClusters"][
+            0
+        ] = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        # Fill in for the rest of the non-acm clusters
+        # index 0 is filled by primary
+        index = 1
+        for cluster in get_non_acm_cluster_config():
+            if (
+                cluster.ENV_DATA["cluster_name"]
+                == get_primary_cluster_config().ENV_DATA["cluster_name"]
+            ):
+                continue
+            dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_policy_hub_", delete=False
