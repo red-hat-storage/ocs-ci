@@ -309,7 +309,13 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     return javas3_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
 
 
-def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds=None):
+def sync_object_directory(
+    podobj,
+    src,
+    target,
+    s3_obj=None,
+    signed_request_creds=None,
+):
     """
     Syncs objects between a target and source directories
 
@@ -321,6 +327,7 @@ def sync_object_directory(podobj, src, target, s3_obj=None, signed_request_creds
                                  are in an MCG
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
+
     """
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
