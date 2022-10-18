@@ -1,12 +1,19 @@
 import logging
+import json
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import check_pods_in_statuses
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import LVMOHealthException
+from ocs_ci.ocs.exceptions import CommandFailed, LVMOHealthException
+from ocs_ci.helpers.helpers import clean_all_test_projects
+
 
 log = logging.getLogger(__name__)
+
+LS_DEVICE_BY_PATH = "ls /dev/disk/by-path/*"
+LS_DEVICE_BY_ID = "ls /dev/disk/by-id/*"
 
 
 def lvmo_health_check_base():
@@ -21,10 +28,12 @@ def lvmo_health_check_base():
     oc_obj = OCP(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         kind="lvmcluster",
-        resource_name="lvmcluster",
+        resource_name=constants.LVMCLUSTER,
     )
-    lvmcluster_status = oc_obj.get("lvmcluster")
-    if not (lvmcluster_status["status"]["ready"]):
+    lvmcluster_status = oc_obj.get(constants.LVMCLUSTER)
+    try:
+        lvmcluster_status.get("status")["ready"]
+    except LVMOHealthException:
         log.error("lvmcluster is not ready")
         raise LVMOHealthException(
             f"LVM Cluster status is {lvmcluster_status['status']['ready']}"
@@ -56,3 +65,70 @@ def lvmo_health_check(tries=20, delay=30):
         delay=delay,
         backoff=1,
     )(lvmo_health_check_base)()
+
+
+def get_sno_disks_by_path(node=constants.SNO_NODE_NAME):
+    """
+    Get list of storage devices by it's path as listed on node
+
+    args:
+        node (str): node name
+
+    Returns:
+        list: list of storage devices full-path (str)
+    """
+    storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
+    oc_obj = OCP()
+    disks = oc_obj.exec_oc_debug_cmd(node, cmd_list=[LS_DEVICE_BY_PATH])
+    raw_disks_list = disks.split("\n")
+    raw_disks_list = list(filter(None, raw_disks_list))
+    disks_by_path = list()
+    for line in raw_disks_list[-storage_disks_count:]:
+        if "sda" not in line:
+            disk_name = line
+            disks_by_path.append(disk_name)
+
+    return disks_by_path
+
+
+def get_sno_blockdevices(node=constants.SNO_NODE_NAME):
+    """
+    Gets list of storage devices by it's names
+
+    args:
+        node (str): node name
+
+    Returns:
+        list: list of storage devices full-names (str)
+
+    """
+    storage_disks_count = config.DEPLOYMENT.get("lvmo_disks")
+    disks_by_name = list()
+    oc_obj = OCP()
+    disks = oc_obj.exec_oc_debug_cmd(node, cmd_list=["lsblk --json"])
+    disks = json.loads(disks)
+    for disk in range(1, (storage_disks_count + 1)):
+        disk_name = "/dev/" + (disks["blockdevices"][disk]["name"])
+        disks_by_name.append(disk_name)
+
+    return disks_by_name
+
+
+def delete_lvm_cluster():
+    """
+    Delete lvm cluster if exists
+
+    raise:
+        execption if lvmcluster cant be deleted
+    """
+    clean_all_test_projects()
+    lmvcluster = OCP(kind="LVMCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    try:
+        lmvcluster.delete(resource_name=constants.LVMCLUSTER)
+    except CommandFailed as e:
+        if f'lvmclusters.lvm.topolvm.io "{constants.LVMCLUSTER}" not found' not in str(
+            e
+        ):
+            raise e
+        else:
+            log.info("LVMCluster not found, procced with creation of new one")
