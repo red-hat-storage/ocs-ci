@@ -18,7 +18,7 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
-from ocs_ci.ocs import constants, defaults, workload, ocp
+from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CephToolBoxNotFoundException,
@@ -1497,6 +1497,7 @@ def get_pod_node(pod_obj):
     node_name = pod_obj.get().get("spec").get("nodeName")
     if not node_name:
         raise NotFoundError(f"Node name not found for the pod {pod_obj.name}")
+    return node.get_node_objs(node_names=node_name)[0]
 
 
 def delete_pods(pod_objs, wait=True):
