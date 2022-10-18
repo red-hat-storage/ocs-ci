@@ -3934,7 +3934,7 @@ def clean_all_test_projects(project_name="test"):
     'test' can be replaced with another string
 
     Args:
-        project_name (str, optional): expression to be deleted. Defaults to "test".
+        project_name (str): expression to be deleted. Defaults to "test".
 
     """
     oc_obj = OCP(kind="ns")
