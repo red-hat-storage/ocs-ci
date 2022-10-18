@@ -993,8 +993,11 @@ validation_4_11 = {
     "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
+    "object-odf-4-10": ("//a[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
+    "blockandfile-odf-4-10": ("//a[normalize-space()='Block and File']", By.XPATH),
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+    "blockpools-odf-4-10": ("//a[normalize-space()='BlockPools']", By.XPATH),
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
     "backingstorage-breadcrumb-odf-4-10": (
@@ -1002,6 +1005,10 @@ validation_4_11 = {
         By.XPATH,
     ),
     "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
+    "bucketclass-breadcrumb-odf-4-10": (
+        "//a[normalize-space()='noobaa.io~v1alpha1~BucketClass']",
+        By.XPATH,
+    ),
 }
 
 

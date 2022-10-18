@@ -386,7 +386,8 @@ class ValidationUI(PageNavigator):
                 self.validation_loc["backingstorage-breadcrumb-odf-4-10"],
                 enable_screenshot=True,
             )
-        self.do_click((self.validation_loc["backingstorage-breadcrumb"]))
+        else:
+            self.do_click((self.validation_loc["backingstorage-breadcrumb"]))
         logger.info("Click on Bucket Class")
         self.do_click((self.validation_loc["bucketclass"]))
         logger.info("Click on Bucket Class Hyperlink")
@@ -401,9 +402,18 @@ class ValidationUI(PageNavigator):
         )
         logger.info("Verification of bucketclass status is successful!")
         logger.info("Click on bucketclass breadcrumb")
-        self.do_click(
-            (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
-        )
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                (self.validation_loc["bucketclass-breadcrumb-odf-4-10"]),
+                enable_screenshot=True,
+            )
+        else:
+            self.do_click(
+                (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
+            )
         logger.info("Click on Namespace Store")
         self.do_click((self.validation_loc["namespace-store"]), enable_screenshot=True)
         logger.info("Navigate again to ODF Overview page")
@@ -448,16 +458,46 @@ class ValidationUI(PageNavigator):
             self.do_click(
                 self.validation_loc["overview_odf_4_10"], enable_screenshot=True
             )
-        self.do_click(self.validation_loc["overview"], enable_screenshot=True)
+        else:
+            self.do_click(self.validation_loc["overview"], enable_screenshot=True)
         logger.info("Click on 'Object' tab")
-        self.do_click(self.validation_loc["object"], enable_screenshot=True)
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["object-odf-4-10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["object"], enable_screenshot=True)
         if not config.ENV_DATA["mcg_only_deployment"]:
             logger.info("Click on 'Block and File' tab")
-            self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
+            if (
+                self.ocp_version_semantic == version.VERSION_4_11
+                and self.ocs_version_semantic == version.VERSION_4_10
+            ):
+                self.do_click(
+                    self.validation_loc["blockandfile-odf-4-10"], enable_screenshot=True
+                )
+            else:
+                self.do_click(
+                    self.validation_loc["blockandfile"], enable_screenshot=True
+                )
         if not config.DEPLOYMENT.get("external_mode"):
             if not config.ENV_DATA["mcg_only_deployment"]:
                 logger.info("Click on 'BlockPools' tab")
-                self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
+                if (
+                    self.ocp_version_semantic == version.VERSION_4_11
+                    and self.ocs_version_semantic == version.VERSION_4_10
+                ):
+                    self.do_click(
+                        self.validation_loc["blockpools-odf-4-10"],
+                        enable_screenshot=True,
+                    )
+                else:
+                    self.do_click(
+                        self.validation_loc["blockpools"], enable_screenshot=True
+                    )
                 logger.info(
                     "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
                 )
