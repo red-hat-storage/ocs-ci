@@ -990,12 +990,17 @@ validation_4_10 = {
 }
 validation_4_11 = {
     "overview": ("//span[normalize-space()='Overview']", By.XPATH),
+    "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "backingstorage-breadcrumb-odf-4-10": (
+        "//a[normalize-space()='noobaa.io~v1alpha1~BackingStore']",
+        By.XPATH,
+    ),
     "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
 }
 
