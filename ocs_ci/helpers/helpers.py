@@ -3926,3 +3926,27 @@ def get_noobaa_db_used_space():
         f"noobaa_db used space is {df_out[-4]} which is {df_out[-2]} of the total PVC size"
     )
     return df_out[-4]
+
+
+def clean_all_test_projects(project_name="test"):
+    """
+    Delete all namespaces with 'test' in its name
+    'test' can be replaced with another string
+
+    Args:
+        project_name (str): expression to be deleted. Defaults to "test".
+
+    """
+    oc_obj = OCP(kind="ns")
+    all_ns = oc_obj.get()
+    ns_list = all_ns["items"]
+    filtered_ns_to_delete = filter(
+        lambda i: (project_name in i.get("metadata").get("name")), ns_list
+    )
+    ns_to_delete = list(filtered_ns_to_delete)
+    if not ns_to_delete:
+        logger.info("No test project found, Moving On")
+
+    for ns in ns_to_delete:
+        logger.info(f"Removing {ns['metadata']['name']}")
+        oc_obj.delete_project(ns["metadata"]["name"])
