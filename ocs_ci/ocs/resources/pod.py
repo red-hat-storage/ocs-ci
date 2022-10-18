@@ -18,7 +18,7 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
-from ocs_ci.ocs import constants, defaults, node, workload, ocp
+from ocs_ci.ocs import constants, defaults, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     CephToolBoxNotFoundException,
