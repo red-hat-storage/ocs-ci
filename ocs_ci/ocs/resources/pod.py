@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     ResourceNotFoundError,
+    NotFoundError,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1489,10 +1490,13 @@ def get_pod_node(pod_obj):
     Returns:
         ocs_ci.ocs.ocp.OCP: The node object
 
+    Raises:
+        NotFoundError when the node name is not found
+
     """
     node_name = pod_obj.get().get("spec").get("nodeName")
-    assert node_name, f"Node name not found for the pod {pod_obj.name}"
-    return node.get_node_objs(node_names=node_name)[0]
+    if not node_name:
+        raise NotFoundError(f"Node name not found for the pod {pod_obj.name}")
 
 
 def delete_pods(pod_objs, wait=True):
