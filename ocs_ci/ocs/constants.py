@@ -1034,7 +1034,7 @@ MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
 S3CLI_APP_LABEL = "s3cli"
-OSD_NODE_LABEL = "node.ocs.openshift.io/ocd=''"
+OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
