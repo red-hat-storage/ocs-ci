@@ -2579,9 +2579,6 @@ def create_rhelpod(namespace, pod_name, timeout=300):
     """
     # importing here to avoid dependencies
     from ocs_ci.helpers import helpers
-    from ocs_ci.ocs.utils import label_pod_security_admission
-
-    label_pod_security_admission(namespace=namespace)
 
     # TODO: This method should be updated to add argument to change RHEL version
     rhelpod_obj = helpers.create_pod(

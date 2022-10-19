@@ -19,7 +19,6 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -689,7 +688,6 @@ def clean_disk():
 
     ocp_obj = ocp.OCP()
     ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS)
-    label_pod_security_admission(namespace=constants.BM_DEBUG_NODE_NS)
 
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(

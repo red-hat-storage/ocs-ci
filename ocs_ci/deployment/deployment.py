@@ -80,7 +80,6 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     collect_ocs_logs,
     enable_console_plugin,
-    label_pod_security_admission,
 )
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
@@ -637,9 +636,6 @@ class Deployment(object):
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
-        # workaround for PodSecurity admission
-        label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-
         # create multus network
         if config.ENV_DATA.get("is_multus_enabled"):
             logger.info("Creating multus network")
@@ -1058,8 +1054,6 @@ class Deployment(object):
         if not ui_deployment:
             logger.info("Creating namespace and operator group.")
             run_cmd(f"oc create -f {constants.OLM_YAML}")
-        # workaround for PodSecurity admission
-        label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         if not live_deployment:
             create_catalog_source()
         self.subscribe_ocs()
@@ -1300,7 +1294,6 @@ class Deployment(object):
             resource_count=1,
             timeout=300,
         )
-        label_pod_security_admission(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
         assert pod.wait_for_resource(
             condition="Running",
