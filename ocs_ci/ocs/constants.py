@@ -739,6 +739,8 @@ DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 RDR_MODE = "regional-dr"
 
+MDR_ZONE_YAML = os.path.join(TEMPLATE_DIR, "mdr_zone.yaml")
+
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
