@@ -42,6 +42,7 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     add_disk_to_node,
     get_nodes,
+    get_provider_internal_node_ips,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -56,6 +57,7 @@ from ocs_ci.utility import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -1590,3 +1592,116 @@ def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         namespace=namespace,
     )
     return sc_obj.get_resource(resource_name=sc_name, column="PHASE")
+
+
+def get_rook_ceph_mon_per_endpoint_ip():
+    """
+    Get a dictionary of the rook ceph mon per endpoint ip
+
+    Returns:
+        dict: A dictionary of the rook ceph mon per endpoint ip
+
+    """
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
+    )
+    cm_data = configmap_obj.get().get("data").get("data")
+    cm_data_list = cm_data.split(sep=",")
+    return {d[0]: d[2 : d.index(":")] for d in cm_data_list}
+
+
+@switch_to_orig_index_at_last
+def check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
+    """
+    Check that the rook ceph mon endpoint ips are found in the provider worker node ips
+
+    Returns:
+        bool: True, If all the rook ceph mon endpoint ips are found in the
+            provider worker nodes. False, otherwise.
+
+    """
+    rook_ceph_mon_per_endpoint_ip = get_rook_ceph_mon_per_endpoint_ip()
+    log.info(f"rook ceph mon per endpoint ip: {rook_ceph_mon_per_endpoint_ip}")
+    provider_wnode_ips = get_provider_internal_node_ips()
+
+    for mon_name, endpoint_ip in rook_ceph_mon_per_endpoint_ip.items():
+        if endpoint_ip not in provider_wnode_ips:
+            log.warning(
+                f"The endpoint ip {endpoint_ip} of mon {mon_name} is not found "
+                f"in the provider worker node ips"
+            )
+            return False
+
+    log.info("All the mon endpoint ips are found in the provider worker node ips")
+    return True
+
+
+def get_consumer_storage_provider_endpoint():
+    """
+    Get the consumer "storageProviderEndpoint" from the ocs storage cluster
+
+    Returns:
+        str: The consumer "storageProviderEndpoint"
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+    )
+    return sc_obj.get()["spec"]["externalStorage"]["storageProviderEndpoint"]
+
+
+@switch_to_orig_index_at_last
+def check_consumer_storage_provider_endpoint_in_provider_wnodes():
+    """
+    Check that the consumer "storageProviderEndpoint" ip is found in the provider worker node ips
+
+    Returns:
+        bool: True, if the consumer "storageProviderEndpoint" ip is found in the
+            provider worker node ips. False, otherwise.
+
+    """
+    storage_provider_endpoint = get_consumer_storage_provider_endpoint()
+    storage_provider_endpoint_ip = storage_provider_endpoint.split(":")[0]
+    log.info(
+        f"The consumer 'storageProviderEndpoint' ip is: {storage_provider_endpoint_ip}"
+    )
+    provider_wnode_ips = get_provider_internal_node_ips()
+
+    if storage_provider_endpoint_ip in provider_wnode_ips:
+        log.info(
+            "The consumer 'storageProviderEndpoint' ip found in the provider worker node ips"
+        )
+        return True
+    else:
+        log.warning(
+            "The consumer 'storageProviderEndpoint' ip was not found in the provider worker node ips"
+        )
+        return False
+
+
+def wait_for_consumer_storage_provider_endpoint_in_provider_wnodes(
+    timeout=180, sleep=10
+):
+    """
+    Wait for the consumer "storageProviderEndpoint" ip to be found in the provider worker node ips
+
+    Args:
+        timeout (int): timeout in seconds to wait for the consumer "storageProviderEndpoint" ip
+            to be found in the provider worker node ips
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        True, if the consumer "storageProviderEndpoint" ip is found in the
+            provider worker node ips. False, otherwise.
+
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_consumer_storage_provider_endpoint_in_provider_wnodes,
+    )
+    return sample.wait_for_func_status(result=True)
