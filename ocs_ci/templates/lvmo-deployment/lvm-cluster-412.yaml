@@ -6,7 +6,7 @@ metadata:
 spec:
   storage:
     deviceClasses:
-      - name: vg1
-        thinPoolConfig:
-          name: thin-pool-1
-          overprovisionRatio: 50
+    - name: vg1
+      thinPoolConfig:
+        name: thin-pool-1
+        overprovisionRatio: 50
