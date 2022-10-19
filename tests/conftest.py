@@ -455,6 +455,7 @@ def pagerduty_service(request):
     msg = f"Request {service_response.request.url} failed: {service_response.text}"
     assert service_response.ok, msg
     service = service_response.json().get("service")
+    config.RUN["pagerduty_service_id"] = service["id"]
 
     def teardown():
         """
