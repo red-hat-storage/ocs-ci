@@ -11,7 +11,6 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
-from ocs_ci.ocs.machine import get_labeled_nodes
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     check_pods_after_node_replacement,
@@ -180,7 +179,7 @@ def check_automated_recovery_from_drain_node(nodes):
     new_osd_pods = wait_for_osd_pods_having_ids(osd_ids=old_osd_pod_ids)
     new_osd_pod_names = [p.name for p in new_osd_pods]
 
-    osd_labelled_nodes = set(get_labeled_nodes(constants.OSD_NODE_LABEL))
+    osd_labelled_nodes = set(machine.get_labeled_nodes(constants.OSD_NODE_LABEL))
     osd_running_nodes = set(get_osd_running_nodes())
 
     wnodes = get_worker_nodes()
