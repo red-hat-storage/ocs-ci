@@ -464,7 +464,9 @@ class TestReplication(MCGTest):
 
         for i in range(3):
             original_obj_sums.append(
-                cal_md5sum(awscli_pod_session, f"{origin_dir}/ObjKey-{i}", True)
+                cal_md5sum(
+                    awscli_pod_session, f"{origin_dir}/ObjKey-{i}", raw_path=True
+                )
             )
             assert verify_s3_object_integrity(
                 f"{origin_dir}/ObjKey-{i}",
@@ -495,10 +497,14 @@ class TestReplication(MCGTest):
 
         for i in range(4):
             obj_sums_after_rewrite.append(
-                cal_md5sum(awscli_pod_session, f"{origin_dir}/ObjKey-{i}", True)
+                cal_md5sum(
+                    awscli_pod_session, f"{origin_dir}/ObjKey-{i}", raw_path=True
+                )
             )
             obj_sums_after_rw_and_replication.append(
-                cal_md5sum(awscli_pod_session, f"{target_dir}/ObjKey-{i}", True)
+                cal_md5sum(
+                    awscli_pod_session, f"{target_dir}/ObjKey-{i}", raw_path=True
+                )
             )
 
         for i in range(3):
