@@ -168,6 +168,11 @@ class ObjectBucket(ABC):
                 }
             ]
         )
+        self.replication_policy = (
+            self.replication_policy
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
+            else {"rules": self.replication_policy}
+        )
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
