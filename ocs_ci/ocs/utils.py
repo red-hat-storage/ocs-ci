@@ -890,7 +890,7 @@ def run_must_gather(log_dir_path, image, command=None):
     if version.VERSION_4_6 < ocs_version < version.VERSION_4_11:
         timeout = 1500
     elif ocs_version >= version.VERSION_4_11:
-        timeout = 1800
+        timeout = 2700
     else:
         log.error("OCS/ODF version isn't supported")
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
