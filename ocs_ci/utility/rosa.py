@@ -654,3 +654,58 @@ def post_onboarding_verification():
                     f"{resource_name} is in Status {resource_yaml.get()['status']['phase']}. Status should be Ready"
                 )
     config.switch_ctx(restore_ctx_index)
+
+
+def wait_for_addon_to_be_ready(
+    cluster_name=None, addon_name=None, timeout=300, sleep=20
+):
+    """
+    Wait for the addon of a cluster to be ready
+
+    Args:
+        cluster_name (str): The cluster name. The default value is 'config.ENV_DATA["cluster_name"]'
+        addon_name (str): The addon name. The default value is 'addon_name = config.ENV_DATA["addon_name"]'
+        timeout (int): Timeout to wait for the addon to be ready
+        sleep (int): Time in seconds to sleep between attempts
+
+    Raise:
+        TimeoutExpiredError: In case the addon is not ready in the given timeout
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    addon_name = addon_name or config.ENV_DATA["addon_name"]
+
+    for addon_info in utils.TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_addon_info,
+        cluster_name=cluster_name,
+        addon_name=addon_name,
+    ):
+        if addon_info and "ready" in addon_info:
+            logger.info(
+                f"The addon {addon_name} of the cluster {cluster_name} is in a ready state"
+            )
+            break
+
+
+def edit_addon_installation(
+    addon_param_key, addon_param_value, cluster_name=None, addon_name=None, wait=True
+):
+    """
+    Edit a specific parameter of the odf addon installation of a cluster
+
+    Args:
+        addon_param_key (str): The addon key param to modify
+        addon_param_value (str): The addon value param to modify
+        cluster_name (str): The cluster name. The default value is 'config.ENV_DATA["cluster_name"]'
+        addon_name (str): The addon name. The default value is 'addon_name = config.ENV_DATA["addon_name"]'
+        wait (bool): If true, wait for the addon to be ready. False, otherwise.
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    addon_name = addon_name or config.ENV_DATA["addon_name"]
+    cmd = f"rosa edit addon {addon_name} -c {cluster_name} --{addon_param_key} '{addon_param_value}'"
+    utils.run_cmd(cmd)
+    if wait:
+        wait_for_addon_to_be_ready(cluster_name, addon_name)

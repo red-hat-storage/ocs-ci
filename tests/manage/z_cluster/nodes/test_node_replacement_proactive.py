@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
+from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
@@ -99,6 +99,10 @@ def check_node_replacement_verification_steps(
         old_node_name, new_node_name, new_osd_node_name, old_osd_ids
     )
 
+    # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+    if is_ms_provider_cluster() and config.is_consumer_exist():
+        assert node.consumers_verification_steps_after_provider_node_replacement()
+
 
 def delete_and_create_osd_node(osd_node_name):
     """
@@ -112,6 +116,14 @@ def delete_and_create_osd_node(osd_node_name):
     old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
+
+    # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+    if is_ms_provider_cluster() and config.is_consumer_exist():
+        pytest.skip(
+            "The test will not run with an MS provider and MS consumer clusters due to the BZ "
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2131581. issue for tracking: "
+            "https://github.com/red-hat-storage/ocs-ci/issues/6540"
+        )
 
     # error message for invalid deployment configuration
     msg_invalid = (
