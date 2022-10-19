@@ -168,6 +168,12 @@ class ObjectBucket(ABC):
                 }
             ]
         )
+        # If a replication policy was set, and ODF >=4.12 is used, adjust the schema
+        if (
+            self.replication_policy is not None
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
+        ):
+            self.replication_policy = {"rules": self.replication_policy}
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
