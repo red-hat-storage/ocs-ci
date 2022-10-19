@@ -283,13 +283,16 @@ class PagerDutyAPI(object):
             }
         }
 
-    def wait_for_incident_cleared(self, summary, timeout=1200, sleep=5):
+    def wait_for_incident_cleared(
+        self, summary, timeout=1200, sleep=5, pagerduty_service_ids=None
+    ):
         """
         Search for incident to be cleared.
 
         Args:
             summary (str): Incident summary
             sleep (int): Number of seconds to sleep in between incidents search
+            pagerduty_service_ids (list): service ids used in incidents get query
 
         Returns:
             list: List of incident records
@@ -297,7 +300,7 @@ class PagerDutyAPI(object):
         """
         while timeout > 0:
             incidents_response = self.get(
-                "incidents",
+                "incidents", payload={"service_ids[]": pagerduty_service_ids}
             )
             msg = f"Request {incidents_response.request.url} failed"
             assert incidents_response.ok, msg
@@ -317,7 +320,9 @@ class PagerDutyAPI(object):
             timeout -= sleep
         return incidents
 
-    def check_incident_cleared(self, summary, measure_end_time, time_min=420):
+    def check_incident_cleared(
+        self, summary, measure_end_time, time_min=420, pagerduty_service_ids=None
+    ):
         """
         Check that all incidents with provided summary are cleared.
 
@@ -326,6 +331,7 @@ class PagerDutyAPI(object):
             measure_end_time (int): Timestamp of measurement end
             time_min (int): Number of seconds to wait for incidents to be cleared
                 since measurement end
+            pagerduty_service_ids (list): service ids used in incidents get query
 
         """
         time_actual = time.time()
@@ -338,7 +344,9 @@ class PagerDutyAPI(object):
         else:
             time_wait = 1
         cleared_incidents = self.wait_for_incident_cleared(
-            summary=summary, timeout=time_wait
+            summary=summary,
+            timeout=time_wait,
+            pagerduty_service_ids=pagerduty_service_ids,
         )
         logger.info(f"Cleared incidents: {cleared_incidents}")
         if len(cleared_incidents) != 0:

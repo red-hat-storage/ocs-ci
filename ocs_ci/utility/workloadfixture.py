@@ -42,7 +42,7 @@ def measure_operation(
     minimal_time=None,
     metadata=None,
     measure_after=False,
-    pagerduty_service=None,
+    pagerduty_service_ids=None,
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -64,8 +64,8 @@ def measure_operation(
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
             and utilized data are measured after the utilization is completed
-        pagerduty_service (str): Service ID from PagerDuty system. This should
-            be unique for each cluster.
+        pagerduty_service_ids (list): Service IDs from PagerDuty system used
+            incidents query
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -187,7 +187,7 @@ def measure_operation(
                 incidents_response = pagerduty.get(
                     "incidents",
                     payload={
-                        "service_ids[]": pagerduty_service,
+                        "service_ids[]": pagerduty_service_ids,
                         "since": time.strftime(
                             "%Y-%m-%d %H:%M:%S", time.gmtime(start_time)
                         ),

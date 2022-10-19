@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     bugzilla,
     managed_service_required,
@@ -45,7 +46,9 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
             urgency="high",
         )
         api.check_incident_cleared(
-            summary=target_label, measure_end_time=measure_stop_ceph_mgr.get("stop")
+            summary=target_label,
+            measure_end_time=measure_stop_ceph_mgr.get("stop"),
+            pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
         )
 
 
@@ -75,7 +78,9 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
             urgency="high",
         )
         api.check_incident_cleared(
-            summary=target_label, measure_end_time=measure_stop_ceph_osd.get("stop")
+            summary=target_label,
+            measure_end_time=measure_stop_ceph_osd.get("stop"),
+            pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
         )
 
 
@@ -106,7 +111,9 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
             urgency="high",
         )
         api.check_incident_cleared(
-            summary=target_label, measure_end_time=measure_stop_worker_nodes.get("stop")
+            summary=target_label,
+            measure_end_time=measure_stop_worker_nodes.get("stop"),
+            pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
         )
 
 
@@ -144,6 +151,7 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
             summary=target_label,
             measure_end_time=measure_stop_ceph_mon.get("stop"),
             time_min=time_min,
+            pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
         )
 
 
@@ -173,5 +181,7 @@ def test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
         urgency="high",
     )
     api.check_incident_cleared(
-        summary=target_label, measure_end_time=measure_stop_ceph_mon.get("stop")
+        summary=target_label,
+        measure_end_time=measure_stop_ceph_mon.get("stop"),
+        pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
     )
