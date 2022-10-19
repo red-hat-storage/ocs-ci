@@ -732,10 +732,8 @@ add_capacity_4_11 = {
 }
 add_capacity_4_12 = {
     "standard_csi_sc": ("standard-csi-link", By.ID),
-}
-
-add_capacity_4_12 = {
     "add_capacity_button": ("//span[text()='Add Capacity']", By.XPATH),
+    "thin_sc": ("//*[text()= 'kubernetes.io/vsphere-volume']", By.XPATH),
 }
 
 block_pool = {
