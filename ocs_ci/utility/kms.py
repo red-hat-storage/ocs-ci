@@ -1425,15 +1425,19 @@ class KMIP(KMS):
 
     def __init__(self):
         super().__init__("kmip")
-        self.kmip_endpoint = None
-        self.kmip_port = None
-        self.kmip_ca_cert_base64 = None
-        self.kmip_client_cert_base64 = None
-        self.kmip_client_key_base64 = None
         self.kmip_secret_name = None
-        self.kmip_tls_server_name = None
         self.kmip_key_identifier = None
         self.kmsid = None
+        logger.info("Loading KMIP details from auth config")
+        self.kmip_conf = load_auth_config()["kmip"]
+        self.kmip_endpoint = self.kmip_conf["KMIP_ENDPOINT"]
+        self.kmip_ciphertrust_user = self.kmip_conf["KMIP_CTM_USER"]
+        self.kmip_ciphertrust_pwd = self.kmip_conf["KMIP_CTM_PWD"]
+        self.kmip_port = self.kmip_conf["KMIP_PORT"]
+        self.kmip_ca_cert_base64 = self.kmip_conf["KMIP_CA_CERT_BASE64"]
+        self.kmip_client_cert_base64 = self.kmip_conf["KMIP_CLIENT_CERT_BASE64"]
+        self.kmip_client_key_base64 = self.kmip_conf["KMIP_CLIENT_KEY_BASE64"]
+        self.kmip_tls_server_name = self.kmip_conf["KMIP_TLS_SERVER_NAME"]
 
     def deploy(self):
         """
@@ -1453,26 +1457,9 @@ class KMIP(KMS):
         This function configures the resources required to use Thales CipherTrust Manager with ODF
 
         """
-        self.gather_init_kmip_conf()
         self.update_kmip_env_vars()
         get_ksctl_cli()
         self.create_odf_kmip_resources()
-
-    def gather_init_kmip_conf(self):
-        """
-        Initialize the variables from the KMIP configuration
-
-        """
-        logger.info("Loading KMIP details from auth config")
-        self.kmip_conf = load_auth_config()["kmip"]
-        self.kmip_endpoint = self.kmip_conf["KMIP_ENDPOINT"]
-        self.kmip_ciphertrust_user = self.kmip_conf["KMIP_CTM_USER"]
-        self.kmip_ciphertrust_pwd = self.kmip_conf["KMIP_CTM_PWD"]
-        self.kmip_port = self.kmip_conf["KMIP_PORT"]
-        self.kmip_ca_cert_base64 = self.kmip_conf["KMIP_CA_CERT_BASE64"]
-        self.kmip_client_cert_base64 = self.kmip_conf["KMIP_CLIENT_CERT_BASE64"]
-        self.kmip_client_key_base64 = self.kmip_conf["KMIP_CLIENT_KEY_BASE64"]
-        self.kmip_tls_server_name = self.kmip_conf["KMIP_TLS_SERVER_NAME"]
 
     def update_kmip_env_vars(self):
         """
@@ -1704,7 +1691,7 @@ class KMIP(KMS):
         Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
 
         """
-        self.gather_init_kmip_conf()
+
         key_id_list = self.get_key_list_ciphertrust()
 
         # Check for OSD keys
@@ -1740,8 +1727,6 @@ class KMIP(KMS):
         Cleanup for KMIP
 
         """
-        if not self.kmip_endpoint:
-            self.gather_init_kmip_conf()
         self.update_kmip_env_vars()
 
         # Retrieve OSD and NooBaa keys for deletion and delete

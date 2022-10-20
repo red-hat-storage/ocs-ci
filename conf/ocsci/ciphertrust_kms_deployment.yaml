@@ -5,7 +5,4 @@ ENV_DATA:
   encryption_at_rest: true
   KMS_PROVIDER: kmip
   KMS_SERVICE_NAME: ciphertrust
-  KMIP_ENDPOINT: ""
-  KMIP_PORT: ""
   KMIP_SECRET_NAME: thales-kmip-ocs
-  TLS_SERVER_NAME: ""
