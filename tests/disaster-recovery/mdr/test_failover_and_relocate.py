@@ -170,19 +170,20 @@ class TestFailoverAndRelocate(ManageTest):
             rdr_workload.workload_namespace,
         )
 
-        # Verify application are deleted from old cluster
-        set_current_secondary_cluster_context(rdr_workload.workload_namespace)
-        wait_for_all_resources_deletion(rdr_workload.workload_namespace)
-
         # ToDo: Validate same PV being used
+
+        # Bring up cluster which was down
+        set_current_secondary_cluster_context(rdr_workload.workload_namespace)
+        logger.info("Bring up cluster which was down")
+        nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
+        wait_for_nodes_status([node.name for node in node_objs])
+
+        # Verify application are deleted from old cluster
+        wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         # Validate data integrity
         set_current_primary_cluster_context(rdr_workload.workload_namespace)
         validate_data_integrity(rdr_workload.workload_namespace)
-
-        # Bring up cluster which was down
-        nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
-        wait_for_nodes_status([node.name for node in node_objs])
 
         # Unfenced the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.drcluster_name)
