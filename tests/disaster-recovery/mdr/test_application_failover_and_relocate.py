@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 @mdr_test
-class TestFailoverAndRelocate(ManageTest):
+class TestApplicationFailoverAndRelocate(ManageTest):
     """
     Test Failover and Relocate actions for a busybox application
 
