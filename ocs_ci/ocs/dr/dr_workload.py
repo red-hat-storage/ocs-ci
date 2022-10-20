@@ -136,7 +136,9 @@ class BusyBox(DRWorkload):
         self.workload_pod_count = config.ENV_DATA["dr_workload_pod_count"]
         self.workload_pvc_count = config.ENV_DATA["dr_workload_pvc_count"]
 
-        # Name of the preferred primary cluster
+        self.dr_policy_name = config.ENV_DATA.get("dr_policy_name") or (
+            dr_helpers.get_all_drpolicy()[0]["metadata"]["name"]
+        )
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
@@ -144,11 +146,13 @@ class BusyBox(DRWorkload):
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
         self.workload_subscription_dir = os.path.join(
-            self.target_clone_dir, "subscriptions"
+            self.target_clone_dir, config.ENV_DATA.get("dr_workload_subscription_dir")
         )
         self.drpc_yaml_file = os.path.join(
-            os.path.join(self.workload_subscription_dir, self.workload_name),
-            "drpc.yaml",
+            self.workload_subscription_dir, self.workload_name, "drpc.yaml"
+        )
+        self.channel_yaml_file = os.path.join(
+            self.workload_subscription_dir, "channel.yaml"
         )
 
     def deploy_workload(self):
@@ -162,11 +166,17 @@ class BusyBox(DRWorkload):
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
 
         # TODO
         # drpc_yaml_file needs to be committed back to the repo
         # because ACM would refetch from repo directly
+
+        # load channel.yaml
+        channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
+        channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
+        templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
 
         # Create the resources on Hub cluster
         config.switch_acm_ctx()

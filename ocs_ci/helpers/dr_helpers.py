@@ -535,3 +535,17 @@ def wait_for_all_resources_deletion(
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=timeout, sleep=5
         )
+
+
+def get_all_drpolicy():
+    """
+    Gets all DRPolicy from hub cluster
+
+    Returns:
+        list: List of all DRPolicy
+
+    """
+    config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    return drpolicy_list
