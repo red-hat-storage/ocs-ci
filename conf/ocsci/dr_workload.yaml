@@ -1,6 +1,8 @@
 ENV_DATA:
-  dr_workload_repo_url: "https://github.com/shylesh/ocm-ramen-samples.git"
+  dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
-  dr_workload_pod_count: 1
-  dr_workload_pvc_count: 1
+  dr_workload_pod_count: 20
+  dr_workload_pvc_count: 20
+  dr_workload_subscription_dir: "rdr/busybox/app-busybox-1/subscriptions"
+  # dr_policy_name: PLACEHOLDER
   # preferred_primary_cluster: PLACEHOLDER
