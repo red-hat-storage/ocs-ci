@@ -2471,7 +2471,6 @@ def check_for_zombie_process_on_node(node_name=None):
             log.error(f"Zombie process found on node: {node_obj.name}")
             log.error(f"pid and ppid details: {out}")
             raise exceptions.ZombieProcessFoundException
-<<<<<<< HEAD
 
 
 @switch_to_orig_index_at_last
