@@ -33,6 +33,7 @@ setup(
         "pytest-metadata==1.11.0",
         "bs4==0.0.1",
         "gspread==3.6.0",
+        "google-auth-oauthlib==0.5.3",
         "oauth2client==4.1.3",
         "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
