@@ -241,6 +241,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4273")
+    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_outcluster_nfs_export(
         self,
         pod_factory,
@@ -417,6 +418,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4274")
+    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_multiple_nfs_based_PVs(
         self,
         pod_factory,
@@ -561,6 +563,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4293")
+    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_multiple_mounts_of_same_nfs_volume(
         self,
         pod_factory,
@@ -696,6 +699,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4312")
+    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_external_nfs_client_can_write_read_new_file(
         self,
         pod_factory,
