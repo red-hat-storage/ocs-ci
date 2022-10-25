@@ -887,7 +887,12 @@ def run_must_gather(log_dir_path, image, command=None):
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
-    timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
+    if ocs_version >= version.VERSION_4_11:
+        timeout = 2100
+    elif ocs_version >= version.VERSION_4_6:
+        timeout = 1500
+    else:
+        timeout = 600
     must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
