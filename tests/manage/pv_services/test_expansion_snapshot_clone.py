@@ -30,30 +30,6 @@ log = logging.getLogger(__name__)
             *["thin", "thin"],
             marks=[polarion_id("OCS-2408"), skipif_ocs_version("<4.6")],
         ),
-        pytest.param(
-            *["thick", "thick"],
-            marks=[
-                polarion_id("OCS-2502"),
-                pytest.mark.skip(reason="Deprecated"),
-                bugzilla("1959793"),
-            ],
-        ),
-        pytest.param(
-            *["thin", "thick"],
-            marks=[
-                polarion_id("OCS-2507"),
-                pytest.mark.skip(reason="Deprecated"),
-                bugzilla("1959793"),
-            ],
-        ),
-        pytest.param(
-            *["thick", "thin"],
-            marks=[
-                polarion_id("OCS-2508"),
-                pytest.mark.skip(reason="Deprecated"),
-                bugzilla("1959793"),
-            ],
-        ),
     ],
 )
 class TestExpansionSnapshotClone(ManageTest):
