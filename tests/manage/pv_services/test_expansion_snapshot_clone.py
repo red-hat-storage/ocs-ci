@@ -15,7 +15,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     polarion_id,
-    bugzilla,
 )
 
 log = logging.getLogger(__name__)
