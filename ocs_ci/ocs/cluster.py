@@ -757,24 +757,39 @@ class CephCluster(object):
                 and states["count"] == total_pg_count
             )
 
-    def wait_for_rebalance(self, timeout=600):
+    def wait_for_rebalance(self, timeout=600, repeat=3):
         """
         Wait for re-balance to complete
 
         Args:
             timeout (int): Time to wait for the completion of re-balance
+            repeat (int): How many times to repeat the check to make sure, it's
+                really completed.
 
         Returns:
-            bool: True if rebalance completed, False otherwise
+            bool: True if re-balance completed, False otherwise
 
         """
         try:
-            for rebalance in TimeoutSampler(
-                timeout=timeout, sleep=10, func=self.get_rebalance_status
-            ):
-                if rebalance:
-                    logger.info("Re-balance is completed")
-                    return True
+            start_time = time.time()
+            for attempt in range(1, repeat + 1):
+                diff_time = int(time.time() - start_time)
+                logger.debug(f"Attempt {attempt} out of {repeat} repeats.")
+                for rebalance in TimeoutSampler(
+                    timeout=timeout - diff_time,
+                    sleep=10,
+                    func=self.get_rebalance_status,
+                ):
+                    if rebalance:
+                        logger.info(
+                            f"Attempt {attempt} for re-balance out of {repeat} is completed"
+                        )
+                        if repeat == attempt:
+                            return True
+                        else:
+                            logger.debug("Wait 10 seconds between next attempt")
+                            time.sleep(10)
+                            break
         except exceptions.TimeoutExpiredError:
             logger.error(
                 f"Data re-balance failed to complete within the given "
