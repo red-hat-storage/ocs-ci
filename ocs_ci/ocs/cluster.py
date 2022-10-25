@@ -771,24 +771,30 @@ class CephCluster(object):
 
         """
         try:
+            sleep_time = 10
             start_time = time.time()
             for attempt in range(1, repeat + 1):
-                diff_time = int(time.time() - start_time)
+                new_timeout = timeout - int(time.time() - start_time)
+                if new_timeout < sleep_time:
+                    new_timeout = sleep_time + 5
                 logger.debug(f"Attempt {attempt} out of {repeat} repeats.")
                 for rebalance in TimeoutSampler(
-                    timeout=timeout - diff_time,
-                    sleep=10,
+                    timeout=new_timeout,
+                    sleep=sleep_time,
                     func=self.get_rebalance_status,
                 ):
                     if rebalance:
                         logger.info(
-                            f"Attempt {attempt} for re-balance out of {repeat} is completed"
+                            f"Re-balance completed! This is attempt {attempt} out of {repeat} repeats. "
+                            f"This rebalance check needs to prove it {repeat} times in row."
                         )
                         if repeat == attempt:
                             return True
                         else:
-                            logger.debug("Wait 10 seconds between next attempt")
-                            time.sleep(10)
+                            logger.debug(
+                                f"Wait {sleep_time} seconds before next attempt to check re-balance has completed."
+                            )
+                            time.sleep(sleep_time)
                             break
         except exceptions.TimeoutExpiredError:
             logger.error(
