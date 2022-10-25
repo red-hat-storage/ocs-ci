@@ -4,7 +4,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import storagecluster_independent_check
-from ocs_ci.utility import version
 
 
 class RGW(object):
@@ -54,27 +53,17 @@ class RGW(object):
         )
 
         if storagecluster_independent_check():
-            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7:
-                endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
-                )
-            else:
-                endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
-                )
+            endpoint = route_ocp_obj.get(
+                resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
+            )
             if secret_name == constants.NOOBAA_OBJECTSTOREUSER_SECRET:
                 secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
             elif secret_name == constants.CEPH_OBJECTSTOREUSER_SECRET:
                 secret_name = constants.CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET
         else:
-            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7:
-                endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_SERVICE_INTERNAL_MODE
-                )
-            else:
-                endpoint = route_ocp_obj.get(
-                    resource_name=constants.RGW_ROUTE_INTERNAL_MODE
-                )
+            endpoint = route_ocp_obj.get(
+                resource_name=constants.RGW_SERVICE_INTERNAL_MODE
+            )
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
         endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
