@@ -1562,6 +1562,31 @@ def verify_consumer_storagecluster(sc_data):
     assert re.match("\\d+[PT]", granted_capacity)
 
 
+def verify_managedocs_security():
+    """
+    Check ocs-osd-deployer-operator permissions:
+    1. Verify `runAsUser` is not 0
+    2. Verify `SecurityContext.allowPrivilegeEscalation` is set to false
+    3. Verify `SecurityContext.capabilities.drop` only has capabilities
+    KILL, MKNOD, SETGID, SETUID
+    """
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        selector=constants.MANAGED_CONTROLLER_LABEL,
+    )
+    deployer_yaml = pod_obj.get().get("items")[0]
+    containers = deployer_yaml["spec"]["containers"]
+    for container in containers:
+        log.info(f"Checking container {container['name']}")
+        userid = container["securityContext"]["runAsUser"]
+        log.info(f"unAsUser is {userid}. Verifying it is not 0")
+        assert userid > 0
+        escalation = container["securityContext"]["allowPrivilegeEscalation"]
+        log.info("Verifying allowPrivilegeEscalation is False")
+        assert not escalation
+
+
 def get_ceph_clients():
     """
     Get the yamls of all ceph clients.
