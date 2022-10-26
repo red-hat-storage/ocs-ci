@@ -27,6 +27,7 @@ def has_required_ipranges(ipPermission, lookup_type="all"):
             {ipRange["CidrIp"] for ipRange in ipPermission.get("IpRanges", [])}
         )
 
+
 def has_required_ippermissions(securityGroup, lookup_type="all"):
     """
     A helper function to process Amazon's security group's JSON
@@ -40,6 +41,7 @@ def has_required_ippermissions(securityGroup, lookup_type="all"):
         has_required_ipranges(ipPermission, lookup_type=lookup_type)
         for ipPermission in securityGroup.get("IpPermissions", [])
     )
+
 
 class TestLBSubnetConfig(MCGTest):
     @tier2
