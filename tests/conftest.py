@@ -5763,8 +5763,13 @@ def edit_mcg_subnets(request):
     noobaa = OCP(kind="noobaa", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     lb_cfg = (
         '{"spec":\
-    {"loadBalancerSourceSubnets":{"s3":["%s","%s"],"sts":["%s"]}}}'
-        % tuple(constants.TEST_NET_BLOCK_SET)
+    {"loadBalancerSourceSubnets":{"s3":["%s","%s"],"sts":["%s", "%s"]}}}'
+        % (
+            constants.TEST_NET_1_BLOCK,
+            constants.TEST_NET_2_BLOCK,
+            constants.TEST_NET_3_BLOCK,
+            constants.TEST_NET_MCAST_BLOCK,
+        )
     )
 
     log.info("Patching the NooBaa CR with a load balancer source subnet config")
