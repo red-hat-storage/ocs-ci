@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework.testlib import MCGTest
@@ -62,8 +63,10 @@ class TestLBSubnetConfig(MCGTest):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
-        """
 
+        """
+        # Wait a few seconds to make sure the changes have propagated to AWS
+        sleep(10)
         # Retrieve all security groups
         filtered_security_groups = (
             cld_mgr.aws_client.ec2_resource.meta.client.describe_security_groups()
@@ -104,6 +107,8 @@ class TestLBSubnetConfig(MCGTest):
         OCP(kind="noobaa", namespace=defaults.ROOK_CLUSTER_NAMESPACE).patch(
             resource_name="noobaa", params=clean_lb_config, format_type="merge"
         )
+        # Wait a few seconds for the changes to propagate
+        sleep(10)
         # Retrieve the security groups again to update any changes that occurred
         filtered_security_groups = (
             cld_mgr.aws_client.ec2_resource.meta.client.describe_security_groups()
