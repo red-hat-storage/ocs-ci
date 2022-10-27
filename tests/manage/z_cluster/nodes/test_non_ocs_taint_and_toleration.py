@@ -70,7 +70,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. Respin all ocs pods and check if it runs on ocs nodes with tolerations
+        3. Check toleration on all ocs pods.
         4. Add Capacity
 
         """
@@ -146,15 +146,50 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
+        # Check toleration on pods under openshift-storage
+        check_toleration_on_pods(toleration_key="xyz")
+
         # Respin all pods and check it if is still running
         pod_list = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
         )
-        for pod in pod_list:
-            pod.delete(wait=False)
 
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
         self.sanity_helpers.health_check()
+
+        pod_name_list = [
+            pod.get().get("metadata").get("generateName") for pod in pod_list
+        ]
+        logger.info(pod_name_list)
+
+        odf_pods = [
+            "ocs-operator-",
+            "ocs-metrics-exporter-",
+            "odf-operator-controller-manager-",
+            "odf-console-",
+            "rook-ceph-operator-",
+            "noobaa-operator-",
+            "noobaa-core-",
+            "noobaa-db-",
+            "noobaa-endpoint-",
+            "rook-ceph-mon-",
+            "rook-ceph-mgr-",
+            "rook-ceph-mds-ocs-storagecluster-cephfilesystem-",
+            "rook-ceph-rgw-ocs-storagecluster-cephobjectstore-",
+            "csi-cephfsplugin-",
+            "csi-cephfsplugin-provisioner-",
+            "csi-rbdplugin-",
+            "csi-rbdplugin-provisioner-",
+            "csi-addons-controller-manager"
+            "rook-ceph-crashcollector-",
+            "rook-ceph-osd-",
+            "rook-ceph-osd-prepare-ocs-deviceset-",
+            "rook-ceph-tools",
+        ]
+        for i in range(len(odf_pods)):
+            assert any(
+                odf_pods[i] in p for p in pod_name_list
+            ), f"Pod {odf_pods[i]} is not present"
 
         # Add capacity to check if new osds has toleration
         osd_size = storage_cluster.get_osd_size()
