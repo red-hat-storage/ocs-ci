@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
         pytest.param("v2", marks=pytest.mark.polarion_id("OCS-2592")),
     ],
 )
+@skipif_ocs_version("<4.8")
+@skipif_ocs_version(">4.8")
 class TestPVEncryption(ManageTest):
     """
     Test to create, verify and delete Block PV encryption via UI
