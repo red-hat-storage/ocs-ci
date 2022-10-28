@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -1688,6 +1688,13 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
             }
         }
     }
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+        rep_policy_dict = replication_policy_patch_dict["spec"]["additionalConfig"][
+            "replicationPolicy"
+        ]
+        replication_policy_patch_dict["spec"]["additionalConfig"][
+            "replicationPolicy"
+        ] = {"rules": rep_policy_dict}
     OCP(
         kind="obc",
         namespace=config.ENV_DATA["cluster_namespace"],
