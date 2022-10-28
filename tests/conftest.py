@@ -4799,7 +4799,8 @@ def storageclass_factory_ui(request, cephblockpool_factory_ui, setup_ui):
 
 def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui):
     """
-    The function create new storageclass
+    The function create new storage class without encryption and creates an encrypted storage class vi UI
+    if the flag encryption is set to True
     """
     instances = []
 
@@ -4808,10 +4809,16 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         compression=False,
         replica=3,
         create_new_pool=False,
-        encryption=False,  # not implemented yet
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE,  # not implemented yet
+        encryption=False,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
         default_pool=constants.DEFAULT_BLOCKPOOL,
         existing_pool=None,
+        backend_path=None,
+        vault_namespace=None,
+        vol_binding_mode="Immediate",
+        service_name=None,
+        kms_address=None,
+        tls_server_name=None,
     ):
         """
         Args:
@@ -4826,17 +4833,29 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             (ocs_ci.ocs.resource.ocs) ocs object of the storageclass.
 
         """
+        global sc_name
         storageclass_ui_object = StorageClassUI(setup_ui)
-        if existing_pool is None and create_new_pool is False:
-            pool_name = default_pool
-        if create_new_pool is True:
-            pool_ocs_obj = cephblockpool_factory_ui(
-                replica=replica, compression=compression
+        if encryption:
+            sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
+                backend_path=backend_path,
+                reclaim_policy=reclaim_policy,
+                provisioner=provisioner,
+                vol_binding_mode=vol_binding_mode,
+                service_name=service_name,
+                kms_address=kms_address,
+                tls_server_name=tls_server_name,
             )
-            pool_name = pool_ocs_obj.name
-        if existing_pool is not None:
-            pool_name = existing_pool
-        sc_name = storageclass_ui_object.create_storageclass(pool_name)
+        else:
+            if existing_pool is None and create_new_pool is False:
+                pool_name = default_pool
+            if create_new_pool is True:
+                pool_ocs_obj = cephblockpool_factory_ui(
+                    replica=replica, compression=compression
+                )
+                pool_name = pool_ocs_obj.name
+            if existing_pool is not None:
+                pool_name = existing_pool
+            sc_name = storageclass_ui_object.create_storageclass(pool_name)
         if sc_name is None:
             log.error("Storageclass was not created")
             raise StorageclassNotCreated(

@@ -118,9 +118,9 @@ class PvcUI(PageNavigator):
         self.do_click(get_element_type(pvc_name), enable_screenshot=True)
 
         logger.info("Checking status of Pvc")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.pvc_loc["pvc-status"], expected_text="Bound"
-        )
+        ), "PVC did not reach Bound state"
 
         pvc_size_new = f"{pvc_size} GiB"
         self.check_element_text(expected_text=pvc_size_new)
