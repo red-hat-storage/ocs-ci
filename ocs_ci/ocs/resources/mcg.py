@@ -677,7 +677,7 @@ class MCG:
                 "replicationPolicy",
                 json.dumps(replication_policy)
                 if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
-                else {"rules": json.dumps(replication_policy)},
+                else json.dumps({"rules": replication_policy}),
             )
 
         return create_resource(**bc_data)

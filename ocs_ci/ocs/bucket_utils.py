@@ -1674,27 +1674,21 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+        replication_policy = {
+            "rules": [
+                {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+            ]
+        }
+    else:
+        replication_policy = [
+            {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+        ]
     replication_policy_patch_dict = {
         "spec": {
-            "additionalConfig": {
-                "replicationPolicy": json.dumps(
-                    [
-                        {
-                            "rule_id": rule_id,
-                            "destination_bucket": destination_bucket_name,
-                        }
-                    ]
-                )
-            }
+            "additionalConfig": {"replicationPolicy": json.dumps(replication_policy)}
         }
     }
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
-        rep_policy_dict = replication_policy_patch_dict["spec"]["additionalConfig"][
-            "replicationPolicy"
-        ]
-        replication_policy_patch_dict["spec"]["additionalConfig"][
-            "replicationPolicy"
-        ] = {"rules": rep_policy_dict}
     OCP(
         kind="obc",
         namespace=config.ENV_DATA["cluster_namespace"],
