@@ -86,22 +86,29 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         """
-        try:
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-            screenshot = (
-                ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-            )
-            if screenshot:
+        if version.get_semantic_version(get_ocp_version(), True) <= version.VERSION_4_11:
+            try:
+                wait = WebDriverWait(self.driver, timeout)
+                element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+                screenshot = (
+                    ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+                )
+                if screenshot:
+                    self.take_screenshot()
+                element.click()
+                if copy_dom:
+                    self.copy_dom()
+            except TimeoutException as e:
                 self.take_screenshot()
-            element.click()
-            if copy_dom:
                 self.copy_dom()
-        except TimeoutException as e:
-            self.take_screenshot()
-            self.copy_dom()
-            logger.error(e)
-            raise TimeoutException
+                logger.error(e)
+                raise TimeoutException
+        else:
+            self.page_has_loaded()
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
+            element.click()
+            #self.driver.find_element_by_id(locator[0]).click()
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -115,14 +122,22 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
+        #if version.get_semantic_version(get_ocp_version(), True) <= version.VERSION_4_11:
         try:
             wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            #element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            element = wait.until(ec.presence_of_element_located((locator[1], locator[0])))
             element.send_keys(text)
+
         except TimeoutException as e:
             self.take_screenshot()
             logger.error(e)
             raise TimeoutException
+        # else:
+        #     self.page_has_loaded()
+        #     wait = WebDriverWait(self.driver, timeout)
+        #     element = wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
+        #     element.send_keys(text)
 
     def is_expanded(self, locator, timeout=30):
         """

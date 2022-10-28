@@ -695,6 +695,10 @@ acm_configuration_4_11 = {
     "nat-t-checkbox": ("natt-enable", By.ID),
 }
 
+acm_configuration_4_12 = {
+    **acm_configuration_4_11,
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1144,6 +1148,11 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_12,
+        },
     },
     "4.11": {
         "login": {**login, **login_4_11},

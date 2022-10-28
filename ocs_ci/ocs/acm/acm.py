@@ -14,10 +14,11 @@ from ocs_ci.ocs.acm.acm_constants import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_running_acm_version
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import login_ui
+from ocs_ci.ocs.ui.base_ui import login_ui, PageNavigator
+from ocs_ci.utility.version import VERSION_4_12, get_semantic_version, compare_versions
 
 log = logging.getLogger(__name__)
 
@@ -41,19 +42,38 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         self.navigate_clusters_page()
-        self.do_click(self.page_nav["Import_cluster"])
+        #self.do_click(self.page_nav["Import_cluster"])
+        time.sleep(40)
+        self.driver.find_element_by_id("importCluster").click()
+        log.info("Clicked on Import cluster")
+        time.sleep(60)
         self.do_send_keys(
             self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
         )
+        log.info("Keys sent")
+        log.info("sent input to the text box")
         self.do_click(self.page_nav["Import_mode"])
         self.do_click(self.page_nav["choose_kubeconfig"])
         log.info(f"Coping Kubeconfig {kubeconfig_location}")
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
         for line in kubeconfig_to_import:
-            self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
-            time.sleep(2)
+            if len(line) > 100:
+                for c in line:
+                    self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{c}")
+            else:
+                self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
+            time.sleep(10)
+        # With ACM2.6 there will be 1 more page
+        # 1. Automation
+        # So we have to click 'Next' button
+        acm_version_str = ".".join(get_running_acm_version().split('.')[:2])
+        if compare_versions(
+            f"{acm_version_str} >= 2.6"
+        ):
+            for i in range(2):
+                self.do_click(locator=self.page_nav["cc_next_page_button"], timeout=10)
         log.info(f"Submitting import of {cluster_name}")
-        self.do_click(self.page_nav["Submit_import"])
+        self.do_click(self.page_nav["Submit_import"], timeout=600)
 
     def import_cluster(self, cluster_name, kubeconfig_location):
         """
