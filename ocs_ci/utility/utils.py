@@ -3962,38 +3962,3 @@ def wipe_all_disk_partitions_for_node(node):
             if disk_to_wipe != root_disk:
                 disk_path = f"/dev/{disk_to_wipe}"
                 wipe_partition(node, disk_path)
-
-
-def get_ksctl_cli(bin_dir=None):
-    """
-    Download ksctl to interact with CipherTrust Manager via CLI
-
-    Args:
-        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
-
-    """
-
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
-    system = platform.system()
-    if "Darwin" not in system and "Linux" not in system:
-        raise UnsupportedOSType("Not a supported platform")
-
-    system = system.lower()
-    zip_file = "ksctl_images.zip"
-    ksctl_cli_filename = "ksctl"
-    ksctl_binary_path = os.path.join(bin_dir, ksctl_cli_filename)
-    if os.path.isfile(ksctl_binary_path):
-        log.info(
-            f"ksctl CLI binary already exists {ksctl_binary_path}, skipping download."
-        )
-    else:
-        log.info("Downloading ksctl cli")
-        prepare_bin_dir()
-        url = f"https://{load_auth_config()['kmip']['KMIP_ENDPOINT']}/downloads/{zip_file}"
-        download_file(url, zip_file, verify=False)
-        run_cmd(f"tar -xzC {bin_dir} -f {zip_file}")
-        run_cmd(f"mv ksctl-{system}-amd64 {ksctl_cli_filename}")
-        delete_file(zip_file)
-
-    ksctl_ver = run_cmd(f"{ksctl_binary_path} version")
-    log.info(f"ksctl cli version: {ksctl_ver}")

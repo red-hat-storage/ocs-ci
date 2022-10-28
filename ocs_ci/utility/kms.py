@@ -8,6 +8,7 @@ import os
 
 import requests
 import json
+import platform
 import shlex
 import tempfile
 import subprocess
@@ -29,11 +30,14 @@ from ocs_ci.ocs.exceptions import (
     HPCSDeploymentError,
     KMIPDeploymentError,
     KMIPOperationError,
+    UnsupportedOSType,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
+    download_file,
+    delete_file,
     load_auth_config,
     run_cmd,
     get_vault_cli,
@@ -41,8 +45,8 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_cluster_name,
     get_ocp_version,
-    get_ksctl_cli,
     encode,
+    prepare_bin_dir,
 )
 
 
@@ -1916,3 +1920,38 @@ def remove_token_reviewer_resources():
     run_cmd(
         f"oc delete ClusterRoleBinding {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}"
     )
+
+
+def get_ksctl_cli(bin_dir=None):
+    """
+    Download ksctl to interact with CipherTrust Manager via CLI
+
+    Args:
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    """
+
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise UnsupportedOSType("Not a supported platform")
+
+    system = system.lower()
+    zip_file = "ksctl_images.zip"
+    ksctl_cli_filename = "ksctl"
+    ksctl_binary_path = os.path.join(bin_dir, ksctl_cli_filename)
+    if os.path.isfile(ksctl_binary_path):
+        logger.info(
+            f"ksctl CLI binary already exists {ksctl_binary_path}, skipping download."
+        )
+    else:
+        logger.info("Downloading ksctl cli")
+        prepare_bin_dir()
+        url = f"https://{load_auth_config()['kmip']['KMIP_ENDPOINT']}/downloads/{zip_file}"
+        download_file(url, zip_file, verify=False)
+        run_cmd(f"unzip -d {bin_dir} {zip_file}")
+        run_cmd(f"mv {bin_dir}/ksctl-{system}-amd64 {bin_dir}/{ksctl_cli_filename}")
+        delete_file(zip_file)
+
+    ksctl_ver = run_cmd(f"{ksctl_binary_path} version")
+    logger.info(f"ksctl cli version: {ksctl_ver}")
