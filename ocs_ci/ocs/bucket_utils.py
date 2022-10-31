@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -1674,18 +1674,19 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+        replication_policy = {
+            "rules": [
+                {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+            ]
+        }
+    else:
+        replication_policy = [
+            {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+        ]
     replication_policy_patch_dict = {
         "spec": {
-            "additionalConfig": {
-                "replicationPolicy": json.dumps(
-                    [
-                        {
-                            "rule_id": rule_id,
-                            "destination_bucket": destination_bucket_name,
-                        }
-                    ]
-                )
-            }
+            "additionalConfig": {"replicationPolicy": json.dumps(replication_policy)}
         }
     }
     OCP(
