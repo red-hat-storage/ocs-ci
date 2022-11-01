@@ -18,6 +18,7 @@ import shutil
 
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.utils import (
     clone_repo,
@@ -34,6 +35,7 @@ from ocs_ci.utility.flexy import (
     load_cluster_info,
 )
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -466,12 +468,13 @@ class FlexyBase(object):
         """
         # change ownership of flexy-dir back to current user
         chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
-        exec_cmd(chown_cmd)
+
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(chown_cmd)
         chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
-        exec_cmd(chmod_cmd)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        exec_cmd(rsync_cmd, timeout=3600)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(rsync_cmd, timeout=3600)
 
         # mirror install-dir to cluster path (auth directory, metadata.json
         # file and other files)
@@ -479,7 +482,7 @@ class FlexyBase(object):
             self.flexy_host_dir, constants.FLEXY_RELATIVE_CLUSTER_DIR
         )
         rsync_cmd = f"rsync -av {install_dir}/ {self.cluster_path}/"
-        exec_cmd(rsync_cmd)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(rsync_cmd)
 
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             # copy terraform.tfvars and terraform.tfstate files to
