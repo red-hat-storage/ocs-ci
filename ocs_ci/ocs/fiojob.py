@@ -312,7 +312,10 @@ def get_pool_name(fixture_name):
     Return ceph pool name based on fixture name suffix.
     """
     if fixture_name.endswith("rbd"):
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if (
+            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+        ):
             cluster_id = run_cmd(
                 "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
             )
