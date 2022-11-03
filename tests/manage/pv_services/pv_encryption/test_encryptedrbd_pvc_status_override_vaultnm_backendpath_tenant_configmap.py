@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -22,20 +23,26 @@ if config.ENV_DATA.get("vault_hcp"):
         pytest.param(
             "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4639")
         ),
+    ]
+    """
         pytest.param(
             "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4641")
         ),
     ]
-
+    """
 else:
     argvalues = [
         pytest.param(
             "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4638")
         ),
+    ]
+    """
         pytest.param(
             "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4640")
         ),
     ]
+    """
+
 
 @pytest.mark.parametrize(
     argnames=argnames,
@@ -88,8 +95,10 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             encrypted=True,
             encryption_kms_id=self.kms_vault.kmsid,
         )
+
     def test_encryptedrbd_pvc_status_with_tenant_configmap_override(
         self,
+        request,
         setup,
         multi_pvc_factory,
         kv_version,
@@ -98,31 +107,38 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         use_vault_namespace,
     ):
 
-        self.kms = kms.Vault()
+        self.kms_obj = kms.Vault()
         vault_resource_name = create_unique_resource_name("test", "vault")
         if use_vault_namespace:
-            self.kms.vault_create_namespace(namespace=vault_resource_name)
-        self.kms.vault_create_backend_path(
+            self.kms_obj.vault_create_namespace(namespace=vault_resource_name)
+        self.kms_obj.vault_create_backend_path(
             backend_path=vault_resource_name, kv_version=kv_version
         )
-        self.kms.vault_create_policy(policy_name=vault_resource_name)
+        self.kms_obj.vault_create_policy(policy_name=vault_resource_name)
+
+        def kms_obj_cleanup():
+            self.kms_obj.remove_vault_backend_path()
+            self.kms_obj.remove_vault_policy()
+            if self.kms_obj.vault_namespace:
+                self.kms_obj.remove_vault_namespace()
+        request.addfinalizer(kms_obj_cleanup)
 
         # Create a configmap in the tenant namespace to override the vault namespace as shown below:
         if use_vault_namespace:
-            self.kms.create_tenant_configmap(
+            self.kms_obj.create_tenant_configmap(
                 self.proj_obj.namespace,
                 vaultBackendPath=f"{vault_resource_name}",
-                vaultNamespace=f"{self.kms.vault_namespace}",
+                vaultNamespace=f"{self.kms_obj.vault_namespace}",
             )
         else:
-            self.kms.create_tenant_configmap(
+            self.kms_obj.create_tenant_configmap(
                 self.proj_obj.namespace,
                 vaultBackendPath=f"{vault_resource_name}",
             )
 
         # Create ceph-csi-kms-token in the tenant namespace
-        self.kms.vault_path_token = self.kms.generate_vault_token()
-        self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
+        self.kms_obj.vault_path_token = self.kms_obj.generate_vault_token()
+        self.kms_obj.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
         # Create New PVC and check status
         self.pvc_size = 1
@@ -147,12 +163,9 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
 
-            if kms.is_key_present_in_path(
-                key=vol_handle, path=self.kms.vault_backend_path
-            ):
-                log.info(f"Vault: Found key for {pvc_obj.name}")
-            else:
-                raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
+            assert kms.is_key_present_in_path(
+                key=vol_handle, path=self.kms_obj.vault_backend_path
+            ), f"Vault: Key not found for {pvc_obj.name}"
 
         self.pod_objs = create_pods(
             self.pvc_obj,
@@ -184,5 +197,3 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         pod_obj.ocp.wait_for_delete(
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
-        self.kms.remove_vault_backend_path()
-        self.kms.remove_vault_namespace()
