@@ -1303,6 +1303,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
+    "topolvm.io",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
@@ -1895,7 +1896,8 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app.lvm.openshift.io=vg-manager",
     },
 }
-LVM_PROVISIONER = "topolvm.cybozu.com"
+LVM_PROVISIONER_4_11 = "topolvm.cybozu.com"
+LVM_PROVISIONER_4_12 = "topolvm.io"
 TOPOLVM_METRICS = [
     "topolvm_thinpool_data_percent",
     "topolvm_thinpool_metadata_percent",
