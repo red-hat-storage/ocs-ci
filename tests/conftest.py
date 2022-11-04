@@ -5136,6 +5136,8 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 f"account create {name}",
                 f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
                 if type(allowed_buckets) in (list, tuple)
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "",
                 " --full_permission=" + "True"
                 if type(allowed_buckets) is dict
