@@ -719,3 +719,18 @@ def edit_addon_installation(
     utils.run_cmd(cmd)
     if wait:
         wait_for_addon_to_be_ready(cluster_name, addon_name)
+
+
+def configure_managed_service_size(size, cluster_name=None):
+    """
+    Configure the number of osds and instances
+
+    Args:
+        size (str): Cluster size
+        cluster_name (str): The cluster name. The default value is 'config.ENV_DATA["cluster_name"]'
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    service_id = get_rosa_cluster_service_id(cluster_name)
+    cmd = f"rosa edit service --id={service_id} --size {size}"
+    utils.run_cmd(cmd)
