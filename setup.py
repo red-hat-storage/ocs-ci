@@ -92,6 +92,7 @@ setup(
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
             "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
+            "debug-mode=ocs_ci.helpers.debug_mode_helper:main",
         ],
     },
     zip_safe=True,
