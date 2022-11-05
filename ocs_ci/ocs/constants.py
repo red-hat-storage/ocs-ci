@@ -368,6 +368,9 @@ CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "storageclass.y
 
 CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml")
 
+CSI_LVM_STORAGECLASS_YAML_4_11 = os.path.join(
+    TEMPLATE_CSI_LVM_DIR, "storageclass_4_11.yaml"
+)
 CSI_LVM_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "storageclass.yaml")
 
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
@@ -1897,7 +1900,7 @@ LVMO_POD_LABEL = {
     },
 }
 LVM_PROVISIONER_4_11 = "topolvm.cybozu.com"
-LVM_PROVISIONER_4_12 = "topolvm.io"
+LVM_PROVISIONER = "topolvm.io"
 TOPOLVM_METRICS = [
     "topolvm_thinpool_data_percent",
     "topolvm_thinpool_metadata_percent",
