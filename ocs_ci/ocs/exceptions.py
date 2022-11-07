@@ -586,3 +586,6 @@ class VolumesExistError(Exception):
 
 class UnexpectedODFAccessException(Exception):
     pass
+
+class BlockPoolRawCapacityNotCorrect(Exception):
+    pass
