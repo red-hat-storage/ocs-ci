@@ -1412,6 +1412,8 @@ def health_checker(request, tier_marks_name):
         ):
             return
 
+    node = request.node
+
     def finalizer():
         if not skipped:
             try:
@@ -1424,8 +1426,17 @@ def health_checker(request, tier_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ceph_health_check_base()
-                    log.info("Ceph health check passed at teardown")
+                    if "test_add_capacity" in node.name:
+                        ceph_health_check(
+                            namespace=config.ENV_DATA["cluster_namespace"]
+                        )
+                        log.info(
+                            "Ceph health check passed at teardown. (After Add capacity "
+                            "TC we allow more re-tries)"
+                        )
+                    else:
+                        ceph_health_check_base()
+                        log.info("Ceph health check passed at teardown")
             except CephHealthException:
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
@@ -1433,7 +1444,6 @@ def health_checker(request, tier_marks_name):
                 ceph_health_check()
                 raise
 
-    node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
         if mark.name in tier_marks_name and config.RUN.get("cephcluster"):
