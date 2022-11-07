@@ -10,14 +10,16 @@ from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
+    BlockPoolRawCapacityNotLoaded,
+    BlockPoolRawCapacityNotCorrect,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +74,7 @@ class TestPoolUserInterface(ManageTest):
     @skipif_ocs_version("<4.8")
     @green_squad
     def test_create_delete_pool(
-        self,
-        replica,
-        compression,
-        namespace,
-        storage,
-        pvc,
-        pod,
+        self, replica, compression, namespace, storage, pvc, pod, setup_ui
     ):
         """
         test create delete pool have the following workflow
@@ -111,7 +107,20 @@ class TestPoolUserInterface(ManageTest):
         )
 
         # Getting IO results
-        get_fio_rw_iops(self.pod_obj)
+        self.get_fio_rw_iops(self.pod_obj)
+
+        # Checking the raw capcity is loaded on the UI or not.
+        blockpool_ui_object = BlockPoolUI(setup_ui)
+        if not blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name):
+            raise BlockPoolRawCapacityNotLoaded(
+                f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
+            )
+
+        # Cross checking the raw capacity of the blockpool between CLI and UI
+        if not blockpool_ui_object.cross_check_raw_capacity(self.pool_name):
+            raise BlockPoolRawCapacityNotCorrect(
+                f"The Raw Capcity for the blockpool {self.pool_name} doesnt match in UI as shown in CLI."
+            )
 
         # Checking Results for compression and replication
         if compression:
