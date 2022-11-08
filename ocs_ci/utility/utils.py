@@ -2078,7 +2078,7 @@ def ceph_health_check_base(namespace=None):
         f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-tools "
         f"-n {namespace} "
-        f"--timeout=120s"
+        f"--timeout=300s"
     )
     ceph_health_cmd = create_ceph_health_cmd(namespace)
     try:
@@ -2995,35 +2995,35 @@ def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000)
         "TB": {
             "Ti": abso,
             "Gi": abso / 1024,
-            "Mi": abso / 1024**2,
-            "Ki": abso / 1024**3,
-            "Bi": abso / 1024**4,
+            "Mi": abso / 1024 ** 2,
+            "Ki": abso / 1024 ** 3,
+            "Bi": abso / 1024 ** 4,
         },
         "GB": {
             "Ti": abso * 1024,
             "Gi": abso,
             "Mi": abso / 1024,
-            "Ki": abso / 1024**2,
-            "Bi": abso / 1024**3,
+            "Ki": abso / 1024 ** 2,
+            "Bi": abso / 1024 ** 3,
         },
         "MB": {
-            "Ti": abso * 1024**2,
+            "Ti": abso * 1024 ** 2,
             "Gi": abso * 1024,
             "Mi": abso,
             "Ki": abso / 1024,
-            "Bi": abso / 1024**2,
+            "Bi": abso / 1024 ** 2,
         },
         "KB": {
-            "Ti": abso * 1024**3,
-            "Gi": abso * 1024**2,
+            "Ti": abso * 1024 ** 3,
+            "Gi": abso * 1024 ** 2,
             "Mi": abso * 1024,
             "Ki": abso,
             "Bi": abso / 1024,
         },
         "BY": {
-            "Ti": abso * 1024**4,
-            "Gi": abso * 1024**3,
-            "Mi": abso * 1024**2,
+            "Ti": abso * 1024 ** 4,
+            "Gi": abso * 1024 ** 3,
+            "Mi": abso * 1024 ** 2,
             "Ki": abso * 1024,
             "Bi": abso,
         },
