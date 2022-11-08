@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     skipif_external_mode,
     skipif_ibm_cloud,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import defaults, constants, ocp
 from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
@@ -188,9 +189,10 @@ class TestS3Routes:
         request.addfinalizer(finalizer)
 
     @tier3
-    @bugzilla("1954708")
     @skipif_external_mode
     @skipif_ibm_cloud
+    @skipif_managed_service
+    @bugzilla("1954708")
     @pytest.mark.polarion_id("OCS-4653")
     @skipif_ocs_version("<4.10")
     def test_disable_nb_lb(self, revert_lb_service):
