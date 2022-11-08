@@ -11,7 +11,6 @@ from ocs_ci.framework.testlib import (
     config,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
-from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.utility import kms
 
 log = logging.getLogger(__name__)
@@ -23,25 +22,20 @@ if config.ENV_DATA.get("vault_hcp"):
         pytest.param(
             "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4639")
         ),
-    ]
-    """
         pytest.param(
             "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4641")
         ),
     ]
-    """
+
 else:
     argvalues = [
         pytest.param(
             "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4638")
         ),
-    ]
-    """
         pytest.param(
             "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4640")
         ),
     ]
-    """
 
 
 @pytest.mark.parametrize(
@@ -76,16 +70,13 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
     ):
         """
         Setup csi-kms-connection-details configmap
-
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-
         self.kms_vault = pv_encryption_kms_setup_factory(
             kv_version, use_vault_namespace
         )
         log.info("csi-kms-connection-details setup successful")
-
         # Create a project
         self.proj_obj = project_factory()
 
@@ -117,10 +108,17 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         self.kms_obj.vault_create_policy(policy_name=vault_resource_name)
 
         def kms_obj_cleanup():
-            self.kms_obj.remove_vault_backend_path()
-            self.kms_obj.remove_vault_policy()
+            self.kms_obj.remove_vault_backend_path(
+                vault_namespace=self.kms_obj.vault_namespace
+            )
+            self.kms_obj.remove_vault_policy(
+                vault_namespace=self.kms_obj.vault_namespace
+            )
             if self.kms_obj.vault_namespace:
-                self.kms_obj.remove_vault_namespace()
+                self.kms_obj.remove_vault_namespace(
+                    vault_namespace=self.kms_obj.vault_namespace
+                )
+
         request.addfinalizer(kms_obj_cleanup)
 
         # Create a configmap in the tenant namespace to override the vault namespace as shown below:

@@ -698,15 +698,22 @@ class Vault(KMS):
                     self.vault_policy_name = policy
                     logger.info(f"setting vault_policy_name = {self.vault_policy_name}")
 
-    def remove_vault_backend_path(self):
+    def remove_vault_backend_path(self, vault_namespace=None):
         """
         remove vault path
-
         """
-        cmd = f"vault secrets disable {self.vault_backend_path}"
+
+        if vault_namespace:
+            cmd = f"vault secrets disable -namespace={vault_namespace} {self.vault_backend_path}"
+        else:
+            cmd = f"vault secrets disable {self.vault_backend_path}"
         subprocess.check_output(shlex.split(cmd))
         # Check if path doesn't appear in the list
-        cmd = "vault secrets list --format=json"
+        if vault_namespace:
+            cmd = f"vault secrets list -namespace={vault_namespace} --format=json"
+            print("cmd:", cmd)
+        else:
+            cmd = "vault secrets list --format=json"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         for path in json_out.keys():
@@ -716,15 +723,23 @@ class Vault(KMS):
                 )
         logger.info(f"Vault path {self.vault_backend_path} deleted")
 
-    def remove_vault_policy(self):
+    def remove_vault_policy(self, vault_namespace=None):
         """
         Cleanup the policy we used
 
         """
-        cmd = f"vault policy delete {self.vault_policy_name} "
+        if vault_namespace:
+            cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
+        else:
+            cmd = f"vault policy delete {self.vault_policy_name}"
         subprocess.check_output(shlex.split(cmd))
+
         # Check if policy still exists
-        cmd = "vault policy list --format=json"
+        if vault_namespace:
+            cmd = f"vault policy list -namespace={vault_namespace} --format=json"
+        else:
+            cmd = "vault policy list --format=json"
+
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
@@ -743,7 +758,9 @@ class Vault(KMS):
         """
         # Unset namespace from environment
         # else delete will look for namespace within namespace
-        os.environ.pop("VAULT_NAMESPACE")
+        if os.environ.get("VAULT_NAMESPACE"):
+            os.environ.pop("VAULT_NAMESPACE")
+
         if config.ENV_DATA.get("vault_hcp"):
             self.vault_namespace = self.vault_namespace.replace("admin/", "")
             cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
