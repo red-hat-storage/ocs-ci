@@ -1580,11 +1580,14 @@ def verify_managedocs_security():
     for container in containers:
         log.info(f"Checking container {container['name']}")
         userid = container["securityContext"]["runAsUser"]
-        log.info(f"unAsUser is {userid}. Verifying it is not 0")
+        log.info(f"runAsUser is {userid}. Verifying it is not 0")
         assert userid > 0
         escalation = container["securityContext"]["allowPrivilegeEscalation"]
         log.info("Verifying allowPrivilegeEscalation is False")
         assert not escalation
+        dropped_capabilities = container["securityContext"]["capabilities"]["drop"]
+        log.info(f"Dropped capabilities: {dropped_capabilities}")
+        assert "ALL" in dropped_capabilities
 
 
 def get_ceph_clients():
