@@ -4161,7 +4161,9 @@ def pvc_clone_factory_fixture(request):
         elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
-        elif pvc_obj.provisioner == constants.LVM_PROVISIONER:
+        elif pvc_obj.provisioner == (
+            constants.LVM_PROVISIONER_4_11 or constants.LVM_PROVISIONER
+        ):
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             no_interface = True
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
@@ -5923,7 +5925,10 @@ def lvm_storageclass_factory_fixture(request, storageclass_factory):
             sc_obj = OCS(**sc_ocp_obj.data)
             log.info(f"Will return default storageclass {sc_obj.name}")
         elif volume_binding == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-            sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_11:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML_4_11)
+            elif version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
             sc_obj["metadata"]["name"] = create_unique_resource_name(
                 resource_description="immediate-test",
                 resource_type="storageclass",

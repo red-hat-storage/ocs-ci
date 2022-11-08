@@ -2420,7 +2420,7 @@ class LVM(object):
         lvmc_cop = OCP(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             kind="lvmcluster",
-            resource_name="lvmcluster",
+            resource_name=constants.LVMCLUSTER,
         )
         lvmc_ocs = lvmc_cop.data
         self.lvmcluster = lvmc_ocs
@@ -2898,7 +2898,7 @@ def check_clusters():
     try:
         lvmcluster_obj = OCP(
             kind="lvmcluster",
-            resource_name="lvmcluster",
+            resource_name=constants.LVMCLUSTER,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             silent=True,
         )
