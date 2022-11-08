@@ -1567,8 +1567,7 @@ def verify_managedocs_security():
     Check ocs-osd-deployer-operator permissions:
     1. Verify `runAsUser` is not 0
     2. Verify `SecurityContext.allowPrivilegeEscalation` is set to false
-    3. Verify `SecurityContext.capabilities.drop` only has capabilities
-    KILL, MKNOD, SETGID, SETUID
+    3. Verify `SecurityContext.capabilities.drop` contains ALL
     """
     pod_obj = OCP(
         kind="pod",
