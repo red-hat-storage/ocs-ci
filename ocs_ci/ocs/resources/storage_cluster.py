@@ -1264,7 +1264,7 @@ def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
     1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
-    2. 1 prometheus pod and 2 alertmanager pods are in Running state
+    2. 1 prometheus and 1 alertmanager pods are in Running state
     3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
     4. Verify that noobaa-operator replicas is set to 0
     5. Verify managed ocs secrets
@@ -1301,7 +1301,7 @@ def verify_managed_service_resources():
     )
     for alert_pod in {
         (constants.MANAGED_PROMETHEUS_LABEL, 1),
-        (constants.MANAGED_ALERTMANAGER_LABEL, 2),
+        (constants.MANAGED_ALERTMANAGER_LABEL, 1),
     }:
         pod_obj.wait_for_resource(
             condition="Running", selector=alert_pod[0], resource_count=alert_pod[1]
