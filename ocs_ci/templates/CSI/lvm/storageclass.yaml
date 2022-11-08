@@ -8,4 +8,4 @@ volumeBindingMode:
 allowVolumeExpansion: true
 parameters:
   csi.storage.k8s.io/fstype: xfs
-  topolvm.cybozu.com/device-class: vg1
+  topolvm.io/device-class: vg1
