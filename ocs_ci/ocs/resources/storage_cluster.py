@@ -1301,7 +1301,7 @@ def verify_managed_service_resources():
     )
     for alert_pod in {
         (constants.MANAGED_PROMETHEUS_LABEL, 1),
-        (constants.MANAGED_ALERTMANAGER_LABEL, 3),
+        (constants.MANAGED_ALERTMANAGER_LABEL, 1),
     }:
         pod_obj.wait_for_resource(
             condition="Running", selector=alert_pod[0], resource_count=alert_pod[1]
