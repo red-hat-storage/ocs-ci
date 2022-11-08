@@ -2078,7 +2078,7 @@ def ceph_health_check_base(namespace=None):
         f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-tools "
         f"-n {namespace} "
-        f"--timeout=120s"
+        f"--timeout=300s"
     )
     ceph_health_cmd = create_ceph_health_cmd(namespace)
     try:
