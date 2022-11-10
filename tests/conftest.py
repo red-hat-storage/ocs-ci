@@ -4632,8 +4632,8 @@ def pv_encryption_vault_setup_factory(request):
             vault.remove_vault_backend_path(vault_namespace=vault.vault_namespace)
             vault.remove_vault_policy(vault_namespace=vault.vault_namespace)
         else:
-            vault.remove_vault_backend_path(vault_namespace=None)
-            vault.remove_vault_policy(vault_namespace=None)
+            vault.remove_vault_backend_path()
+            vault.remove_vault_policy()
         if vault.vault_namespace:
             vault.remove_vault_namespace()
 

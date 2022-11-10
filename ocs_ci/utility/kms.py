@@ -701,6 +701,10 @@ class Vault(KMS):
     def remove_vault_backend_path(self, vault_namespace=None):
         """
         remove vault path
+
+        Args:
+        vaultNamespace (str): Namespace in Vault, if exists, where the backend
+                              path is created
         """
 
         if vault_namespace:
@@ -711,7 +715,6 @@ class Vault(KMS):
         # Check if path doesn't appear in the list
         if vault_namespace:
             cmd = f"vault secrets list -namespace={vault_namespace} --format=json"
-            print("cmd:", cmd)
         else:
             cmd = "vault secrets list --format=json"
         out = subprocess.check_output(shlex.split(cmd))
@@ -727,6 +730,9 @@ class Vault(KMS):
         """
         Cleanup the policy we used
 
+        Args:
+        vaultNamespace (str): Namespace in Vault, if exists, where the backend
+                              path is created
         """
         if vault_namespace:
             cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
