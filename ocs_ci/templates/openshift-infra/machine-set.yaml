@@ -24,6 +24,7 @@ spec:
           node-role.kubernetes.io/app: app-scale
       providerSpec:
         value:
+          spotMarketOptions: {}
           ami:
             id: ami-04a79d8d7cfa540cc
           apiVersion: awsproviderconfig.openshift.io/v1beta1
