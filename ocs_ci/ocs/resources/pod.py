@@ -413,10 +413,10 @@ class Pod(OCS):
             self.io_params["timeout"] = timeout
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
-    def fillup_fs(self, size, fio_filename=None):
+    def fillup_fs(self, size, fio_filename=None, performance_pod=False):
         """
         Execute FIO on a pod to fillup a file
-        This will run sequantial IO of 1MB block size to fill up the fill with data
+        This will run sequential IO of 1MB block size to fill up the fill with data
         This operation will run in background and will store the results in
         'self.thread.result()'.
         In order to wait for the output and not continue with the test until
@@ -427,11 +427,11 @@ class Pod(OCS):
         Args:
             size (str): Size in MB, e.g. '200M'
             fio_filename(str): Name of fio file created on app pod's mount point
-
+            performance_pod (bool): True if this pod is the performance pod created with PERF_POD_YAML
         """
 
         if not self.wl_setup_done:
-            self.workload_setup(storage_type="fs", jobs=1)
+            self.workload_setup(storage_type="fs", jobs=1, fio_installed=performance_pod)
 
         self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
         size = size if isinstance(size, str) else f"{size}M"

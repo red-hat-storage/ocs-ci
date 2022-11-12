@@ -1,13 +1,14 @@
 import logging
 import pytest
-import itertools
+import random
+import time
 
 from ocs_ci.ocs.perftests import PASTest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import PodNotCreated
-from ocs_ci.ocs.resources import pvc, ocs
+from ocs_ci.ocs.resources import pvc, ocs, pod
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
     get_osd_utilization,
@@ -40,7 +41,8 @@ class TestCephCapacityRecovery(PASTest):
             raise Exception(err_msg)
 
         log.info(f"Working on cluster {self.ceph_cluster.cluster_name} with capacity {self.ceph_capacity}")
-        self.num_of_pvcs = 200
+
+        self.num_of_pvcs = 10
         self.pvc_size = self.ceph_capacity/self.num_of_pvcs
         self.pvc_size_str = str(self.pvc_size) + "Gi"
         log.info(f"Creating pvs of {self.pvc_size_str} size")
@@ -162,6 +164,10 @@ class TestCephCapacityRecovery(PASTest):
 
             log.info(f"Finished successfully creation of snapshot number {index} .")
 
+        log.info(f"************ Going to sleep before PVC delete *************** .")
+        #time.sleep(600)
+        self.verify_osd_used_capacity_greater_than_expected(85.0)
+
         for (pod_obj, pvc_obj) in zip(pod_list, pvc_list):
             log.info(f"Deleting the test POD : {pod_obj.name}")
             try:
@@ -179,6 +185,10 @@ class TestCephCapacityRecovery(PASTest):
                 pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
             except Exception as ex:
                 log.error(f"Cannot delete the test pvc : {ex}")
+
+        log.info(f"************ Going to sleep after PVC delete *************** .")
+        #time.sleep(600)
+        self.verify_osd_used_capacity_greater_than_expected(85.0)
 
 
     def verify_osd_used_capacity_greater_than_expected(self, expected_used_capacity):
@@ -198,8 +208,8 @@ class TestCephCapacityRecovery(PASTest):
         log.info(f"ceph df detail: {ceph_df_detail}")
         osds_utilization = get_osd_utilization()
         log.info(f"osd utilization: {osds_utilization}")
-        for osd_id, osd_utilization in osds_utilization.items():
-            if osd_utilization > expected_used_capacity:
-                log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
-                return True
-        return False
+        # for osd_id, osd_utilization in osds_utilization.items():
+        #     if osd_utilization > expected_used_capacity:
+        #         log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
+        #         return True
+        # return False
