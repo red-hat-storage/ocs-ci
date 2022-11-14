@@ -453,7 +453,7 @@ class ManagedServiceCleanup(object):
     def __init__(self):
         self.cluster_names = list()
         self.clusters_details = list()
-        self.delete_clusters = list()
+        self.delete_clusters_list = list()
 
     def get_rosa_clusters(self):
         """
@@ -486,6 +486,21 @@ class ManagedServiceCleanup(object):
                     MANAGED_SERVICE_STRUCTURE["creation_time"] = parse(
                         line, fuzzy_with_tokens=True
                     )[0]
+                if "State:" in line:
+                    MANAGED_SERVICE_STRUCTURE["state"] = line.split()[1]
+            try:
+                cmd = f"rosa list addon -c {cluster_name}"
+                cmd_output = utils.run_cmd(cmd)
+                lines = cmd_output.splitlines()
+            except Exception as e:
+                logger.error(e)
+            is_provider = False
+            for line in lines:
+                if "ocs-provider" in line and "not installed" not in line:
+                    is_provider = True
+            MANAGED_SERVICE_STRUCTURE["type"] = (
+                "provider" if is_provider else "consumer"
+            )
             self.clusters_details.append(MANAGED_SERVICE_STRUCTURE)
 
     def check_cluster_rules(self):
@@ -496,13 +511,14 @@ class ManagedServiceCleanup(object):
         utc_time = dt.replace(tzinfo=timezone.utc)
         for cluster_detail in self.clusters_details:
             delta = utc_time - cluster_detail["creation_time"]
-            delta_hours = delta.second / 3600
+            delta_hours = delta.seconds / 3600
             for prefix, hours in defaults.CLUSTER_PREFIXES_SPECIAL_RULES.items():
                 expected_hours = (
                     hours if prefix in cluster_detail["cluster_name"] else 12
                 )
                 if delta_hours > expected_hours:
-                    self.delete_clusters.append(cluster_detail)
+                    self.delete_clusters_list.append(cluster_detail)
+        self.delete_expired_clusters()
 
     def verify_clusters_deleted(self, deleted_clusters):
         """
@@ -524,14 +540,17 @@ class ManagedServiceCleanup(object):
         logger.error(f"{not_deleted_cluster}")
         return len(not_deleted_cluster) == 0
 
-    def delete_clusters(self):
+    def delete_expired_clusters(self):
         """
         Delete the clusters that have passed the desired time
 
         """
         deleted_clusters = list()
-        for cluster_detail in self.delete_clusters:
-            cmd = f"rosa delete cluster -c {cluster_detail['cluster_name']}"
+        for cluster_detail in self.delete_clusters_list:
+            if cluster_detail["type"] == "consumer":
+                cmd = f"rosa delete cluster -c {cluster_detail['cluster_name']}"
+            else:
+                cmd = f"rosa delete service --id {cluster_detail['cluster_id']}"
             utils.run_cmd(cmd)
             deleted_clusters.append(cluster_detail["cluster_name"])
 
@@ -543,9 +562,5 @@ class ManagedServiceCleanup(object):
         )
         if not sample.wait_for_func_status(result=True):
             logger.error("Some clusters are not deleted")
-
-
-a = ManagedServiceCleanup()
-a.get_rosa_clusters()
-a.get_clusters_details()
-a.check_cluster_rules()
+        else:
+            self.delete_expired_clusters = list()

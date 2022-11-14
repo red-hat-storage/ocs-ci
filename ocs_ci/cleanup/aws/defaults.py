@@ -23,4 +23,5 @@ MANAGED_SERVICE_STRUCTURE = {
     "type": "",
     "region": "",
     "creation_time": "",
+    "state": "",
 }
