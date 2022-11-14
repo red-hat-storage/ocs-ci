@@ -703,8 +703,7 @@ class Vault(KMS):
         remove vault path
 
         Args:
-        vaultNamespace (str): Namespace in Vault, if exists, where the backend
-                                path is created
+            vault_namespace (str): Namespace in Vault, if exists, where the backend path is created
         """
 
         if vault_namespace:
@@ -731,9 +730,9 @@ class Vault(KMS):
         Cleanup the policy we used
 
         Args:
-        vaultNamespace (str): Namespace in Vault, if exists, where the backend
-                                path is created
+            vault namespace (str): Namespace in Vault, if exists, where the backend path is created
         """
+
         if vault_namespace:
             cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
         else:

@@ -87,6 +87,21 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             encryption_kms_id=self.kms_vault.kmsid,
         )
 
+    def kms_obj_cleanup(self):
+        self.kms_obj.remove_vault_backend_path(
+            vault_namespace=self.kms_obj.vault_namespace
+        )
+        self.kms_obj.remove_vault_policy(vault_namespace=self.kms_obj.vault_namespace)
+        if self.kms_obj.vault_namespace:
+            self.kms_obj.remove_vault_namespace()
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            self.kms_obj_cleanup()
+
+        request.addfinalizer(finalizer)
+
     def test_encryptedrbd_pvc_status_with_tenant_configmap_override(
         self,
         request,
@@ -106,20 +121,6 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             backend_path=vault_resource_name, kv_version=kv_version
         )
         self.kms_obj.vault_create_policy(policy_name=vault_resource_name)
-
-        def kms_obj_cleanup():
-            self.kms_obj.remove_vault_backend_path(
-                vault_namespace=self.kms_obj.vault_namespace
-            )
-            self.kms_obj.remove_vault_policy(
-                vault_namespace=self.kms_obj.vault_namespace
-            )
-            if self.kms_obj.vault_namespace:
-                self.kms_obj.remove_vault_namespace(
-                    vault_namespace=self.kms_obj.vault_namespace
-                )
-
-        request.addfinalizer(kms_obj_cleanup)
 
         # Create a configmap in the tenant namespace to override the vault namespace as shown below:
         if use_vault_namespace:
