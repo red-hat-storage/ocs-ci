@@ -6,10 +6,14 @@ import threading
 import os
 import re
 
+from dateutil.parser import parse
 from botocore.exceptions import ClientError
 from ocs_ci.framework import config
 
-
+from ocs_ci.utility import utils
+from ocs_ci.cleanup.aws.defaults import MANAGED_SERVICE_STRUCTURE
+from datetime import timezone
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.constants import (
     CLEANUP_YAML,
     TEMPLATE_CLEANUP_DIR,
@@ -443,3 +447,105 @@ def hour_valid(string):
         raise argparse.ArgumentTypeError(msg)
 
     return hours
+
+
+class ManagedServiceCleanup(object):
+    def __init__(self):
+        self.cluster_names = list()
+        self.clusters_details = list()
+        self.delete_clusters = list()
+
+    def get_rosa_clusters(self):
+        """
+        Get Rosa Clusters
+
+        """
+        cmd = "rosa list clusters"
+        cmd_output = utils.run_cmd(cmd)
+        lines = cmd_output.splitlines()
+        if len(lines) >= 2:
+            for line in lines[1::]:
+                self.cluster_names.append(line.split()[1])
+
+    def get_clusters_details(self):
+        """
+        Get Clusters Details
+
+        """
+        for cluster_name in self.cluster_names:
+            MANAGED_SERVICE_STRUCTURE["cluster_name"] = cluster_name
+            cmd = f"rosa describe cluster -c {cluster_name}"
+            cmd_output = utils.run_cmd(cmd)
+            lines = cmd_output.splitlines()
+            for line in lines:
+                if "ID:" in line and "External ID:" not in line:
+                    MANAGED_SERVICE_STRUCTURE["cluster_id"] = line.split()[1]
+                if "Region:" in line:
+                    MANAGED_SERVICE_STRUCTURE["region"] = line.split()[1]
+                if "Created:" in line:
+                    MANAGED_SERVICE_STRUCTURE["creation_time"] = parse(
+                        line, fuzzy_with_tokens=True
+                    )[0]
+            self.clusters_details.append(MANAGED_SERVICE_STRUCTURE)
+
+    def check_cluster_rules(self):
+        """
+        Check
+        """
+        dt = datetime.datetime.now(timezone.utc)
+        utc_time = dt.replace(tzinfo=timezone.utc)
+        for cluster_detail in self.clusters_details:
+            delta = utc_time - cluster_detail["creation_time"]
+            delta_hours = delta.second / 3600
+            for prefix, hours in defaults.CLUSTER_PREFIXES_SPECIAL_RULES.items():
+                expected_hours = (
+                    hours if prefix in cluster_detail["cluster_name"] else 12
+                )
+                if delta_hours > expected_hours:
+                    self.delete_clusters.append(cluster_detail)
+
+    def verify_clusters_deleted(self, deleted_clusters):
+        """
+        Verify the relevant clusters
+
+        Args:
+            deleted_clusters (list): List of clusters that need to be deleted
+
+        Returns:
+            bool: True if all clusters deleted otherwise False
+
+        """
+        cmd = "rosa list clusters"
+        cmd_output = utils.run_cmd(cmd)
+        not_deleted_cluster = []
+        for deleted_cluster in deleted_clusters:
+            if deleted_cluster in cmd_output:
+                not_deleted_cluster.append(deleted_cluster)
+        logger.error(f"{not_deleted_cluster}")
+        return len(not_deleted_cluster) == 0
+
+    def delete_clusters(self):
+        """
+        Delete the clusters that have passed the desired time
+
+        """
+        deleted_clusters = list()
+        for cluster_detail in self.delete_clusters:
+            cmd = f"rosa delete cluster -c {cluster_detail['cluster_name']}"
+            utils.run_cmd(cmd)
+            deleted_clusters.append(cluster_detail["cluster_name"])
+
+        sample = TimeoutSampler(
+            timeout=1500,
+            sleep=60,
+            func=self.verify_clusters_deleted,
+            deleted_clusters=deleted_clusters,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error("Some clusters are not deleted")
+
+
+a = ManagedServiceCleanup()
+a.get_rosa_clusters()
+a.get_clusters_details()
+a.check_cluster_rules()
