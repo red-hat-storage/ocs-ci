@@ -1695,7 +1695,7 @@ class KMIP(KMS):
         Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
 
         """
-
+        self.update_kmip_env_vars()
         key_id_list = self.get_key_list_ciphertrust()
 
         # Check for OSD keys
