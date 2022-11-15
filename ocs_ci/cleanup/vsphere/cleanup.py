@@ -247,7 +247,6 @@ def vsphere_cleanup():
 
     # delete the cluster
     delete_cluster(vsphere, cluster_name)
-    config.ENV_DATA["vsphere_cluster_type"] = "ipi"
 
     ipam = IPAM()
     if config.ENV_DATA.get("vsphere_cluster_type") == "ipi":
