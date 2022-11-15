@@ -712,7 +712,11 @@ class MCG:
             if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
             else ""
         )
-
+        if (
+            replication_policy is not None
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
+        ):
+            replication_policy = {"rules": replication_policy}
         with tempfile.NamedTemporaryFile(
             delete=True, mode="wb", buffering=0
         ) as replication_policy_file:
