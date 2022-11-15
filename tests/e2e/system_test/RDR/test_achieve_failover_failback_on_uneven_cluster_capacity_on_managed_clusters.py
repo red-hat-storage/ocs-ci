@@ -14,11 +14,14 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.storage_cluster import get_osd_count
+from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.pod import get_pod_obj
-from ocs_ci.ocs import node
+from ocs_ci.ocs import ocp, node
 from ocs_ci.ocs.node import get_osd_running_nodes, get_node_names
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs.cluster import (
+    check_ceph_health_after_add_capacity,
+)
 
 
 log = logging.getLogger(__name__)
@@ -52,15 +55,29 @@ class TestAchieveFailoverFailbackOnUnevenCapacityManagedClusters(E2ETest):
 
         # Add capacity if the osd count in the managedclusters are equal
         osds = []
-        for cluster in range(config.nclusters):
+        for cluster in range(1, 3):
             config.switch_ctx(cluster)
-            osd_count = get_osd_count()
+            osd_count = storage_cluster.get_osd_count()
             osds.append(osd_count)
             log.info(
                 f"CLUSTER_NAME: {config.ENV_DATA['cluster_name']} & Osd count {osd_count}"
             )
-        if osds[0] != osds[1]:
-            log.error("The osds are same in the managed clusters, Please Add capacity")
+        if osds[0] == osds[1]:
+            log.warning("The osds are same in the managed clusters, Adding capacity")
+
+        # Add capacity
+        osd_size = storage_cluster.get_osd_size()
+        count = storage_cluster.add_capacity(osd_size)
+        pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        assert pod.wait_for_resource(
+            timeout=300,
+            condition=constants.STATUS_RUNNING,
+            selector=constants.OSD_APP_LABEL,
+            resource_count=count * 1,
+        ), "New OSDs failed to reach running state"
+        check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
         # TODO check FIPS and KMS
 
@@ -80,7 +97,7 @@ class TestAchieveFailoverFailbackOnUnevenCapacityManagedClusters(E2ETest):
 
         # Number of clusters
         log.info(f"Number of clusters: {config.nclusters}")
-
+        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace
         )
@@ -105,7 +122,7 @@ class TestAchieveFailoverFailbackOnUnevenCapacityManagedClusters(E2ETest):
 
         # Respin osd nodes during failover on new primary
         osd_nodes = get_osd_running_nodes()
-        log.info(f"osd_nodes[0] {osd_nodes[0]}")
+        log.info(f"Rebooting node {osd_nodes[0]}")
         nodes.restart_nodes(nodes=osd_nodes[0], wait=True)
 
         # Respin ramen operator of new primary
@@ -113,6 +130,7 @@ class TestAchieveFailoverFailbackOnUnevenCapacityManagedClusters(E2ETest):
             cluster_name=config.current_cluster_name()
         )
         pod_obj = get_pod_obj(name=pod, namespace=constants.OPENSHIFT_OPERATORS)
+        log.info(f"Ramen pod_obj {pod_obj.name}")
         pod_obj.delete(force=True)
 
         # Verify resources deletion from previous primary or current secondary cluster
@@ -131,6 +149,7 @@ class TestAchieveFailoverFailbackOnUnevenCapacityManagedClusters(E2ETest):
 
         # Drain one node new primary/old secondary during relocate
         nodes = get_node_names()
+        log.info(f"Node to drain {nodes[0]}")
         node.drain_nodes(nodes[0])
 
         # Make the node schedulable again

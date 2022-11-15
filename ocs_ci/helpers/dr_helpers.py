@@ -562,6 +562,7 @@ def get_ramen_cluster_operator_pod(cluster_name):
         operator_pod (str): Returns the name of the ramen cluster operator pod
 
     """
+    operator_pod = []
     for i in range(config.nclusters):
         if cluster_name == i:
             config.switch_ctx(i)
