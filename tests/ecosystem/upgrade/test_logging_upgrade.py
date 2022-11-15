@@ -4,10 +4,7 @@ import pytest
 
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.utility.deployment_openshift_logging import (
-    check_health_of_clusterlogging,
-    get_clusterlogging_subscription,
-)
+from ocs_ci.utility.deployment_openshift_logging import check_health_of_clusterlogging
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -179,8 +176,12 @@ class TestUpgradeLogging:
             # Matching the OCP version and cluster-Logging version
             ocp_version = get_ocp_version()
             logger.info(f"OCP version {ocp_version}")
-            subscription = get_clusterlogging_subscription()
-            logging_channel = subscription.get("spec").get("channel")
+            clusterlogging_subscription = ocp.OCP(
+                kind=constants.SUBSCRIPTION,
+                namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+            )
+            subscription_info = clusterlogging_subscription.get(out_yaml_format=True)
+            logging_channel = subscription_info.get("spec").get("channel")
             logger.info(f"Current Logging channel {logging_channel}")
             upgrade_info(logging_channel)
             upgrade_channel = config.UPGRADE["upgrade_logging_channel"]
