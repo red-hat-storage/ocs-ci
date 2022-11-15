@@ -679,7 +679,7 @@ def wait_for_addon_to_be_ready(
         timeout=timeout,
         sleep=sleep,
         func=get_addon_info,
-        cluster_name=cluster_name,
+        cluster=cluster_name,
         addon_name=addon_name,
     ):
         if addon_info and "ready" in addon_info:

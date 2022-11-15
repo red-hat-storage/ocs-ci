@@ -2421,6 +2421,14 @@ def check_pods_after_node_replacement():
     if are_pods_running:
         return True
 
+    # This is a workaround due to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2142461
+    failed_pod_statuses = [
+        "Init:0/1",
+        constants.STATUS_CONTAINER_CREATING,
+        constants.STATUS_CLBO,
+    ]
+    restart_pods_in_statuses(failed_pod_statuses)
+
     not_ready_statuses = [
         constants.STATUS_ERROR,
         constants.STATUS_PENDING,
@@ -2913,3 +2921,28 @@ def exit_osd_maintenance_mode(osd_deployment):
     for deployment in osd_deployment:
         if os.path.isfile(f"backup_{deployment.name}.yaml"):
             os.remove(f"backup_{deployment.name}.yaml")
+
+
+def restart_pods_in_statuses(
+    status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE, wait=True
+):
+    """
+    Restart all the pods in specific statuses
+
+    Args:
+        status_options (list): The list of the status options.
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        wait (bool): Determines if the delete command should wait for
+            completion
+
+    Returns:
+        list: Restart all the pods that their status in the 'status_options' list.
+
+    """
+    logger.info(f"Get the pods in the statuses: {status_options}")
+    pods_to_restart = get_pods_in_statuses(status_options, namespace)
+    logger.info(
+        f"The pods {pods_to_restart} are in the statuses {status_options}. Restarting the pods..."
+    )
+    delete_pods(pods_to_restart, wait=wait)
+    logger.info("Finish restarting the pods")
