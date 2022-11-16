@@ -206,7 +206,10 @@ def setup_local_storage(storageclass):
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
-    verify_pvs_created(expected_pvs, storageclass)
+    if platform == constants.BAREMETAL_PLATFORM:
+        verify_pvs_created(expected_pvs, storageclass, False)
+    else:
+        verify_pvs_created(expected_pvs, storageclass)
 
 
 def create_optional_operators_catalogsource_non_ga(force=False):
@@ -334,12 +337,15 @@ def _get_disk_by_id(worker):
 
 
 @retry(AssertionError, 120, 10, 1)
-def verify_pvs_created(expected_pvs, storageclass):
+def verify_pvs_created(expected_pvs, storageclass, exact_count_pvs=True):
     """
     Verify that PVs were created and are in the Available state
 
     Args:
         expected_pvs (int): number of PVs to verify
+        storageclass (str): Name of storageclass
+        exact_count_pvs (bool): True if expected_pvs should match exactly with PVs created,
+            False, if PVs created is more than or equal to expected_pvs
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
@@ -368,8 +374,12 @@ def verify_pvs_created(expected_pvs, storageclass):
 
     # check number of PVs created
     num_pvs = len(available_pvs)
+    if exact_count_pvs:
+        condition_to_check = num_pvs == expected_pvs
+    else:
+        condition_to_check = num_pvs >= expected_pvs
     assert (
-        num_pvs == expected_pvs
+        condition_to_check
     ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
 
     logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
