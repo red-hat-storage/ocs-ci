@@ -380,6 +380,14 @@ class HPCSDeploymentError(Exception):
     pass
 
 
+class KMIPDeploymentError(Exception):
+    pass
+
+
+class KMIPOperationError(Exception):
+    pass
+
+
 class KMSNotSupported(Exception):
     pass
 
