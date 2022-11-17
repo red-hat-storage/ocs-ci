@@ -15,6 +15,8 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     load_config_file,
 )
+from ocs_ci.utility import version
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.utility.ocp_upgrade import (
@@ -74,7 +76,7 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
+    def test_upgrade_ocp(self, reduce_and_resume_cluster_load, setup_ui_class):
         """
         Tests OCS stability when upgrading OCP
 
@@ -186,6 +188,15 @@ class TestUpgradeOCP(ManageTest):
 
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions post upgrade:\n{cluster_ver}")
+
+        # Login to OCP console and run ODF dashboard validation check
+        version_post_upgrade = parse_version(ocp_upgrade_version)
+        if version_post_upgrade >= version.VERSION_4_9:
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version >= version.VERSION_4_9:
+                validation_ui_obj = ValidationUI(setup_ui_class)
+                validation_ui_obj.odf_overview_ui()
+                validation_ui_obj.odf_storagesystems_ui()
 
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
