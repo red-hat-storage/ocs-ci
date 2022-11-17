@@ -37,6 +37,7 @@ class TestOBCQuota:
     )
     def test_obc_quota(
         self,
+        rgw_endpoint,
         awscli_pod_session,
         rgw_bucket_factory,
         test_directory_setup,
