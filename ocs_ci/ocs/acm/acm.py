@@ -220,40 +220,40 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Checking connection status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Connection status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Agent status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "First gateway node label check did not pass for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
+        ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
-        log.info("Submariner add-ons creation is successful")
+        log.info("Submariner is healthy, check passed")
 
 
 def copy_kubeconfig(file):

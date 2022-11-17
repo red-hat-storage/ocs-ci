@@ -716,6 +716,12 @@ acm_configuration_4_11 = {
 }
 
 acm_configuration_4_12 = {
+    "local-cluster": ("pf-dropdown-toggle-id-128", By.ID),
+    "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
+
+}
+
+acm_configuration_4_12 = {
     **acm_configuration_4_11,
     "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
     "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
