@@ -154,11 +154,14 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         if output_string is None:
             return False
 
+        matched_result = []
         for expected_string in expected_strings:
-            if expected_string not in output_string:
-                log.error(f"expected string:{expected_string} not in {output_string}")
-                return False
-        return True
+            if expected_string in output_string:
+                log.error(f"expected string:{expected_string} in {output_string}")
+                matched_result.append(True)
+            matched_result.append(False)
+
+        return all(matched_result)
 
     def set_overprovision_policy(self, capacity, quota, sc_name, label):
         """
