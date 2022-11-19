@@ -17,17 +17,12 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True, scope="class")
 def setup_sc(storageclass_factory_class):
-    sc_fs_obj = storageclass_factory_class(
-        interface=constants.CEPHFILESYSTEM, sc_name="sc-test-fs"
-    )
     sc_blk_obj = storageclass_factory_class(
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     return {
         constants.CEPHBLOCKPOOL_SC: None,
-        constants.CEPHFILESYSTEM_SC: None,
         "sc-test-blk": sc_blk_obj,
-        "sc-test-fs": sc_fs_obj,
     }
 
 
@@ -41,27 +36,14 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            log.info("Delete overprovisionControl from storage cluster yaml file")
-            storagecluster_obj = OCP(
-                resource_name=constants.DEFAULT_CLUSTERNAME,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                kind=constants.STORAGECLUSTER,
-            )
-            params = '{"spec": {"overprovisionControl": []}}'
-            storagecluster_obj.patch(
-                params=params,
-                format_type="merge",
-            )
-            log.info("Verify storagecluster on Ready state")
-            verify_storage_cluster()
-
+            self.clear_overprovision_spec()
         request.addfinalizer(finalizer)
 
     def test_overprovision_level_policy_control_with_capacity(
         self,
         setup_sc,
-        teardown_project_factory,
-        pvc_factory
+        pvc_factory,
+        project_factory,
     ):
         """
         Test Process:
@@ -78,44 +60,27 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         sc_type = constants.CEPHBLOCKPOOL
         policy_labels = {"storagequota": "storagequota"}
         quota_capacity = "100Gi"
-        test_namespace = "openshiftstoragequota"
 
-        log.info("Add 'overprovisionControl' section to storagecluster yaml file")
-        params = (
-            '{"spec": {"overprovisionControl": [{"capacity": "'+quota_capacity+'",'
-            '"storageClassName":"'+sc_name+'", "quotaName": "'+quota_name+'",'
-            '"selector": {"labels": {"matchLabels": {"storagequota":"storagequota"}}}}]}}'
-        )
-
-        storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.STORAGECLUSTER,
-        )
-
-        storagecluster_obj.patch(
-            params=params,
-            format_type="merge",
-        )
-
+        self.clear_overprovision_spec()
+        self.set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
         log.info(f"Create Namespace with {policy_labels} label")
-        ocp_ns_obj = OCP(kind=constants.NAMESPACE)
-        ocp_ns_obj.new_project(project_name=test_namespace)
-        ocp_ns_obj.add_label(resource_name=test_namespace, label="storagequota=storagequota")
+        ocp_ns_obj = project_factory()
+        ocp_project_label = OCP(kind=constants.NAMESPACE)
+        ocp_project_label.add_label(
+            resource_name=ocp_ns_obj.namespace, label="storagequota=storagequota"
+        )
 
-        ocp_project_obj = OCP(kind="Project", namespace=test_namespace)
-        teardown_project_factory(ocp_project_obj)
-
-        log.info(f"Create 50Gi pvc on namespace f{test_namespace}")
+        log.info(f"Create 50Gi pvc on namespace f{ocp_ns_obj.namespace}")
         sc_obj = setup_sc.get(sc_name)
+        pytest.set_trace()
 
         try:
             pvc_factory(
                 interface=sc_type,
-                project=ocp_project_obj,
+                project=ocp_ns_obj,
                 storageclass=sc_obj,
                 size=50,
                 status=constants.STATUS_BOUND,
@@ -135,14 +100,13 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             output_string=output_clusterresourcequota,
             expected_strings=["50Gi"])
 
-
         log.info(
             "Add another pvc with 51Gi capacity and verify it failed [50Gi + 51Gi > 100Gi]"
         )
         try:
             pvc_factory(
                 interface=sc_type,
-                project=ocp_project_obj,
+                project=ocp_ns_obj,
                 storageclass=sc_obj,
                 size=51,
             )
@@ -151,17 +115,6 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 output_string=str(e), expected_strings=["forbidden","exceeded quota"]
             ), f"The error does not contain string:{str(e)}"
 
-        log.info("Removing overprovisionControl from storage cluster.")
-        storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.STORAGECLUSTER,
-        )
-        params = '{"spec": {"overprovisionControl": []}}'
-        storagecluster_obj.patch(
-            params=params,
-            format_type="merge",
-        )
         log.info("Verify storagecluster on Ready state.")
         verify_storage_cluster()
 
@@ -169,7 +122,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         try:
             pvc_factory(
                 interface=sc_type,
-                project=ocp_project_obj,
+                project=ocp_ns_obj,
                 storageclass=sc_obj,
                 size=51,
             )
@@ -206,3 +159,57 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 log.error(f"expected string:{expected_string} not in {output_string}")
                 return False
         return True
+
+    def set_overprovision_policy(self, capacity, quota, sc_name, label):
+        """
+        Set OverProvisionControl Policy.
+
+        Args:
+            capacity (str): storage capacity e.g. 50Gi
+            quota (str): quota name.
+            sc_name (str): storage class name
+            label (dict): storage quota labels.
+
+        Return:
+            None
+        """
+        log.info("Add 'overprovisionControl' section to storagecluster yaml file")
+        params = (
+            '{"spec": {"overprovisionControl": [{"capacity": "'+capacity+'",'
+            '"storageClassName":"'+sc_name+'", "quotaName": "'+quota+'",'
+            '"selector": {"labels": {"matchLabels": '+ label.__str__().replace('\'',"\"")
++'}}}]}}'
+        )
+
+        storagecluster_obj = OCP(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            kind=constants.STORAGECLUSTER,
+        )
+
+        storagecluster_obj.patch(
+            params=params,
+            format_type="merge",
+        )
+
+        log.info("Verify storagecluster on Ready state")
+        verify_storage_cluster()
+
+    def clear_overprovision_spec(self):
+        """
+        Clear OverProvisionPolicy of storage cluster.
+        """
+        log.info("Removing overprovisionControl from storage cluster.")
+        storagecluster_obj = OCP(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            kind=constants.STORAGECLUSTER,
+        )
+        params = '{"spec": {"overprovisionControl": []}}'
+        storagecluster_obj.patch(
+            params=params,
+            format_type="merge",
+        )
+        log.info("Verify storagecluster on Ready state")
+        verify_storage_cluster()
+
