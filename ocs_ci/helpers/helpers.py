@@ -3965,7 +3965,6 @@ def verify_quota_resource_exist(quota_name):
     """
     clusterresourcequota_obj = OCP(kind="clusterresourcequota")
     quota_resources = clusterresourcequota_obj.get().get("items")
-    quota_resource_names = list()
-    for quota_resource in quota_resources:
-        quota_resource_names.append(quota_resource.get("metadata").get("name"))
-    return quota_name in quota_resource_names
+    return quota_name in [
+        quota_resource.get("metadata").get("name") for quota_resource in quota_resources
+    ]
