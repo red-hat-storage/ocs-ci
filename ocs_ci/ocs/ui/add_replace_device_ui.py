@@ -33,10 +33,6 @@ class AddReplaceDeviceUI(PageNavigator):
         self.do_click(self.add_capacity_ui["kebab_storage_cluster"])
         self.do_click(self.add_capacity_ui["add_capacity_button"])
         self.do_click(
-            self.add_capacity_ui["select_sc_add_capacity"], enable_screenshot=True
-        )
-        self.do_click(self.add_capacity_ui[self.storage_class], enable_screenshot=True)
-        self.do_click(
             self.add_capacity_ui["confirm_add_capacity"], enable_screenshot=True
         )
 
