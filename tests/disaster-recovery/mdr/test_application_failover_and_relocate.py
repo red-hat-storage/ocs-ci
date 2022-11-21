@@ -20,9 +20,9 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_secondary_cluster_name,
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
-    validate_data_integrity,
-    gracefully_reboot_nodes,
+    gracefully_reboot_ocp_nodes,
 )
+from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class TestApplicationFailoverAndRelocate(ManageTest):
         def finalizer():
             if self.drcluster_name and get_fence_state(self.drcluster_name) == "Fenced":
                 enable_unfence(self.drcluster_name)
-                gracefully_reboot_nodes(self.namespace, self.drcluster_name)
+                gracefully_reboot_ocp_nodes(self.namespace, self.drcluster_name)
 
         request.addfinalizer(finalizer)
 
@@ -100,7 +100,9 @@ class TestApplicationFailoverAndRelocate(ManageTest):
         enable_unfence(drcluster_name=self.drcluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_nodes(rdr_workload.workload_namespace, self.drcluster_name)
+        gracefully_reboot_ocp_nodes(
+            rdr_workload.workload_namespace, self.drcluster_name
+        )
 
         # ToDo: Validate PV is in Released state
 
@@ -189,7 +191,9 @@ class TestApplicationFailoverAndRelocate(ManageTest):
         enable_unfence(drcluster_name=self.drcluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_nodes(rdr_workload.workload_namespace, self.drcluster_name)
+        gracefully_reboot_ocp_nodes(
+            rdr_workload.workload_namespace, self.drcluster_name
+        )
 
         # ToDo: Validate PV is in Released state
 
