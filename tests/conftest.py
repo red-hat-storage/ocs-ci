@@ -4167,8 +4167,8 @@ def pvc_clone_factory_fixture(request):
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
         elif pvc_obj.provisioner == (
-            constants.LVM_PROVISIONER_4_11 or constants.LVM_PROVISIONER
-        ):
+            constants.LVM_PROVISIONER_4_11
+        ) or pvc_obj.provisioner == (constants.LVM_PROVISIONER):
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             no_interface = True
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
