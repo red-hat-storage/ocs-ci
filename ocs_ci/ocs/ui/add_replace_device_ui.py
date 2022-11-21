@@ -37,6 +37,7 @@ class AddReplaceDeviceUI(PageNavigator):
         self.do_click(
             self.add_capacity_ui["confirm_add_capacity"], enable_screenshot=True
         )
+        self.take_screenshot()
 
     def verify_pod_status(self, pod_names, pod_state="Running"):
         """
