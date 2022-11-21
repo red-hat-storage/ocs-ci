@@ -8,8 +8,9 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -168,22 +169,31 @@ def check_mirroring_status_ok(replaying_images=None):
     )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
-    keys_to_check = ["health", "daemon_health", "image_health", "states"]
-    for key in keys_to_check:
-        if key != "states":
-            expected_value = "OK"
-            current_value = mirroring_status.get(key)
-        elif key == "states" and replaying_images:
-            # Replaying images count can be higher due to presence of dummy images
-            # There can be upto 2 dummy images in each ODF cluster
-            expected_value = range(replaying_images, replaying_images + 3)
-            current_value = mirroring_status.get("states").get("replaying")
+    health_keys = ["daemon_health", "health", "image_health"]
+    for key in health_keys:
+        expected_value = "OK"
+        current_value = mirroring_status.get(key)
+        if current_value not in expected_value:
+            logger.warning(
+                f"Unexpected {key}. Current status is {current_value} but expected {expected_value}"
+            )
+            return False
+
+    if replaying_images:
+        # Replaying images count can be higher due to presence of dummy images
+        # This does not apply for clusters with ODF 4.12 and above.
+        # See https://bugzilla.redhat.com/show_bug.cgi?id=2132359
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_12:
+            expected_value = [replaying_images]
         else:
-            continue
+            expected_value = range(replaying_images, replaying_images + 3)
+
+        current_value = mirroring_status.get("states").get("replaying")
 
         if current_value not in expected_value:
             logger.warning(
-                f"Unexpected {key} status. Current status is {current_value} but expected {expected_value}"
+                f"Unexpected states. Current replaying count is {current_value} but expected {expected_value}"
             )
             return False
 
@@ -208,13 +218,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
     """
     restore_index = config.cur_index
     if not replaying_images:
-        replaying_images = 0
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            replaying_images += len(
-                get_all_pvcs_in_storageclass(constants.CEPHBLOCKPOOL_SC)
-            )
-        replaying_images -= 2  # Ignore db-noobaa-db-pg-0 PVCs
+        replaying_images = config.ENV_DATA["dr_workload_pvc_count"]
 
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
