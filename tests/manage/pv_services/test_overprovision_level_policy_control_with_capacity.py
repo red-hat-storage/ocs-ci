@@ -8,7 +8,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    bugzilla,
     skipif_managed_service,
 )
 
@@ -33,10 +32,12 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
     """
     Test OverProvision Level Policy Control With Capacity.
     """
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
             self.clear_overprovision_spec()
+
         request.addfinalizer(finalizer)
 
     def test_overprovision_level_policy_control_with_capacity(
@@ -62,7 +63,9 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         quota_capacity = "100Gi"
 
         self.clear_overprovision_spec()
-        self.set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
+        self.set_overprovision_policy(
+            quota_capacity, quota_name, sc_name, policy_labels
+        )
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
@@ -97,8 +100,8 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
 
         assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota,
-            expected_strings=["50Gi"])
+            output_string=output_clusterresourcequota, expected_strings=["50Gi"]
+        )
 
         log.info(
             "Add another pvc with 51Gi capacity and verify it failed [50Gi + 51Gi > 100Gi]"
@@ -112,7 +115,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             )
         except Exception as e:
             assert self.verify_substrings_in_string(
-                output_string=str(e), expected_strings=["forbidden","exceeded quota"]
+                output_string=str(e), expected_strings=["forbidden", "exceeded quota"]
             ), f"The error does not contain string:{str(e)}"
 
         log.info("Verify storagecluster on Ready state.")
@@ -136,8 +139,8 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
 
         assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota,
-            expected_strings=["50Gi","51Gi"])
+            output_string=output_clusterresourcequota, expected_strings=["50Gi", "51Gi"]
+        )
 
     def verify_substrings_in_string(self, output_string, expected_strings):
         """
@@ -178,10 +181,11 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         """
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         params = (
-            '{"spec": {"overprovisionControl": [{"capacity": "'+capacity+'",'
-            '"storageClassName":"'+sc_name+'", "quotaName": "'+quota+'",'
-            '"selector": {"labels": {"matchLabels": '+ label.__str__().replace('\'',"\"")
-+'}}}]}}'
+            '{"spec": {"overprovisionControl": [{"capacity": "' + capacity + '",'
+            '"storageClassName":"' + sc_name + '", "quotaName": "' + quota + '",'
+            '"selector": {"labels": {"matchLabels": '
+            + label.__str__().replace("'", '"')
+            + "}}}]}}"
         )
 
         storagecluster_obj = OCP(
@@ -215,4 +219,3 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         )
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
-
