@@ -761,7 +761,7 @@ DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 ACTION_FENCE = "Fenced"
-AcTION_UNFENCE = "Unfenced"
+ACTION_UNFENCE = "Unfenced"
 
 # constants
 RBD_INTERFACE = "rbd"

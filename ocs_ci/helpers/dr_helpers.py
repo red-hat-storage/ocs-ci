@@ -2,7 +2,6 @@
 Helper functions specific for DR
 """
 import logging
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -10,14 +9,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvc_objs
-from ocs_ci.ocs.node import (
-    get_node_objs,
-    wait_for_nodes_status,
-    schedule_nodes,
-    unschedule_nodes,
-    drain_nodes,
-)
-from ocs_ci.ocs import platform_nodes
+from ocs_ci.ocs.node import gracefully_reboot_nodes
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
 
@@ -579,9 +571,8 @@ def enable_fence(drcluster_name):
     config.switch_acm_ctx()
     fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
-    assert drcluster_obj.patch(
-        params=fence_params, format_type="merge"
-    ), f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}"
+    if not drcluster_obj.patch(params=fence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
     logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
     config.switch_ctx(restore_index)
 
@@ -600,12 +591,37 @@ def enable_unfence(drcluster_name):
     )
     restore_index = config.cur_index
     config.switch_acm_ctx()
-    unfence_params = f'{{"spec":{{"clusterFence":"{constants.AcTION_UNFENCE}"}}}}'
+    unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
-    assert drcluster_obj.patch(
-        params=unfence_params, format_type="merge"
-    ), f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}"
+    if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
     logger.info(f"Successfully unfenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def fence_state(drcluster_name, fence_state):
+    """
+    Sets the specified clusterFence state
+
+    Args:
+       drcluster_name (str): Name of the DRcluster which needs to be fenced
+       fence_state (str): Specify the clusterfence state
+        either constants.ACTION_UNFENCE and ACTION_FENCE
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(
+        f"Successfully changed clusterfence state to {fence_state} {constants.DRCLUSTER}: {drcluster_name}"
+    )
     config.switch_ctx(restore_index)
 
 
@@ -629,34 +645,7 @@ def get_fence_state(drcluster_name):
     return state
 
 
-def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
-    """
-    Verifies the md5sum values of files are OK
-
-    Args:
-        namespace (str): Namespace where the workload running
-        path (str): Path of the hashfile saved of each files
-        timeout (int): Time taken in seconds to run command inside pod
-
-    Raises: If there is a mismatch in md5sum value or None
-
-    """
-    all_pods = get_all_pods(namespace=namespace)
-    for pod_obj in all_pods:
-        logger.info("Verify the md5sum values are OK")
-        cmd = f"md5sum -c {path}"
-        try:
-            pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
-            logger.info(f"Pod {pod_obj.name}: All files checksums value matches")
-        except CommandFailed as ex:
-            if "computed checksums did NOT match" in str(ex):
-                logger.error(
-                    f"Pod {pod_obj.name}: One or more files or datas are modified"
-                )
-            raise ex
-
-
-def gracefully_reboot_nodes(namespace, drcluster_name):
+def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
@@ -672,16 +661,4 @@ def gracefully_reboot_nodes(namespace, drcluster_name):
         set_current_primary_cluster_context(namespace)
     else:
         set_current_secondary_cluster_context(namespace)
-    node_objs = get_node_objs()
-    factory = platform_nodes.PlatformNodesFactory()
-    nodes = factory.get_nodes_platform()
-    waiting_time = 30
-    for node in node_objs:
-        node_name = node.name
-        unschedule_nodes([node_name])
-        drain_nodes([node_name])
-        nodes.restart_nodes([node], wait=False)
-        logger.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(waiting_time)
-        schedule_nodes([node_name])
-    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
+    gracefully_reboot_nodes()

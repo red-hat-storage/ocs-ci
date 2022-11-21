@@ -13,6 +13,7 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.helpers import delete_volume_in_backend
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility.utils import clone_repo, run_cmd
 from ocs_ci.utility import templating
@@ -247,3 +248,30 @@ class BusyBox(DRWorkload):
         finally:
             config.switch_acm_ctx()
             run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+
+
+def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
+    """
+    Verifies the md5sum values of files are OK
+
+    Args:
+        namespace (str): Namespace where the workload running
+        path (str): Path of the hashfile saved of each files
+        timeout (int): Time taken in seconds to run command inside pod
+
+    Raises: If there is a mismatch in md5sum value or None
+
+    """
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        log.info("Verify the md5sum values are OK")
+        cmd = f"md5sum -c {path}"
+        try:
+            pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+            log.info(f"Pod {pod_obj.name}: All files checksums value matches")
+        except CommandFailed as ex:
+            if "computed checksums did NOT match" in str(ex):
+                log.error(
+                    f"Pod {pod_obj.name}: One or more files or datas are modified"
+                )
+            raise ex
