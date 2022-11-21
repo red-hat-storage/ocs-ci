@@ -78,7 +78,6 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
 
         log.info(f"Create 50Gi pvc on namespace f{ocp_ns_obj.namespace}")
         sc_obj = setup_sc.get(sc_name)
-        pytest.set_trace()
 
         try:
             pvc_factory(
