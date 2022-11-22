@@ -4206,6 +4206,7 @@ def pvc_clone_factory_fixture(request):
         size=None,
         access_mode=None,
         volume_mode=None,
+        timeout=60,
     ):
         """
         Args:
@@ -4220,6 +4221,7 @@ def pvc_clone_factory_fixture(request):
                 the cloned PVC. eg: ReadWriteOnce, ReadOnlyMany, ReadWriteMany
             volume_mode (str): Volume mode for PVC. This should match the
                 volume mode of parent PVC
+            timeout (int): Time in seconds to wait for the PVC to reach the desired status.
 
         Returns:
             PVC: PVC instance

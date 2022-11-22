@@ -4,17 +4,19 @@ import logging
 from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier3,
     skipif_ocp_version,
     skipif_managed_service,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    pre_upgrade,
 )
-
-from ocs_ci.ocs.resources import pod
 
 
 log = logging.getLogger(__name__)
@@ -23,28 +25,145 @@ ERRMSG = "Error in command"
 
 
 @tier1
+@skipif_ocs_version(">4.11")
+@skipif_ocp_version(">4.11")
+@skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
+@green_squad
+class TestMetadataUnavailable(ManageTest):
+    """
+    Test metadata feature is unavailable for ODF < 4.12
+    """
+
+    @pytest.mark.parametrize(
+        argnames=["fs", "sc_name"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephfilesystem",
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+            ),
+        ],
+    )
+    def test_metadata_feature_unavailable_for_previous_versions(
+        self, project_factory_class, sc_name, fs
+    ):
+        """
+        This test is to validate setmetadata feature is unavailable in previous ODF version
+
+        Steps:
+        1:- Check CSI_ENABLE_METADATA flag unavailable in rook-ceph-operator-config
+        and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
+        for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+        """
+        config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
+        pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
+        toolbox = pod.get_ceph_tools_pod()
+        project_factory_class(project_name="test-metadata")
+        enable_metadata = '{"data":{"CSI_ENABLE_METADATA": "true"}}'
+        assert config_map_obj.patch(
+            resource_name="rook-ceph-operator-config",
+            params=enable_metadata,
+        ), "configmap/rook-ceph-operator-config not patched"
+
+        # metadata flag not available
+        metadata_flag = config_map_obj.exec_oc_cmd(
+            "get cm rook-ceph-operator-config --output  jsonpath='{.data.CSI_ENABLE_METADATA}'"
+        )
+        log.info(f"metadata flag----{metadata_flag}")
+
+        # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+        res = metadata_utils.check_setmetadata_availability(pod_obj)
+        if res:
+            raise AssertionError
+        available_subvolumes = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
+        # Create pvc object
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_name,
+            namespace="test-metadata",
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
+
+        updated_subvolumes = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
+
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, toolbox, created_subvolume
+        )
+        # metadata details unavailable for the PVC
+        assert metadata == {}
+
+        # Delete the PVC
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+
+    @pre_upgrade
+    def test_create_pvc(self, pvc_factory):
+        """
+        This test is to validate setmetadata feature is unavailable in previous ODF version
+
+        Steps:
+        1:- Check CSI_ENABLE_METADATA flag unavailable in rook-ceph-operator-config
+        and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
+        for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+        """
+        # create a pvc with cephfs sc
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM, status=constants.STATUS_BOUND
+        )
+        log.info(f"PVC {pvc_obj.name} created!")
+        # Delete the PVC
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+
+
+@tier1
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@green_squad
 class TestDefaultMetadataDisabled(ManageTest):
     """
     Test metadata feature disabled by default for ODF 4.12
 
     """
 
-    def test_metadata_not_enabled_by_default(self):
+    @pytest.mark.parametrize(
+        argnames=["fs", "sc_name"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephfilesystem",
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+            )
+        ],
+    )
+    def test_metadata_not_enabled_by_default(
+        self, pvc_factory, pvc_clone_factory, fs, sc_name
+    ):
         """
         This test is to validate metadata feature is not enabled by default for  ODF(4.12) clusters
 
         Steps:
         1:- Check CSI_ENABLE_METADATA flag unavailable by default in rook-ceph-operator-config
         and setmetadata is unavailable for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+        2. metadata details unavailable for
+            1. a newly created RBD PVC
+            2. PVC clone
+
         """
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
-
+        toolbox = pod.get_ceph_tools_pod()
         # enable metadata flag not available by default
         metadata_flag = config_map_obj.exec_oc_cmd(
             "get cm rook-ceph-operator-config --output  jsonpath='{.data.CSI_ENABLE_METADATA}'"
@@ -59,15 +178,39 @@ class TestDefaultMetadataDisabled(ManageTest):
         res = metadata_utils.check_setmetadata_availability(pod_obj)
         if res:
             raise AssertionError
+        _ = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
+        # create a pvc with cephfs sc
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM, status=constants.STATUS_BOUND
+        )
+        log.info(f"PVC {pvc_obj.name} created!")
+        # create a clone of the PVC
+        cloned_pvc_obj = pvc_clone_factory(pvc_obj)
+        log.info(f"Clone of PVC {pvc_obj.name} created!")
+        updated_subvolumes = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
+        for sub_vol in updated_subvolumes:
+            metadata = metadata_utils.fetch_metadata(
+                sc_name, fs, toolbox, sub_vol["name"]
+            )
+            assert metadata == {}
+        # Delete PVCs
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+        cloned_pvc_obj.delete()
+        cloned_pvc_obj.ocp.wait_for_delete(
+            resource_name=cloned_pvc_obj.name, timeout=300
+        ), f"PVC {cloned_pvc_obj.name} is not deleted"
 
 
-@tier1
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-class TestMetadataForCephfs(ManageTest):
+@green_squad
+class TestMetadata(ManageTest):
     """
     This test class consists of tests to verify cephfs metadata for
     1. a newly created CephFS PVC
@@ -91,7 +234,7 @@ class TestMetadataForCephfs(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
-        self.project_name = "test-metadata"
+        self.project_name = "metadata"
         project_factory_class(project_name=self.project_name)
         self.namespace = "openshift-storage"
         self.config_map_obj = ocp.OCP(kind="Configmap", namespace=self.namespace)
@@ -114,7 +257,20 @@ class TestMetadataForCephfs(ManageTest):
             self.config_map_obj,
             self.pod_obj,
         )
+        log.info("Starting the test environment celanup")
+        # Delete the test project
+        self.delete_test_project()
 
+    def teardown(self):
+        """
+        Test teardown to cleanup
+        """
+        list_pvcs = pvc.get_all_pvc_objs(namespace=self.project_name)
+        log.info(f"List of pvcs in {self.project_name} is--- {list_pvcs} ")
+        pvc.delete_pvcs(pvc_objs=list_pvcs)
+        log.info("Teardown complete")
+
+    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -131,8 +287,9 @@ class TestMetadataForCephfs(ManageTest):
         self, pvc_clone_factory, snapshot_factory, snapshot_restore_factory, fs, sc_name
     ):
         """
-        This test case verifies the cephfs metadata created on the subvolume for,
-        1. a newly created CephFS PVC
+        This test case verifies the cephfs and rbd metadata created on the subvolume
+        for CSI_ENABLE_METADATA flag enabled for,
+        1. a newly created PVC
         2. Create a clone
         3. Create a volume snapshot
         4. Restore volume from snapshot
@@ -149,15 +306,12 @@ class TestMetadataForCephfs(ManageTest):
             size="1Gi",
         )
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
-
         updated_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
-
         created_subvolume = metadata_utils.created_subvolume(
             available_subvolumes, updated_subvolumes, sc_name
         )
-
         metadata = metadata_utils.fetch_metadata(
             sc_name, fs, self.toolbox, created_subvolume
         )
@@ -170,9 +324,8 @@ class TestMetadataForCephfs(ManageTest):
             namespace=self.project_name,
         )
         available_subvolumes = updated_subvolumes
-
         # Clone the PVC
-        clone_pvc_obj = pvc_clone_factory(pvc_obj=pvc_obj)
+        clone_pvc_obj = pvc_clone_factory(pvc_obj=pvc_obj, timeout=600)
         updated_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -182,7 +335,6 @@ class TestMetadataForCephfs(ManageTest):
         metadata = metadata_utils.fetch_metadata(
             sc_name, fs, self.toolbox, created_subvolume
         )
-
         # metadata validation for cloned PVC
         metadata_utils.validate_metadata(
             metadata=metadata,
@@ -208,7 +360,6 @@ class TestMetadataForCephfs(ManageTest):
             available_subvolumes=available_subvolumes,
             updated_subvolumes=updated_subvolumes,
         )
-
         # metadata validation for snapshot created
         metadata_utils.validate_metadata(
             metadata=metadata,
@@ -221,7 +372,7 @@ class TestMetadataForCephfs(ManageTest):
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
-        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj)
+        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj, timeout=600)
         updated_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -239,7 +390,96 @@ class TestMetadataForCephfs(ManageTest):
             pvc_name=restored_pvc.name,
             namespace=self.project_name,
         )
+        # Verify VolumeSnapshotContent deleted
+        snap_obj.delete()
+        snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name, timeout=180)
 
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["fs", "sc_name"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephfilesystem",
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+            )
+        ],
+    )
+    def test_verify_metadata_details_for_new_pvc_same_named(self, fs, sc_name):
+        """
+        This test case verifies the behavior for creating a PVC for CSI_ENABLE_METADATA flag
+        enabled and then delete the PVC and created a new PVC with the same name
+        Steps:
+            1. Create a PVC
+            2. Check metadata details
+            3. Delete the PVC
+            4. Create a new PVC with same name as previous
+            5. Validate the metadata created for the new PVC
+               is different than previous metadata
+        """
+        available_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        # Create pvc object
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_name,
+            namespace=self.project_name,
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
+        pvc_name = pvc_obj.name
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata validation for new PVC created
+        metadata_utils.validate_metadata(
+            metadata=metadata,
+            clustername=self.cluster_name,
+            pv_name=pvc_obj.backed_pv_obj.name,
+            pvc_name=pvc_name,
+            namespace=self.project_name,
+        )
+        # Delete the PVC
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+        available_subvolumes = updated_subvolumes
+        # Create a pvc object with same name
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_name,
+            pvc_name=pvc_name,
+            namespace=self.project_name,
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata_new_pvc = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata validation for new PVC created
+        metadata_utils.validate_metadata(
+            metadata=metadata_new_pvc,
+            clustername=self.cluster_name,
+            pv_name=pvc_obj.backed_pv_obj.name,
+            pvc_name=pvc_name,
+            namespace=self.project_name,
+        )
+        assert metadata_new_pvc != metadata
+
+    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -252,13 +492,270 @@ class TestMetadataForCephfs(ManageTest):
             ),
         ],
     )
+    def test_metadata_details_available_only_when_metadata_flag_enabled(
+        self, pvc_clone_factory, snapshot_factory, snapshot_restore_factory, fs, sc_name
+    ):
+        """
+        This test case is to validate that metadata details are available for the operations
+        done after enabling CSI_ENABLE_METADATA flag----
+        Steps:
+        1. enable CSI_ENABLE_METADATA flag create a PVC and check the metadata details
+        are available for the added PVC,
+
+        2. disable CSI_ENABLE_METADATA flag and create a clone and snapshot of the volume
+
+        3. Check metadata details will not be available for volume clone and snapshot.
+
+        4. Enable CSI_ENABLE_METADATA flag, restore snapshot
+
+        5. Check metadata details available for created pvc and restored volume but
+        no metadata details available for the volume clone and snapshot created
+
+        """
+        available_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        # Create pvc object
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_name,
+            namespace=self.project_name,
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
+
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata validation for new PVC created
+        metadata_utils.validate_metadata(
+            metadata=metadata,
+            clustername=self.cluster_name,
+            pv_name=pvc_obj.backed_pv_obj.name,
+            pvc_name=pvc_obj.name,
+            namespace=self.project_name,
+        )
+        # Disable metadata flag
+        metadata_utils.disable_metadata(
+            self.config_map_obj,
+            self.pod_obj,
+        )
+        available_subvolumes = updated_subvolumes
+        # Clone the PVC
+        clone_pvc_obj = pvc_clone_factory(pvc_obj=pvc_obj, timeout=600)
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata details unavailable for cloned PVC
+        if metadata == {} or metadata is None:
+            pass
+        else:
+            raise AssertionError
+        # Create a volume snapshot
+        available_subvolumes = updated_subvolumes
+        snap_obj = snapshot_factory(clone_pvc_obj, wait=True)
+
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name,
+            fs,
+            self.toolbox,
+            created_subvolume,
+            snapshot=True,
+            available_subvolumes=available_subvolumes,
+            updated_subvolumes=updated_subvolumes,
+        )
+        # metadata details unavailable for snapshot created
+        if metadata == {} or metadata is None:
+            pass
+        else:
+            raise AssertionError
+
+        # Enable metadata feature
+        log.info("----Enable metadata----")
+        _ = metadata_utils.enable_metadata(
+            self.config_map_obj,
+            self.pod_obj,
+        )
+        # Restore volume from snapshot
+        available_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj, timeout=600)
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata validation for restored snapshot
+        metadata_utils.validate_metadata(
+            metadata=metadata,
+            clustername=self.cluster_name,
+            pv_name=restored_pvc.backed_pv_obj.name,
+            pvc_name=restored_pvc.name,
+            namespace=self.project_name,
+        )
+        # Verify VolumeSnapshotContent deleted
+        snap_obj.delete()
+        snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name, timeout=180)
+
+    @tier3
+    @pytest.mark.parametrize(
+        argnames=["fs", "sc_name"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephfilesystem",
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+            ),
+            pytest.param(
+                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+            ),
+        ],
+    )
+    def test_disable_metadata_flag_after_enabling(self, fs, sc_name):
+        """
+        This test case is to validate the behavior for, disable CSI_ENABLE_METADATA flag
+        after enabling----
+        Steps:
+        1. enable CSI_ENABLE_METADATA flag create a PVC and check the metadata details
+        are available for the added PVC,
+
+        2. disable CSI_ENABLE_METADATA flag and check for the PVC created with CSI_ENABLE_METADATA
+        flag enabled meta data details will be still available.
+
+        3. create another PVC after disabling CSI_ENABLE_METADATA flag,
+        and check for this PVC metadata details will not be available.
+
+        4. After disabling CSI_ENABLE_METADATA flag, 'setmatadata' should not be set
+        for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+
+        """
+        available_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        # Create pvc object
+        pvc_obj_with_metadata_enabled = helpers.create_pvc(
+            sc_name=sc_name,
+            namespace=self.project_name,
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(
+            pvc_obj_with_metadata_enabled, constants.STATUS_BOUND, timeout=600
+        )
+
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata validation for new PVC created
+        metadata_utils.validate_metadata(
+            metadata=metadata,
+            clustername=self.cluster_name,
+            pv_name=pvc_obj_with_metadata_enabled.backed_pv_obj.name,
+            pvc_name=pvc_obj_with_metadata_enabled.name,
+            namespace=self.project_name,
+        )
+        # Disable metadata flag
+        metadata_utils.disable_metadata(
+            self.config_map_obj,
+            self.pod_obj,
+        )
+        # check meta data details still available for the pvc
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        available_subvolumes = updated_subvolumes
+        # create another PVC after disabling CSI_ENABLE_METADATA flag
+        pvc_obj_with_metadata_disabled = helpers.create_pvc(
+            sc_name=sc_name,
+            namespace=self.project_name,
+            do_reload=True,
+            size="1Gi",
+        )
+        helpers.wait_for_resource_state(
+            pvc_obj_with_metadata_disabled, constants.STATUS_BOUND, timeout=600
+        )
+
+        updated_subvolumes = metadata_utils.available_subvolumes(
+            sc_name, self.toolbox, fs
+        )
+        created_subvolume = metadata_utils.created_subvolume(
+            available_subvolumes, updated_subvolumes, sc_name
+        )
+        metadata = metadata_utils.fetch_metadata(
+            sc_name, fs, self.toolbox, created_subvolume
+        )
+        # metadata details unavailable for PVC, pvc_obj_with_metadata_disabled
+        if metadata == {} or metadata is None:
+            pass
+        else:
+            raise AssertionError
+        # 'setmatadata' unavailable for cephfs and rbd plugin provisioner pods
+        res = metadata_utils.check_setmetadata_availability(self.pod_obj)
+        if res:
+            raise AssertionError
+        # Enable metadata feature
+        log.info("----Enable metadata----")
+        _ = metadata_utils.enable_metadata(
+            self.config_map_obj,
+            self.pod_obj,
+        )
+
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["fs", "sc_name"],
+        argvalues=[
+            pytest.param(
+                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+            ),
+        ],
+    )
     def test_metadata_update_for_PV_Retain(self, fs, sc_name, project_factory_class):
         """
-        This test case verifies the cephfs metadata created on the subvolume for,
-        1. a newly created CephFS PVC
-        2. Create a clone
-        3. Create a volume snapshot
-        4. Restore volume from snapshot
+        This test is to validate metadata is updated after a PVC is deleted by setting ReclaimPloicy: Retain on PV
+        and a freshly created PVC in same or different namespace is attached to the old PV for CSI_ENABLE_METADATA
+        flag set to true,
+        Steps:
+            1. Enable CSI_ENABLE_OMAP_GENERATOR flag
+            2. Create pvc object
+            3. Update persistentVolumeReclaimPolicy:Retain for the PV
+            4. validate metadata for PVC created
+            5. Delete the PVC
+            6. Validate PV for claim pvc_obj is in Released state
+            7. Edit restore PV and remove the claimRef section
+            8. Validate PV is in Available state
+            9. Create another pvc
+            10. validate metadata for new PVC created
+            11. Delete the PVC
+            12. Validate PV for claim pvc_obj is in Released state
+            13. Edit restore PV and remove the claimRef section
+            14. Validate PV is in Available state
+            15. Create another pvc in different namespace
+            16. validate metadata for new PVC created
 
         """
         # Enable CSI_ENABLE_OMAP_GENERATOR flag
@@ -284,6 +781,7 @@ class TestMetadataForCephfs(ManageTest):
         pv_name = pvc_obj.backed_pv_obj.name
         log.info(f"pv name is ----- {pv_name}")
 
+        # Update persistentVolumeReclaimPolicy:Retain for the PV
         params = '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
         assert self.pv_obj.patch(
             resource_name=pv_name, params=params
@@ -347,7 +845,6 @@ class TestMetadataForCephfs(ManageTest):
             pvc_name=new_pvc_obj.name,
             namespace=self.project_name,
         )
-
         # Delete the PVC
         new_pvc_obj.delete()
         new_pvc_obj.ocp.wait_for_delete(
@@ -368,10 +865,11 @@ class TestMetadataForCephfs(ManageTest):
             condition=constants.STATUS_AVAILABLE, resource_name=pv_name
         )
         # Create another pvc in a different namespace
-        project_factory_class(project_name="project-test")
+        dif_namespace = "new-project"
+        project_factory_class(project_name=dif_namespace)
         pvc_obj_in_dif_namespace = helpers.create_pvc(
             sc_name=sc_name,
-            namespace="project-test",
+            namespace=dif_namespace,
             do_reload=True,
             size="1Gi",
         )
@@ -388,13 +886,14 @@ class TestMetadataForCephfs(ManageTest):
             clustername=self.cluster_name,
             pv_name=pv_name,
             pvc_name=pvc_obj_in_dif_namespace.name,
-            namespace="project-test",
+            namespace=dif_namespace,
         )
 
+    @tier3
     @pytest.mark.parametrize(
         argnames=["flag_value"],
         argvalues=[
-            pytest.param(12345678),
+            pytest.param("12345678"),
             pytest.param("feature3504"),
             pytest.param("add-metadata"),
         ],
@@ -406,16 +905,35 @@ class TestMetadataForCephfs(ManageTest):
         2. alphanumeric value for CSI_ENABLE_METADATA flag
         3. string values other than 'true/false' for CSI_ENABLE_METADATA flag
 
+        Steps:
+            1. Set CSI_ENABLE_METADATA flag value as numeric value
+            2. Set CSI_ENABLE_METADATA flag value as alphanumeric value
+            3. Set string values other than 'true/false' for CSI_ENABLE_METADATA flag
         """
         # Set numeric value for CSI_ENABLE_METADATA flag
-        numeric_value = '{"data":{"CSI_ENABLE_METADATA": ' + flag_value + "}}"
+        params = '{"data":{"CSI_ENABLE_METADATA": ' + '"' + flag_value + '"' + "}}"
+        log.info(f"params ----- {params}")
 
         # Enable CSI_ENABLE_OMAP_GENERATOR flag for rook-ceph-operator-config using patch command
         assert self.config_map_obj.patch(
             resource_name="rook-ceph-operator-config",
-            params=numeric_value,
+            params=params,
         ), "configmap/rook-ceph-operator-config not patched"
 
+        # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
+        assert self.pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector="app=csi-cephfsplugin-provisioner",
+            dont_allow_other_resources=True,
+            timeout=60,
+        )
+
+        assert self.pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector="app=csi-rbdplugin-provisioner",
+            dont_allow_other_resources=True,
+            timeout=60,
+        )
         res = metadata_utils.check_setmetadata_availability(self.pod_obj)
         if res:
             raise AssertionError

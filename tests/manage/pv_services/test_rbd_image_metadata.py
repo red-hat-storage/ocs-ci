@@ -14,9 +14,16 @@ class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")
     @bugzilla("2099965")
-    def test_rbd_image_metadata(self, pvc_factory, pvc_clone_factory):
+    def test_rbd_image_metadata(
+        self, pvc_factory, pvc_clone_factory, snapshot_restore_factory
+    ):
         """
-        Test if the rbd images have metdata being set
+        Test by default the rbd images doesnot have metdata details for,
+        1. a newly created RBD PVC
+        2. PVC clone and check its status
+        3. volume snapshot
+        4. Restore volume from snapshot
+
         """
 
         rbd_images = []
@@ -39,6 +46,10 @@ class TestRbdImageMetadata:
         snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
         snap_image_name = f'csi-snap-{snap_handle.split("-", 5)[5]}'
         rbd_images.append(snap_image_name)
+
+        # restore the snapshot
+        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj, timeout=600)
+        log.info(f"restored the snapshot {restored_pvc.name} created!")
 
         # create a clone of the PVC
         clone_obj = pvc_clone_factory(pvc_obj)

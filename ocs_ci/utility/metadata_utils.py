@@ -7,7 +7,6 @@ import logging
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 
-
 log = logging.getLogger(__name__)
 
 
@@ -20,8 +19,11 @@ def check_setmetadata_availability(pod_obj):
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
     )
-    log.info(f"plugin provisioner pods-----{plugin_provisioner_pod_objs}")
-
+    log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
+    response = pod.validate_pods_are_respinned_and_running_state(
+        plugin_provisioner_pod_objs
+    )
+    log.info(response)
     for plugin_provisioner_pod in plugin_provisioner_pod_objs:
         args = pod_obj.exec_oc_cmd(
             "get pod "
@@ -166,8 +168,10 @@ def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
         if sub_vol not in available_subvolumes:
             created_subvolume = sub_vol
             if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+                log.info(f"created sub volume---- {created_subvolume['name']}")
                 return created_subvolume["name"]
             else:
+                log.info(f"created sub volume---- {created_subvolume}")
                 return created_subvolume
 
 
