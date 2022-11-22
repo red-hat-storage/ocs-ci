@@ -56,10 +56,7 @@ class RGW(object):
             endpoint = route_ocp_obj.get(
                 resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
             )
-            if secret_name == constants.NOOBAA_OBJECTSTOREUSER_SECRET:
-                secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
-            elif secret_name == constants.CEPH_OBJECTSTOREUSER_SECRET:
-                secret_name = constants.CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET
+            secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
         else:
             endpoint = route_ocp_obj.get(
                 resource_name=constants.RGW_SERVICE_INTERNAL_MODE
@@ -73,4 +70,4 @@ class RGW(object):
         secret_key = base64.b64decode(
             creds_secret_obj.get("data").get("SecretKey")
         ).decode("utf-8")
-        return (endpoint, access_key, secret_key)
+        return endpoint, access_key, secret_key

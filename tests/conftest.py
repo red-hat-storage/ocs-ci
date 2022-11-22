@@ -45,7 +45,11 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.scale_lib import FioPodScale
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    collect_ocs_logs,
+    collect_pod_container_rpm_package,
+)
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
@@ -4005,6 +4009,7 @@ def collect_logs_fixture(request):
             if config.REPORTING["collect_logs_on_success_run"]:
                 collect_ocs_logs("testcases", ocs=False, status_failure=False)
                 collect_ocs_logs("testcases", ocp=False, status_failure=False)
+                collect_pod_container_rpm_package("testcases")
 
     request.addfinalizer(finalizer)
 
@@ -5148,10 +5153,14 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 f"account create {name}",
                 f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
                 if type(allowed_buckets) in (list, tuple)
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "",
                 " --full_permission=" + "True"
                 if type(allowed_buckets) is dict
                 and allowed_buckets.get("full_permission")
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "False",
                 f" --default_resource {default_resource}" if default_resource else "",
                 f" --uid {uid}" if uid else "",

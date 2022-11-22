@@ -414,9 +414,9 @@ def ocs_install_verification(
             deviceset_pvcs = [osd.get_node() for osd in get_osd_pods()]
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
-            if config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM or (
-                config.ENV_DATA.get("flexy_deployment")
-                and config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
+            if (
+                config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM
+                or config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
             ):
                 deviceset_pvcs = [
                     deviceset.replace(".", "-") for deviceset in deviceset_pvcs
@@ -1264,7 +1264,7 @@ def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
     1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
-    2. 1 prometheus pod and 3 alertmanager pods are in Running state
+    2. 1 prometheus and 1 alertmanager pods are in Running state
     3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
     4. Verify that noobaa-operator replicas is set to 0
     5. Verify managed ocs secrets
@@ -1301,7 +1301,7 @@ def verify_managed_service_resources():
     )
     for alert_pod in {
         (constants.MANAGED_PROMETHEUS_LABEL, 1),
-        (constants.MANAGED_ALERTMANAGER_LABEL, 3),
+        (constants.MANAGED_ALERTMANAGER_LABEL, 1),
     }:
         pod_obj.wait_for_resource(
             condition="Running", selector=alert_pod[0], resource_count=alert_pod[1]

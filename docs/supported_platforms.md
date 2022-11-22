@@ -48,6 +48,7 @@ own domain name.
 ## IBM Cloud
 
 This platform supports deployment of OCP cluster + OCS cluster on top of it.
+For IPI deployments, please see the IPI section below.
 
 ### Requirements
 
@@ -125,6 +126,23 @@ Please follow official
 [documentation](https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main).
 
 ### Deployment types
+
+#### IPI
+
+IPI deployments to IBM Cloud are supported for ODF versions >= 4.10.
+
+##### Requirements
+
+1. OCP installer version >= 4.10
+2. ibmcloud ipi config file (e.g. `conf/deployment/ibmcloud/ipi_3az_rhcos_3m_3w.yaml`)
+3. ibmcloud account data. This data should appear as follows in the ocsci config:
+
+```
+#AUTH:
+#  ibmcloud:
+#    account_id: ACCOUNT ID PLACEHOLDER
+#    api_key: IBM CLOUD API KEY PLACEHOLDER
+```
 
 #### Managed
 
