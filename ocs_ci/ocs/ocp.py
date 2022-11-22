@@ -429,6 +429,18 @@ class OCP(object):
         status = self.exec_oc_cmd(command)
         return status
 
+    def remove_label(self, resource_name, label):
+        """
+        Remove label from the resource.
+
+        Args:
+            resource_name (str): Name of the resource you want to remove label.
+            label (str): Label Name to be remove.
+        """
+        command = f"label {self.kind} {resource_name} {label}-"
+        status = self.exec_oc_cmd(command)
+        return status
+
     def new_project(self, project_name, policy=constants.PSA_BASELINE):
         """
         Creates a new project

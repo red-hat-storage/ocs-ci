@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -10,6 +9,8 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_managed_service,
 )
+
+from ocs_ci.ocs.overprovision import set_overprovision_policy, clear_overprovision_spec
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            self.clear_overprovision_spec()
+            clear_overprovision_spec()
 
         request.addfinalizer(finalizer)
 
@@ -53,7 +54,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             3.Add one PVC with 50Gi Capacity.
             4.Add another PVC with 51Gi Capacity and verify that it is failing with message
             'exceede quota'.
-            5.Remove the policy.
+            5.Remove the labels from namespace.
             6.Add again PVC with 51Gi capacity and verify that it is succeeeding.
         """
         quota_name = "storagequota"
@@ -62,10 +63,8 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         policy_labels = {"storagequota": "storagequota"}
         quota_capacity = "100Gi"
 
-        self.clear_overprovision_spec()
-        self.set_overprovision_policy(
-            quota_capacity, quota_name, sc_name, policy_labels
-        )
+        clear_overprovision_spec(ignore_errors=True)
+        set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
@@ -117,8 +116,10 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 output_string=str(e), expected_strings=["forbidden", "exceeded quota"]
             ), f"The error does not contain string:{str(e)}"
 
-        log.info("Verify storagecluster on Ready state.")
-        verify_storage_cluster()
+        log.info("Removing Labels from namespace.")
+        ocp_project_label.remove_label(
+            resource_name=ocp_ns_obj.namespace, label=list(policy_labels.keys())[0]
+        )
 
         """ Adding the new PVC with 51Gi  """
         try:
@@ -131,15 +132,6 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         except Exception as e:
             log.error(f"Failed to create PVC : {e}")
             assert False
-
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=constants.CEPHBLOCKPOOL_SC
-        )
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-
-        assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["50Gi", "51Gi"]
-        )
 
     def verify_substrings_in_string(self, output_string, expected_strings):
         """
@@ -159,62 +151,10 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         matched_result = []
         for expected_string in expected_strings:
             if expected_string in output_string:
-                log.error(f"expected string:{expected_string} in {output_string}")
+                log.info(f"expected string:{expected_string} in {output_string}")
                 matched_result.append(True)
+                continue
+            log.error(f"expected string:{expected_string} not in {output_string}")
             matched_result.append(False)
 
         return all(matched_result)
-
-    def set_overprovision_policy(self, capacity, quota, sc_name, label):
-        """
-        Set OverProvisionControl Policy.
-
-        Args:
-            capacity (str): storage capacity e.g. 50Gi
-            quota (str): quota name.
-            sc_name (str): storage class name
-            label (dict): storage quota labels.
-
-        Return:
-            None
-        """
-        log.info("Add 'overprovisionControl' section to storagecluster yaml file")
-        params = (
-            '{"spec": {"overprovisionControl": [{"capacity": "' + capacity + '",'
-            '"storageClassName":"' + sc_name + '", "quotaName": "' + quota + '",'
-            '"selector": {"labels": {"matchLabels": '
-            + label.__str__().replace("'", '"')
-            + "}}}]}}"
-        )
-
-        storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.STORAGECLUSTER,
-        )
-
-        storagecluster_obj.patch(
-            params=params,
-            format_type="merge",
-        )
-
-        log.info("Verify storagecluster on Ready state")
-        verify_storage_cluster()
-
-    def clear_overprovision_spec(self):
-        """
-        Clear OverProvisionPolicy of storage cluster.
-        """
-        log.info("Removing overprovisionControl from storage cluster.")
-        storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.STORAGECLUSTER,
-        )
-        params = '{"spec": {"overprovisionControl": []}}'
-        storagecluster_obj.patch(
-            params=params,
-            format_type="merge",
-        )
-        log.info("Verify storagecluster on Ready state")
-        verify_storage_cluster()
