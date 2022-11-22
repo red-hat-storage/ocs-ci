@@ -126,8 +126,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
 
         params = (
-            '{"data": {"CSI_PLUGIN_TOLERATIONS": "\n- effect: NoSchedule\n  key: nodename\n  operator: Equal\n  '
-            'value: \\"true\\"", "CSI_PROVISIONER_TOLERATIONS": "\n- effect: NoSchedule\n  key: nodename\n  operator: '
+            '{"data": {"CSI_PLUGIN_TOLERATIONS": "\n- effect: NoSchedule\n  key: xyz\n  operator: Equal\n  '
+            'value: \\"true\\"", "CSI_PROVISIONER_TOLERATIONS": "\n- effect: NoSchedule\n  key: xyz\n  operator: '
             'Equal\n  value: \\"true\\""}} '
         )
         params = params.replace("\n", "\\n")
