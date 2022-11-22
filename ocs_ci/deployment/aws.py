@@ -210,7 +210,9 @@ class AWSIPI(AWSBase):
             self.host_network_update()
         lso_type = config.DEPLOYMENT.get("type")
         if lso_type == constants.AWS_EBS:
-            create_and_attach_volume_for_all_workers()
+            create_and_attach_volume_for_all_workers(
+                count=config.ENV_DATA.get("extra_disks", 1)
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

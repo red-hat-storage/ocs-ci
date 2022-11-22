@@ -1889,10 +1889,7 @@ def get_stack_name_from_instance_dict(instance_dict):
     return stack_name
 
 
-def create_and_attach_ebs_volumes(
-    worker_pattern,
-    size=100,
-):
+def create_and_attach_ebs_volumes(worker_pattern, size=100, count=1):
     """
     Create volumes on workers
 
@@ -1900,6 +1897,7 @@ def create_and_attach_ebs_volumes(
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
+        count (int): number of EBS volumes to attach to worker node
 
     """
     region = config.ENV_DATA["region"]
@@ -1907,17 +1905,24 @@ def create_and_attach_ebs_volumes(
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
     with parallel() as p:
         for worker in worker_instances:
-            logger.info(f"Creating and attaching {size} GB volume to {worker['name']}")
-            p.spawn(
-                aws.create_volume_and_attach,
-                availability_zone=worker["avz"],
-                instance_id=worker["id"],
-                name=f"{worker['name']}_extra_volume",
-                size=size,
-            )
+            for number in range(1, count + 1):
+                logger.info(
+                    f"Creating and attaching {number}. {size} GB volume to {worker['name']}"
+                )
+                p.spawn(
+                    aws.create_volume_and_attach,
+                    availability_zone=worker["avz"],
+                    instance_id=worker["id"],
+                    name=f"{worker['name']}_extra_volume_{number}",
+                    size=size,
+                )
 
 
-def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="worker"):
+def create_and_attach_volume_for_all_workers(
+    device_size=None,
+    worker_suffix="worker",
+    count=1,
+):
     """
     Create volumes on workers
 
@@ -1925,6 +1930,7 @@ def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="wo
         device_size (int): Size in GB, if not specified value from:
             config.ENV_DATA["device_size"] will be used
         worker_suffix (str): Worker name suffix (default: worker)
+        count (int): number of EBS volumes to attach to worker node
 
     """
     device_size = device_size or int(
@@ -1934,4 +1940,5 @@ def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="wo
     create_and_attach_ebs_volumes(
         f"{infra_id}-{worker_suffix}*",
         device_size,
+        count,
     )
