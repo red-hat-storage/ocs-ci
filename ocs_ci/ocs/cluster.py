@@ -1993,13 +1993,19 @@ def get_mds_cache_memory_limit():
 
     Raises:
         UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+        IOError if fail to read configuration
 
     """
     pod_obj = pod.get_ceph_tools_pod()
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
-    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
-    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    try:
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+        mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+        mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    except IOError as ioe:
+        if "ENOENT" not in ioe:
+            raise ioe
+
     if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
         raise UnexpectedBehaviour(
             f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
