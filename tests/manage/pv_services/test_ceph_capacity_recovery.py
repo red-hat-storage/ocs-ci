@@ -1,7 +1,4 @@
 import logging
-import pytest
-import random
-import time
 
 from ocs_ci.ocs.perftests import PASTest
 
@@ -12,11 +9,10 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     TimeoutExpiredError,
 )
-from ocs_ci.ocs.resources import pvc, ocs, pod
+from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
     get_osd_utilization,
-    get_ceph_df_detail,
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
 
@@ -123,8 +119,8 @@ class TestCephCapacityRecovery(PASTest):
     def test_capacity_recovery(
         self,
     ):
-        log.info(f"Ceph Recovery test start")
-        get_used_capacity(f"Before pulling perf image")
+        log.info("Ceph Recovery test start")
+        get_used_capacity("Before pulling perf image")
 
         helpers.pull_images(constants.PERF_IMAGE)
 
@@ -140,7 +136,7 @@ class TestCephCapacityRecovery(PASTest):
             },
         )
 
-        used_now = get_used_capacity(f"After pulling perf image")
+        used_now = get_used_capacity("After pulling perf image")
 
         self.num_of_pvcs = 10
         self.pvc_size = (
@@ -154,7 +150,7 @@ class TestCephCapacityRecovery(PASTest):
         for i in range(5):
             index = i + 1
 
-            log.info(f"Start creating PVC")
+            log.info("Start creating PVC")
             pvc_obj = helpers.create_pvc(
                 sc_name=self.sc_obj.name,
                 size=self.pvc_size_str,
