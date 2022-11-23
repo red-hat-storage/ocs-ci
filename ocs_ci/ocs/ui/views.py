@@ -730,6 +730,7 @@ add_capacity = {
 }
 
 add_capacity_4_11 = {
+    "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "thin_sc": ("thin-link", By.ID),
     "gp2_sc": ("gp2-link", By.ID),
     "gp2-csi_sc": ("gp2-csi-link", By.ID),
