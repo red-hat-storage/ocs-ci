@@ -2015,6 +2015,62 @@ def check_pods_in_running_state(
     return ret_val
 
 
+def check_containers_are_running(pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Checks if all containers in given pod are running
+
+    Args:
+        pod_name (str): Pod name to check it's containers
+        namespace (str): Pod's namespace
+
+    Returns:
+        bool: True if all containers are running, False otherwise
+
+    """
+    ocp_obj = OCP(kind=constants.POD, namespace=namespace)
+    pod_obj = ocp_obj.get(resource_name=pod_name)
+    containers_count = len(pod_obj.get("status").get("containerStatuses"))
+    for i in range(len(containers_count)):
+        if not (pod_obj.get("status").get("containerStatuses")[i].get("ready")):
+            return False
+    return True
+
+
+def wait_for_containers_to_be_running(
+    pod_name, timeout=180, sleep=15, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """Wait for all containers in given pod to be running
+
+    Args:
+        pod_name (str): Pod name to check it's containers
+        timeout (int): Timeout in seconds.
+        sleep (int): Delay between checks in seconds.
+        namespace (str): Pod's namespace
+
+    Returns:
+        bool: True if all containers are running until end of timeout, False otherwise
+
+    """
+    try:
+        for containers in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=check_containers_are_running,
+            namespace=namespace,
+            pod_names=pod_name,
+        ):
+            # Check if all the pods in running state
+            if containers:
+                logger.info("All the pods reached status running!")
+                return True
+
+    except TimeoutExpiredError:
+        logger.error(
+            f"Not all the containers reached status running " f"after {timeout} seconds"
+        )
+        return False
+
+
 def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
     Checks the running state pods in a given namespace.

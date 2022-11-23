@@ -65,9 +65,11 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
+    get_lvm_operator_pod,
     validate_pods_are_respinned_and_running_state,
     get_pods_having_label,
     get_pod_count,
+    wait_for_containers_to_be_running,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -1291,7 +1293,10 @@ class Deployment(object):
             resource_count=1,
             timeout=300,
         )
-        time.sleep(30)
+        lvm_operator = get_lvm_operator_pod()
+        lmv_operator_name = lvm_operator.data["metadata"]["name"]
+        assert wait_for_containers_to_be_running(pod_name=lmv_operator_name)
+
         run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
         assert pod.wait_for_resource(
             condition="Running",
