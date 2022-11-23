@@ -431,7 +431,9 @@ class Pod(OCS):
         """
 
         if not self.wl_setup_done:
-            self.workload_setup(storage_type="fs", jobs=1, fio_installed=performance_pod)
+            self.workload_setup(
+                storage_type="fs", jobs=1, fio_installed=performance_pod
+            )
 
         self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
         size = size if isinstance(size, str) else f"{size}M"
