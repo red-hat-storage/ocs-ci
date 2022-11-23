@@ -13,7 +13,7 @@ The containers are expected to run with a service account that has admin credent
 
 **Run Build cmd**
 ```commandline
-docker build -t <image-name> -f Dockerfile_ocsci . --build-arg TEST_PATH_ARG=<test-path> --build-arg OCP_VERSION_ARG=<ocp-version> --build-arg OCS_VERSION_ARG=<ocs-version> --build-arg MARKER_PYTEST_ARG=<marker-pytest>
+docker/podman build -t <image-name> -f Dockerfile_ocsci . --build-arg TEST_PATH_ARG=<test-path> --build-arg OCP_VERSION_ARG=<ocp-version> --build-arg OCS_VERSION_ARG=<ocs-version> --build-arg MARKER_PYTEST_ARG=<marker-pytest>
 
 ```
 *Add Params:
