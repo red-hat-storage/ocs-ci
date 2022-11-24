@@ -76,7 +76,9 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
     log.info(f"osd utilization: {osds_utilization}")
     for osd_id, osd_utilization in osds_utilization.items():
         if osd_utilization > expected_used_capacity:
-            log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%")
+            log.info(
+                f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%"
+            )
             return True
     return False
 
