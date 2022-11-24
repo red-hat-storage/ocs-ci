@@ -1,6 +1,5 @@
 import logging
 import json
-import time
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
@@ -36,7 +35,7 @@ def lvmo_health_check_base():
         lvmcluster_status = oc_obj.get(constants.LVMCLUSTER)
         lvmcluster_status.get("status")["ready"]
     except (KeyError, TypeError):
-        time.sleep(10)
+        log.info("lvm cluster status is not available")
     except LVMOHealthException:
         log.error("lvmcluster is not ready")
         raise LVMOHealthException(
