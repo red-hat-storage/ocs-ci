@@ -812,6 +812,15 @@ def setup_ceph_toolbox(force_setup=False):
                 "image"
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-multus"
+            # remove tini from multus tool box
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
+
             toolbox["spec"]["template"]["metadata"]["annotations"] = {
                 "k8s.v1.cni.cncf.io/networks": "openshift-storage/ocs-public"
             }
