@@ -956,7 +956,7 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     return new_storage_devices_sets_count
 
 
-def add_capacity_lso():
+def add_capacity_lso(ui_flag=False):
     """
     Add capacity on LSO cluster.
 
@@ -964,6 +964,8 @@ def add_capacity_lso():
     Because the UI backend check the pv and available state and base on it
     change the count param on StorageCluster.
 
+    Args:
+        ui_flag(bool): add capacity via ui [true] or via cli [false]
     """
     from ocs_ci.ocs.cluster import (
         is_flexible_scaling_enabled,
@@ -985,15 +987,9 @@ def add_capacity_lso():
         num_available_pv = 3
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
-    if ui_add_capacity_conditions():
-        try:
-            osd_size = get_osd_size()
-            ui_add_capacity(osd_size)
-        except Exception as e:
-            log.error(
-                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
-            )
-            set_deviceset_count(set_count)
+    if ui_add_capacity_conditions() and ui_flag:
+        osd_size = get_osd_size()
+        ui_add_capacity(osd_size)
     else:
         set_deviceset_count(set_count)
 
