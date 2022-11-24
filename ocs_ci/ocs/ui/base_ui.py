@@ -426,12 +426,15 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Overview Page")
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+        if Version.coerce(self.ocp_version) > Version.coerce("4.8"):
             self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+            logger.info("Navigating to ODF tab")
+            self.do_click(locator=self.page_nav["odf_tab"])
+            self.page_has_loaded(retries=10)
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
-        self.do_click(locator=self.page_nav["overview_page"])
+            self.do_click(locator=self.page_nav["overview_page"])
 
     def navigate_odf_overview_page(self):
         """
@@ -444,7 +447,7 @@ class PageNavigator(BaseUI):
             self.ocp_version_full >= version.VERSION_4_10
             and ocs_version >= version.VERSION_4_10
         ):
-            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
@@ -670,9 +673,27 @@ class PageNavigator(BaseUI):
         Navigate to block pools page
 
         """
-        logger.info("Navigate to block pools page")
-        self.navigate_to_ocs_operator_page()
-        self.do_click(locator=self.page_nav["block_pool_link"])
+        if self.ocp_version_full <= version.VERSION_4_8:
+            logger.info("Navigate to block pools page")
+            self.navigate_to_ocs_operator_page()
+            self.do_click(locator=self.page_nav["block_pool_link"])
+        else:
+            self.navigate_odf_overview_page()
+            self.page_has_loaded(retries=10)
+            logger.info("Navigating to Storage System")
+            validation_4_9 = locators[get_ocp_version()]["validation"]
+            self.do_click(
+                validation_4_9["storage_systems"],
+                enable_screenshot=False,
+            )
+            self.do_click(
+                validation_4_9["ocs-storagecluster-storagesystem"],
+                enable_screenshot=False,
+            )
+            self.do_click(
+                validation_4_9["blockpools"],
+                enable_screenshot=False,
+            )
 
     def wait_for_namespace_selection(self, project_name):
         """

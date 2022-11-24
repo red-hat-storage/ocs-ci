@@ -474,7 +474,7 @@ page_nav_4_6 = {
 }
 
 page_nav_4_10 = {
-    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
+    "odf_tab": ("Data Foundation", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -777,6 +777,18 @@ block_pool = {
     ),
     "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
+}
+
+block_pool_4_11 = {
+    "actions_inside_pool": (
+        "//div[@class='pf-c-dropdown pf-m-align-right']",
+        By.XPATH,
+    ),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
+        By.XPATH,
+    ),
 }
 
 storageclass = {
@@ -863,6 +875,15 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
+    "volume_binding_mode": (
+        "button[id='storage-class-volume-binding-mode']",
+        By.CSS_SELECTOR,
+    ),
+    "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
+    "storage_class_breadcrumb": (
+        "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
+        By.XPATH,
+    ),
 }
 
 storageclass_4_9 = {
@@ -1172,6 +1193,8 @@ locators = {
         },
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "obc": obc,
+        "block_pool": {**block_pool, **block_pool_4_11},
+        "storageclass": storageclass,
     },
     "4.10": {
         "login": login,
@@ -1192,6 +1215,8 @@ locators = {
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "acm_page": {**acm_page_nav, **acm_configuration},
+        "block_pool": block_pool,
+        "storageclass": storageclass,
     },
     "4.9": {
         "login": login,
@@ -1203,6 +1228,7 @@ locators = {
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "storageclass": {**storageclass, **storageclass_4_9},
+        "block_pool": block_pool,
     },
     "4.8": {
         "login": login,

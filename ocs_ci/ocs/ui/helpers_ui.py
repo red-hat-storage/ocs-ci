@@ -8,6 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -178,3 +179,19 @@ def get_element_type(element_name):
     """
 
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
+
+def get_blockpool_ui_element(pool_name, OCP_Version):
+    """
+    This function returns the blockpool UI element of the pool name given.
+    Args:
+        pool_name (str): Block Pool Name
+        OCP_Version (str): OCP Version
+    Returns:
+        Block Pool UI element.
+    """
+
+    if OCP_Version <= version.VERSION_4_8:
+        return (f"{pool_name}", By.LINK_TEXT)
+    else:
+        return (f"//a[text()='{pool_name}']", By.XPATH)

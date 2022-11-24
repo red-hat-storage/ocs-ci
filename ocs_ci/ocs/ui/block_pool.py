@@ -2,12 +2,14 @@ import logging
 import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.helpers_ui import get_blockpool_ui_element
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility.utils import get_ocp_version
 from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +73,17 @@ class BlockPoolUI(PageNavigator):
         """
         self.navigate_overview_page()
         self.navigate_block_pool_page()
-        self.page_has_loaded()
-        pool_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR), pool_name, 5
-        )
+        self.page_has_loaded(retries=10)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            pool_existence = self.wait_until_expected_text_is_found(
+                (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
+            )
+        else:
+            pool_existence = self.wait_until_expected_text_is_found(
+                (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR),
+                pool_name,
+                5,
+            )
         logger.info(f"Pool name {pool_name} existence is {pool_existence}")
         return pool_existence
 
@@ -90,15 +99,14 @@ class BlockPoolUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
-        self.navigate_block_pool_page()
-        self.page_has_loaded()
-        self.do_click((f"{pool_name}", By.LINK_TEXT))
+        logger.info(f"Deleting the blockpool: {pool_name}")
+        self.select_blockpool(pool_name)
         self.do_click(self.bp_loc["actions_inside_pool"])
         self.do_click(self.bp_loc["delete_pool_inside_pool"])
         self.do_click(self.bp_loc["confirm_delete_inside_pool"])
         # wait for pool to deleted
         time.sleep(2)
+        logger.info(f"Checking if {pool_name} exists in the Block Pools UI list.")
         return not self.check_pool_existence(pool_name)
 
     def edit_pool_parameters(self, pool_name, replica=3, compression=True):
@@ -173,3 +181,92 @@ class BlockPoolUI(PageNavigator):
                     raise PoolStateIsUnknow(
                         f"pool {pool_name} is in unexpected state {pool_state}"
                     )
+
+    def pool_raw_capacity_loaded(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is loaded
+        or returns False if the capacity is not loaded.
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is loaded, otherwise False
+
+        """
+        logger.info("Checking if the Block Pool Raw Capacity has loaded in UI")
+
+        self.select_blockpool(pool_name)
+
+        raw_capacity_loaded = self.check_element_text(
+            "Available",
+            "div[@class='ceph-raw-card-legend__title']",
+        )
+        if raw_capacity_loaded:
+            logger.info("Block Pool Raw Capacity has loaded in UI")
+        else:
+            logger.warning("Block Pool Raw Capacity has not loaded in UI")
+        return raw_capacity_loaded
+
+    def cross_check_raw_capacity(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is same in GUI as obtained from CLI
+        or returns False if the raw capacity of the block pool doesnt match with CLI
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is is same in GUI as obtained from CLI, otherwise False
+
+        """
+        logger.info(
+            "Checking if the Block Pool Raw Capacity is same in GUI as obtained from CLI"
+        )
+        if self.pool_raw_capacity_loaded(pool_name):
+            cmd = "rados df"
+            ct_pod = pod.get_ceph_tools_pod()
+            df_op = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+            for pools in df_op["pools"]:
+                if pools["name"] == pool_name:
+                    raw_capacity = round(
+                        int(pools["size_kb"]) / 1024, 1
+                    )  # converting it into MiB because we are only running io in MiB in the previous step
+
+            logger.info(
+                f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
+            )
+
+            used_raw_capacity_in_UI = self.get_element_text(
+                self.bp_loc["used_raw_capacity_in_UI"]
+            )
+
+            if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
+                logger.info("UI values didnt matched as per CLI for the Raw Capacity")
+                return True
+            else:
+                logger.error(
+                    f"UI value (i.e {used_raw_capacity_in_UI}) didnt matched as per CLI for the Raw Capacity"
+                )
+                return False
+
+    def select_blockpool(self, pool_name):
+        """
+        Selects and clicks on the blocpool according to the blockpool name passed.
+
+        Args:
+            pool_name (str): Block pool name that is to be selected.
+
+        Returns:
+            True (bool): Successfull selection of the blockpool
+
+        """
+        self.navigate_overview_page()
+        self.navigate_block_pool_page()
+        self.page_has_loaded()
+        if self.ocp_version_full <= version.VERSION_4_8:
+            self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
+        else:
+            self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
+
+        return True

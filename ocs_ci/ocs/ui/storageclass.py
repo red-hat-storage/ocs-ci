@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class StorageClassUI(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         ocp_version = get_ocp_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.sc_loc = locators[ocp_version]["storageclass"]
 
     def create_storageclass(self, pool_name):
@@ -36,10 +38,14 @@ class StorageClassUI(PageNavigator):
         """
         self.navigate_overview_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=10)
         sc_name = create_unique_resource_name("test", "storageclass")
+        logger.info(f"Creating Storage class with name {sc_name}")
         self.do_click(self.sc_loc["create_storageclass_button"])
         self.do_send_keys(self.sc_loc["input_storageclass_name"], sc_name)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.do_click(self.sc_loc["volume_binding_mode"])
+            self.do_click(self.sc_loc["immediate_binding_mode"])
         self.do_click(self.sc_loc["provisioner_dropdown"])
         self.do_click(self.sc_loc["rbd_provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
@@ -62,11 +68,15 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
-        self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        if self.ocp_version_full >= version.VERSION_4_9:
+            logger.info("Navigating Back to Storage Classes")
+            self.do_click(self.sc_loc["storage_class_breadcrumb"])
+        else:
+            self.navigate_overview_page()
+            self.navigate_storageclasses_page()
+        self.page_has_loaded(retries=5)
         sc_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 5
+            (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 15
         )
         return sc_existence
 
@@ -84,7 +94,7 @@ class StorageClassUI(PageNavigator):
 
         self.navigate_overview_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=10)
         logger.info(f"sc_name is {sc_name}")
         self.do_click((f"{sc_name}", By.LINK_TEXT))
         self.do_click(self.sc_loc["action_inside_storageclass"])
@@ -92,7 +102,14 @@ class StorageClassUI(PageNavigator):
         self.do_click(self.sc_loc["confirm_delete_inside_storageclass"])
         # wait for storageclass to be deleted
         time.sleep(2)
-        return not self.verify_storageclass_existence(sc_name)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.page_has_loaded(retries=10)
+            logger.info(f"Looking for the storage class {sc_name}")
+            return not self.wait_until_expected_text_is_found(
+                (f"a[data-test-id={sc_name}]", By.CSS_SELECTOR), sc_name, 15
+            )
+        else:
+            return not self.verify_storageclass_existence(sc_name)
 
     def create_encrypted_storage_class_ui(
         self,
