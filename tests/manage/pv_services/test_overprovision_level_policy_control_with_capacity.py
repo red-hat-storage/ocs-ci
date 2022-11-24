@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, set_overprovision_policy, clear_overprovision_spec
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
 )
 
-from ocs_ci.ocs.overprovision import set_overprovision_policy, clear_overprovision_spec
 
 log = logging.getLogger(__name__)
 
