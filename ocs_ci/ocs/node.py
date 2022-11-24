@@ -2541,6 +2541,15 @@ def consumer_verification_steps_after_provider_node_replacement():
         )
         return False
 
+    log.info("Check if we can execute a ceph command from the consumer")
+    if not pod.wait_for_ceph_cmd_execute_successfully(timeout=300):
+        log.info("Try to restart the ocs-operator pod")
+        pod.delete_pods([pod.get_ocs_operator_pod()])
+        log.info("Check again if we can execute a ceph command from the consumer")
+        if not pod.wait_for_ceph_cmd_execute_successfully(timeout=300):
+            log.warning("Failed to execute the ceph command")
+            return False
+
     log.info("The consumer verification steps finished successfully")
     return True
 
