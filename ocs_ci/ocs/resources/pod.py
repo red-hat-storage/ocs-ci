@@ -2061,12 +2061,12 @@ def wait_for_containers_to_be_running(
         ):
             # Check if all the pods in running state
             if containers:
-                logger.info("All the pods reached status running!")
+                logger.info("All containers reached status running!")
                 return True
 
     except TimeoutExpiredError:
         logger.error(
-            f"Not all the containers reached status running " f"after {timeout} seconds"
+            f"Not all containers reached status running after {timeout} seconds"
         )
         return False
 
