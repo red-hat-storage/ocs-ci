@@ -812,12 +812,14 @@ class OCP(object):
         resource_info = [
             i for i in resource if (not i.isupper() or i in exception_list)
         ]
-        temp_list = shlex.split(resource_info[0])
+
+        temp_list = shlex.split(resource_info.pop(0))
+
         for i in temp_list:
             if i.isupper():
                 titles.append(i)
-            else:
-                resource_info[0] = i
+                temp_list.remove(i)
+        resource_info = temp_list + resource_info
 
         # Fix for issue:
         # https://github.com/red-hat-storage/ocs-ci/issues/6503
