@@ -34,8 +34,9 @@ def lvmo_health_check_base():
     try:
         lvmcluster_status = oc_obj.get(constants.LVMCLUSTER)
         lvmcluster_status.get("status")["ready"]
-    except (KeyError, TypeError):
+    except (KeyError, TypeError) as e:
         log.info("lvm cluster status is not available")
+        raise e
     except LVMOHealthException:
         log.error("lvmcluster is not ready")
         raise LVMOHealthException(
