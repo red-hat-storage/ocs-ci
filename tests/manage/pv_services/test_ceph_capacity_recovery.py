@@ -9,7 +9,6 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     TimeoutExpiredError,
 )
-from ocs_ci.framework.testlib import ManageTest
 
 
 from ocs_ci.ocs.resources import pvc, ocs
@@ -82,7 +81,6 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
     return False
 
 
-#class TestCephCapacityRecovery(PASTest):
 class TestCephCapacityRecovery(PASTest):
     def setup(self):
         """
@@ -151,7 +149,7 @@ class TestCephCapacityRecovery(PASTest):
 
         pvc_list = []
         pod_list = []
-        for i in range(self.num_of_pvcs/2): # on each loop cycle 1 pvc and 1 clone
+        for i in range(self.num_of_pvcs / 2):  # on each loop cycle 1 pvc and 1 clone
             index = i + 1
 
             log.info("Start creating PVC")
