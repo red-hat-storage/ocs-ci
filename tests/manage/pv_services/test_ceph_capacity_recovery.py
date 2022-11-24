@@ -9,6 +9,9 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     TimeoutExpiredError,
 )
+from ocs_ci.framework.testlib import ManageTest
+
+
 from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -74,11 +77,12 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
     log.info(f"osd utilization: {osds_utilization}")
     for osd_id, osd_utilization in osds_utilization.items():
         if osd_utilization > expected_used_capacity:
-            log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
+            log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%")
             return True
     return False
 
 
+#class TestCephCapacityRecovery(PASTest):
 class TestCephCapacityRecovery(PASTest):
     def setup(self):
         """
@@ -147,7 +151,7 @@ class TestCephCapacityRecovery(PASTest):
 
         pvc_list = []
         pod_list = []
-        for i in range(5):
+        for i in range(self.num_of_pvcs/2): # on each loop cycle 1 pvc and 1 clone
             index = i + 1
 
             log.info("Start creating PVC")
