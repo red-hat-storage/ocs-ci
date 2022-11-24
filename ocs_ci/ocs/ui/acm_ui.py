@@ -139,7 +139,7 @@ class AcmPageNavigator(BaseUI):
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
 
-    def navigate_from_hub_to_acm(self):
+    def navigate_from_ocp_to_acm(self):
         self.page_has_loaded()
         if not self.check_element_presence(self.acm_page_nav["local-cluster"]):
             log.error("local-cluster is not found, can not switch to ACM console")
