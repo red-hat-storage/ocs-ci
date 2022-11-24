@@ -2056,8 +2056,8 @@ def wait_for_containers_to_be_running(
             timeout=timeout,
             sleep=sleep,
             func=check_containers_are_running,
+            pod_name=pod_name,
             namespace=namespace,
-            pod_names=pod_name,
         ):
             # Check if all the pods in running state
             if containers:
