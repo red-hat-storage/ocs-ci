@@ -191,8 +191,7 @@ class TestUpgradeOCP(ManageTest):
 
         # Login to OCP console and run ODF dashboard validation check
         version_post_upgrade = parse_version(ocp_upgrade_version)
-        ocs_version = version.get_semantic_version(version="4.9", only_major_minor=True)
-        if version_post_upgrade >= ocs_version:
+        if version_post_upgrade >= version.VERSION_4_9:
             validation_ui_obj = ValidationUI(setup_ui_class)
             validation_ui_obj.odf_overview_ui()
             validation_ui_obj.odf_storagesystems_ui()

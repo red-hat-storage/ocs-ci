@@ -753,8 +753,8 @@ def run_ocs_upgrade(
         )
 
     # Login to OCP console and run ODF dashboard validation check
-    ocs_version = version.get_semantic_version(version="4.9", only_major_minor=True)
-    if upgrade_version >= ocs_version:
+    semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
+    if semantic_upgrade_version >= version.VERSION_4_9:
         validation_ui_obj = ValidationUI(setup_ui_class)
         validation_ui_obj.odf_overview_ui()
         validation_ui_obj.odf_storagesystems_ui()
