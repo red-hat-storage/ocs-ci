@@ -1291,6 +1291,7 @@ class Deployment(object):
             resource_count=1,
             timeout=300,
         )
+        time.sleep(30)
         run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
         assert pod.wait_for_resource(
             condition="Running",
