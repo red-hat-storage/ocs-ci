@@ -1,8 +1,6 @@
 import logging
-import pytest
 
 from ocs_ci.ocs.resources.pod import cal_md5sum
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers.managed_services import verify_provider_topology
 from ocs_ci.framework.testlib import (
     pre_upgrade,
