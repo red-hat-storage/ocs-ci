@@ -37,7 +37,7 @@ def block_md5(block_pod):
     md5 = cal_md5sum(
         pod_obj=block_pod,
         file_name="fio-rand-write",
-        block=True,
+        block=False,
     )
     logger.info(f"RBD md5: {md5}")
     return md5

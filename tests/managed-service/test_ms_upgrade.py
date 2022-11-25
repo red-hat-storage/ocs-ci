@@ -42,7 +42,7 @@ def test_verify_block_md5_after_upgrade(block_md5, block_pod):
     md5_after_upgrade = cal_md5sum(
         pod_obj=block_pod,
         file_name="fio-rand-write",
-        block=True,
+        block=False,
     )
     logger.info(f"RBD file md5 after upgrade: {md5_after_upgrade}")
     assert md5_after_upgrade == block_md5
