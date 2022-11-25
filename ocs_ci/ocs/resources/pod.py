@@ -2030,7 +2030,7 @@ def check_containers_are_running(pod_name, namespace=defaults.ROOK_CLUSTER_NAMES
     ocp_obj = OCP(kind=constants.POD, namespace=namespace)
     pod_obj = ocp_obj.get(resource_name=pod_name)
     containers_count = len(pod_obj.get("status").get("containerStatuses"))
-    for i in range(len(containers_count)):
+    for i in range(containers_count):
         if not (pod_obj.get("status").get("containerStatuses")[i].get("ready")):
             return False
     return True
