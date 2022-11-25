@@ -12,7 +12,7 @@ from ocs_ci.helpers.managed_services import verify_provider_topology
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
-    ms_consumer_required,
+    ms_provider_and_consumer_required,
     tier1,
 )
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @ignore_leftovers
-@ms_consumer_required
+@ms_provider_and_consumer_required
 class TestAddCapacityMS(ManageTest):
     """
     Automates adding variable capacity to the cluster
