@@ -92,9 +92,7 @@ class TestAddCapacityMS(ManageTest):
             timeout=600,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
-            resource_count=constants.SIZE_MAP_MANAGED_SERVICE[SIZE[current_size]][
-                "osd_count"
-            ],
+            resource_count=constants.SIZE_MAP_MANAGED_SERVICE[new_size]["osd_count"],
         )
         verify_provider_topology(size="8")
         assert ceph_health_check(delay=120, tries=50), "Ceph health check failed"
