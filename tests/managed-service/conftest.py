@@ -14,11 +14,11 @@ def block_pod(pvc_factory_session, pod_factory_session):
         obj: Utilized pod with RBD pvc
 
     """
-    pvc = pvc_factory_session(size=5)
-    pod = pod_factory_session(pvc=pvc)
+    pvc = pvc_factory_session(size=5, interface=constants.CEPHBLOCKPOOL)
+    pod = pod_factory_session(pvc=pvc, interface=constants.CEPHBLOCKPOOL)
     logger.info(f"Utilization of RBD PVC {pvc.name} with pod {pod.name} starts")
     pod.run_io(
-        storage_type="block",
+        storage_type="fs",
         size="4G",
         fio_filename="fio-rand-write",
     )
