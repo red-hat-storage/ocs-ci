@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4c, bugzilla, skipif_managed_service
+from ocs_ci.framework.testlib import (
+    tier4c,
+    bugzilla,
+    skipif_managed_service,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -83,6 +88,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
 @pytest.mark.polarion_id("OCS-2724")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 @skipif_managed_service
+@skipif_ocs_version("<4.9")
 def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
     """
     Test to verify that CephMonQuorumLost alert is seen and
