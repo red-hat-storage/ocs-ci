@@ -12,6 +12,7 @@ import time
 import calendar
 from threading import Thread
 import base64
+from typing import List
 from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -2172,7 +2173,7 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_ids=None):
+def run_osd_removal_job(osd_ids: List[str] = None) -> OCS:
     """
     Run the ocs-osd-removal job
 
@@ -2183,22 +2184,30 @@ def run_osd_removal_job(osd_ids=None):
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
-    osd_ids_str = ",".join(map(str, osd_ids))
+    osd_ids_str = ",".join(osd_ids)
     ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
 
-    if Version.coerce(ocs_version) >= Version.coerce(
-        "4.10"
-    ) and not check_safe_to_destroy_status(osd_ids_str):
-        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
-    elif Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
+    # Fixes: #6662
+    # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
+    cmd_params = (
+        f"-p FORCE_OSD_REMOVAL=true"
+        if Version.coerce(ocs_version) >= Version.coerce("4.6")
+        and not check_safe_to_destroy_status(osd_ids_str)
+        else ""
+    )
+
+    # Parameter name FAILED_OSD_ID changed to FAILED_OSD_IDS for Version OCP 4.6 and above
+    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+        cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
     else:
-        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
+        cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
+    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(
+        f"process ocs-osd-removal {cmd_params} -o yaml"
+    )
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
     osd_removal_job_yaml["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
     osd_removal_job = OCS(**osd_removal_job_yaml)

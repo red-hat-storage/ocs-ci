@@ -120,6 +120,7 @@ def osd_device_replacement(nodes):
         osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
     # Run ocs-osd-removal job
+    assert osd_id, "No osd found to remove"
     osd_removal_job = run_osd_removal_job([osd_id])
     assert osd_removal_job, "ocs-osd-removal failed to create"
     is_completed = verify_osd_removal_job_completed_successfully(osd_id)

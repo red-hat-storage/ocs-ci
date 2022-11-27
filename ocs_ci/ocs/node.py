@@ -1034,6 +1034,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
 
     osd_id = osd_ids[0]
+    assert osd_id, "osd ids not found"
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
