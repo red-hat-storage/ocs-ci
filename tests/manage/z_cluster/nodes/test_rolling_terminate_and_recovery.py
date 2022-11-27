@@ -81,6 +81,9 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 
+            # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+            if is_ms_provider_cluster() and config.is_consumer_exist():
+                assert consumers_verification_steps_after_provider_node_replacement()
             if is_managed_service_cluster():
                 self.sanity_helpers.health_check_ms(cluster_check=False, tries=40)
             else:
@@ -94,10 +97,6 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
 
         """
         self.rolling_terminate_and_recovery_of_ocs_worker_nodes(nodes)
-        # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
-        if is_ms_provider_cluster() and config.is_consumer_exist():
-            assert consumers_verification_steps_after_provider_node_replacement()
-
         # Check basic cluster functionality by creating some resources
         self.sanity_helpers.create_resources_on_ms_consumers()
 

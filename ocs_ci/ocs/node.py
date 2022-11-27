@@ -2507,7 +2507,11 @@ def consumer_verification_steps_after_provider_node_replacement():
             with the first provider worker node IP.
         1.2 Wait and check again if the consumer "storageProviderEndpoint" IP is found in the
             provider worker node IPs.
-    2. If found, also check that the rook ceph mon endpoint IPs are found in the provider worker node IPs.
+    2. If found, check if we can execute a ceph command from the consumer
+        2.1 If not found, restart the ocs-operator pod
+        2.2 Wait and check again if we can execute a ceph command from the consumer
+    3. If the ceph command executed successfully from the consumer, check that the rook ceph mon
+       endpoint IPs are found in the provider worker node IPs.
 
     Returns:
         bool: True, if the consumer verification steps finished successfully. False, otherwise.
@@ -2535,12 +2539,6 @@ def consumer_verification_steps_after_provider_node_replacement():
             )
             return False
 
-    if not check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
-        log.warning(
-            "Did not find all the mon endpoint ips in the provider worker node ips"
-        )
-        return False
-
     log.info("Check if we can execute a ceph command from the consumer")
     if not pod.wait_for_ceph_cmd_execute_successfully(timeout=300):
         log.info("Try to restart the ocs-operator pod")
@@ -2549,6 +2547,15 @@ def consumer_verification_steps_after_provider_node_replacement():
         if not pod.wait_for_ceph_cmd_execute_successfully(timeout=300):
             log.warning("Failed to execute the ceph command")
             return False
+
+    log.info(
+        "Check that the mon endpoint ips are found in the provider worker node ips"
+    )
+    if not check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
+        log.warning(
+            "Did not find all the mon endpoint ips in the provider worker node ips"
+        )
+        return False
 
     log.info("The consumer verification steps finished successfully")
     return True
