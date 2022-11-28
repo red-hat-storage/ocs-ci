@@ -20,7 +20,7 @@ There are 3 options:
 ```commandline
 docker/podman run -v <kubeconfig-path>:/opt/cluster/auth -e MARKER_PYTEST=<marker>
 -e OCP_VERSION=<ocp-version> -e OCS_VERSION=<ocs-version> -e  CLUSTER_NAME=<cluster-path>
--e TEST_PATH=<test-path> -it <image-name> /bin/bash
+-e TEST_PATH=<test-path> <image-name>
 ```
 *Add Params:
 ```
