@@ -18,7 +18,10 @@ setup(
         "apache-libcloud==3.1.0",
         "cryptography==38.0.1",
         "docopt==0.6.2",
-        "gevent==20.9.0",
+        # https://pypi.org/project/gevent/ the latest version resolves problem for Mac M1 chips
+        # This issue is caused by a program attempting to load an x86_64-only library from a native arm64 process.
+        # More https://stackoverflow.com/questions/71443345/gevent-cant-be-installed-on-m1-mac-using-poetry
+        "gevent==21.12.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
         "paramiko==2.11.0",
@@ -68,7 +71,10 @@ setup(
         "webdriver-manager==3.2.2",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
-        "greenlet<1.0.0",
+        # by default program attempting to load an x86_64-only library from a native arm64 process
+        # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
+        # compatible systems. Resolves problem for m1 Mac chips
+        "greenlet==1.1.2",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser",
         "flaky==3.7.0",
