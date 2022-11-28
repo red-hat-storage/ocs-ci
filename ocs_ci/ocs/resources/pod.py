@@ -12,7 +12,6 @@ import time
 import calendar
 from threading import Thread
 import base64
-from typing import List
 from semantic_version import Version
 
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -2173,18 +2172,18 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_ids: List[str]) -> OCS:
+def run_osd_removal_job(osd_ids: list) -> OCS:
     """
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (:obj:`List` of :obj:`str`): The osd IDs.
+        osd_ids (list): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
 
     """
-    osd_ids_str = ",".join(osd_ids)
+    osd_ids_str = ",".join(map(str, osd_ids))
     ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
 
