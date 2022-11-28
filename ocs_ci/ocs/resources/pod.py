@@ -2178,7 +2178,7 @@ def run_osd_removal_job(osd_ids: List[str] = None) -> OCS:
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (:obj:`list` of :obj:`str`): The osd IDs.
+        osd_ids (:obj:`list` of :obj:`str`, optional): The osd IDs.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
