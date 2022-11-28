@@ -1638,6 +1638,28 @@ def check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
     return True
 
 
+def wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes(timeout=180, sleep=10):
+    """
+    Wait for the rook ceph mon endpoint ips to be found in the provider worker node ips
+
+    Args:
+        timeout (int): The time to wait for the rook ceph mon endpoint ips to be found
+            in the provider worker node ips
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True, If all the rook ceph mon endpoint ips are found in the
+            provider worker nodes. False, otherwise.
+
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes,
+    )
+    return sample.wait_for_func_status(result=True)
+
+
 def get_consumer_storage_provider_endpoint():
     """
     Get the consumer "storageProviderEndpoint" from the ocs storage cluster

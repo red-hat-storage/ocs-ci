@@ -71,6 +71,12 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
                 recover_node_to_ready_state(n)
 
             config.switch_ctx(self.orig_index)
+            # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+            if is_ms_provider_cluster() and config.is_consumer_exist():
+                log.info(
+                    "Execute the the consumers verification steps before starting the next test"
+                )
+                consumers_verification_steps_after_provider_node_replacement()
 
         request.addfinalizer(finalizer)
 
