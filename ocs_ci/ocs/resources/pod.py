@@ -2191,7 +2191,7 @@ def run_osd_removal_job(osd_ids: List[str] = None) -> OCS:
     # Fixes: #6662
     # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
     cmd_params = (
-        f"-p FORCE_OSD_REMOVAL=true"
+        "-p FORCE_OSD_REMOVAL=true"
         if Version.coerce(ocs_version) >= Version.coerce("4.6")
         and not check_safe_to_destroy_status(osd_ids_str)
         else ""
