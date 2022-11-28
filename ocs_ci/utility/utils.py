@@ -9,6 +9,7 @@ import random
 import re
 import shlex
 import smtplib
+import socket
 import string
 import subprocess
 import time
@@ -3983,3 +3984,17 @@ def wipe_all_disk_partitions_for_node(node):
             if disk_to_wipe != root_disk:
                 disk_path = f"/dev/{disk_to_wipe}"
                 wipe_partition(node, disk_path)
+
+
+def convert_hostnames_to_ips(hostnames):
+    """
+    Gets the IP's from hostname with FQDN
+
+    Args:
+        hostnames (list): List of host names with FQDN
+
+    Returns:
+        list: Host IP's
+
+    """
+    return [socket.gethostbyname(host) for host in hostnames]
