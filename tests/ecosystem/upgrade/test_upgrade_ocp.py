@@ -189,7 +189,7 @@ class TestUpgradeOCP(ManageTest):
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions post upgrade:\n{cluster_ver}")
 
-        # Login to OCP console and run ODF dashboard validation check
+        # Login to OCP console and run ODF dashboard validation
         version_post_upgrade = version.get_semantic_version(ocp_upgrade_version, True)
         if version_post_upgrade >= version.VERSION_4_9:
             validation_ui_obj = ValidationUI(setup_ui_class)
