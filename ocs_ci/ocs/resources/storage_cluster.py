@@ -1198,7 +1198,7 @@ def verify_multus_network():
     Verify Multus network(s) created successfully and are present on relevant pods.
     """
     with open(constants.MULTUS_YAML, mode="r") as f:
-        multus_public_data = yaml.load(f)
+        multus_public_data = yaml.load(f, Loader=yaml.FullLoader)
         multus_namespace = multus_public_data["metadata"]["namespace"]
         multus_name = multus_public_data["metadata"]["name"]
         multus_public_network_name = f"{multus_namespace}/{multus_name}"
