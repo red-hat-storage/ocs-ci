@@ -1,8 +1,32 @@
-# Zone list according to IP
+# Zone list example, update the hostname according to zones here where xxx name of the cluster
 a:
-   # arbiter node
+  dc: "Datacenter-CP"
+  arbiter_node: ['arbiter.xxxx-xxx-xx.qe.rh-ocs.com']
 b:
-   # list all b zone nodes
-
+  odf_nodes:
+    nodes: ['compute-0.xxxx-xxx-xx.qe.rh-ocs.com',
+            'compute-1.xxxx-xxx-xx.qe.rh-ocs.com',
+            'compute-2.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-0.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-1.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-2.xxxx-xxx-xx.qe.rh-ocs.com']
+    dc: "Datacenter-LONG"
+  ceph_nodes:
+    nodes: ['osd-0.xxxx-xxx-xx.qe.rh-ocs.com',
+            'osd-1.xxxx-xxx-xx.qe.rh-ocs.com',
+            'osd-2.xxxx-xxx-xx.qe.rh-ocs.com']
+    dc: "Datacenter-CP"
 c:
-   # List all c zone nodes
+  odf_nodes:
+    nodes: ['compute-0.xxxx-xxx-xx.qe.rh-ocs.com',
+            'compute-1.xxxx-xxx-xx.qe.rh-ocs.com',
+            'compute-2.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-0.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-1.xxxx-xxx-xx.qe.rh-ocs.com',
+            'control-plane-2.xxxx-xxx-xx.qe.rh-ocs.com']
+    dc: "Datacenter-CP"
+  ceph_nodes:
+    nodes: ['osd-3.xxxx-xxx-xx.qe.rh-ocs.com',
+            'osd-4.xxxx-xxx-xx.qe.rh-ocs.com',
+            'osd-5.xxxx-xxx-xx.qe.rh-ocs.com']
+    dc: "Datacenter-CP"
