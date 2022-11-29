@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier3,
     skipif_managed_service,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 @tier3
 @pytest.mark.polarion_id("OCS-4662")
+@skipif_ocs_version("<4.9")
 @skipif_managed_service
 class TestNoobaaDbPw(E2ETest):
     """
