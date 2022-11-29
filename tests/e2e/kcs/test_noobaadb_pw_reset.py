@@ -80,5 +80,6 @@ def run_db_reset_cmd():
     """
     alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
     ocp.OCP().exec_oc_cmd(
-        f'exec {constants.NB_DB_NAME_47_AND_ABOVE} -- psql -d nbcore -c "{alter_cmd}"'
+        f"exec -n {defaults.ROOK_CLUSTER_NAMESPACE} {constants.NB_DB_NAME_47_AND_ABOVE} "
+        f'-- psql -d nbcore -c "{alter_cmd}"'
     )
