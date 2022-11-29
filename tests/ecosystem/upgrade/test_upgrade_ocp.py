@@ -128,6 +128,14 @@ class TestUpgradeOCP(ManageTest):
             if get_semantic_ocp_running_version() > VERSION_4_8:
                 pause_machinehealthcheck()
 
+            # Before upgrading OCP, login to the OCP console and look for any pop-up so as to refresh the console
+            version_post_upgrade = version.get_semantic_version(
+                ocp_upgrade_version, True
+            )
+            if version_post_upgrade >= version.VERSION_4_9:
+                validation_ui_obj = ValidationUI(setup_ui_class)
+                validation_ui_obj.refresh_web_console()
+
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
             ocp.upgrade_ocp(image=target_image, image_path=image_path)

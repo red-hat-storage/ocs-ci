@@ -171,6 +171,22 @@ class ValidationUI(PageNavigator):
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
 
+    def refresh_web_console(self):
+        refresh_web_console_popup = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["warning-alert"],
+            expected_text="Refresh web console",
+        )
+        if refresh_web_console_popup:
+            logger.info(
+                "Refresh web console option is now available, click on it to see the changes"
+            )
+            self.do_click(
+                self.validation_loc["refresh-web-console"],
+                enable_screenshot=True,
+            )
+        else:
+            logger.warning("Refresh web console pop-up was not found")
+
     def odf_console_plugin_check(self):
         """
         Function to verify if console plugin is enabled on UI or not,
@@ -227,6 +243,7 @@ class ValidationUI(PageNavigator):
                     self.do_click(self.dep_loc["enable_console_plugin"])
                     self.do_click(self.validation_loc["save_console_plugin_settings"])
                     logger.info("Waiting for warning alert to refresh the web console")
+                    self.refresh_web_console()
                     refresh_web_console_popup = self.wait_until_expected_text_is_found(
                         locator=self.validation_loc["warning-alert"],
                         expected_text="Refresh web console",

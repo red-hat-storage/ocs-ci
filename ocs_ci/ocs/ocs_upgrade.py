@@ -576,6 +576,13 @@ def run_ocs_upgrade(
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # Before upgrading OCS/ODF, login to the OCP console and look for any pop-up so as to refresh the console
+    semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
+    if semantic_upgrade_version >= version.VERSION_4_9:
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj.refresh_web_console()
+
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
         host, user, password, ssh_key = get_external_cluster_client()
