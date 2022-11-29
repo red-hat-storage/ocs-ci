@@ -197,7 +197,13 @@ def setup_local_storage(storageclass):
         run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
-    if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
+    if (
+        platform == constants.AWS_PLATFORM
+        and lso_type == constants.AWS_EBS
+        and (config.DEPLOYMENT.get("arbiter_deployment", False))
+    ):
+        storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+    elif platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
     elif platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
