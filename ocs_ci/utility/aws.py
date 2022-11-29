@@ -1889,7 +1889,9 @@ def get_stack_name_from_instance_dict(instance_dict):
     return stack_name
 
 
-def create_and_attach_ebs_volumes(worker_pattern, size=100, count=1):
+def create_and_attach_ebs_volumes(
+    worker_pattern, size=100, count=1, device_names=("sdx",)
+):
     """
     Create volumes on workers
 
@@ -1897,15 +1899,25 @@ def create_and_attach_ebs_volumes(worker_pattern, size=100, count=1):
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
-        count (int): number of EBS volumes to attach to worker node
+        count (int): number of EBS volumes to attach to worker node, if it's
+        device_names (list): list of the devices like ["sda", "sdb"]. Length of list needs
+            to match count!
+
+    Raises:
+        UnexpectedInput: In case the device_names length doesn't match count.
 
     """
     region = config.ENV_DATA["region"]
+    if len(device_names) != count:
+        raise exceptions.UnexpectedInput(
+            "The device_names doesn't contain the same number of devices as the "
+            f"count, which is: {count}! If count is 2, the device_names should be for example ['sdc', 'sdx']!"
+        )
     aws = AWS(region)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
-    for number in range(1, count + 1):
-        with parallel() as p:
-            for worker in worker_instances:
+    with parallel() as p:
+        for worker in worker_instances:
+            for number in range(1, count + 1):
                 logger.info(
                     f"Creating and attaching {number}. {size} GB volume to {worker['name']}"
                 )
@@ -1915,6 +1927,7 @@ def create_and_attach_ebs_volumes(worker_pattern, size=100, count=1):
                     instance_id=worker["id"],
                     name=f"{worker['name']}_extra_volume_{number}",
                     size=size,
+                    device=f"/dev/{device_names[number-1]}",
                 )
 
 
@@ -1922,6 +1935,7 @@ def create_and_attach_volume_for_all_workers(
     device_size=None,
     worker_suffix="worker",
     count=1,
+    device_letters="ghijklmnopxyz",
 ):
     """
     Create volumes on workers
@@ -1931,14 +1945,19 @@ def create_and_attach_volume_for_all_workers(
             config.ENV_DATA["device_size"] will be used
         worker_suffix (str): Worker name suffix (default: worker)
         count (int): number of EBS volumes to attach to worker node
+        device_letters (str): device letters from which generate device names.
+            e.g. for "abc" and if count=2 it will generate ["sda", "sdb"]
 
     """
     device_size = device_size or int(
         config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
     )
+    device_letters = "ghijklmnopxyz"
+    device_names = [f"sd{letter}" for letter in device_letters[:count]]
     infra_id = get_infra_id(config.ENV_DATA["cluster_path"])
     create_and_attach_ebs_volumes(
         f"{infra_id}-{worker_suffix}*",
         device_size,
         count,
+        device_names,
     )
