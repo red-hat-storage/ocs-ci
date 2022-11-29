@@ -491,6 +491,20 @@ class VMWareNodes(NodesBase):
             for vm in vms:
                 self.vsphere.wait_for_vm_delete(vm)
 
+    def get_vm_from_ips(self, node_ips, dc):
+        """
+        Fetches VM objects from given IP's
+
+        Args:
+            node_ips (list): List of node IP's
+            dc (str): Datacenter name
+
+        Returns:
+            list: List of VM objects
+
+        """
+        return [self.vsphere.get_vm_by_ip(ip, dc) for ip in node_ips]
+
 
 class AWSNodes(NodesBase):
     """
