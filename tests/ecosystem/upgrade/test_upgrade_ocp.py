@@ -61,6 +61,19 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
+    def operators_upgrade_verfication(self, operators: list, image: str):
+        for oper in operators:
+            pre_len = len(operators)
+            if ocp.confirm_cluster_operator_version(
+                image, oper
+            ) and ocp.verify_cluster_operator_status(oper):
+                operators.remove(oper)
+            post_len = len(operators)
+            if pre_len == post_len:
+                return False
+            else:
+                return True
+
     def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
@@ -109,15 +122,6 @@ class TestUpgradeOCP(ManageTest):
             # Wait for upgrade
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
-                # ############ Workaround for issue 2624 #######
-                name_changed_between_versions = (
-                    "service-catalog-apiserver",
-                    "service-catalog-controller-manager",
-                )
-                if ocp_operator in name_changed_between_versions:
-                    logger.info(f"{ocp_operator} upgrade will not be verified")
-                    continue
-                # ############ End of Workaround ###############
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
