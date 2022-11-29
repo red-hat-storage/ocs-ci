@@ -15,7 +15,9 @@ from ocs_ci.helpers.helpers import (
 )
 
 from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +54,7 @@ class TestNoobaaDbPw(E2ETest):
         scale_nb_resources(replica=0)
         sleep(15)
 
-        alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
-        ocp.OCP().exec_oc_cmd(
-            f'exec {constants.NB_DB_NAME_47_AND_ABOVE} -- psql -d nbcore -c "{alter_cmd}"'
-        )
+        run_db_reset_cmd()
         nb_db_secret_obj = ocp.OCP(
             kind=constants.SECRET,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -71,3 +70,15 @@ class TestNoobaaDbPw(E2ETest):
             wait_for_resource_state(
                 resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
             )
+
+
+@retry(CommandFailed, tries=5, delay=3)
+def run_db_reset_cmd():
+    """
+    Retries DB password reset cmd if the command fails
+
+    """
+    alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
+    ocp.OCP().exec_oc_cmd(
+        f'exec {constants.NB_DB_NAME_47_AND_ABOVE} -- psql -d nbcore -c "{alter_cmd}"'
+    )
