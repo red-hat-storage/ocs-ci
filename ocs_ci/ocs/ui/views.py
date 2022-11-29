@@ -1203,6 +1203,12 @@ locators = {
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
             **acm_configuration_4_12,
         },
         "obc": obc,

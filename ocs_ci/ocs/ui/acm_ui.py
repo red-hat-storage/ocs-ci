@@ -140,7 +140,6 @@ class AcmPageNavigator(BaseUI):
         self.do_click(locator=self.acm_page_nav["Credentials"])
 
     def navigate_from_ocp_to_acm(self):
-        self.page_has_loaded()
         if not self.check_element_presence(self.acm_page_nav["local-cluster"]):
             log.error("local-cluster is not found, can not switch to ACM console")
             self.take_screenshot()
@@ -151,8 +150,8 @@ class AcmPageNavigator(BaseUI):
             self.take_screenshot()
             raise NoSuchElementException
         self.do_click_by_id(self.acm_page_nav["all-clusters"])
-        self.take_screenshot()
         self.page_has_loaded()
+        self.take_screenshot()
 
 
     def navigate_from_ocp_to_acm_cluster_page(self):
