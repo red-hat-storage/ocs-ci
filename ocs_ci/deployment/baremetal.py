@@ -687,7 +687,10 @@ def clean_disk():
     workers = get_nodes(node_type="worker")
 
     ocp_obj = ocp.OCP()
-    ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS)
+    policy = constants.PSA_BASELINE
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+        policy = constants.PSA_PRIVILEGED
+    ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
 
     for worker in workers:
         out = ocp_obj.exec_oc_debug_cmd(
