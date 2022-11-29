@@ -1903,9 +1903,9 @@ def create_and_attach_ebs_volumes(worker_pattern, size=100, count=1):
     region = config.ENV_DATA["region"]
     aws = AWS(region)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
-    with parallel() as p:
-        for worker in worker_instances:
-            for number in range(1, count + 1):
+    for number in range(1, count + 1):
+        with parallel() as p:
+            for worker in worker_instances:
                 logger.info(
                     f"Creating and attaching {number}. {size} GB volume to {worker['name']}"
                 )
