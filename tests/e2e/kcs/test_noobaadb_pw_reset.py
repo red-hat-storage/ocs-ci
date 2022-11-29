@@ -36,7 +36,6 @@ class TestNoobaaDbPw(E2ETest):
         """
 
         def finalizer():
-            # Scaling up in case the test fails in between,
             # does not matter if the replica is already 1
             scale_nb_resources(replica=1)
 
@@ -44,7 +43,7 @@ class TestNoobaaDbPw(E2ETest):
 
     def test_noobaadb_password_reset(self):
         """
-        Verifies https://access.redhat.com/solutions/6648191
+        Verifies KCS article: https://access.redhat.com/solutions/6648191
 
         """
         logger.info("Scaling down noobaa resources")
@@ -53,20 +52,19 @@ class TestNoobaaDbPw(E2ETest):
 
         alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
         ocp.OCP().exec_oc_cmd(
-            f"exec -it {constants.NB_DB_NAME_47_AND_ABOVE} -- psql -d nbcore -c {alter_cmd}"
+            f'exec {constants.NB_DB_NAME_47_AND_ABOVE} -- psql -d nbcore -c "{alter_cmd}"'
         )
-
         nb_db_secret_obj = ocp.OCP(
             kind=constants.SECRET,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             resource_name="noobaa-db",
         )
-        secret_param = '{"stringData":{"password": myNewPassword}}'
-        nb_db_secret_obj.patch(params=secret_param, format_type="merge")
+        db_secret_patch = '[{"op": "add", "path": "/stringData", "value": {"password": "myNewPassword"}}]'
+        nb_db_secret_obj.patch(params=db_secret_patch, format_type="json")
 
-        logger.info("Scaling up Noobaa resources")
+        logger.info("Scaling back up Noobaa resources")
         scale_nb_resources(replica=1)
-        sleep(20)
+        sleep(30)
         for noobaa_pod in get_noobaa_pods():
             wait_for_resource_state(
                 resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
