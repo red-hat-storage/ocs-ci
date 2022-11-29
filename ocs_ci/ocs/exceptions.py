@@ -26,6 +26,10 @@ class UnexpectedBehaviour(Exception):
     pass
 
 
+class UnexpectedInput(Exception):
+    pass
+
+
 class ClassCreationException(Exception):
     pass
 
