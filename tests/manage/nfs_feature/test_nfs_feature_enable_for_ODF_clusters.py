@@ -4,7 +4,8 @@ import time
 import yaml
 
 
-from ocs_ci.utility import utils, nfs_utils
+from ocs_ci.utility import nfs_utils
+from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
@@ -79,7 +80,7 @@ class TestNfsEnable(ManageTest):
     """
 
     @pytest.fixture(scope="class", autouse=True)
-    def setup_teardown(self, request):
+    def setup_teardown(self, request, pvc_factory_class, pod_factory_class):
         """
         Setup-Teardown for the class
 
@@ -107,8 +108,7 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
-        self.test_folder = "test_nfs"
-        utils.exec_cmd(cmd="mkdir -p " + self.test_folder)
+        self.test_folder = "/mnt/test_nfs"
 
         # Enable nfs feature
         log.info("----Enable nfs----")
@@ -124,6 +124,11 @@ class TestNfsEnable(ManageTest):
             self.storage_cluster_obj,
         )
 
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            "10.0.151.68", user="root", private_key=constants.SSH_PRIV_KEY, stdout=False
+        )
         yield
 
         log.info("-----Teardown-----")
@@ -140,7 +145,23 @@ class TestNfsEnable(ManageTest):
             self.storage_cluster_obj,
         )
 
-        utils.exec_cmd(cmd="rm -rf " + self.test_folder)
+    def teardown(self):
+        """
+        Check if any nfs idle mount is available out of cluster
+        and remove those.
+        """
+        retcode, stdout, _ = self.con.exec_cmd("findmnt -t nfs4 " + self.test_folder)
+        if stdout:
+            log.info("unmounting existing nfs mount")
+            retry(
+                (CommandFailed),
+                tries=200,
+                delay=10,
+            )(self.con.exec_cmd("umount -f " + self.test_folder))
+            retcode, _, _ = self.con.exec_cmd("findmnt -M  " + self.test_folder)
+            assert retcode == 1
+        log.info("Delete mount point")
+        _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
 
     @tier1
     @polarion_id("OCS-4269")
@@ -337,9 +358,10 @@ class TestNfsEnable(ManageTest):
             out_yaml_format=False,
         )
 
-        # Connect the external client using the share path and ingress address
+        retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
+        assert retcode == 0
         export_nfs_external_cmd = (
-            "sudo mount -t nfs4 -o proto=tcp "
+            "mount -t nfs4 -o proto=tcp "
             + self.hostname_add
             + ":"
             + share_details
@@ -347,23 +369,22 @@ class TestNfsEnable(ManageTest):
             + self.test_folder
         )
 
-        result = retry(
+        retry(
             (CommandFailed),
             tries=200,
             delay=10,
-        )(utils.exec_cmd(cmd=export_nfs_external_cmd))
-        assert result.returncode == 0
+        )(self.con.exec_cmd(export_nfs_external_cmd))
 
         # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"
-        result = utils.exec_cmd(cmd=command)
-        stdout = result.stdout.decode().rstrip()
+        retcode, stdout, _ = self.con.exec_cmd(command)
+        stdout = stdout.rstrip()
         log.info(stdout)
         assert stdout == "hello world"
 
-        command = f"sudo chmod 666 {self.test_folder}/index.html"
-        result = utils.exec_cmd(cmd=command)
-        assert result.returncode == 0
+        command = f"chmod 666 {self.test_folder}/index.html"
+        retcode, _, _ = self.con.exec_cmd(command)
+        assert retcode == 0
 
         # Verify able to write to the exported volume
         command = (
@@ -372,13 +393,13 @@ class TestNfsEnable(ManageTest):
             + "'test_writing'"
             + f'  >> {self.test_folder}/index.html"'
         )
-        result = utils.exec_cmd(cmd=command)
-        assert result.returncode == 0
+        retcode, _, stderr = self.con.exec_cmd(command)
+        assert retcode == 0, f"failed with error---{stderr}"
 
         command = f"cat {self.test_folder}/index.html"
-        result = utils.exec_cmd(cmd=command)
-        stdout = result.stdout.decode().rstrip()
-        log.info(stdout)
+        retcode, stdout, _ = self.con.exec_cmd(command)
+        assert retcode == 0
+        stdout = stdout.rstrip()
         assert stdout == "hello world" + """\n""" + "test_writing"
 
         # Able to read updated /var/lib/www/html/index.html file from inside the pod
@@ -390,12 +411,15 @@ class TestNfsEnable(ManageTest):
         assert result.rstrip() == "hello world" + """\n""" + "test_writing"
 
         # unmount
-        result = retry(
+        retry(
             (CommandFailed),
-            tries=300,
+            tries=600,
             delay=10,
-        )(utils.exec_cmd(cmd="sudo umount -l " + self.test_folder))
-        assert result.returncode == 0
+        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
+
+        # Check mount point unmounted successfully
+        retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
+        assert retcode == 1
 
         # Deletion of Pods and PVCs
         log.info("Deleting pod")
@@ -515,32 +539,39 @@ class TestNfsEnable(ManageTest):
             )
 
             # Connect the external client using the share path and ingress address
+            retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
+            assert retcode == 0
             export_nfs_external_cmd = (
-                "sudo mount -t nfs4 -o proto=tcp "
+                "mount -t nfs4 -o proto=tcp "
                 + self.hostname_add
                 + ":"
                 + share_details
                 + " "
                 + self.test_folder
             )
-
-            result = retry(
+            retry(
                 (CommandFailed),
                 tries=200,
                 delay=10,
-            )(utils.exec_cmd(cmd=export_nfs_external_cmd))
-            assert result.returncode == 0
+            )(self.con.exec_cmd(export_nfs_external_cmd))
 
             # Verify able to access exported volume
             command = f"cat {self.test_folder}/index.html"
-            result = utils.exec_cmd(cmd=command)
-            stdout = result.stdout.decode().rstrip()
+            retcode, stdout, _ = self.con.exec_cmd(command)
+            stdout = stdout.rstrip()
             log.info(stdout)
             assert stdout == "hello world"
 
             # unmount
-            result = utils.exec_cmd(cmd="sudo umount -l " + self.test_folder)
-            assert result.returncode == 0
+            retry(
+                (CommandFailed),
+                tries=600,
+                delay=10,
+            )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
+
+            # Check mount point unmounted successfully
+            retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
+            assert retcode == 1
 
             # Deletion of Pods and PVCs
             log.info("Deleting pods")
@@ -549,8 +580,6 @@ class TestNfsEnable(ManageTest):
                 pod_obj.name, 180
             ), f"Pod {pod_obj.name} is not deleted"
 
-        log.info("Deleting PVCs")
-        for pvc_obj in nfs_pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             log.info(f"pv object-----{pv_obj}")
             pvc_obj.delete()
@@ -649,33 +678,41 @@ class TestNfsEnable(ManageTest):
                 assert assert_str in result
 
         # Connect the external client using the share path and ingress address
+        retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
+        assert retcode == 0
         export_nfs_external_cmd = (
-            "sudo mount -t nfs4 -o proto=tcp "
+            "mount -t nfs4 -o proto=tcp "
             + self.hostname_add
             + ":"
             + share_details
             + " "
             + self.test_folder
         )
-
-        result = retry(
+        retry(
             (CommandFailed),
             tries=200,
             delay=10,
-        )(utils.exec_cmd(cmd=export_nfs_external_cmd))
-        assert result.returncode == 0
+        )(self.con.exec_cmd(export_nfs_external_cmd))
 
         # Verify able to access exported volume
         command = f"cat {self.test_folder}/shared_file.html"
-        result = utils.exec_cmd(cmd=command)
-        stdout = result.stdout.decode().rstrip()
+        retcode, stdout, _ = self.con.exec_cmd(command)
+        stdout = stdout.rstrip()
+        log.info(stdout)
         for pod_name in pod_names:
             assert_str = f"I am pod, {pod_name}"
             assert assert_str in stdout
 
         # unmount
-        result = utils.exec_cmd(cmd="sudo umount -l " + self.test_folder)
-        assert result.returncode == 0
+        retry(
+            (CommandFailed),
+            tries=600,
+            delay=10,
+        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
+
+        # Check mount point unmounted successfully
+        retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
+        assert retcode == 1
 
         # Deletion of Pods and PVCs
         log.info("Deleting pods")
@@ -781,21 +818,21 @@ class TestNfsEnable(ManageTest):
         log.info(f"File {file_name} exists in {pod_obj.name}")
 
         # Connect the external client using the share path and ingress address
+        retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
+        assert retcode == 0
         export_nfs_external_cmd = (
-            "sudo mount -t nfs4 -o proto=tcp "
+            "mount -t nfs4 -o proto=tcp "
             + self.hostname_add
             + ":"
             + share_details
             + " "
             + self.test_folder
         )
-
-        result = retry(
+        retry(
             (CommandFailed),
             tries=200,
             delay=10,
-        )(utils.exec_cmd(cmd=export_nfs_external_cmd))
-        assert result.returncode == 0
+        )(self.con.exec_cmd(export_nfs_external_cmd))
 
         # Verify able to write new file in exported volume by external client
         command = (
@@ -804,12 +841,12 @@ class TestNfsEnable(ManageTest):
             + "'written from external client'"
             + f'  > {self.test_folder}/test.html"'
         )
-        result = utils.exec_cmd(cmd=command)
-        assert result.returncode == 0
+        retcode, _, _ = self.con.exec_cmd(command)
+        assert retcode == 0
 
         command = f"sudo chmod 666 {self.test_folder}/test.html"
-        result = utils.exec_cmd(cmd=command)
-        assert result.returncode == 0
+        retcode, _, _ = self.con.exec_cmd(command)
+        assert retcode == 0
 
         # Able to read the external client's written content from inside the pod
         command = "bash -c " + '"cat ' + ' /var/lib/www/html/test.html"'
@@ -820,12 +857,15 @@ class TestNfsEnable(ManageTest):
         assert result.rstrip() == "written from external client"
 
         # unmount
-        result = retry(
+        retry(
             (CommandFailed),
-            tries=300,
+            tries=600,
             delay=10,
-        )(utils.exec_cmd(cmd="sudo umount -l " + self.test_folder))
-        assert result.returncode == 0
+        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
+
+        # Check mount point unmounted successfully
+        retcode, _, _ = self.con.exec_cmd("findmnt -M  " + self.test_folder)
+        assert retcode == 1
 
         # Deletion of Pods and PVCs
         log.info("Deleting pod")

@@ -1962,8 +1962,8 @@ ACM_CSV_LABEL = (
 )
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
-SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
-SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
+SSH_PRIV_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pem"))
+SSH_PUB_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pub"))
 SPACE = " "
 
 # DR actions
