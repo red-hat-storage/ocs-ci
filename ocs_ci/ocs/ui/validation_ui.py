@@ -175,6 +175,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
+            timeout=120,
         )
         if refresh_web_console_popup:
             logger.info(
