@@ -225,7 +225,7 @@ class ValidationUI(PageNavigator):
             plugin_availability_check = self.wait_until_expected_text_is_found(
                 locator=self.dep_loc["plugin-available"],
                 expected_text="Plugin available",
-                timeout=10,
+                timeout=60,
             )
             if plugin_availability_check:
                 logger.info(

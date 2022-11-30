@@ -1161,7 +1161,7 @@ validation_4_9 = {
     "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
     "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
     "storage-system-on-installed-operators": (
         "a[title='storagesystems.odf.openshift.io']",
         By.CSS_SELECTOR,

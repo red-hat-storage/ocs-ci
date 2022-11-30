@@ -577,6 +577,13 @@ def run_ocs_upgrade(
         f"{upgrade_ocs.version_before_upgrade}"
     )
 
+    # Before ODF upgrade, login to OCP console and enable console plugin if not already
+    semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
+    if semantic_upgrade_version >= version.VERSION_4_9:
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj.refresh_web_console()
+        validation_ui_obj.odf_console_plugin_check()
+
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
         host, user, password, ssh_key = get_external_cluster_client()
@@ -756,8 +763,8 @@ def run_ocs_upgrade(
     # Login to OCP console and run ODF dashboard validation check
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI(setup_ui_class)
         validation_ui_obj.refresh_web_console()
+        validation_ui_obj.odf_console_plugin_check()
         validation_ui_obj.odf_overview_ui()
         validation_ui_obj.odf_storagesystems_ui()
 
