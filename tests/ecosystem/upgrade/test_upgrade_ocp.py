@@ -201,6 +201,7 @@ class TestUpgradeOCP(ManageTest):
         version_post_upgrade = version.get_semantic_version(ocp_upgrade_version, True)
         if version_post_upgrade >= version.VERSION_4_9:
             validation_ui_obj = ValidationUI(setup_ui_class)
+            validation_ui_obj.refresh_web_console()
             validation_ui_obj.odf_overview_ui()
             validation_ui_obj.odf_storagesystems_ui()
 
