@@ -184,7 +184,18 @@ class TestNodesRestartMS(ManageTest):
         ocp_nodes = get_nodes(node_type=node_type)
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
+            wait_for_node_count_to_reach_status(
+                node_count=len(ocp_nodes), node_type=node_type
+            )
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+
+        if is_ms_consumer_cluster():
+            logger.info(
+                "Verify that the nodes are ready before start creating resources"
+            )
+            wait_for_node_count_to_reach_status(
+                node_count=len(ocp_nodes), node_type=node_type
+            )
 
         self.create_resources()
 
