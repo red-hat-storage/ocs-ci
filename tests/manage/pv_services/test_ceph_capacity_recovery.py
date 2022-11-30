@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.ocs.perftests import PASTest
 
@@ -114,7 +115,9 @@ class TestCephCapacityRecovery(PASTest):
         """
         log.info("Starting the test cleanup")
 
-        self.benchmark_obj.cleanup()
+        if self.benchmark_obj is not None:
+            self.benchmark_obj.cleanup()
+
         # Deleting the namespace used by the test
         self.delete_test_project()
 
@@ -151,7 +154,9 @@ class TestCephCapacityRecovery(PASTest):
 
         pvc_list = []
         pod_list = []
-        for i in range(self.num_of_pvcs / 2):  # on each loop cycle 1 pvc and 1 clone
+        for i in range(
+            int(self.num_of_pvcs / 2)
+        ):  # on each loop cycle 1 pvc and 1 clone
             index = i + 1
 
             log.info("Start creating PVC")
@@ -262,12 +267,13 @@ class TestCephCapacityRecovery(PASTest):
 
             get_used_capacity(f"After deletion of pvc  {pvc_obj.name}")
             check_health_status()
+            time.sleep(600)
 
         get_used_capacity("After PVCs deletion")
 
-        sample = TimeoutSampler(timeout=900, sleep=30, func=check_health_status)
+        sample = TimeoutSampler(timeout=1800, sleep=30, func=check_health_status)
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 900 seconds the cluster health is still not OK")
+            log.error("The after 1800 seconds the cluster health is still not OK")
             raise TimeoutExpiredError
         else:
             get_used_capacity("After cluster health returned to be OK")
