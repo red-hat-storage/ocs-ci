@@ -9,6 +9,8 @@ from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from selenium.common.exceptions import NoSuchElementException
+
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +319,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Storage system under Status card on Data Foundation Overview tab is missing"
             )
+            raise NoSuchElementException
 
         system_capacity_check = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["system-capacity"],
@@ -330,6 +333,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "System Capacity Card not found on OpenShift Data Foundation Overview page"
             )
+            raise NoSuchElementException
         logger.info(
             "Navigate to System Capacity Card and Click on storage system hyperlink"
         )
@@ -347,6 +351,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
             )
+            raise NoSuchElementException
         logger.info("Click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate back to ODF Overview page")
@@ -365,6 +370,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't find 'Performance' card on Data Foundation Overview page"
             )
+            raise NoSuchElementException
         navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["storagesystem-details"],
             timeout=15,
@@ -378,6 +384,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from Performance Card"
             )
+            raise NoSuchElementException
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Click on Backing Store")
