@@ -24,13 +24,17 @@ def check_setmetadata_availability(pod_obj):
         plugin_provisioner_pod_objs
     )
     log.info(response)
+    get_args_provisioner_plugin_pods = []
     for plugin_provisioner_pod in plugin_provisioner_pod_objs:
         args = pod_obj.exec_oc_cmd(
             "get pod "
             + plugin_provisioner_pod.name
             + " --output jsonpath='{.spec.containers[4].args}'"
         )
-        return "--setmetadata=true" in args
+        get_args_provisioner_plugin_pods.append(args)
+    return all(
+        ["--setmetadata=true" in args for args in get_args_provisioner_plugin_pods]
+    )
 
 
 def enable_metadata(
@@ -75,8 +79,7 @@ def enable_metadata(
 
     # Check 'setmatadata' is set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
     res = check_setmetadata_availability(pod_obj)
-    if not res:
-        raise AssertionError
+    assert res, "Error: The metadata not set for cephfs and rbd plugin provisioner pods"
 
     cephfsplugin_provisioner_pods = pod.get_cephfsplugin_provisioner_pods()
 
@@ -87,6 +90,8 @@ def enable_metadata(
     )
     for arg in args:
         if "--clustername" in arg:
+            log.info(f"Fetch the cluster name parameter {arg}")
+            # To fetch value of clustername parameter
             return arg[14:]
 
 
@@ -129,39 +134,45 @@ def disable_metadata(
 
     # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
     res = check_setmetadata_availability(pod_obj)
-    if res:
-        raise AssertionError
+    assert (
+        not res
+    ), "Error: The metadata is set, while it is expected to be unavailable "
 
 
 def available_subvolumes(sc_name, toolbox_pod, fs):
     """
     To fetch available subvolumes for cephfs or rbd
+        sc_name (str): storage class
+        toolbox_pod (str): ceph tool box pod
+        fs (str): file system
 
     Returns:
-    list: list of subvolumes available for rbd or cephfs
+        list: subvolumes available for rbd or cephfs
 
     """
     if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
-        # fs="ocs-storagecluster-cephfilesystem"
         cephfs_subvolumes = toolbox_pod.exec_cmd_on_pod(
             f"ceph fs subvolume ls {fs} --group_name csi"
         )
         log.info(f"available cephfs subvolumes-----{cephfs_subvolumes}")
         return cephfs_subvolumes
 
-    else:
-        # fs="ocs-storagecluster-cephblockpool"
+    elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
         rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls {fs} --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
+    else:
+        log.exception("Metadata feature is not supported for this storage class")
 
 
 def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
     """
     To fetch created subvolume for cephfs or rbd
-
+        available_subvolumes (list): List of available subvolumes
+        updated_subvolumes (list): Updated list of subvolumes
+        sc_name (str): storage class
     Returns:
-    str: name of subvolume created
+        str: name of subvolume created
 
     """
     for sub_vol in updated_subvolumes:
@@ -170,9 +181,13 @@ def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
             if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
                 log.info(f"created sub volume---- {created_subvolume['name']}")
                 return created_subvolume["name"]
-            else:
+            elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
                 log.info(f"created sub volume---- {created_subvolume}")
                 return created_subvolume
+            else:
+                log.exception(
+                    "Metadata feature is not supported for this storage class"
+                )
 
 
 def fetch_metadata(
@@ -186,9 +201,16 @@ def fetch_metadata(
 ):
     """
     To fetch metadata details created for cephfs or rbd
+        sc_name (str): storage class
+        toolbox_pod (str): ceph tool box pod
+        fs (str): file system
+        created_subvol (str): Created sub volume
+        snapshot (bool): snapshot or not
+        available_subvolumes (list): List of available subvolumes
+        updated_subvolumes (list): Updated list of subvolumes
 
     Returns:
-    json: metadata details
+        json: metadata details
 
     """
     if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
@@ -205,7 +227,7 @@ def fetch_metadata(
             metadata = toolbox_pod.exec_cmd_on_pod(
                 f"ceph fs subvolume metadata ls {fs} {created_subvol} --group_name=csi --format=json"
             )
-    else:
+    elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
         if snapshot:
             created_subvol = created_subvolume(
                 available_subvolumes, updated_subvolumes, sc_name
@@ -213,6 +235,8 @@ def fetch_metadata(
         metadata = toolbox_pod.exec_cmd_on_pod(
             f"rbd image-meta ls {fs}/{created_subvol} --format=json"
         )
+    else:
+        log.exception("Metadata feature is not supported for this storage class")
     log.info(f"metadata is ------ {metadata}")
     return metadata
 
@@ -228,6 +252,13 @@ def validate_metadata(
 ):
     """
     To validate the metadata details
+        metadata (json): metadata details
+        clustername (str): cluster name
+        pv_name (str): name of the pv
+        pvc_name (str): name of the pvc
+        namespace (str): namespace
+        volumesnapshot_name (str): name of the volumesnapshot
+        volumesnapshot_content (str): volumesnapshot content
 
     """
     assert (

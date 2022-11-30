@@ -74,8 +74,9 @@ class TestMetadataUnavailable(ManageTest):
 
         # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         res = metadata_utils.check_setmetadata_availability(pod_obj)
-        if res:
-            raise AssertionError
+        assert (
+            not res
+        ), "Error: The metadata is set, while it is expected to be unavailable "
         available_subvolumes = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
         # Create pvc object
         pvc_obj = helpers.create_pvc(
@@ -95,7 +96,7 @@ class TestMetadataUnavailable(ManageTest):
             sc_name, fs, toolbox, created_subvolume
         )
         # metadata details unavailable for the PVC
-        assert metadata == {}
+        assert metadata == {}, "Error: Metadata details are available for the PVC"
 
         # Delete the PVC
         pvc_obj.delete()
@@ -176,8 +177,9 @@ class TestDefaultMetadataDisabled(ManageTest):
 
         # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         res = metadata_utils.check_setmetadata_availability(pod_obj)
-        if res:
-            raise AssertionError
+        assert (
+            not res
+        ), "Error: The metadata is set, while it is expected to be unavailable "
         _ = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
         # create a pvc with cephfs sc
         pvc_obj = pvc_factory(
@@ -192,7 +194,7 @@ class TestDefaultMetadataDisabled(ManageTest):
             metadata = metadata_utils.fetch_metadata(
                 sc_name, fs, toolbox, sub_vol["name"]
             )
-            assert metadata == {}
+            assert metadata == {}, "Error: Metadata details are available"
         # Delete PVCs
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(
@@ -716,8 +718,9 @@ class TestMetadata(ManageTest):
             raise AssertionError
         # 'setmatadata' unavailable for cephfs and rbd plugin provisioner pods
         res = metadata_utils.check_setmetadata_availability(self.pod_obj)
-        if res:
-            raise AssertionError
+        assert (
+            not res
+        ), "Error: The metadata is set, while it is expected to be unavailable "
         # Enable metadata feature
         log.info("----Enable metadata----")
         _ = metadata_utils.enable_metadata(
@@ -935,5 +938,6 @@ class TestMetadata(ManageTest):
             timeout=60,
         )
         res = metadata_utils.check_setmetadata_availability(self.pod_obj)
-        if res:
-            raise AssertionError
+        assert (
+            not res
+        ), "Error: The metadata is set, while it is expected to be unavailable "
