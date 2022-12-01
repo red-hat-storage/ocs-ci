@@ -9,51 +9,46 @@ The containers are expected to run with a service account that has admin credent
 
 **Change directory to Docker_files/ocsci_container [$ cd Docker_files/ocsci_container]**
 
-**docker/podman build -t Dockerfile_ocsci -f Dockerfile_ocsci . --build-arg BRANCH_ID_ARG=<branch-id/master/stable>**
+**docker/podman build -t <image-name> -f Dockerfile_ocsci . --build-arg BRANCH_ID_ARG=<branch-id/master/stable>**
 
 BRANCH_ID_ARG:
 There are 3 options:
 1. BRANCH_ID_ARG is empty -> checkout to stable branch
 2. BRANCH_ID_ARG=master -> checkout to master branch
 3. BRANCH_ID_ARG=PR-ID [1234] -> checkout to relevant branch based on pr-id
+
 ### Run Container
 ```commandline
-docker/podman run -v <kubeconfig-path>:/opt/cluster/auth -e MARKER_PYTEST=<marker>
--e OCP_VERSION=<ocp-version> -e OCS_VERSION=<ocs-version> -e  CLUSTER_NAME=<cluster-path>
--e TEST_PATH=<test-path> <image-name>
+docker/podman run -v <kubeconfig-path>:/opt/cluster <image-name> run-ci --cluster-path /opt/cluster_path
+--ocp-version <ocp-version> --ocs-version <ocs-version> --cluster-name <cluster-name> <test-path>
 ```
 *Add Params:
 ```
 kubeconfig-path: Path to kubeconfig on your local machine
-MARKER_PYTEST: Pytest marker ["tier1", "acceptance" ..]
-OCP_VERSION: OCP Version ["4.11", "4.12" ..]
-OCS_VERSION: ODF Version ["4.11", "4.12" ..]
-CLUSTER_NAME: Cluster name [optional]
-TEST_PATH: test path [tests/manage/z_cluster/test_must_gather.py]
+image-name: Image name
+run-ci params
 
 ```
 
 Example:
 
-```
-docker run -v /home/odedviner/ClusterPath/auth:/opt/cluster/auth -e MARKER_PYTEST=tier1
--e OCP_VERSION=4.12 -e OCS_VERSION=4.11 -e  CLUSTER_NAME=cluster-aws
--e TEST_PATH=tests/manage/z_cluster/test_must_gather.py -it oded_image111 /bin/bash
+```commandline
+docker run -v ~/ClusterPath/auth:/opt/cluster ocsci_image run-ci --cluster-path /opt/cluster_path
+--ocp-version 4.12 --ocs-version 4.12 --cluster-name cluster-name tests/manage/z_cluster/test_must_gather.py
 ```
 
 ### Upload image to quay.io
 **Login to quay.io**
-docker login -u <user-name> quay.io
+docker/podman login -u <user-name> quay.io
 
 **Tag Image**
 
-docker image tag ocs-ci-stable quay.io/<user-name>/ocs-ci:ocs-ci-stable
+docker/podman image tag ocsci-container quay.io/ocsci/ocs-ci-container:stable
 
 **Push Image to quay registry**
 
-docker image push quay.io/<user-name>/ocs-ci:ocs-ci-stable
-
+podman push ocsci-container quay.io/ocsci/ocs-ci-container:stable
 
 ### Download image from quay.io
 
-**docker pull quay.io/<user-name>/ocs-ci:ocs-ci-stable**
+**docker/podman pull quay.io/ocsci/ocs-ci-container:stable**
