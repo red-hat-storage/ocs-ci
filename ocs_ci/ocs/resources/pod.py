@@ -2946,3 +2946,52 @@ def restart_pods_in_statuses(
     )
     delete_pods(pods_to_restart, wait=wait)
     logger.info("Finish restarting the pods")
+
+
+def wait_for_ceph_cmd_execute_successfully(timeout=300):
+    """
+    Wait for a Ceph command to execute successfully
+
+    Args:
+        timeout (int): The time to wait for a Ceph command to execute successfully
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    try:
+        for res in TimeoutSampler(
+            timeout=timeout, sleep=10, func=check_ceph_cmd_execute_successfully
+        ):
+            if res:
+                return True
+    except TimeoutExpiredError:
+        logger.warning(f"Failed to execute the ceph command after {timeout} seconds")
+        return False
+
+
+def check_ceph_cmd_execute_successfully():
+    """
+    Check that a Ceph command executes successfully
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
+    try:
+        tool_pod = get_ceph_tools_pod()
+        res = tool_pod.exec_cmd_on_pod("ceph -s --format json-pretty", timeout=60)
+        if res:
+            logger.info("The Ceph command executed successfully")
+            return True
+    except CommandFailed as ex:
+        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+            logger.info("Patch the consumer rook-ceph-tools deployment")
+            patch_consumer_toolbox()
+
+        logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
+        return False
