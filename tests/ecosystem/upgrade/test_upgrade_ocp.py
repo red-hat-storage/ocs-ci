@@ -202,7 +202,6 @@ class TestUpgradeOCP(ManageTest):
         if version_post_upgrade >= version.VERSION_4_9:
             validation_ui_obj = ValidationUI(setup_ui_class)
             validation_ui_obj.refresh_web_console()
-            validation_ui_obj.odf_console_plugin_check()
             validation_ui_obj.odf_overview_ui()
             validation_ui_obj.odf_storagesystems_ui()
 
