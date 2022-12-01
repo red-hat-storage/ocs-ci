@@ -23,12 +23,10 @@ else
       git checkout $BRANCH_ID
 fi
 
-#Install virtual environment
-python3.8 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip setuptools
-pip install setuptools==65.5.0
-pip install -r requirements.txt
+#Install dependencies
+pip3.8 install --upgrade pip setuptools
+pip3.8 install setuptools==65.5.0
+pip3.8 install -r requirements.txt
 popd
 
 which run-ci
