@@ -142,6 +142,8 @@ def disable_metadata(
 def available_subvolumes(sc_name, toolbox_pod, fs):
     """
     To fetch available subvolumes for cephfs or rbd
+
+    Args:
         sc_name (str): storage class
         toolbox_pod (str): ceph tool box pod
         fs (str): file system
@@ -168,9 +170,12 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
 def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
     """
     To fetch created subvolume for cephfs or rbd
+
+    Args:
         available_subvolumes (list): List of available subvolumes
         updated_subvolumes (list): Updated list of subvolumes
         sc_name (str): storage class
+
     Returns:
         str: name of subvolume created
 
@@ -201,6 +206,8 @@ def fetch_metadata(
 ):
     """
     To fetch metadata details created for cephfs or rbd
+
+    Args:
         sc_name (str): storage class
         toolbox_pod (str): ceph tool box pod
         fs (str): file system
@@ -252,6 +259,8 @@ def validate_metadata(
 ):
     """
     To validate the metadata details
+
+    Args:
         metadata (json): metadata details
         clustername (str): cluster name
         pv_name (str): name of the pv
