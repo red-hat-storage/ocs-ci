@@ -89,6 +89,9 @@ necessary dependencies
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
+
+** On Python3.8, there is a bug on numpy with setuptools 65.6.0 https://github.com/numpy/numpy/issues/22623
+WA : `pip install setuptools==65.5.0`
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 
