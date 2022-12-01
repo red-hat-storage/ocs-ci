@@ -10,13 +10,12 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     TimeoutExpiredError,
 )
-
+from ocs_ci.helpers.helpers import (
+    get_used_capacity,
+    verify_osd_used_capacity_greater_than_expected,
+)
 
 from ocs_ci.ocs.resources import pvc, ocs
-from ocs_ci.ocs.cluster import (
-    get_percent_used_capacity,
-    get_osd_utilization,
-)
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
 
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
@@ -43,45 +42,6 @@ def check_health_status():
         # skip because ceph is not in good health
         log.info(f"Ceph health exception received: {e}")
         return False
-
-
-def get_used_capacity(msg):
-    """
-    Verify OSD percent used capacity greate than ceph_full_ratio
-
-    Args:
-        expected_used_capacity (float): expected used capacity
-
-    Returns:
-         bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
-    """
-    log.info(f"{msg}")
-    used_capacity = get_percent_used_capacity()
-    log.info(f"Used Capacity is {used_capacity}%")
-    return used_capacity
-
-
-def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
-    """
-    Verify OSD percent used capacity greate than ceph_full_ratio
-
-    Args:
-        expected_used_capacity (float): expected used capacity
-
-    Returns:
-         bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
-    """
-    osds_utilization = get_osd_utilization()
-    log.info(f"osd utilization: {osds_utilization}")
-    for osd_id, osd_utilization in osds_utilization.items():
-        if osd_utilization > expected_used_capacity:
-            log.info(
-                f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%"
-            )
-            return True
-    return False
 
 
 class TestCephCapacityRecovery(PASTest):
