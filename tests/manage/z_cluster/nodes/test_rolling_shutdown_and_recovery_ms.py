@@ -15,12 +15,12 @@ from ocs_ci.ocs.node import (
     wait_for_node_count_to_reach_status,
     get_node_objs,
     recover_node_to_ready_state,
+    consumers_verification_steps_after_provider_node_replacement,
 )
 from ocs_ci.ocs.resources.pod import check_pods_after_node_replacement
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import is_ms_consumer_cluster
-
+from ocs_ci.ocs.cluster import is_ms_consumer_cluster, is_ms_provider_cluster
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,12 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
                 recover_node_to_ready_state(n)
 
             config.switch_ctx(self.orig_index)
+            # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+            if is_ms_provider_cluster() and config.is_consumer_exist():
+                log.info(
+                    "Execute the the consumers verification steps before starting the next test"
+                )
+                consumers_verification_steps_after_provider_node_replacement()
 
         request.addfinalizer(finalizer)
 
@@ -95,6 +101,10 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
             )
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
+
+            # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+            if is_ms_provider_cluster() and config.is_consumer_exist():
+                assert consumers_verification_steps_after_provider_node_replacement()
             self.sanity_helpers.health_check(cluster_check=False, tries=40)
 
         # Check basic cluster functionality by creating some resources
