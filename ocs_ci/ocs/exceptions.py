@@ -26,6 +26,10 @@ class UnexpectedBehaviour(Exception):
     pass
 
 
+class UnexpectedInput(Exception):
+    pass
+
+
 class ClassCreationException(Exception):
     pass
 
@@ -377,6 +381,14 @@ class VaultOperationError(Exception):
 
 
 class HPCSDeploymentError(Exception):
+    pass
+
+
+class KMIPDeploymentError(Exception):
+    pass
+
+
+class KMIPOperationError(Exception):
     pass
 
 

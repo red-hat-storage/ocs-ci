@@ -429,6 +429,18 @@ class OCP(object):
         status = self.exec_oc_cmd(command)
         return status
 
+    def remove_label(self, resource_name, label):
+        """
+        Remove label from the resource.
+
+        Args:
+            resource_name (str): Name of the resource you want to remove label.
+            label (str): Label Name to be remove.
+        """
+        command = f"label {self.kind} {resource_name} {label}-"
+        status = self.exec_oc_cmd(command)
+        return status
+
     def new_project(self, project_name, policy=constants.PSA_BASELINE):
         """
         Creates a new project
@@ -812,12 +824,14 @@ class OCP(object):
         resource_info = [
             i for i in resource if (not i.isupper() or i in exception_list)
         ]
-        temp_list = shlex.split(resource_info[0])
+
+        temp_list = shlex.split(resource_info.pop(0))
+
         for i in temp_list:
             if i.isupper():
                 titles.append(i)
-            else:
-                resource_info[0] = i
+                temp_list.remove(i)
+        resource_info = temp_list + resource_info
 
         # Fix for issue:
         # https://github.com/red-hat-storage/ocs-ci/issues/6503
@@ -1570,3 +1584,78 @@ def get_ocp_url():
     log.info(f"OCP URL: {url}")
 
     return str(url)
+
+
+def clear_overprovision_spec(ignore_errors=False):
+    """
+    Remove cluster overprovision policy.
+
+    Args:
+       ignore_errors (bool): Flag to report errors.
+    Return:
+          bool: True on success and False on error.
+    """
+    log.info("Removing overprovisionControl from storage cluster.")
+    storagecluster_obj = OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        kind=constants.STORAGECLUSTER,
+    )
+
+    params = '[{"op": "remove", path: "/spec/overprovisionControl"}]'
+    try:
+        storagecluster_obj.patch(params=params, format_type="json")
+    except Exception as e:
+        log.error(e)
+        if not ignore_errors:
+            return False
+
+    log.info("Verify storagecluster on Ready state")
+    from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+
+    verify_storage_cluster()
+    return True
+
+
+def set_overprovision_policy(capacity, quota_name, sc_name, label):
+    """
+    Set OverProvisionControl Policy.
+
+    Args:
+        capacity (str): storage capacity e.g. 50Gi
+        quota_name (str): quota name.
+        sc_name (str): storage class name
+        label (dict): storage quota labels.
+
+    Return:
+        bool: True on success and False on error.
+    """
+    log.info("Add 'overprovisionControl' section to storagecluster yaml file")
+    params = (
+        '{"spec": {"overprovisionControl": [{"capacity": "' + capacity + '",'
+        '"storageClassName":"' + sc_name + '", "quotaName": "' + quota_name + '",'
+        '"selector": {"labels": {"matchLabels": '
+        + label.__str__().replace("'", '"')
+        + "}}}]}}"
+    )
+
+    storagecluster_obj = OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        kind=constants.STORAGECLUSTER,
+    )
+
+    try:
+        storagecluster_obj.patch(
+            params=params,
+            format_type="merge",
+        )
+    except Exception as e:
+        log.error(e)
+        return False
+
+    log.info("Verify storagecluster on Ready state")
+    from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+
+    verify_storage_cluster()
+    return True

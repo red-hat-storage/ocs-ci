@@ -19,6 +19,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     get_ocp_version,
     TimeoutSampler,
+    retry,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
@@ -242,7 +243,9 @@ class ROSA(CloudDeploymentBase):
         if config.DEPLOYMENT.get("not_ga_wa"):
             update_non_ga_version()
         if config.ENV_DATA.get("cluster_type") == "consumer":
-            patch_consumer_toolbox()
+            retry((CommandFailed, AssertionError), tries=5, delay=30, backoff=1)(
+                patch_consumer_toolbox
+            )()
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)

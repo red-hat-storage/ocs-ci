@@ -45,7 +45,11 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.scale_lib import FioPodScale
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    collect_ocs_logs,
+    collect_pod_container_rpm_package,
+)
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
@@ -1412,6 +1416,8 @@ def health_checker(request, tier_marks_name):
         ):
             return
 
+    node = request.node
+
     def finalizer():
         if not skipped:
             try:
@@ -1424,8 +1430,17 @@ def health_checker(request, tier_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ceph_health_check_base()
-                    log.info("Ceph health check passed at teardown")
+                    if "test_add_capacity" in node.name:
+                        ceph_health_check(
+                            namespace=config.ENV_DATA["cluster_namespace"]
+                        )
+                        log.info(
+                            "Ceph health check passed at teardown. (After Add capacity "
+                            "TC we allow more re-tries)"
+                        )
+                    else:
+                        ceph_health_check_base()
+                        log.info("Ceph health check passed at teardown")
             except CephHealthException:
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
@@ -1433,7 +1448,6 @@ def health_checker(request, tier_marks_name):
                 ceph_health_check()
                 raise
 
-    node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
         if mark.name in tier_marks_name and config.RUN.get("cephcluster"):
@@ -3995,6 +4009,7 @@ def collect_logs_fixture(request):
             if config.REPORTING["collect_logs_on_success_run"]:
                 collect_ocs_logs("testcases", ocs=False, status_failure=False)
                 collect_ocs_logs("testcases", ocp=False, status_failure=False)
+                collect_pod_container_rpm_package("testcases")
 
     request.addfinalizer(finalizer)
 
@@ -4151,7 +4166,10 @@ def pvc_clone_factory_fixture(request):
         elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
-        elif pvc_obj.provisioner == constants.LVM_PROVISIONER:
+        elif pvc_obj.provisioner in [
+            constants.LVM_PROVISIONER_4_11,
+            constants.LVM_PROVISIONER,
+        ]:
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             no_interface = True
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
@@ -4799,7 +4817,8 @@ def storageclass_factory_ui(request, cephblockpool_factory_ui, setup_ui):
 
 def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui):
     """
-    The function create new storageclass
+    The function create new storage class without encryption and creates an encrypted storage class vi UI
+    if the flag encryption is set to True
     """
     instances = []
 
@@ -4808,10 +4827,16 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         compression=False,
         replica=3,
         create_new_pool=False,
-        encryption=False,  # not implemented yet
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE,  # not implemented yet
+        encryption=False,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
         default_pool=constants.DEFAULT_BLOCKPOOL,
         existing_pool=None,
+        backend_path=None,
+        vault_namespace=None,
+        vol_binding_mode="Immediate",
+        service_name=None,
+        kms_address=None,
+        tls_server_name=None,
     ):
         """
         Args:
@@ -4826,17 +4851,29 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             (ocs_ci.ocs.resource.ocs) ocs object of the storageclass.
 
         """
+        global sc_name
         storageclass_ui_object = StorageClassUI(setup_ui)
-        if existing_pool is None and create_new_pool is False:
-            pool_name = default_pool
-        if create_new_pool is True:
-            pool_ocs_obj = cephblockpool_factory_ui(
-                replica=replica, compression=compression
+        if encryption:
+            sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
+                backend_path=backend_path,
+                reclaim_policy=reclaim_policy,
+                provisioner=provisioner,
+                vol_binding_mode=vol_binding_mode,
+                service_name=service_name,
+                kms_address=kms_address,
+                tls_server_name=tls_server_name,
             )
-            pool_name = pool_ocs_obj.name
-        if existing_pool is not None:
-            pool_name = existing_pool
-        sc_name = storageclass_ui_object.create_storageclass(pool_name)
+        else:
+            if existing_pool is None and create_new_pool is False:
+                pool_name = default_pool
+            if create_new_pool is True:
+                pool_ocs_obj = cephblockpool_factory_ui(
+                    replica=replica, compression=compression
+                )
+                pool_name = pool_ocs_obj.name
+            if existing_pool is not None:
+                pool_name = existing_pool
+            sc_name = storageclass_ui_object.create_storageclass(pool_name)
         if sc_name is None:
             log.error("Storageclass was not created")
             raise StorageclassNotCreated(
@@ -5117,10 +5154,14 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 f"account create {name}",
                 f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
                 if type(allowed_buckets) in (list, tuple)
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "",
                 " --full_permission=" + "True"
                 if type(allowed_buckets) is dict
                 and allowed_buckets.get("full_permission")
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "False",
                 f" --default_resource {default_resource}" if default_resource else "",
                 f" --uid {uid}" if uid else "",
@@ -5894,7 +5935,10 @@ def lvm_storageclass_factory_fixture(request, storageclass_factory):
             sc_obj = OCS(**sc_ocp_obj.data)
             log.info(f"Will return default storageclass {sc_obj.name}")
         elif volume_binding == constants.IMMEDIATE_VOLUMEBINDINGMODE:
-            sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_11:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML_4_11)
+            elif version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
             sc_obj["metadata"]["name"] = create_unique_resource_name(
                 resource_description="immediate-test",
                 resource_type="storageclass",

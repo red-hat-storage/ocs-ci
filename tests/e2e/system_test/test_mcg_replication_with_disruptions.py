@@ -1,4 +1,3 @@
-import json
 import logging
 
 import pytest
@@ -9,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import tier2, system_test
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
+    patch_replication_policy_to_bucket,
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs import ocp
@@ -18,7 +18,6 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_rgw_pods,
 )
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 
@@ -101,25 +100,9 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 
         # change from uni-directional to bi-directional replication policy
         logger.info("Changing the replication policy from uni to bi-directional!")
-        bi_replication_policy_dict = {
-            "spec": {
-                "additionalConfig": {
-                    "replicationPolicy": json.dumps(
-                        [
-                            {
-                                "rule_id": "basic-replication-rule-2",
-                                "destination_bucket": source_bucket_name,
-                            }
-                        ]
-                    )
-                }
-            }
-        }
-        OCP(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind="obc",
-            resource_name=target_bucket_name,
-        ).patch(params=json.dumps(bi_replication_policy_dict), format_type="merge")
+        patch_replication_policy_to_bucket(
+            target_bucket_name, "basic-replication-rule-2", source_bucket_name
+        )
         logger.info(
             "Patch ran successfully! Changed the replication policy from uni to bi directional"
         )

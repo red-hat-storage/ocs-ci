@@ -1,20 +1,18 @@
-import json
 import logging
 
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1, tier2
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
+    patch_replication_policy_to_bucket,
     sync_object_directory,
     write_random_test_objects_to_bucket,
     verify_s3_object_integrity,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.framework.testlib import skipif_ocs_version
 
@@ -255,25 +253,9 @@ class TestReplication(MCGTest):
             1, bucketclass=second_bucketclass, replication_policy=replication_policy
         )[0].name
 
-        replication_policy_patch_dict = {
-            "spec": {
-                "additionalConfig": {
-                    "replicationPolicy": json.dumps(
-                        [
-                            {
-                                "rule_id": "basic-replication-rule-2",
-                                "destination_bucket": second_bucket_name,
-                            }
-                        ]
-                    )
-                }
-            }
-        }
-        OCP(
-            kind="obc",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=first_bucket_name,
-        ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+        patch_replication_policy_to_bucket(
+            first_bucket_name, "basic-replication-rule-2", second_bucket_name
+        )
 
         standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"

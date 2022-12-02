@@ -154,8 +154,11 @@ class BucketClassUI(PageNavigator):
     def set_multi_namespacestore_policy(self, nss_name_lst):
         for nss_name in nss_name_lst:
             self.do_send_keys(self.generic_locators["search_resource_field"], nss_name)
+            sleep(1)
             self.do_click(self.generic_locators["check_first_row_checkbox"])
+            sleep(1)
             self.do_click(self.generic_locators["remove_search_filter"])
+            sleep(2)
 
         self.do_click(self.bucketclass["nss_dropdown"])
         self.do_click_by_id(nss_name_lst[0])

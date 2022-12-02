@@ -12,8 +12,12 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, VolumesExistError
-from ocs_ci.utility import ibmcloud
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    UnsupportedPlatformVersionError,
+    VolumesExistError,
+)
+from ocs_ci.utility import ibmcloud, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     delete_file,
@@ -144,6 +148,10 @@ class IBMCloudIPI(CloudDeploymentBase):
         Args:
             log_cli_level (str): log level for installer (default: DEBUG)
         """
+        if version.get_semantic_ocp_version_from_config() < version.VERSION_4_10:
+            raise UnsupportedPlatformVersionError(
+                "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
+            )
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 

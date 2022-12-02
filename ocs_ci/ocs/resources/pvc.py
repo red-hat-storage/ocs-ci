@@ -242,7 +242,10 @@ class PVC(OCS):
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHFILESYSTEM
             ).name
-        elif self.provisioner == "topolvm.cybozu.com":
+        elif self.provisioner in [
+            constants.LVM_PROVISIONER_4_11,
+            constants.LVM_PROVISIONER,
+        ]:
             snap_yaml = constants.CSI_LVM_SNAPSHOT_YAML
             snapshotclass = constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVM
 

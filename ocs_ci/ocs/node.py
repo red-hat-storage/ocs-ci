@@ -2507,7 +2507,11 @@ def consumer_verification_steps_after_provider_node_replacement():
             with the first provider worker node IP.
         1.2 Wait and check again if the consumer "storageProviderEndpoint" IP is found in the
             provider worker node IPs.
-    2. If found, also check that the rook ceph mon endpoint IPs are found in the provider worker node IPs.
+    2. If found, Check if the mon endpoint ips are found in the provider worker node ips, and we can execute
+        a ceph command from the consumer
+        2.1 If not found, restart the ocs-operator pod
+        2.2 Wait and check again if the mon endpoint ips are found in the provider worker node ips, and we
+        can execute a ceph command from the consumer
 
     Returns:
         bool: True, if the consumer verification steps finished successfully. False, otherwise.
@@ -2516,9 +2520,9 @@ def consumer_verification_steps_after_provider_node_replacement():
     # Import inside the function to avoid circular loop
     from ocs_ci.ocs.resources.storage_cluster import (
         get_consumer_storage_provider_endpoint,
-        check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes,
         check_consumer_storage_provider_endpoint_in_provider_wnodes,
         wait_for_consumer_storage_provider_endpoint_in_provider_wnodes,
+        wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes,
     )
 
     if not check_consumer_storage_provider_endpoint_in_provider_wnodes():
@@ -2535,11 +2539,30 @@ def consumer_verification_steps_after_provider_node_replacement():
             )
             return False
 
-    if not check_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
-        log.warning(
-            "Did not find all the mon endpoint ips in the provider worker node ips"
+    log.info(
+        "Check if the mon endpoint ips are found in the provider worker node ips "
+        "and we can execute a ceph command from the consumer"
+    )
+    if not (
+        wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes()
+        and pod.wait_for_ceph_cmd_execute_successfully()
+    ):
+        # This is a workaround due to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2131581
+        log.info("Try to restart the ocs-operator pod")
+        pod.delete_pods([pod.get_ocs_operator_pod()])
+
+        log.info(
+            "Check that the mon endpoint ips are found in the provider worker node ips"
         )
-        return False
+        if not wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
+            log.warning(
+                "Did not find all the mon endpoint ips in the provider worker node ips"
+            )
+            return False
+        log.info("Check again if we can execute a ceph command from the consumer")
+        if not pod.wait_for_ceph_cmd_execute_successfully():
+            log.warning("Failed to execute the ceph command")
+            return False
 
     log.info("The consumer verification steps finished successfully")
     return True
@@ -2556,6 +2579,13 @@ def consumers_verification_steps_after_provider_node_replacement():
         bool: True, if all the consumers verification steps finished successfully. False, otherwise.
 
     """
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+        log.info(
+            "We need to change the consumers verification steps when the ODF version is 4.11. "
+            "Currently, we can skip these steps when we use ODF 4.11"
+        )
+        return True
+
     consumer_indexes = config.get_consumer_indexes_list()
     for consumer_i in consumer_indexes:
         config.switch_ctx(consumer_i)

@@ -368,6 +368,9 @@ CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "storageclass.y
 
 CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml")
 
+CSI_LVM_STORAGECLASS_YAML_4_11 = os.path.join(
+    TEMPLATE_CSI_LVM_DIR, "storageclass_4_11.yaml"
+)
 CSI_LVM_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "storageclass.yaml")
 
 ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
@@ -690,6 +693,18 @@ EXTERNAL_HPCS_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 EXTERNAL_IBM_KP_KMS_SECRET = os.path.join(
     EXTERNAL_HPCS_TEMPLATES, "ibm-kp-kms-secret.yaml"
 )
+
+# KMIP KMS yamls
+KMIP_KMS_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "kmip")
+KMIP_OCS_KMS_CONNECTION_DETAILS = os.path.join(
+    KMIP_KMS_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+KMIP_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details-kmip.yaml"
+)
+KMIP_OCS_KMS_SECRET = os.path.join(KMIP_KMS_TEMPLATES, "thales-kmip-ocs-secret.yaml")
+KMIP_CSI_KMS_SECRET = os.path.join(TEMPLATE_CSI_RBD_DIR, "thales-kmip-csi-secret.yaml")
+
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"
@@ -1303,6 +1318,7 @@ OCS_PROVISIONERS = [
     "openshift-storage.cephfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
+    "topolvm.io",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
@@ -1624,6 +1640,9 @@ VAULT_DEFAULT_TLS_SERVER = ""
 VAULT_KMS_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
 VAULT_KMS_TOKEN_RESOURCE = "ocs-kms-token"
 VAULT_CLIENT_CERT_PATH = os.path.join(DATA_DIR, "vault-client.crt")
+VAULT_CA_CERT_PEM = os.path.join(DATA_DIR, "vault-ca-cert.pem")
+VAULT_CLIENT_CERT_PEM = os.path.join(DATA_DIR, "vault-client-cert.pem")
+VAULT_PRIVKEY_PEM = os.path.join(DATA_DIR, "vault-privkey.pem")
 VAULT_KMS_PROVIDER = "vault"
 HPCS_KMS_PROVIDER = "hpcs"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
@@ -1892,7 +1911,8 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app.lvm.openshift.io=vg-manager",
     },
 }
-LVM_PROVISIONER = "topolvm.cybozu.com"
+LVM_PROVISIONER_4_11 = "topolvm.cybozu.com"
+LVM_PROVISIONER = "topolvm.io"
 TOPOLVM_METRICS = [
     "topolvm_thinpool_data_percent",
     "topolvm_thinpool_metadata_percent",

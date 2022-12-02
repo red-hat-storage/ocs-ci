@@ -2423,6 +2423,14 @@ def check_pods_after_node_replacement():
     if are_pods_running:
         return True
 
+    # This is a workaround due to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2142461
+    failed_pod_statuses = [
+        "Init:0/1",
+        constants.STATUS_CONTAINER_CREATING,
+        constants.STATUS_CLBO,
+    ]
+    restart_pods_in_statuses(failed_pod_statuses)
+
     not_ready_statuses = [
         constants.STATUS_ERROR,
         constants.STATUS_PENDING,
@@ -2915,3 +2923,77 @@ def exit_osd_maintenance_mode(osd_deployment):
     for deployment in osd_deployment:
         if os.path.isfile(f"backup_{deployment.name}.yaml"):
             os.remove(f"backup_{deployment.name}.yaml")
+
+
+def restart_pods_in_statuses(
+    status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE, wait=True
+):
+    """
+    Restart all the pods in specific statuses
+
+    Args:
+        status_options (list): The list of the status options.
+        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        wait (bool): Determines if the delete command should wait for
+            completion
+
+    Returns:
+        list: Restart all the pods that their status in the 'status_options' list.
+
+    """
+    logger.info(f"Get the pods in the statuses: {status_options}")
+    pods_to_restart = get_pods_in_statuses(status_options, namespace)
+    logger.info(
+        f"The pods {pods_to_restart} are in the statuses {status_options}. Restarting the pods..."
+    )
+    delete_pods(pods_to_restart, wait=wait)
+    logger.info("Finish restarting the pods")
+
+
+def wait_for_ceph_cmd_execute_successfully(timeout=300):
+    """
+    Wait for a Ceph command to execute successfully
+
+    Args:
+        timeout (int): The time to wait for a Ceph command to execute successfully
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    try:
+        for res in TimeoutSampler(
+            timeout=timeout, sleep=10, func=check_ceph_cmd_execute_successfully
+        ):
+            if res:
+                return True
+    except TimeoutExpiredError:
+        logger.warning(f"Failed to execute the ceph command after {timeout} seconds")
+        return False
+
+
+def check_ceph_cmd_execute_successfully():
+    """
+    Check that a Ceph command executes successfully
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
+    try:
+        tool_pod = get_ceph_tools_pod()
+        res = tool_pod.exec_cmd_on_pod("ceph -s --format json-pretty", timeout=60)
+        if res:
+            logger.info("The Ceph command executed successfully")
+            return True
+    except CommandFailed as ex:
+        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+            logger.info("Patch the consumer rook-ceph-tools deployment")
+            patch_consumer_toolbox()
+
+        logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
+        return False

@@ -12,7 +12,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
 from ocs_ci.ocs.node import get_nodes, get_compute_node_names
-from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
@@ -82,9 +81,6 @@ def setup_local_storage(storageclass):
         logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
-
-    # PodSecurity admission
-    label_pod_security_admission(namespace=lso_namespace)
 
     local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
     assert local_storage_operator.wait_for_resource(
@@ -201,7 +197,13 @@ def setup_local_storage(storageclass):
         run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
-    if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
+    if (
+        platform == constants.AWS_PLATFORM
+        and lso_type == constants.AWS_EBS
+        and (config.DEPLOYMENT.get("arbiter_deployment", False))
+    ):
+        storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+    elif platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
     elif platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)

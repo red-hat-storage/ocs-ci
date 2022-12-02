@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
+from ocs_ci.ocs.cluster import is_ms_provider_cluster
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     check_pods_after_node_replacement,
@@ -34,6 +35,7 @@ from ocs_ci.ocs.node import (
     unschedule_nodes,
     schedule_nodes,
     wait_for_new_worker_node_ipi,
+    consumers_verification_steps_after_provider_node_replacement,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -255,6 +257,12 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             ceph_health_check()
 
             config.switch_ctx(self.orig_index)
+            # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+            if is_ms_provider_cluster() and config.is_consumer_exist():
+                log.info(
+                    "Execute the the consumers verification steps before starting the next test"
+                )
+                consumers_verification_steps_after_provider_node_replacement()
 
         request.addfinalizer(finalizer)
 
@@ -288,6 +296,10 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
         assert (
             verify_worker_nodes_security_groups()
         ), "Not all the worker nodes security groups set correctly"
+
+        # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+        if is_ms_provider_cluster() and config.is_consumer_exist():
+            assert consumers_verification_steps_after_provider_node_replacement()
 
         log.info("Checking that the ceph health is ok on the provider")
         ceph_health_check()

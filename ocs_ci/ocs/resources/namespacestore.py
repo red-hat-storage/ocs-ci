@@ -156,7 +156,7 @@ class NamespaceStore:
             == constants.STATUS_READY
         )
 
-    def verify_health(self, timeout=60, interval=5):
+    def verify_health(self, timeout=180, interval=5):
         """
         Health verification function that tries to verify
         a namespacestores's health until a given time limit is reached
@@ -407,7 +407,7 @@ def namespace_store_factory(
         current_call_created_nss = []
         for platform, nss_lst in nss_dict.items():
             for nss_tup in nss_lst:
-                for _ in range(nss_tup[0]):
+                for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
                     if platform.lower() == "nsfs":
                         uls_name = nss_tup[0] or create_unique_resource_name(
                             constants.PVC.lower(), platform

@@ -665,6 +665,7 @@ def pytest_runtest_makereport(item, call):
                     "ecosystem",
                     "e2e/performance",
                     "tests/manage/z_cluster/cluster_expansion",
+                    "tests/manage/z_cluster/nodes",
                 ]
             )
             else False

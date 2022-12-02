@@ -3989,3 +3989,20 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             )
             return True
     return False
+
+def verify_quota_resource_exist(quota_name):
+    """
+    Verify quota resource exist
+
+    Args:
+        quota_name (str): The name of quota
+
+    Returns:
+        bool: return True if quota_name exist in list, otherwise False
+
+    """
+    clusterresourcequota_obj = OCP(kind="clusterresourcequota")
+    quota_resources = clusterresourcequota_obj.get().get("items")
+    return quota_name in [
+        quota_resource.get("metadata").get("name") for quota_resource in quota_resources
+    ]

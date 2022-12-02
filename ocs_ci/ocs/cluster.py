@@ -757,24 +757,45 @@ class CephCluster(object):
                 and states["count"] == total_pg_count
             )
 
-    def wait_for_rebalance(self, timeout=600):
+    def wait_for_rebalance(self, timeout=600, repeat=3):
         """
         Wait for re-balance to complete
 
         Args:
             timeout (int): Time to wait for the completion of re-balance
+            repeat (int): How many times to repeat the check to make sure, it's
+                really completed.
 
         Returns:
-            bool: True if rebalance completed, False otherwise
+            bool: True if re-balance completed, False otherwise
 
         """
         try:
-            for rebalance in TimeoutSampler(
-                timeout=timeout, sleep=10, func=self.get_rebalance_status
-            ):
-                if rebalance:
-                    logger.info("Re-balance is completed")
-                    return True
+            sleep_time = 10
+            start_time = time.time()
+            for attempt in range(1, repeat + 1):
+                new_timeout = timeout - int(time.time() - start_time)
+                if new_timeout < sleep_time:
+                    new_timeout = sleep_time + 5
+                logger.debug(f"Attempt {attempt} out of {repeat} repeats.")
+                for rebalance in TimeoutSampler(
+                    timeout=new_timeout,
+                    sleep=sleep_time,
+                    func=self.get_rebalance_status,
+                ):
+                    if rebalance:
+                        logger.info(
+                            f"Re-balance completed! This is attempt {attempt} out of {repeat} repeats. "
+                            f"This rebalance check needs to prove it {repeat} times in row."
+                        )
+                        if repeat == attempt:
+                            return True
+                        else:
+                            logger.debug(
+                                f"Wait {sleep_time} seconds before next attempt to check re-balance has completed."
+                            )
+                            time.sleep(sleep_time)
+                            break
         except exceptions.TimeoutExpiredError:
             logger.error(
                 f"Data re-balance failed to complete within the given "
@@ -1972,13 +1993,19 @@ def get_mds_cache_memory_limit():
 
     Raises:
         UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+        IOError if fail to read configuration
 
     """
     pod_obj = pod.get_ceph_tools_pod()
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
-    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
-    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    try:
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+        mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+        mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    except IOError as ioe:
+        if "ENOENT" not in ioe:
+            raise ioe
+
     if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
         raise UnexpectedBehaviour(
             f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
@@ -2399,7 +2426,7 @@ class LVM(object):
         lvmc_cop = OCP(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             kind="lvmcluster",
-            resource_name="lvmcluster",
+            resource_name=constants.LVMCLUSTER,
         )
         lvmc_ocs = lvmc_cop.data
         self.lvmcluster = lvmc_ocs
@@ -2877,7 +2904,7 @@ def check_clusters():
     try:
         lvmcluster_obj = OCP(
             kind="lvmcluster",
-            resource_name="lvmcluster",
+            resource_name=constants.LVMCLUSTER,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             silent=True,
         )
