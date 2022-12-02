@@ -10,8 +10,10 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
     ACM_MANAGED_CLUSTERS,
     ACM_PAGE_TITLE,
+    ACM_2_7_MULTICLUSTER_URL,
+    ACM_PAGE_TITLE_2_7_ABOVE,
 )
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler, get_running_acm_version
@@ -307,10 +309,22 @@ def login_to_acm():
         driver (Selenium WebDriver)
 
     """
-    url = get_acm_url()
+    acm_version = ".".join(get_running_acm_version().split(".")[:2])
+    cmp_str = f"{acm_version}>=2.7"
+    if compare_versions(cmp_str):
+        url = f"{get_ocp_url()}{ACM_2_7_MULTICLUSTER_URL}"
+    else:
+        url = get_acm_url()
     log.info(f"URL: {url}")
     driver = login_ui(url)
-    validate_page_title(driver, title=ACM_PAGE_TITLE)
+    page_nav = AcmPageNavigator(driver)
+    page_nav.navigate_from_ocp_to_acm_cluster_page()
+
+    if compare_versions(cmp_str):
+        page_title = ACM_PAGE_TITLE_2_7_ABOVE
+    else:
+        page_title = ACM_PAGE_TITLE
+    validate_page_title(driver, title=page_title)
 
     return driver
 

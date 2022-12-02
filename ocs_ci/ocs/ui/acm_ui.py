@@ -5,7 +5,7 @@ import shlex
 import subprocess
 
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from ocs_ci.deployment import vmware
@@ -136,6 +136,27 @@ class AcmPageNavigator(BaseUI):
         """
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
+
+    def navigate_from_ocp_to_acm_cluster_page(self):
+        if not self.check_element_presence(
+            (
+                self.acm_page_nav["click-local-cluster"][1],
+                self.acm_page_nav["click-local-cluster"][0],
+            ),
+            timeout=300
+        ):
+            log.error("local-cluster is not found, can not switch to ACM console")
+            self.take_screenshot()
+            raise NoSuchElementException
+        self.do_click(self.acm_page_nav["click-local-cluster"])
+        # if not self.check_element_presence(self.acm_page_nav["all-clusters"]):
+        #     log.error("All Clusters is not found, can not switch to ACM console")
+        #     self.take_screenshot()
+        #     raise NoSuchElementException
+        # self.do_click_by_id(self.acm_page_nav["all-clusters"])
+        self.page_has_loaded()
+        self.take_screenshot()
+
 
 
 class ACMOCPClusterDeployment(AcmPageNavigator):

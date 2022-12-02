@@ -781,6 +781,20 @@ class PageNavigator(BaseUI):
             )
             return False
 
+    def navigate_from_ocp_to_acm_cluster_page(self):
+        if not self.check_element_presence(self.acm_page_nav["local-cluster"]):
+            logger.error("local-cluster is not found, can not switch to ACM console")
+            self.take_screenshot()
+            raise NoSuchElementException
+        self.do_click_by_id(self.acm_page_nav["local-cluster"])
+        if not self.check_element_presence(self.acm_page_nav["all-clusters"]):
+            logger.error("All Clusters is not found, can not switch to ACM console")
+            self.take_screenshot()
+            raise NoSuchElementException
+        self.do_click_by_id(self.acm_page_nav["all-clusters"])
+        self.page_has_loaded()
+        self.take_screenshot()
+
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
@@ -1029,6 +1043,8 @@ def login_ui(console_url=None, username=None, password=None):
         element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
         element.click()
     return driver
+
+
 
 
 def close_browser(driver):

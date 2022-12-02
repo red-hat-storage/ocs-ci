@@ -1905,6 +1905,7 @@ ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
+ACM_4_7_MULTICLUSTER_URL = "/multicloud/infrastructure/clusters/managed"
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
