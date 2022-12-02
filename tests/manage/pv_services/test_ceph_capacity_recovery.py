@@ -173,7 +173,7 @@ class TestCephCapacityRecovery(PASTest):
 
             get_used_capacity(f"After creation of pvc {index}")
 
-            log.info(f"Start creation of clone number for pvc number {index}.")
+            log.info(f"Start creation of clone for pvc number {index}.")
             cloned_pvc_obj = pvc.create_pvc_clone(
                 sc_name=pvc_obj.backed_sc,
                 parent_pvc=pvc_obj.name,
