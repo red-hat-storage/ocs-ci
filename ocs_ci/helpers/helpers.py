@@ -3990,6 +3990,7 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             return True
     return False
 
+
 def verify_quota_resource_exist(quota_name):
     """
     Verify quota resource exist
