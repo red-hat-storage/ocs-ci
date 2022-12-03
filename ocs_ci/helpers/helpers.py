@@ -45,7 +45,6 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
-import ocs_ci.ocs.cluster
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -3950,45 +3949,6 @@ def clean_all_test_projects(project_name="test"):
     for ns in ns_to_delete:
         logger.info(f"Removing {ns['metadata']['name']}")
         oc_obj.delete_project(ns["metadata"]["name"])
-
-
-def get_used_capacity(msg):
-    """
-    Verify OSD percent used capacity greate than ceph_full_ratio
-
-    Args:
-        expected_used_capacity (float): expected used capacity
-
-    Returns:
-         bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
-    """
-    logger.info(f"{msg}")
-    used_capacity = ocs_ci.ocs.cluster.get_percent_used_capacity()
-    logger.info(f"Used Capacity is {used_capacity}%")
-    return used_capacity
-
-
-def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
-    """
-    Verify OSD percent used capacity greate than ceph_full_ratio
-
-    Args:
-        expected_used_capacity (float): expected used capacity
-
-    Returns:
-         bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
-    """
-    osds_utilization = ocs_ci.ocs.cluster.get_osd_utilization()
-    logger.info(f"osd utilization: {osds_utilization}")
-    for osd_id, osd_utilization in osds_utilization.items():
-        if osd_utilization > expected_used_capacity:
-            logger.info(
-                f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%"
-            )
-            return True
-    return False
 
 
 def verify_quota_resource_exist(quota_name):

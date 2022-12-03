@@ -10,7 +10,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     TimeoutExpiredError,
 )
-from ocs_ci.helpers.helpers import (
+from ocs_ci.helpers.managed_services import (
     get_used_capacity,
     verify_osd_used_capacity_greater_than_expected,
 )
