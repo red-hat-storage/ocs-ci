@@ -1,6 +1,7 @@
 ---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  ui_deployment: true
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'ipi'
