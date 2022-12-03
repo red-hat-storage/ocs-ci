@@ -1153,7 +1153,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
-    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
+    "warning-alert": ("//div[@class='pf-c-alert pf-m-warning']", By.XPATH),
     "refresh-web-console": (
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
