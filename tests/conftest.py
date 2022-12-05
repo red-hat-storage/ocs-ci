@@ -5149,30 +5149,32 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
-        cli_cmd = "".join(
-            (
-                f"account create {name}",
-                f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
-                if type(allowed_buckets) in (list, tuple)
-                and version.get_semantic_ocs_version_from_config()
-                < version.VERSION_4_12
-                else "",
-                " --full_permission=" + "True"
-                if type(allowed_buckets) is dict
-                and allowed_buckets.get("full_permission")
-                and version.get_semantic_ocs_version_from_config()
-                < version.VERSION_4_12
-                else "False",
-                f" --default_resource {default_resource}" if default_resource else "",
-                f" --uid {uid}" if uid else "",
-                f" --gid {gid}" if gid else "",
-                f" --new_buckets_path {new_buckets_path}" if new_buckets_path else "",
-                f" --nsfs_only={nsfs_only}" if type(nsfs_only) is bool else "",
-                " --nsfs_account_config=" + "True" if uid else "False",
-            )
-        )
+
+        # Build the mcg-cli command for creating an account
+        cli_cmd = f"account create {name}"
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
+            if type(allowed_buckets) in (list, tuple):
+                cli_cmd += " --allowed_buckets="
+                cli_cmd += f"{','.join([bucket for bucket in allowed_buckets])}"
+
+        elif type(allowed_buckets) is dict:
+            cli_cmd += " --full_permission="
+            cli_cmd += str(allowed_buckets.get("full_permission", False))
+
+        cli_cmd += " --default_resource"
+        cli_cmd += f" {default_resource}" if default_resource else ""
+        cli_cmd += f" --uid {uid}" if uid else ""
+        cli_cmd += f" --gid {gid}" if gid else ""
+        cli_cmd += " --new_buckets_path"
+        cli_cmd += f" {new_buckets_path}" if new_buckets_path else ""
+        cli_cmd += " --nsfs_only="
+        cli_cmd += f"{nsfs_only}" if type(nsfs_only) is bool else ""
+        cli_cmd += " --nsfs_account_config=" + "True" if uid else "False"
+
+        # Create the account
         acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
         created_accounts.append(name)
+
         # Verify that the account was created successfuly and that the response contains the needed data
         assert (
             "access_key" in str(acc_creation_process_output).lower()
