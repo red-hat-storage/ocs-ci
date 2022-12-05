@@ -11,6 +11,8 @@ from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_obje
 from ocs_ci.helpers.pvc_ops import create_pvcs
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal, is_ms_consumer_cluster
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -330,3 +332,47 @@ class SanityManagedService(Sanity):
 
         finally:
             config.switch_ctx(orig_index)
+
+    def retry_create_resources_on_ms_consumers(self, tries=3, delay=60):
+        """
+        Retry creates resources for MS consumers multiple times until it succeeds.
+        In every iteration, if it fails to create the resources, it cleans up the current resources
+        before continuing to the next iteration.
+
+        Args:
+            tries (int): The number of tries to create the resources on MS consumers
+            delay (int): The delay in seconds between retries
+
+        Raises:
+            FileNotFoundError, ocs_ci.ocs.exceptions.CommandFailed: In case of file not found,
+                or in case of a command failed after the number of the given tries
+
+        """
+        retry(
+            (FileNotFoundError, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(self.base_retry_create_resources_on_ms_consumers)()
+
+    def base_retry_create_resources_on_ms_consumers(self):
+        """
+        Try to create resources on MS consumers. If it fails to create the resources,
+        it cleans up the current resources.
+
+        Raises:
+            FileNotFoundError, ocs_ci.ocs.exceptions.CommandFailed: In case of file not found,
+                or in case of a command failed
+
+        """
+        is_success = False
+        try:
+            self.create_resources_on_ms_consumers()
+            is_success = True
+            logger.info("Successfully create the resources on MS consumers")
+        finally:
+            if not is_success:
+                logger.info(
+                    "Failed to create the resources on MS consumers. Deleting the leftovers..."
+                )
+                self.delete_resources_on_ms_consumers()
