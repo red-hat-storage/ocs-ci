@@ -41,7 +41,7 @@ RUN cd /usr/local/bin && \
 COPY scripts/run-ocs-ci.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*.sh
 
-CMD [ "/bin/echo", "ocsci base container" ]
+CMD [ "run-ci", "--help" ]
 
 # Run run-ocs-ci.sh script that run when the container is initiated
 ENTRYPOINT ["run-ocs-ci.sh"]

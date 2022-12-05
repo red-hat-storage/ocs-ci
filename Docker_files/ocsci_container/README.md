@@ -33,7 +33,7 @@ run-ci params
 Example:
 
 ```commandline
-docker run -v ~/ClusterPath/auth:/opt/cluster ocsci_image run-ci --cluster-path /opt/cluster_path
+docker run -v ~/ClusterPath:/opt/cluster ocsci_image run-ci --cluster-path /opt/cluster_path
 --ocp-version 4.12 --ocs-version 4.12 --cluster-name cluster-name tests/manage/z_cluster/test_must_gather.py
 ```
 
