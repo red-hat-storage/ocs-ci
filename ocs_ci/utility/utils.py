@@ -447,6 +447,7 @@ def run_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    stdin=None,
     **kwargs,
 ):
     """
@@ -464,6 +465,9 @@ def run_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        stdin (int): by default is None, subsequently subprocess.run handle the
+            input stream passing creation of p2cwrite pipe. Optional values are
+            subprocess.PIPE, subprocess.STDOUT, subprocess.DEVNULL
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -472,7 +476,14 @@ def run_cmd(
         (str) Decoded stdout of command
     """
     completed_process = exec_cmd(
-        cmd, secrets, timeout, ignore_error, threading_lock, silent=silent, **kwargs
+        cmd,
+        secrets,
+        timeout,
+        ignore_error,
+        threading_lock,
+        silent=silent,
+        stdin=stdin,
+        **kwargs,
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
@@ -566,6 +577,7 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    stdin=None,
     **kwargs,
 ):
     """
@@ -585,6 +597,9 @@ def exec_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        stdin (int): by default is None, subsequently subprocess.run handle the
+            input stream passing the creation of p2cwrite pipe. Optional values are
+            subprocess.PIPE, subprocess.STDOUT, subprocess.DEVNULL
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -601,14 +616,16 @@ def exec_cmd(
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
-        cmd = shlex.split(cmd)
+        # use of shlex has been temporarily removed to fix issue #6489
+        # shlex.split() creates peaks in RSS+VSZ mem usage when called intensively
+        cmd = cmd.split()
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
+        stdin=stdin,
         timeout=timeout,
         **kwargs,
     )
