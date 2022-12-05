@@ -4628,8 +4628,12 @@ def pv_encryption_vault_setup_factory(request):
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(vault.kmsid)
-        vault.remove_vault_backend_path()
-        vault.remove_vault_policy()
+        if vault.vault_namespace:
+            vault.remove_vault_backend_path(vault_namespace=vault.vault_namespace)
+            vault.remove_vault_policy(vault_namespace=vault.vault_namespace)
+        else:
+            vault.remove_vault_backend_path()
+            vault.remove_vault_policy()
         if vault.vault_namespace:
             vault.remove_vault_namespace()
 
