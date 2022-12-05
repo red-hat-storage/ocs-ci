@@ -6023,6 +6023,7 @@ def fedora_pod_fixture(request, scope_name):
 
     return fedora_pod_obj
 
+
 @pytest.fixture()
 def scc_factory(request):
     """
@@ -6043,4 +6044,3 @@ def scc_factory(request):
 
     request.addfinalizer(teardown)
     return create_scc
-
