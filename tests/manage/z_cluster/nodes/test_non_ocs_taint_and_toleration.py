@@ -187,7 +187,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ]
         assert any(
             "rook-ceph-osd-prepare-" in pod_name for pod_name in pod_name_list
-        ), f"osd-prepare pod is not present"
+        ), "osd-prepare pod is not present"
 
         # Check non ocs toleration on all pods under openshift-storage
         check_toleration_on_pods(toleration_key="xyz")
