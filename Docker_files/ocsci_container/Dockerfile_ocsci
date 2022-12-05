@@ -18,8 +18,7 @@ RUN INSTALL_PKGS="python38 python38-devel python38-setuptools python38-pip \
     rm -rf /var/cache/yum
 
 # Environment variables containing various file locations required by install-ocs-ci.sh script
-ENV OCSCI_INSTALL_DIR=/opt/ocs-ci \
-    CLUSTER_DIR=/opt/cluster
+ENV OCSCI_INSTALL_DIR=/opt/ocs-ci
 
 # Copy install-ocs-ci.sh script inside the container.
 COPY scripts/install-ocs-ci.sh /usr/local/bin/
