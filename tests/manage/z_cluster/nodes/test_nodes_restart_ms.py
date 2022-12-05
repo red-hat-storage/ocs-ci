@@ -174,7 +174,7 @@ class TestNodesRestartMS(ManageTest):
             wait_for_node_count_to_reach_status(
                 node_count=len(ocp_nodes), node_type=node_type
             )
-            self.sanity_helpers.health_check(cluster_check=False, tries=60)
+            ceph_health_check(tries=40)
 
         if is_ms_consumer_cluster():
             # When we use the MS consumer cluster, we sometimes need to wait a little more time after
