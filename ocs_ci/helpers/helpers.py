@@ -3952,6 +3952,26 @@ def clean_all_test_projects(project_name="test"):
         oc_obj.delete_project(ns["metadata"]["name"])
 
 
+def scale_nb_resources(replica=1):
+    """
+    Function scales noobaa resources
+
+    Args:
+        replica (int): Replica count
+
+    """
+    for deployment in [
+        constants.NOOBAA_OPERATOR_DEPLOYMENT,
+        constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+    ]:
+        modify_deployment_replica_count(
+            deployment_name=deployment, replica_count=replica
+        )
+    modify_statefulset_replica_count(
+        statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=replica
+    )
+
+
 def verify_quota_resource_exist(quota_name):
     """
     Verify quota resource exist
