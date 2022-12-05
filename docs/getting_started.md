@@ -94,14 +94,14 @@ necessary dependencies
 WA : `pip install setuptools==65.5.0`
 
 Expected Error:
-```commandline
+```
   from . import ccompiler
   File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
     from numpy.distutils import log
   File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
     from distutils.log import Log as old_Log
   ImportError: cannot import name 'Log' from 'distutils.log' /
-   (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
+    (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
 ```
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
