@@ -70,8 +70,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. Check toleration on all ocs pods.
-        4. Add Capacity
+        3. Add Capacity
+        4. Check toleration on all ocs pods.
 
         """
 
@@ -154,9 +154,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
-        # Check non ocs toleration on all pods under openshift-storage
-        check_toleration_on_pods(toleration_key="xyz")
-
         # check number of pods before and after adding non ocs taint
         number_of_pods_after = len(
             get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
@@ -180,3 +177,17 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             resource_count=count * replica_count,
         ), "New OSDs failed to reach running state"
         check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+
+        # Check osd-prepare pod is available
+        pod_list = get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        pod_name_list = [
+            pod.get().get("metadata").get("generateName") for pod in pod_list
+        ]
+        assert any(
+            "rook-ceph-osd-prepare-" in pod_name for pod_name in pod_name_list
+        ), f"osd-prepare pod is not present"
+
+        # Check non ocs toleration on all pods under openshift-storage
+        check_toleration_on_pods(toleration_key="xyz")
