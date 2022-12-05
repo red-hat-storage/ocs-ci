@@ -2,9 +2,10 @@
 This module will have all DR related workload classes
 
 """
-
+import concurrent
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from subprocess import TimeoutExpired
 from time import sleep
 
@@ -13,6 +14,7 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.helpers import delete_volume_in_backend
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility.utils import clone_repo, run_cmd
 from ocs_ci.utility import templating
@@ -245,3 +247,65 @@ class BusyBox(DRWorkload):
         finally:
             config.switch_acm_ctx()
             run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+
+
+def check_rbd_mirrored_image_status(
+    image_state, rbd_image_list, pool_name=constants.DEFAULT_BLOCKPOOL
+):
+    """
+    Check RBD mirror image status for mirrored images
+
+    Args:
+        image_state (str): Image state based on primary and secondary
+        rbd_image_list (list): RBD image list
+        pool_name (str): Pool name
+
+    Returns:
+        bool: True if all images are in expected state or else False
+    """
+    results_thread = []
+    rbd_mirror_image_status_output_list = []
+    failed_count = 0
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for image_name in rbd_image_list:
+            results_thread.append(
+                executor.submit(get_rbd_mirror_image_status, image_name, pool_name)
+            )
+
+    for future in concurrent.futures.as_completed(results_thread):
+        rbd_mirror_image_status_output_list.append(future.result())
+
+    for rbd_mirror_image_status_output in rbd_mirror_image_status_output_list:
+        if rbd_mirror_image_status_output["state"] == image_state:
+            log.info(
+                f"Rbd mirror image status check for {rbd_mirror_image_status_output['name']} Passed"
+            )
+        else:
+            log.error(
+                f"Rbd mirror image status check for "
+                f"{rbd_mirror_image_status_output['name']} Failed "
+                f"\n Image status:= {rbd_mirror_image_status_output['state']}"
+                f" Description:= {rbd_mirror_image_status_output['description']}"
+            )
+            failed_count += 1
+    if failed_count:
+        return False
+    return True
+
+
+def get_rbd_mirror_image_status(image_name, pool_name=constants.DEFAULT_BLOCKPOOL):
+    """
+    Get mirror status for rbd image
+
+    Args:
+        image_name (str): RBD image name
+        pool_name (str): Pool Name
+
+    Returns:
+        dict: rbd mirror image status in json
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    cmd = f"rbd mirror image status {pool_name}/{image_name} --debug-rbd 0"
+    return ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")

@@ -24,6 +24,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp
 from ocs_ci.ocs.exceptions import (
@@ -3988,3 +3989,22 @@ def verify_quota_resource_exist(quota_name):
     return quota_name in [
         quota_resource.get("metadata").get("name") for quota_resource in quota_resources
     ]
+
+
+def get_rbd_image_name_per_namespace(namespace):
+    """
+    Get RDB image name from the provided namespace
+
+    Args:
+        namespace (str): Project/Namespace name
+
+    Returns:
+        list: rbd image list from given namespace
+
+    """
+    pvc_dict = get_all_pvc_objs(namespace=namespace)
+    rbd_image_name_list = [
+        rbd_image_name.get_rbd_image_name for rbd_image_name in pvc_dict
+    ]
+
+    return rbd_image_name_list
