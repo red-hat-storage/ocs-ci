@@ -132,7 +132,7 @@ def patch_consumer_toolbox(ceph_admin_key=None):
         consumer_tools_pod.exec_ceph_cmd("ceph health")
         return
     except Exception as exc:
-        if "RADOS permission error" not in str(exc):
+        if not is_rados_connect_error_in_ex(exc):
             logger.warning(
                 f"Ceph command on rook-ceph-tools deployment is failing with error {str(exc)}. "
                 "This error cannot be fixed by patching the rook-ceph-tools deployment with ceph admin key."
@@ -345,3 +345,18 @@ def get_managedocs_component_state(component):
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
     return managedocs_obj.get()["status"]["components"][component]["state"]
+
+
+def is_rados_connect_error_in_ex(ex):
+    """
+    Check if the RADOS connect error is found in the exception
+
+    Args:
+        ex (Exception): The exception to check if the RADOS connect error is found
+
+    Returns:
+        bool: True, if the RADOS connect error is found in the exception. False otherwise
+
+    """
+    rados_errors = ("RADOS permission error", "RADOS I/O error")
+    return any([rados_error in str(ex) for rados_error in rados_errors])
