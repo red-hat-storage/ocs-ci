@@ -5,6 +5,7 @@ import yaml
 
 
 from ocs_ci.utility import nfs_utils
+from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
@@ -80,9 +81,18 @@ class TestNfsEnable(ManageTest):
     """
 
     @pytest.fixture(scope="class", autouse=True)
-    def setup_teardown(self, request, pvc_factory_class, pod_factory_class):
+    def setup_teardown(self, request):
         """
         Setup-Teardown for the class
+
+        Args:
+            host (str): Hostname or IP to connect.
+            private_key (str): Private key  to connect to load balancer
+            password (password): Password for host
+
+        Prerequisites:
+            On the client host machine openshift-dev pub key in authorized_keys should be available
+            and nfs-utils package should be installed.
 
         Steps:
         ---Setup---
@@ -108,7 +118,9 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
-        self.test_folder = "/mnt/test_nfs"
+        run_id = config.RUN.get("run_id")
+        self.test_folder = f"mnt/test_nfs_{run_id}"
+        log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
 
         # Enable nfs feature
         log.info("----Enable nfs----")
