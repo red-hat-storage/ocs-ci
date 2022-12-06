@@ -34,6 +34,7 @@ TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
 TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
 TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
+TEMPLATE_SECURITY_DIR = os.path.join(TEMPLATE_DIR, "security")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
@@ -380,6 +381,8 @@ ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
 WFFC_VOLUMEBINDINGMODE = "WaitForFirstConsumer"
 
 IMMEDIATE_VOLUMEBINDINGMODE = "Immediate"
+
+SCC_YAML = os.path.join(TEMPLATE_SECURITY_DIR, "scc.yaml")
 
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
