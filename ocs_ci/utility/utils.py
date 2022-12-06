@@ -2072,7 +2072,10 @@ def ceph_health_check_base(namespace=None):
     """
     # Import here to avoid circular loop
     from ocs_ci.ocs.cluster import is_ms_consumer_cluster
-    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+    from ocs_ci.ocs.managedservice import (
+        patch_consumer_toolbox,
+        is_rados_connect_error_in_ex,
+    )
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     run_cmd(
@@ -2085,7 +2088,7 @@ def ceph_health_check_base(namespace=None):
     try:
         health = run_cmd(ceph_health_cmd)
     except CommandFailed as ex:
-        if "RADOS permission error" in str(ex) and is_ms_consumer_cluster():
+        if is_rados_connect_error_in_ex(ex) and is_ms_consumer_cluster():
             log.info("Patch the consumer rook-ceph-tools deployment")
             patch_consumer_toolbox()
             # get the new tool box pod since patching creates the new tool box pod
