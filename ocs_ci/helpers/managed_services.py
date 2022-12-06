@@ -201,10 +201,10 @@ def get_used_capacity(msg):
     Verify OSD percent used capacity greate than ceph_full_ratio
 
     Args:
-        expected_used_capacity (float): expected used capacity
+        msg (str): message to be logged
 
     Returns:
-         bool: True if used_capacity greater than expected_used_capacity, False otherwise
+         float: The percentage of the used capacity in the cluster
 
     """
     log.info(f"{msg}")
@@ -215,7 +215,7 @@ def get_used_capacity(msg):
 
 def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
     """
-    Verify OSD percent used capacity greate than ceph_full_ratio
+    Verify OSD percent used capacity greater than ceph_full_ratio
 
     Args:
         expected_used_capacity (float): expected used capacity

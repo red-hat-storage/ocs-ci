@@ -2,6 +2,7 @@ import logging
 import time
 
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.framework.testlib import tier2, skipif_ocs_version
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.helpers import helpers
@@ -44,6 +45,8 @@ def check_health_status():
         return False
 
 
+@tier2
+@skipif_ocs_version("<4.12")
 class TestCephCapacityRecovery(PASTest):
     def setup(self):
         """
