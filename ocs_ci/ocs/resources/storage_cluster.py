@@ -1270,7 +1270,8 @@ def verify_managed_service_resources():
     5. Verify managed ocs secrets
     6. If cluster is Provider, verify resources specific to provider clusters
     7. Verify that version of Prometheus is 4.10
-    8. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
+    8. Verify security restrictions are in place
+    9. [temporarily left out] Verify Networkpolicy and EgressNetworkpolicy creation
     """
     # Verify CSV status
     for managed_csv in {
@@ -1347,6 +1348,7 @@ def verify_managed_service_resources():
         )
         prometheus_version = prometheus_csv[0]["spec"]["version"]
         assert prometheus_version.startswith("4.10.")
+    verify_managedocs_security()
 
 
 def verify_provider_resources():
@@ -1560,6 +1562,33 @@ def verify_consumer_storagecluster(sc_data):
     )
     assert requested_capacity == granted_capacity
     assert re.match("\\d+[PT]", granted_capacity)
+
+
+def verify_managedocs_security():
+    """
+    Check ocs-osd-deployer-operator permissions:
+    1. Verify `runAsUser` is not 0
+    2. Verify `SecurityContext.allowPrivilegeEscalation` is set to false
+    3. Verify `SecurityContext.capabilities.drop` contains ALL
+    """
+    pod_obj = OCP(
+        kind="pod",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        selector=constants.MANAGED_CONTROLLER_LABEL,
+    )
+    deployer_yaml = pod_obj.get().get("items")[0]
+    containers = deployer_yaml["spec"]["containers"]
+    for container in containers:
+        log.info(f"Checking container {container['name']}")
+        userid = container["securityContext"]["runAsUser"]
+        log.info(f"runAsUser is {userid}. Verifying it is not 0")
+        assert userid > 0
+        escalation = container["securityContext"]["allowPrivilegeEscalation"]
+        log.info("Verifying allowPrivilegeEscalation is False")
+        assert not escalation
+        dropped_capabilities = container["securityContext"]["capabilities"]["drop"]
+        log.info(f"Dropped capabilities: {dropped_capabilities}")
+        assert "ALL" in dropped_capabilities
 
 
 def get_ceph_clients():
