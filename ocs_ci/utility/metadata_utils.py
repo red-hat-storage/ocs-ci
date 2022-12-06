@@ -6,6 +6,11 @@ Module that contains all operations related to add metadata feature in a cluster
 import logging
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+)
 
 log = logging.getLogger(__name__)
 
@@ -20,21 +25,26 @@ def check_setmetadata_availability(pod_obj):
         selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
     )
     log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
-    response = pod.validate_pods_are_respinned_and_running_state(
-        plugin_provisioner_pod_objs
-    )
+    response = retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
+        pod.validate_pods_are_respinned_and_running_state
+    )(plugin_provisioner_pod_objs)
     log.info(response)
     get_args_provisioner_plugin_pods = []
     for plugin_provisioner_pod in plugin_provisioner_pod_objs:
-        args = pod_obj.exec_oc_cmd(
+        containers = pod_obj.exec_oc_cmd(
             "get pod "
             + plugin_provisioner_pod.name
-            + " --output jsonpath='{.spec.containers[4].args}'"
+            + " --output jsonpath='{.spec.containers}'"
         )
-        get_args_provisioner_plugin_pods.append(args)
-    return all(
-        ["--setmetadata=true" in args for args in get_args_provisioner_plugin_pods]
-    )
+        for entry in containers:
+            if "--setmetadata=true" in entry["args"]:
+                get_args_provisioner_plugin_pods.append(entry["args"])
+    if get_args_provisioner_plugin_pods:
+        return all(
+            ["--setmetadata=true" in args for args in get_args_provisioner_plugin_pods]
+        )
+    else:
+        return False
 
 
 def enable_metadata(
