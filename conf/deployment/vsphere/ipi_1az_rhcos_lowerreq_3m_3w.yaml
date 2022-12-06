@@ -1,0 +1,17 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  ui_deployment: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'ipi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '8'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '32768'
+  fio_storageutilization_min_mbps: 10.0
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2434'
