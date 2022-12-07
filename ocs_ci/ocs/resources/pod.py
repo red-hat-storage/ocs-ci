@@ -2187,26 +2187,18 @@ def run_osd_removal_job(osd_ids: list) -> OCS:
     ocp_version = get_ocp_version()
     ocs_version = config.ENV_DATA["ocs_version"]
 
-    # Fixes: #6662
-    # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
-    cmd_params = (
-        "-p FORCE_OSD_REMOVAL=true"
-        if Version.coerce(ocs_version) >= Version.coerce("4.6")
-        and not check_safe_to_destroy_status(osd_ids_str)
-        else ""
-    )
-
-    # Parameter name FAILED_OSD_ID changed to FAILED_OSD_IDS for Version OCP 4.6 and above
-    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-        cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
+    if Version.coerce(ocs_version) >= Version.coerce(
+        "4.10"
+    ) and not check_safe_to_destroy_status(osd_ids_str):
+        cmd = f"process ocs-osd-removal -p FORCE_OSD_REMOVAL=true -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
+    elif Version.coerce(ocp_version) >= Version.coerce("4.6"):
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_IDS={osd_ids_str} -o yaml"
     else:
-        cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
+        cmd = f"process ocs-osd-removal -p FAILED_OSD_ID={osd_ids_str} -o yaml"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(
-        f"process ocs-osd-removal {cmd_params} -o yaml"
-    )
+    osd_removal_job_yaml = ocp_obj.exec_oc_cmd(cmd)
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
     osd_removal_job_yaml["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
     osd_removal_job = OCS(**osd_removal_job_yaml)
