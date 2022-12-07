@@ -5,7 +5,7 @@ from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -259,18 +259,6 @@ class TestMetadata(ManageTest):
             self.config_map_obj,
             self.pod_obj,
         )
-        log.info("Starting the test environment celanup")
-        # Delete the test project
-        self.delete_test_project()
-
-    def teardown(self):
-        """
-        Test teardown to cleanup
-        """
-        list_pvcs = pvc.get_all_pvc_objs(namespace=self.project_name)
-        log.info(f"List of pvcs in {self.project_name} is--- {list_pvcs} ")
-        pvc.delete_pvcs(pvc_objs=list_pvcs)
-        log.info("Teardown complete")
 
     @tier1
     @pytest.mark.parametrize(
@@ -392,9 +380,15 @@ class TestMetadata(ManageTest):
             pvc_name=restored_pvc.name,
             namespace=self.project_name,
         )
-        # Verify VolumeSnapshotContent deleted
-        snap_obj.delete()
-        snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name, timeout=180)
+        # Deleted PVCs and PVs
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+        clone_pvc_obj.delete()
+        clone_pvc_obj.ocp.wait_for_delete(
+            resource_name=clone_pvc_obj.name, timeout=300
+        ), f"PVC {clone_pvc_obj.name} is not deleted"
 
     @tier1
     @pytest.mark.parametrize(
@@ -480,6 +474,12 @@ class TestMetadata(ManageTest):
             namespace=self.project_name,
         )
         assert metadata_new_pvc != metadata
+
+        # Deleted PVCs and PVs
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
 
     @tier1
     @pytest.mark.parametrize(
@@ -615,9 +615,15 @@ class TestMetadata(ManageTest):
             pvc_name=restored_pvc.name,
             namespace=self.project_name,
         )
-        # Verify VolumeSnapshotContent deleted
-        snap_obj.delete()
-        snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name, timeout=180)
+        # Deleted PVCs and PVs
+        pvc_obj.delete()
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=300
+        ), f"PVC {pvc_obj.name} is not deleted"
+        clone_pvc_obj.delete()
+        clone_pvc_obj.ocp.wait_for_delete(
+            resource_name=clone_pvc_obj.name, timeout=300
+        ), f"PVC {clone_pvc_obj.name} is not deleted"
 
     @tier3
     @pytest.mark.parametrize(
@@ -727,6 +733,15 @@ class TestMetadata(ManageTest):
             self.config_map_obj,
             self.pod_obj,
         )
+        # Deleted PVCs and PVs
+        pvc_obj_with_metadata_enabled.delete()
+        pvc_obj_with_metadata_enabled.ocp.wait_for_delete(
+            resource_name=pvc_obj_with_metadata_enabled.name, timeout=300
+        ), f"PVC {pvc_obj_with_metadata_enabled.name} is not deleted"
+        pvc_obj_with_metadata_disabled.delete()
+        pvc_obj_with_metadata_disabled.ocp.wait_for_delete(
+            resource_name=pvc_obj_with_metadata_disabled.name, timeout=300
+        ), f"PVC {pvc_obj_with_metadata_disabled.name} is not deleted"
 
     @tier1
     @pytest.mark.parametrize(
@@ -891,6 +906,10 @@ class TestMetadata(ManageTest):
             pvc_name=pvc_obj_in_dif_namespace.name,
             namespace=dif_namespace,
         )
+        pvc_obj_in_dif_namespace.delete()
+        pvc_obj_in_dif_namespace.ocp.wait_for_delete(
+            resource_name=pvc_obj_in_dif_namespace.name, timeout=600
+        ), f"PVC {pvc_obj_in_dif_namespace.name} is not deleted"
 
     @tier3
     @pytest.mark.parametrize(
