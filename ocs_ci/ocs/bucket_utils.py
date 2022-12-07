@@ -504,12 +504,21 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    mcg_obj.exec_mcg_cmd(
-        f"backingstore create aws-s3 {backingstore_name} "
-        f"--secret-name {cld_mgr.aws_client.secret.name} "
-        f"--target-bucket {uls_name} --region {region}",
-        use_yes=True,
-    )
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7:
+        mcg_obj.exec_mcg_cmd(
+            f"backingstore create aws-s3 {backingstore_name} "
+            f"--secret-name {cld_mgr.aws_client.secret.name} "
+            f"--target-bucket {uls_name} --region {region}",
+            use_yes=True,
+        )
+    else:
+        mcg_obj.exec_mcg_cmd(
+            f"backingstore create aws-s3 {backingstore_name} "
+            f"--access-key {cld_mgr.aws_client.access_key} "
+            f"--secret-key {cld_mgr.aws_client.secret_key} "
+            f"--target-bucket {uls_name} --region {region}",
+            use_yes=True,
+        )
 
 
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
