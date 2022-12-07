@@ -1,10 +1,8 @@
 import random
 import logging
 
-from semantic_version import Version
-
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility import version
 from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs import constants, node, ocp
@@ -72,8 +70,8 @@ def osd_device_replacement(nodes):
     # Get the node that has the OSD pod running on
     logger.info(f"Getting the node that has the OSD pod {osd_pod.name} running on")
     osd_node = get_pod_node(osd_pod)
-    ocp_version = get_ocp_version()
-    if Version.coerce(ocp_version) < Version.coerce("4.6"):
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    if ocp_version < version.VERSION_4_6:
         osd_prepare_pods = get_osd_prepare_pods()
         osd_prepare_pod = [
             pod
@@ -129,7 +127,7 @@ def osd_device_replacement(nodes):
 
     osd_pvc_name = osd_pvc.name
 
-    if Version.coerce(ocp_version) < Version.coerce("4.6"):
+    if ocp_version < version.VERSION_4_6:
         # Delete the OSD prepare job
         logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
         osd_prepare_job.delete()
@@ -175,7 +173,7 @@ def osd_device_replacement(nodes):
     if cluster.is_lso_cluster():
         node.add_disk_to_node(osd_node)
 
-    if Version.coerce(ocp_version) < Version.coerce("4.6"):
+    if ocp_version < version.VERSION_4_6:
         # Delete the rook ceph operator pod to trigger reconciliation
         rook_operator_pod = get_operator_pods()[0]
         logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
@@ -215,7 +213,7 @@ def osd_device_replacement(nodes):
 
     # We need to silence the old osd crash warning due to BZ https://bugzilla.redhat.com/show_bug.cgi?id=1896810
     # This is a workaround - issue for tracking: https://github.com/red-hat-storage/ocs-ci/issues/3438
-    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+    if ocp_version >= version.VERSION_4_6:
         silence_osd_crash = cluster.wait_for_silence_ceph_osd_crash_warning(
             osd_pod_name
         )

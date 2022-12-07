@@ -33,12 +33,11 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
-    get_ocp_version,
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
@@ -2173,7 +2172,7 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
-def run_osd_removal_job(osd_ids: list) -> OCS:
+def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job
 
@@ -2185,20 +2184,20 @@ def run_osd_removal_job(osd_ids: list) -> OCS:
 
     """
     osd_ids_str = ",".join(map(str, osd_ids))
-    ocp_version = get_ocp_version()
-    ocs_version = config.ENV_DATA["ocs_version"]
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    ocs_version = version.get_semantic_ocs_version_from_config()
 
     # Fixes: #6662
     # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
     cmd_params = (
         "-p FORCE_OSD_REMOVAL=true"
-        if Version.coerce(ocs_version) >= Version.coerce("4.6")
+        if ocs_version >= version.VERSION_4_6
         and not check_safe_to_destroy_status(osd_ids_str)
         else ""
     )
 
     # Parameter name FAILED_OSD_ID changed to FAILED_OSD_IDS for Version OCP 4.6 and above
-    if Version.coerce(ocp_version) >= Version.coerce("4.6"):
+    if ocp_version >= version.VERSION_4_6:
         cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
     else:
         cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
