@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, skipif_bm
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    skipif_bm,
+)
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.helpers import get_failure_domin
 from ocs_ci.framework import config
