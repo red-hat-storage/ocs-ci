@@ -95,7 +95,7 @@ class TestNodesRestartMS(ManageTest):
             )
             config.switch_to_provider()
 
-        self.sanity_helpers.delete_resources_on_ms_consumers()
+        self.sanity_helpers.create_resources_on_ms_consumers()
 
         osd_node_name = random.choice(get_osd_running_nodes())
         osd_node = get_node_objs([osd_node_name])[0]
@@ -179,9 +179,10 @@ class TestNodesRestartMS(ManageTest):
         if is_ms_consumer_cluster():
             # When we use the MS consumer cluster, we sometimes need to wait a little more time after
             # restarting the nodes before start creating resources
-            self.sanity_helpers.retry_create_resources_on_ms_consumers()
+            tries = 3
         else:
-            self.sanity_helpers.create_resources()
+            tries = 1
+        self.sanity_helpers.create_resources_on_ms_consumers(tries=tries)
 
     @tier4a
     @polarion_id("OCS-4482")
