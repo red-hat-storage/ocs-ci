@@ -68,7 +68,7 @@ def osd_device_replacement(nodes):
     logger.info(f"OSD_POD {osd_pod.name}")
     osd_id = get_osd_pod_id(osd_pod)
     if not osd_id:
-        raise ValueError("No osd found to remove. ")
+        raise ValueError("No osd found to remove")
     # Get the node that has the OSD pod running on
     logger.info(f"Getting the node that has the OSD pod {osd_pod.name} running on")
     osd_node = get_pod_node(osd_pod)
