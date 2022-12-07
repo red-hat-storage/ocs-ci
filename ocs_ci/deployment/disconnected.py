@@ -453,3 +453,42 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         return None
     else:
         return mirrored_index_image
+
+
+def mirror_ocp_release_images(ocp_image_path, ocp_version):
+    """
+    Mirror OCP release images to mirror registry.
+
+    Args:
+        ocp_image_path (str): OCP release image path
+        ocp_version (str): OCP release image version
+
+    Returns:
+        touple (str, str): touple with two strings: mirrored image path and tag
+            or checksum
+    """
+    ocp_image = f"{ocp_image_path}:{ocp_version}"
+    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    # login to mirror registry
+    login_to_mirror_registry(pull_secret_path)
+
+    # mirror OCP release images (this might take very long time)
+    logger.info(f"Mirror images related to OCP release image: {ocp_image}")
+    dest_image_repo = (
+        f"{config.DEPLOYMENT['mirror_registry']}/"
+        f"{constants.FLEXY_OCP_RELEASE_IMAGE_MIRROR_PATH}"
+    )
+    cmd = (
+        f"oc adm release mirror -a {pull_secret_path} --insecure "
+        f"--max-per-registry=2 --from={ocp_image} "
+        f"--to={dest_image_repo} "
+        f"--to-release-image={dest_image_repo}:{ocp_version} "
+        # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
+        # "--apply-release-image-signature"
+    )
+    exec_cmd(cmd, timeout=7200)
+
+    return (
+        f"{config.DEPLOYMENT['mirror_registry']}/{constants.FLEXY_OCP_RELEASE_IMAGE_MIRROR_PATH}",
+        ocp_version,
+    )
