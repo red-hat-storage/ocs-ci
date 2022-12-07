@@ -1,7 +1,13 @@
 import logging
 import time
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ocs_version,
+    bugzilla,
+    tier2,
+    e2e,
+)
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.resources.deployment import (
     get_osd_deployments,
     get_deployments_having_label,
@@ -17,8 +23,11 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@tier2
+@e2e
+@bugzilla("2103256")
 @skipif_ocs_version("<4.12")
-class TestMaintenancePod:
+class TestMaintenancePod(E2ETest):
     def test_maintenance_pod_for_osd(self, ceph_objectstore_factory):
         """
         Test Maintenance Pod for OSD
