@@ -1,10 +1,8 @@
 #!/bin/bash
 set -e
 
-mkdir -p /opt/cluster/logs
-mkdir -p /opt/cluster_path/auth
-cp -R /opt/cluster/* /opt/cluster_path/auth
+mkdir -p /opt/cluster/logs_ocsci_container
 
 # Execute run-ci
 cd /opt/ocs-ci
-exec "$@" > /opt/cluster/logs/output.txt
+exec "$@" > /opt/cluster/logs_ocsci_container/output.txt
