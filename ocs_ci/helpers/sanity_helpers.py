@@ -11,6 +11,8 @@ from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_obje
 from ocs_ci.helpers.pvc_ops import create_pvcs
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal, is_ms_consumer_cluster
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -260,13 +262,42 @@ class SanityManagedService(Sanity):
             f"The consumer indexes for creating resources are: {self.consumer_indexes}"
         )
 
-    def create_resources_on_ms_consumers(self):
+    def create_resources_on_ms_consumers(self, tries=1, delay=30):
+        """
+        Try creates resources for MS consumers 'tries' times with delay 'delay' between the iterations
+        using the method 'base_create_resources_on_ms_consumers'. If not specified, the default value of
+        'tries' is 1 - which means that by default, it only tries to create the resources once.
+        In every iteration, if it fails to generate the resources, it cleans up the current resources
+        before continuing to the next iteration.
+
+        Args:
+            tries (int): The number of tries to create the resources on MS consumers
+            delay (int): The delay in seconds between retries
+
+        Raises:
+            ocs_ci.ocs.exceptions.CommandFailed: In case of a command failed
+
+        """
+        retry(
+            (FileNotFoundError, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(self.base_create_resources_on_ms_consumers)()
+
+    def base_create_resources_on_ms_consumers(self):
         """
         Create resources on MS consumers.
         This function uses the factory "create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers"
         for creating the resources - Create scale pods, PVCs, and run IO using a Kube job on MS consumers.
+        If it fails to create the resources, it cleans up the current resources.
+
+        Raises:
+            ocs_ci.ocs.exceptions.CommandFailed: In case of a command failed
+
         """
         orig_index = config.cur_index
+        is_success = False
 
         try:
             # Create the scale pods and PVCs using k8s on MS consumers factory
@@ -281,9 +312,16 @@ class SanityManagedService(Sanity):
                     consumer_indexes=self.consumer_indexes,
                 )
             )
+            is_success = True
+            logger.info("Successfully create the resources on MS consumers")
         finally:
             # Switch back to the original index
             config.switch_ctx(orig_index)
+            if not is_success:
+                logger.info(
+                    "Failed to create the resources on MS consumers. Deleting the leftovers..."
+                )
+                self.delete_resources_on_ms_consumers()
 
     def delete_resources_on_ms_consumers(self):
         """
