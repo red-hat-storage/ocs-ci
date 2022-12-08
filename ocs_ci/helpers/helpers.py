@@ -46,7 +46,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import convert_device_size
 
-
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 

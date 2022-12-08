@@ -288,7 +288,7 @@ class TestPVCCreationPerformance(PASTest):
             f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
         )
 
-        if total_time > 50:
+        if total_time > 60:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
                 f"75% of PVCs) time is {total_time} and greater than 50 seconds."

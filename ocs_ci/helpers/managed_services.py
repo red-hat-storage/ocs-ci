@@ -15,6 +15,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, run_cmd
+import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
 
@@ -193,3 +194,42 @@ def verify_provider_topology():
                 ("rook-ceph-osd", "rook-ceph-crashcollector")
             ), f"Pod {pod_name} is running on OSD running node {node_obj.name}"
     log.info("Verified that other pods are not running on OSD nodes")
+
+
+def get_used_capacity(msg):
+    """
+    Verify OSD percent used capacity greate than ceph_full_ratio
+
+    Args:
+        msg (str): message to be logged
+
+    Returns:
+         float: The percentage of the used capacity in the cluster
+
+    """
+    log.info(f"{msg}")
+    used_capacity = ocs_ci.ocs.cluster.get_percent_used_capacity()
+    log.info(f"Used Capacity is {used_capacity}%")
+    return used_capacity
+
+
+def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
+    """
+    Verify OSD percent used capacity greater than ceph_full_ratio
+
+    Args:
+        expected_used_capacity (float): expected used capacity
+
+    Returns:
+         bool: True if used_capacity greater than expected_used_capacity, False otherwise
+
+    """
+    osds_utilization = ocs_ci.ocs.cluster.get_osd_utilization()
+    log.info(f"osd utilization: {osds_utilization}")
+    for osd_id, osd_utilization in osds_utilization.items():
+        if osd_utilization > expected_used_capacity:
+            log.info(
+                f"OSD ID:{osd_id}:{osd_utilization} greater than {expected_used_capacity}%"
+            )
+            return True
+    return False
