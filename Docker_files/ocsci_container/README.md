@@ -19,22 +19,23 @@ There are 3 options:
 
 ### Run Container
 ```commandline
-docker/podman run -v <kubeconfig-path>:/opt/cluster <image-name> run-ci --cluster-path /opt/cluster_path
---ocp-version <ocp-version> --ocs-version <ocs-version> --cluster-name <cluster-name> <test-path>
+docker/podman run -v <kubeconfig-path>:/opt/cluster <image-name> --ocp-version <ocp-version>
+--ocs-version <ocs-version> --cluster-name <cluster-name> <test-path>
 ```
 *Add Params:
 ```
 kubeconfig-path: Path to kubeconfig on your local machine
 image-name: Image name
-run-ci params
+run-ci params: without "--cluster-path"
+**Don't need to add "run-ci" string to docker/podman run cmd
 
 ```
 
 Example:
 
 ```commandline
-docker run -v ~/ClusterPath:/opt/cluster ocsci_image run-ci --cluster-path /opt/cluster_path
---ocp-version 4.12 --ocs-version 4.12 --cluster-name cluster-name tests/manage/z_cluster/test_must_gather.py
+docker run -v ~/ClusterPath:/opt/cluster ocsci_image --ocp-version 4.12 --ocs-version 4.12
+--cluster-name cluster-name tests/manage/z_cluster/test_must_gather.py
 ```
 
 ### Upload image to quay.io
