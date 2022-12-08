@@ -33,7 +33,6 @@ from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp
 
-from ocs_ci.ocs.node import get_nodes
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
@@ -3869,6 +3868,8 @@ def enable_huge_pages():
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
     # Wait for Master nodes ready state when Compact mode 3M 0W config
+    from ocs_ci.ocs.node import get_nodes
+
     if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
         wait_for_machineconfigpool_status(
             node_type=constants.MASTER_MACHINE, timeout=1200
