@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.helpers.managed_services import verify_osds_are_on_correct_machinepool
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -532,10 +533,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # If platform is MS and resource_to_delete is osd, verify that the OSD pods are running on nodes which are
         # part of the correct machinepool.
-        if (
-            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
-            and resource_to_delete == "osd"
-        ):
+        if is_managed_service_cluster() and resource_to_delete == "osd":
             verify_osds_are_on_correct_machinepool()
 
         if switch_to_provider_needed:
