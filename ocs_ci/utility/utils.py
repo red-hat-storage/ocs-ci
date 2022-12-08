@@ -1757,6 +1757,9 @@ def get_csi_versions():
 
 def get_ocp_version(seperator=None):
     """
+    *The deprecated form of 'get current ocp version'*
+    Use ocs_ci/utility/version.py:get_semantic_ocp_version_from_config()
+
     Get current ocp version
 
     Args:
