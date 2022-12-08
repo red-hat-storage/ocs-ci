@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     pre_upgrade,
+    ignore_leftovers,
 )
 
 
@@ -212,6 +213,7 @@ class TestDefaultMetadataDisabled(ManageTest):
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @green_squad
+@ignore_leftovers
 class TestMetadata(ManageTest):
     """
     This test class consists of tests to verify cephfs metadata for
