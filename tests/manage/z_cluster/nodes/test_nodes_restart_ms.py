@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
 )
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
     is_ms_consumer_cluster,
@@ -55,22 +55,9 @@ class TestNodesRestartMS(ManageTest):
 
         """
         self.orig_index = config.cur_index
-        self.sanity_helpers = Sanity()
-        self.create_pods_and_pvcs_factory = (
+        self.sanity_helpers = SanityManagedService(
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
         )
-
-    def create_resources(self):
-        """
-        Create resources on the consumers and run IO
-
-        """
-        if is_ms_consumer_cluster():
-            consumer_indexes = [config.cur_index]
-        else:
-            consumer_indexes = config.get_consumer_indexes_list()
-
-        self.create_pods_and_pvcs_factory(consumer_indexes=consumer_indexes)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -108,7 +95,7 @@ class TestNodesRestartMS(ManageTest):
             )
             config.switch_to_provider()
 
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers()
 
         osd_node_name = random.choice(get_osd_running_nodes())
         osd_node = get_node_objs([osd_node_name])[0]
@@ -164,7 +151,7 @@ class TestNodesRestartMS(ManageTest):
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
         self.sanity_helpers.health_check()
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers()
 
     @tier4b
     @bugzilla("1754287")
@@ -184,9 +171,18 @@ class TestNodesRestartMS(ManageTest):
         ocp_nodes = get_nodes(node_type=node_type)
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
-            self.sanity_helpers.health_check(cluster_check=False, tries=60)
+            wait_for_node_count_to_reach_status(
+                node_count=len(ocp_nodes), node_type=node_type
+            )
+            ceph_health_check(tries=40)
 
-        self.create_resources()
+        if is_ms_consumer_cluster():
+            # When we use the MS consumer cluster, we sometimes need to wait a little more time after
+            # restarting the nodes before start creating resources
+            tries = 3
+        else:
+            tries = 1
+        self.sanity_helpers.create_resources_on_ms_consumers(tries=tries)
 
     @tier4a
     @polarion_id("OCS-4482")
@@ -210,7 +206,7 @@ class TestNodesRestartMS(ManageTest):
             )
             config.switch_to_provider()
 
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers()
 
         # Get 1 worker node
         typed_nodes = get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=1)
@@ -230,7 +226,7 @@ class TestNodesRestartMS(ManageTest):
         drain_nodes([typed_node_name])
 
         # Create PVCs and pods
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers()
 
         # Restart the node
         nodes.restart_nodes(nodes=typed_nodes, wait=False)
@@ -298,4 +294,4 @@ class TestNodesRestartMS(ManageTest):
             ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
 
         # Create PVCs and pods
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers()
