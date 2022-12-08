@@ -233,3 +233,24 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             )
             return True
     return False
+
+
+def verify_osds_are_on_correct_machinepool():
+    """
+    Verify that the OSD pods are running on nodes which are part of the correct machinepool.
+    Applicable for Managed Services.
+
+    """
+    osd_nodes = get_osd_running_nodes()
+    osd_node_objs = get_node_objs(osd_nodes)
+    for node_obj in osd_node_objs:
+        annotation = (
+            node_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("machine.openshift.io/machine")
+        )
+        assert (
+            "ceph-osd-nodepool" in annotation
+        ), f"OSD running node {node_obj.name} is not part of the machinepool {constants.OSD_NODE_POOL}"
+    log.info(f"OSD running nodes are part of the machinepool {constants.OSD_NODE_POOL}")
