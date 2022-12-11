@@ -93,6 +93,6 @@ class TestUserInterfaceValidation(object):
         ), (
             "Compression status validation failed:\n"
             f"'Compression status' from StorageSystem details page = {compression_statuses[0]};\n"
-            f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[0]}\n"
-            f"Expected: "
+            f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[1]}\n"
+            f"Expected: {compression_status_expected}"
         )
