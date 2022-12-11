@@ -1,5 +1,6 @@
 import logging
 
+import pytest
 from ocs_ci.framework.testlib import (
     tier1,
     skipif_ui_not_support,
@@ -7,7 +8,12 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     ui,
 )
-from ocs_ci.framework.pytest_customization.marks import black_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    black_squad,
+    brown_squad,
+    skipif_external_mode,
+    skipif_mcg_only,
+)
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
 
@@ -46,6 +52,8 @@ class TestUserInterfaceValidation(object):
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
+    @skipif_external_mode
+    @skipif_mcg_only
     def test_odf_storagesystems_ui(self, setup_ui_class):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9
@@ -56,3 +64,35 @@ class TestUserInterfaceValidation(object):
         """
         validation_ui_obj = ValidationUI(setup_ui_class)
         validation_ui_obj.odf_storagesystems_ui()
+
+    @ui
+    @tier1
+    @brown_squad
+    @skipif_ocs_version("<4.9")
+    @skipif_external_mode
+    @skipif_mcg_only
+    @pytest.mark.bugzilla("2096414")
+    def test_odf_cephblockpool_compression_status(self, setup_ui_class):
+        """
+        Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
+        are matching
+
+         Args:
+            setup_ui_class: login function on conftest file
+
+        """
+
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
+        compression_statuses = (
+            validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
+        )
+        compression_status_expected = "Disabled"
+        assert all(
+            val == compression_status_expected for val in compression_statuses
+        ), (
+            "Compression status validation failed:\n"
+            f"'Compression status' from StorageSystem details page = {compression_statuses[0]};\n"
+            f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[0]}\n"
+            f"Expected: "
+        )
