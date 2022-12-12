@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_flexy_deployment,
     skipif_ibm_flash,
     skipif_managed_service,
+    skipif_azure,
 )
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_flexy_deployment
 @skipif_ibm_flash
+@skipif_azure
 @ignore_leftovers
 @tier1
 class TestAddNode(ManageTest):

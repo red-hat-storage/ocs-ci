@@ -24,7 +24,7 @@ from ocs_ci.ocs.constants import (
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
     MANAGED_SERVICE_PLATFORMS,
-    HPCS_KMS_PROVIDER,
+    HPCS_KMS_PROVIDER, AZURE_PLATFORM,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -372,6 +372,11 @@ skipif_tainted_nodes = pytest.mark.skipif(
 skipif_flexy_deployment = pytest.mark.skipif(
     config.ENV_DATA.get("flexy_deployment"),
     reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
+)
+
+skipif_azure = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == AZURE_PLATFORM,
+    reason="Test will not run on Azure",
 )
 
 metrics_for_external_mode_required = pytest.mark.skipif(
