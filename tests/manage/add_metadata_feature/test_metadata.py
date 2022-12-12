@@ -32,6 +32,7 @@ ERRMSG = "Error in command"
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @green_squad
+@ignore_leftovers
 class TestMetadataUnavailable(ManageTest):
     """
     Test metadata feature is unavailable for ODF < 4.12
@@ -134,6 +135,7 @@ class TestMetadataUnavailable(ManageTest):
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @green_squad
+@ignore_leftovers
 class TestDefaultMetadataDisabled(ManageTest):
     """
     Test metadata feature disabled by default for ODF 4.12
