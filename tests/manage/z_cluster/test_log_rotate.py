@@ -1,35 +1,36 @@
 import logging
+import time
 import pytest
+import re
 
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
-
-# from ocs_ci.utility.utils import TimeoutSampler
-
-# from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.pod import get_mgr_pods
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-
-# from ocs_ci.helpers.helpers import verify_quota_resource_exist
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     bugzilla,
-    # skipif_ocs_version,
-    # skipif_managed_service,
+    skipif_ocs_version,
     skipif_external_mode,
+    ignore_leftovers,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier2
+@ignore_leftovers
 @bugzilla("2116416")
 @skipif_external_mode
+@skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-XYZ")
 class TestLogsRotate(ManageTest):
     """
-    Test OverProvision Level Policy Control
+    Test Logs Rotate
     """
 
     @pytest.fixture(autouse=True)
@@ -48,6 +49,10 @@ class TestLogsRotate(ManageTest):
                 params=params,
                 format_type="merge",
             )
+            log.info(
+                "It takes time for storagecluster to update after the edit command"
+            )
+            time.sleep(30)
             log.info("Verify storagecluster on Ready state")
             verify_storage_cluster()
 
@@ -56,9 +61,19 @@ class TestLogsRotate(ManageTest):
     def test_logs_rotate(self):
         """
         Test Process:
-            1.
-
+        1.Verify the number of MGR logs
+        2.Add logCollector to spec section on Storagecluster
+        3.Write 500M to ceph-mgr.a.log
+        4.Verify new log created
+        5.Delete logCollector from Storagecluster
         """
+        pod_mgr_obj = get_mgr_pods()[0]
+        self.mgr_id = (
+            pod_mgr_obj.get("data").get("metadata").get("labels").get("ceph_daemon_id")
+        )
+        # cmd = f"ls -l /var/log/ceph"
+        output_cmd = pod_mgr_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
+        self.ceph_mgr_count = len(re.findall(f"ceph-mgr.{self.mgr_id}", output_cmd))
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -69,28 +84,35 @@ class TestLogsRotate(ManageTest):
             params=params,
             format_type="merge",
         )
-
+        log.info("It takes time for storagecluster to update after the edit command")
+        time.sleep(30)
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
-        # sample = TimeoutSampler(
-        #     timeout=60,
-        #     sleep=4,
-        #     func=verify_quota_resource_exist,
-        # )
-        # if not sample.wait_for_func_status(result=True):
-        #     err_str = (
-        #         f"Quota resource {quota_names[sc_name]} does not exist "
-        #         f"after 60 seconds {clusterresourcequota_obj.describe()}"
-        #     )
-        #     log.error(err_str)
-        #     raise TimeoutExpiredError(err_str)
+        sample = TimeoutSampler(
+            timeout=963,
+            sleep=40,
+            func=self.verify_new_log_created,
+            container_name="log-collector",
+            command=f"dd if=/dev/urandom of=/var/log/ceph/ceph-mgr.{self.mgr_id}.log bs=1M count=530",
+        )
+        if not sample.wait_for_func_status(result=True):
+            log.error("New log is not created after timeout")
+            raise TimeoutExpiredError("New log is not created after timeout")
 
-    def verify_substrings_in_string(self):
-        from ocs_ci.ocs.resources.pod import get_mon_pods, get_mon_pod_id
-
-        mon_objs = get_mon_pods()
-        smallest_id_mon_obj = mon_objs[0]
-        for mon_obj in mon_objs:
-            if get_mon_pod_id(mon_obj) < smallest_id_mon_obj:
-                smallest_id_mon_obj = mon_obj
+    def verify_new_log_created(self, container_name, command):
+        try:
+            mgr_obj = get_mgr_pods()[0]
+            mgr_obj.exec_cmd_on_container(
+                container_name=container_name, command=command
+            )
+            output_cmd = mgr_obj.exec_cmd_on_pod(
+                command="ls -l  --block-size=M /var/log/ceph"
+            )
+            if len(re.findall("ceph-mgr", output_cmd)) != self.ceph_mgr_count + 1:
+                logging.info(output_cmd)
+                return False
+            return True
+        except Exception as e:
+            logging.error(e)
+            return False
