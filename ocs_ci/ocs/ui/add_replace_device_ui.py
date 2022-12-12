@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
@@ -31,6 +32,7 @@ class AddReplaceDeviceUI(PageNavigator):
             self.do_click(self.add_capacity_ui["ocs_operator"])
             self.do_click(self.add_capacity_ui["storage_cluster_tab"])
         self.do_click(self.add_capacity_ui["kebab_storage_cluster"])
+        time.sleep(4)
         self.take_screenshot()
         self.do_click(self.add_capacity_ui["add_capacity_button"])
         self.take_screenshot()
