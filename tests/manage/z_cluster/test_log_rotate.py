@@ -61,17 +61,17 @@ class TestLogsRotate(ManageTest):
     def test_logs_rotate(self):
         """
         Test Process:
-        1.Verify the number of MGR logs
-        2.Add logCollector to spec section on Storagecluster
-        3.Write 500M to ceph-mgr.a.log
-        4.Verify new log created
-        5.Delete logCollector from Storagecluster
+            1.Verify the number of MGR logs
+            2.Add logCollector to spec section on Storagecluster
+            3.Write 500M to ceph-mgr.a.log
+            4.Verify new log created
+            5.Delete logCollector from Storagecluster
+
         """
         pod_mgr_obj = get_mgr_pods()[0]
         self.mgr_id = (
             pod_mgr_obj.get("data").get("metadata").get("labels").get("ceph_daemon_id")
         )
-        # cmd = f"ls -l /var/log/ceph"
         output_cmd = pod_mgr_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
         self.ceph_mgr_count = len(re.findall(f"ceph-mgr.{self.mgr_id}", output_cmd))
         storagecluster_obj = OCP(
@@ -107,12 +107,12 @@ class TestLogsRotate(ManageTest):
                 container_name=container_name, command=command
             )
             output_cmd = mgr_obj.exec_cmd_on_pod(
-                command="ls -l  --block-size=M /var/log/ceph"
+                command="ls -l --block-size=M /var/log/ceph"
             )
             if len(re.findall("ceph-mgr", output_cmd)) != self.ceph_mgr_count + 1:
-                logging.info(output_cmd)
+                log.info(output_cmd)
                 return False
             return True
         except Exception as e:
-            logging.error(e)
+            log.error(e)
             return False
