@@ -89,6 +89,20 @@ necessary dependencies
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
+
+** On Python3.8, there is a bug on numpy with setuptools 65.6.0 https://github.com/numpy/numpy/issues/22623
+WA : `pip install setuptools==65.5.0`
+
+Expected Error:
+```
+  from . import ccompiler
+  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
+    from numpy.distutils import log
+  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
+    from distutils.log import Log as old_Log
+  ImportError: cannot import name 'Log' from 'distutils.log' /
+    (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
+```
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 
