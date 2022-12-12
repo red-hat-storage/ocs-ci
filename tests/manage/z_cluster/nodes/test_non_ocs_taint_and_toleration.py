@@ -102,6 +102,36 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
+        # Add tolerations to the subscription
+        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+        param = (
+            '{"spec": {"config":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}}'
+        )
+        for sub in sub_list:
+            sub_obj = ocp.OCP(
+                resource_name=sub,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                kind=constants.SUBSCRIPTION,
+            )
+            sub_obj.patch(params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {sub}")
+
+        # Add tolerations to the ocsinitializations.ocs.openshift.io
+        param = (
+            '{"spec":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}'
+        )
+        ocsini_obj = ocp.OCP(
+            resource_name=constants.OCSINIT,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            kind=constants.OCSINITIALIZATION,
+        )
+        ocsini_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
+
         # Add tolerations to the configmap rook-ceph-operator-config
         configmap_obj = ocp.OCP(
             kind=constants.CONFIGMAP,
@@ -121,36 +151,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         configmap_obj.patch(params=params, format_type="merge")
         logger.info(f"Successfully added toleration to {configmap_obj.kind}")
 
-        # Add tolerations to the ocsinitializations.ocs.openshift.io
-        param = (
-            '{"spec":  {"tolerations": '
-            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-            '"value": "true"}]}}'
-        )
-        ocsini_obj = ocp.OCP(
-            resource_name=constants.OCSINIT,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.OCSINITIALIZATION,
-        )
-        ocsini_obj.patch(params=param, format_type="merge")
-        logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
-
-        # Add tolerations to the subscription
-        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
-        param = (
-            '{"spec": {"config":  {"tolerations": '
-            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-            '"value": "true"}]}}}'
-        )
-        for sub in sub_list:
-            sub_obj = ocp.OCP(
-                resource_name=sub,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                kind=constants.SUBSCRIPTION,
-            )
-            sub_obj.patch(params=param, format_type="merge")
-            logger.info(f"Successfully added toleration to {sub}")
-
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
@@ -161,7 +161,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         number_of_pods_after = len(
             get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         )
-        assert number_of_pods_before == number_of_pods_after
+        assert (
+            number_of_pods_before == number_of_pods_after
+        ), "Number of pods didn't match"
 
         # Add capacity to check if new osds has toleration
         osd_size = storage_cluster.get_osd_size()
