@@ -5153,6 +5153,8 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
+
+        # Build the mcg-cli command for creating an account
         cli_cmd = "".join(
             (
                 f"account create {name}",
@@ -5161,12 +5163,12 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 and version.get_semantic_ocs_version_from_config()
                 < version.VERSION_4_12
                 else "",
-                " --full_permission=" + "True"
+                " --full_permission=True"
                 if type(allowed_buckets) is dict
                 and allowed_buckets.get("full_permission")
                 and version.get_semantic_ocs_version_from_config()
                 < version.VERSION_4_12
-                else "False",
+                else "",
                 f" --default_resource {default_resource}" if default_resource else "",
                 f" --uid {uid}" if uid else "",
                 f" --gid {gid}" if gid else "",
@@ -5175,8 +5177,11 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 " --nsfs_account_config=" + "True" if uid else "False",
             )
         )
+
+        # Create the account
         acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
         created_accounts.append(name)
+
         # Verify that the account was created successfuly and that the response contains the needed data
         assert (
             "access_key" in str(acc_creation_process_output).lower()
