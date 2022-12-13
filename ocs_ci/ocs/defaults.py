@@ -134,6 +134,17 @@ HPCS_CSI_CONNECTION_CONF = {
     }
 }
 
+# KMIP csi-kms-connection-details
+KMIP_CSI_CONNECTION_CONF = {
+    "1-kmip": {
+        "KMS_PROVIDER": "kmip",
+        "KMS_SERVICE_NAME": "1-kmip",
+        "KMIP_ENDPOINT": "",
+        "KMIP_SECRET_NAME": "thales-kmip-csi-secret",
+        "TLS_SERVER_NAME": "kmip_all.ciphertrustmanager.local",
+    }
+}
+
 # Must-gather:
 MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
