@@ -483,6 +483,8 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         f"--max-per-registry=2 --from={ocp_image} "
         f"--to={dest_image_repo} "
         f"--to-release-image={dest_image_repo}:{ocp_version} "
+        # following two arguments leads to failure of this command, we have to
+        # investigate it more to see, if they are required or not
         # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
         # "--apply-release-image-signature"
     )
