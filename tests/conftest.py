@@ -4544,14 +4544,11 @@ def pv_encryption_kms_setup_factory(request):
     Create vault resources and setup csi-kms-connection-details configMap
     """
 
-    def factory(kms_provider=constants.VAULT_KMS_PROVIDER):
-        # set the KMS provider based on KMS_PROVIDER env value.
-        if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-            return pv_encryption_hpcs_setup_factory(request)
-        elif kms_provider == constants.KMIP_KMS_PROVIDER:
-            return pv_encryption_kmip_setup_factory(request)
-        else:
-            return pv_encryption_vault_setup_factory(request)
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
 
 
 def pv_encryption_vault_setup_factory(request):
@@ -4671,6 +4668,7 @@ def pv_encryption_kmip_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[kmip.kmsid] = vdict.pop(old_key)
+            vdict[kmip.kmsid]["KMS_SERVICE_NAME"] = kmip.kmsid
             vdict[kmip.kmsid][
                 "KMIP_ENDPOINT"
             ] = f"{kmip.kmip_endpoint}:{kmip.kmip_port}"

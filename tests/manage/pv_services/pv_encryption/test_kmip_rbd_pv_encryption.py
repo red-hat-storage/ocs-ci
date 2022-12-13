@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    polarion_id,
 )
 from ocs_ci.helpers.helpers import (
     create_pods,
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@polarion_id("OCS-4665")
 class TestKmipRbdPvEncryptionKMIP(ManageTest):
     """
     Test to verify RBD PV encryption using KMIP
