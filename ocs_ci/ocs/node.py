@@ -1619,13 +1619,18 @@ def verify_all_nodes_created():
 
     existing_num_nodes = len(get_all_nodes())
     if expected_num_nodes != existing_num_nodes:
+        platforms_to_wait = [
+            constants.VSPHERE_PLATFORM,
+            constants.IBMCLOUD_PLATFORM,
+            constants.AZURE_PLATFORM,
+        ]
         if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             log.warning(
                 f"Expected number of nodes is {expected_num_nodes} but "
                 f"created during deployment is {existing_num_nodes}"
             )
         elif (
-            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            config.ENV_DATA["platform"].lower() in platforms_to_wait
             and config.ENV_DATA["deployment_type"] == "ipi"
         ):
             try:
