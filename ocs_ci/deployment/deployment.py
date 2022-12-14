@@ -1784,10 +1784,8 @@ class RBDDRDeployOps(object):
             f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
         )
         timeout = 10
-        ocs_version = version.get_ocs_version_from_csv(
-            only_major_minor=True
-        )
-        if (ocs_version <= version.get_semantic_version("4.11")):
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if ocs_version <= version.get_semantic_version("4.11"):
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT
         else:
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_12

@@ -86,10 +86,15 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         """
-        if version.get_semantic_version(get_ocp_version(), True) <= version.VERSION_4_11:
+        if (
+            version.get_semantic_version(get_ocp_version(), True)
+            <= version.VERSION_4_11
+        ):
             try:
                 wait = WebDriverWait(self.driver, timeout)
-                element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+                element = wait.until(
+                    ec.element_to_be_clickable((locator[1], locator[0]))
+                )
                 screenshot = (
                     ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
                 )
@@ -106,9 +111,10 @@ class BaseUI:
         else:
             self.page_has_loaded()
             wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
+            element = wait.until(
+                ec.visibility_of_element_located((locator[1], locator[0]))
+            )
             element.click()
-            #self.driver.find_element_by_id(locator[0]).click()
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -122,22 +128,27 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        #if version.get_semantic_version(get_ocp_version(), True) <= version.VERSION_4_11:
-        try:
+        if (
+            version.get_semantic_version(get_ocp_version(), True)
+            <= version.VERSION_4_11
+        ):
+            try:
+                wait = WebDriverWait(self.driver, timeout)
+                element = wait.until(
+                    ec.presence_of_element_located((locator[1], locator[0]))
+                )
+                element.send_keys(text)
+            except TimeoutException as e:
+                self.take_screenshot()
+                logger.error(e)
+                raise TimeoutException
+        else:
+            self.page_has_loaded()
             wait = WebDriverWait(self.driver, timeout)
-            #element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-            element = wait.until(ec.presence_of_element_located((locator[1], locator[0])))
+            element = wait.until(
+                ec.visibility_of_element_located((locator[1], locator[0]))
+            )
             element.send_keys(text)
-
-        except TimeoutException as e:
-            self.take_screenshot()
-            logger.error(e)
-            raise TimeoutException
-        # else:
-        #     self.page_has_loaded()
-        #     wait = WebDriverWait(self.driver, timeout)
-        #     element = wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
-        #     element.send_keys(text)
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -781,20 +792,6 @@ class PageNavigator(BaseUI):
             )
             return False
 
-    def navigate_from_ocp_to_acm_cluster_page(self):
-        if not self.check_element_presence(self.acm_page_nav["local-cluster"]):
-            logger.error("local-cluster is not found, can not switch to ACM console")
-            self.take_screenshot()
-            raise NoSuchElementException
-        self.do_click_by_id(self.acm_page_nav["local-cluster"])
-        if not self.check_element_presence(self.acm_page_nav["all-clusters"]):
-            logger.error("All Clusters is not found, can not switch to ACM console")
-            self.take_screenshot()
-            raise NoSuchElementException
-        self.do_click_by_id(self.acm_page_nav["all-clusters"])
-        self.page_has_loaded()
-        self.take_screenshot()
-
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
@@ -1043,8 +1040,6 @@ def login_ui(console_url=None, username=None, password=None):
         element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
         element.click()
     return driver
-
-
 
 
 def close_browser(driver):
