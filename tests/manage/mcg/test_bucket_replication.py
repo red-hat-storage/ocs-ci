@@ -381,7 +381,7 @@ class TestReplication(MCGTest):
             ),
         ],
         ids=[
-            "AZUREtoAWS-BS-OC",
+            "AWStoAZURE-BS-OC",
         ],
     )
     def test_unidirectional_bucket_object_change_replication(
