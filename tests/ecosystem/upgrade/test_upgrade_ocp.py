@@ -6,6 +6,7 @@ from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
+from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -85,11 +86,18 @@ class TestUpgradeOCP(ManageTest):
             elif ocp_upgrade_version.endswith(".nightly"):
                 target_image = expose_ocp_version(ocp_upgrade_version)
 
-            logger.info(f"Target image; {target_image}")
+            logger.info(f"Target image: {target_image}")
 
             image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
+            # disconnected environment prerequisites
+            if config.DEPLOYMENT.get("disconnected"):
+                # mirror OCP release images to mirror registry
+                image_path, target_image = mirror_ocp_release_images(
+                    image_path, target_image
+                )
+
             # Verify Upgrade subscription channel:
             ocp.patch_ocp_upgrade_channel(ocp_channel)
             for sampler in TimeoutSampler(
