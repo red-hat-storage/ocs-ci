@@ -427,7 +427,9 @@ pvc_4_9 = {
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
-
+pvc_4_12 = {
+    "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
+}
 page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
