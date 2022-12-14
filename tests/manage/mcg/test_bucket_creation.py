@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    skipif_mcg_only,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -101,7 +102,7 @@ class TestBucketCreation(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
             ),
             pytest.param(
                 *[
@@ -114,7 +115,7 @@ class TestBucketCreation(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
             ),
         ],
         ids=[
