@@ -152,7 +152,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(f"Successfully added toleration to {configmap_obj.kind}")
 
         # After edit noticed few pod respins as expected
-        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        self.sanity_helpers.health_check()
 
         # Check non ocs toleration on all pods under openshift-storage
         check_toleration_on_pods(toleration_key="xyz")
