@@ -4,7 +4,7 @@ import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.base_ui import StorageSystemNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
@@ -14,14 +14,14 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-class ValidationUI(PageNavigator):
+class ValidationUI(StorageSystemNavigator):
     """
     User Interface Validation Selenium
 
     """
 
     def __init__(self, driver):
-        super().__init__(driver)
+        StorageSystemNavigator.__init__(self, driver=driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
         self.ocp_version = get_ocp_version()
         self.err_list = list()
@@ -540,7 +540,6 @@ class ValidationUI(PageNavigator):
             String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
 
         """
-
         self.navigate_cephblockpool()
         logger.info(
             f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
@@ -552,7 +551,7 @@ class ValidationUI(PageNavigator):
             f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
         )
         self.do_click(
-            self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}"],
+            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
             enable_screenshot=True,
         )
         compression_status_blockpools_details = self.get_element_text(
