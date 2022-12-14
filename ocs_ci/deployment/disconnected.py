@@ -464,7 +464,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         ocp_version (str): OCP release image version
 
     Returns:
-        touple (str, str): touple with two strings: mirrored image path and tag
+        tuple (str, str): tuple with two strings: mirrored image path and tag
             or checksum
     """
     ocp_image = f"{ocp_image_path}:{ocp_version}"
