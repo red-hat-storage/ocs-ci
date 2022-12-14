@@ -44,11 +44,6 @@ class TestLogsRotate(ManageTest):
             )
             params = '[{"op": "remove", "path": "/spec/logCollector"}]'
             storagecluster_obj.patch(params=params, format_type="json")
-            params = '{"spec": {"logCollector":{}}}'
-            storagecluster_obj.patch(
-                params=params,
-                format_type="merge",
-            )
             log.info(
                 "It takes time for storagecluster to update after the edit command"
             )
@@ -88,7 +83,6 @@ class TestLogsRotate(ManageTest):
         time.sleep(30)
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
-
         sample = TimeoutSampler(
             timeout=963,
             sleep=40,
