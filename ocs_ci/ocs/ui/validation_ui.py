@@ -291,6 +291,11 @@ class ValidationUI(PageNavigator):
                     self.validation_loc["storage-system-status-card-hyperlink"],
                     enable_screenshot=True,
                 )
+            # verify that only one BlockPools tab is present. BZ #2096513
+            blockpools_tabs = self.get_elements(self.validation_loc["blockpools"])
+            if len(blockpools_tabs) > 1:
+                logger.critical("Multiple BlockPools tabs were found. BZ #2096513")
+                warnings.warn("Multiple BlockPools tabs were found. BZ #2096513")
             logger.info("Click on StorageSystems breadcrumb")
             self.do_click((self.validation_loc["storagesystems"]))
             logger.info("Navigate back to ODF Overview page")
