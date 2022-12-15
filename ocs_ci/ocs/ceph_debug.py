@@ -303,7 +303,7 @@ class MonStoreTool(RookCephPlugin):
             deployment_name: deployment name
 
         Returns:
-            out (str): output for get monmap command
+            str: output for get monmap command
 
         """
         self.__validate_deployment(deployment_name)
