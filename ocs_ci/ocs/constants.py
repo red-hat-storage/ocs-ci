@@ -1905,12 +1905,12 @@ LVMO_POD_LABEL = {
     },
     "default": {
         "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
-        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-csi-driver",
-        "topolvm-node_label": "app.kubernetes.io/name=topolvm-csi-driver",
+        "topolvm-controller_label": "app.kubernetes.io/component=topolvm-controller",
+        "topolvm-node_label": "app.kubernetes.io/component=topolvm-node",
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
     "411-old": {
-        "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
+        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
         "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
         "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
         "vg-manager_label": "app.lvm.openshift.io=vg-manager",
