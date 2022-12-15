@@ -60,7 +60,7 @@ class RookCephPlugin(object):
         Checks if krew is installed already
 
         Returns:
-            installed(boolean): Returns True if installed, otherwise False
+            bool: True if installed, False otherwise
 
         """
         installed = True
@@ -76,7 +76,7 @@ class RookCephPlugin(object):
         Checks if rook-ceph plugin is installed
 
         Returns:
-            installed(boolean): Returns True if installed, otherwise False
+            bool: True if installed, False otherwise
 
         """
         installed = True
@@ -173,7 +173,7 @@ class CephObjectStoreTool(RookCephPlugin):
     ):
         super().__init__(*args, **kwargs)
         self.data_path = data_path
-        self.cot_cmd = "ceph-objectstore-tool"
+        self.cot_cmd = constants.CEPHOBJECTSTORE_TOOL_CMD
         self.deployment_name = deployment_name
 
     def __validate_deployment(self, deployment_name):
@@ -228,6 +228,7 @@ class CephObjectStoreTool(RookCephPlugin):
 
         Returns:
             pgs: List of PGS
+
         """
         self.__validate_deployment(deployment_name)
         data_path = self.__get_data_path()
@@ -247,7 +248,7 @@ class MonStoreTool(RookCephPlugin):
     ):
         super().__init__(*args, **kwargs)
         self.store_path = store_path
-        self.mot_cmd = "ceph-monstore-tool"
+        self.mot_cmd = constants.CEPHMONSTORE_TOOL_CMD
         self.deployment_name = deployment_name
 
     def __validate_deployment(self, deployment_name):
@@ -302,7 +303,8 @@ class MonStoreTool(RookCephPlugin):
             deployment_name: deployment name
 
         Returns:
-            out (str): out put for get monmap command
+            out (str): output for get monmap command
+
         """
         self.__validate_deployment(deployment_name)
         store_path = self.__get_store_path()

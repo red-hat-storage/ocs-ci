@@ -128,7 +128,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
-from ocs_ci.ocs.debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
+from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
