@@ -113,7 +113,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
-LVM_SC = "odf-lvm-vg1"
+LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
@@ -254,7 +254,7 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
-DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "lvms-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -1384,7 +1384,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "noobaa-operator",
     "ocs-operator",
     "odf-csi-addons-operator",
-    "odf-lvm-operator",
+    "lvms-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
@@ -1396,7 +1396,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
-        "odf-lvm-operator",
+        "lvms-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
@@ -1406,7 +1406,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
-        "odf-lvm-operator",
+        "lvms-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
@@ -1904,13 +1904,13 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app=vg-manager",
     },
     "default": {
-        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
-        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
-        "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
+        "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
+        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-csi-driver",
+        "topolvm-node_label": "app.kubernetes.io/name=topolvm-csi-driver",
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
     "411-old": {
-        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
+        "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
         "topolvm-controller_label": "app.lvm.openshift.io=topolvm-controller",
         "topolvm-node_label": "app.lvm.openshift.io=topolvm-node",
         "vg-manager_label": "app.lvm.openshift.io=vg-manager",
