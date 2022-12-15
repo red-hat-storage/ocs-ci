@@ -1285,6 +1285,10 @@ MUST_GATHER_COMMANDS_JSON = [
     "ceph_auth_list_--format_json-pretty",
 ]
 
+# ceph debug commands
+CEPHOBJECTSTORE_TOOL_CMD = "ceph-objectstore-tool"
+CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
+
 # local storage
 LOCAL_STORAGE_OPERATOR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
