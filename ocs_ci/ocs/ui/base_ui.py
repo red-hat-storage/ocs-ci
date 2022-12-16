@@ -444,7 +444,6 @@ class PageNavigator(BaseUI):
             self.ocp_version_full >= version.VERSION_4_10
             and ocs_version >= version.VERSION_4_10
         ):
-            logger.info("Here I am")
             self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         else:
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)

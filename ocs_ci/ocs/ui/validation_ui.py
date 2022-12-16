@@ -574,7 +574,9 @@ class ValidationUI(PageNavigator):
         self.do_click(self.validation_loc["select_administrator"], timeout=5)
         try:
             self.navigate_odf_overview_page()
-        except Exception as ex:
-            logger.info(f"{ex}")
-            return
-        assert False, "[Unexpected] unprivileged users can access ODF dashboard!"
+        except Exception:
+            logger.info(
+                "As expected, ODF dashboard is not available for the unprivileged user"
+            )
+        else:
+            assert False, "Unexpected, unprivileged users can access ODF dashboard"
