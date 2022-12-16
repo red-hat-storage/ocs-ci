@@ -3,8 +3,16 @@ import pytest
 
 
 from ocs_ci.ocs.ui.mcg_ui import ObcUi
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs import ocp
-from ocs_ci.framework.testlib import ManageTest, ui, bugzilla, polarion_id, tier2
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    ui,
+    bugzilla,
+    polarion_id,
+    tier2,
+    E2ETest,
+)
 from time import sleep
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -51,3 +59,21 @@ class TestOBCUi(ManageTest):
         """Login using created user"""
         obc_ui_obj = ObcUi(login_factory(user[0], user[1]))
         obc_ui_obj.check_obc_option()
+
+
+class TestUnprivilegedUserODFAccess(E2ETest):
+    """
+    Test if unprivileged user can see ODF dashboard
+    """
+
+    @ui
+    @tier2
+    @bugzilla("2103975")
+    def test_unprivileged_user_odf_access(self, user_factory, login_factory):
+        # create a user without any role
+        user = user_factory()
+        logger.info(f"user created: {user[0]} password: {user[1]}")
+
+        # login with the user created
+        validation_ui_obj = ValidationUI(login_factory(user[0], user[1]))
+        validation_ui_obj.validate_unprivileged_access()

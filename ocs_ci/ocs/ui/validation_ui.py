@@ -565,3 +565,16 @@ class ValidationUI(PageNavigator):
             logger.error(f"The pod {pod_name} not found on capacity_breakdown")
             res = False
         return res
+
+    def validate_unprivileged_access(self):
+        """
+        Function to verify the unprivileged users can't access ODF dashbaord
+        """
+        self.do_click(self.validation_loc["Developer_dropdown"])
+        self.do_click(self.validation_loc["select_administrator"], timeout=5)
+        try:
+            self.navigate_odf_overview_page()
+        except Exception as ex:
+            logger.info(f"{ex}")
+            return
+        assert False, "[Unexpected] unprivileged users can access ODF dashboard!"

@@ -1094,6 +1094,14 @@ validation_4_11 = {
         "//a[normalize-space()='noobaa.io~v1alpha1~BucketClass']",
         By.XPATH,
     ),
+    "Developer_dropdown": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_administrator": (
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        By.XPATH,
+    ),
 }
 
 
