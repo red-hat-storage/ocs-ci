@@ -242,11 +242,11 @@ class BlockPoolUI(PageNavigator):
             )
 
             if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
-                logger.info("UI values didnt matched as per CLI for the Raw Capacity")
+                logger.info("UI values did matched as per CLI for the Raw Capacity")
                 return True
             else:
                 logger.error(
-                    f"UI value (i.e {used_raw_capacity_in_UI}) didnt matched as per CLI for the Raw Capacity"
+                    f"UI value (i.e {used_raw_capacity_in_UI}) did not matched as per CLI for the Raw Capacity"
                 )
                 return False
 
@@ -267,6 +267,6 @@ class BlockPoolUI(PageNavigator):
         if self.ocp_version_full <= version.VERSION_4_8:
             self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
         else:
-            self.do_click(get_blockpool_ui_element(pool_name, version.VERSION_4_8))
+            self.do_click(get_blockpool_ui_element(pool_name, self.ocp_version_full))
 
         return True
