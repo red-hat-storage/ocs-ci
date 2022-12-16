@@ -54,7 +54,7 @@ class OCP(object):
         silent=False,
     ):
         """
-        Initializer function
+        Initializer function. Avoid shallow request, func is resource consuming
 
         Args:
             api_version (str): TBD
