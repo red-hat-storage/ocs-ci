@@ -247,6 +247,28 @@ class BaseUI:
         )
         return len(element_list) > 0
 
+    def find_group_of_elements(self, expected_text, element="*"):
+        """
+        Check if the text matches the expected text.
+
+        Args:
+            expected_text (string): The expected text.
+
+        return:
+            list: Returns the list containing name of elements found
+
+        """
+        element_list = self.driver.find_elements_by_xpath(
+            f"//{element}[contains(text(), '{expected_text}')]"
+        )
+        self.take_screenshot()
+        if not len(element_list) > 0:
+            logger.warning(f"Element list is empty, no element was found on UI with the text {expected_text}")
+        else:
+            for element in element_list:
+                logger.info(f"Element found on UI is {element}")
+                return element.text
+
     def get_element_text(self, locator):
         """
         Get the inner text of an element in locator.

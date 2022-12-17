@@ -718,6 +718,13 @@ acm_configuration_4_11 = {
 acm_configuration_4_12 = {
     "local-cluster": ("pf-dropdown-toggle-id-128", By.ID),
     "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
+    "cluster_status_check": ('//*[text()="{}"]', By.XPATH),
+    "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
+    "data-services": ("Data Services", By.LINK_TEXT),
+    "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
+
+
+
 
 }
 

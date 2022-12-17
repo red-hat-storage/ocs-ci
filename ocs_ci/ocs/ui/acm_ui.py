@@ -153,6 +153,12 @@ class AcmPageNavigator(BaseUI):
         self.page_has_loaded()
         self.take_screenshot()
 
+    def navigate_data_services(self):
+        log.info("Navigate to Data Policies page on ACM console")
+        self.choose_expanded_mode(
+            mode=True, locator=self.acm_page_nav["data-services"]
+        )
+        self.do_click(locator=self.acm_page_nav["data-policies"])
 
     def navigate_from_ocp_to_acm_cluster_page(self):
         """
