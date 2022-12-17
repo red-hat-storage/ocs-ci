@@ -100,6 +100,15 @@ class TestUpgradeOCP(ManageTest):
             elif ocp_upgrade_version.endswith(".nightly"):
                 target_image = expose_ocp_version(ocp_upgrade_version)
 
+            # Login to OCP console and enable console plugin if not already
+            version_post_upgrade = version.get_semantic_version(
+                ocp_upgrade_version, True
+            )
+            if version_post_upgrade >= version.VERSION_4_9:
+                validation_ui_obj = ValidationUI(setup_ui_class)
+                validation_ui_obj.refresh_web_console()
+                validation_ui_obj.odf_console_plugin_check()
+
             logger.info(f"Target image: {target_image}")
 
             image_path = config.UPGRADE["ocp_upgrade_path"]

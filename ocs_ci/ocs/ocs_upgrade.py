@@ -700,6 +700,12 @@ def run_ocs_upgrade(
             time.sleep(30)
             # End of workaround
 
+        # Login to OCP console and enable console plugin if not already
+        if semantic_upgrade_version >= version.VERSION_4_9:
+            validation_ui_obj = ValidationUI(setup_ui_class)
+            validation_ui_obj.refresh_web_console()
+            validation_ui_obj.odf_console_plugin_check()
+
         for sample in TimeoutSampler(
             timeout=725,
             sleep=5,
