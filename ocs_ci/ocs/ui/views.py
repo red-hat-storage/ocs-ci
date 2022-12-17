@@ -725,7 +725,7 @@ add_capacity = {
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
-    "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
+    "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
@@ -741,6 +741,7 @@ add_capacity_4_11 = {
 
 add_capacity_4_12 = {
     "add_capacity_button": ("//span[text()='Add Capacity']", By.XPATH),
+    "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
 block_pool = {
