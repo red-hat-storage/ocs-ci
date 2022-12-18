@@ -194,7 +194,7 @@ class TestMCGResourcesDisruptions(MCGTest):
                 ocp_scc.patch(
                     resource_name=constants.ANYUID,
                     params='[{"op": "remove", "path": "/users/0", '
-                    f'"value":{service_account}}}]',
+                    f'"value": "{service_account}"}}]',
                     format_type="json",
                 )
             if not helpers.validate_scc_policy(
@@ -205,7 +205,7 @@ class TestMCGResourcesDisruptions(MCGTest):
                 ocp_scc.patch(
                     resource_name=scc_name,
                     params='[{"op": "add", "path": "/users/0", '
-                    f'"value":{service_account}}}]',
+                    f'"value": "{service_account}"}}]',
                     format_type="json",
                 )
             if (
@@ -260,7 +260,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         ocp_scc.patch(
             resource_name=scc_name,
             params='[{"op": "remove", "path": "/users/0", '
-            f'"value":{service_account}}}]',
+            f'"value": "{service_account}"}}]',
             format_type="json",
         )
         assert not helpers.validate_scc_policy(
@@ -272,7 +272,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         ocp_scc.patch(
             resource_name=constants.ANYUID,
             params='[{"op": "add", "path": "/users/0", '
-            f'"value":{service_account}}}]',
+            f'"value": "{service_account}"}}]',
             format_type="json",
         )
         assert helpers.validate_scc_policy(
