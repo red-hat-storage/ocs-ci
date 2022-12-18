@@ -49,6 +49,16 @@ class TestMCGResourcesDisruptions(MCGTest):
         "noobaa_endpoint": constants.NOOBAA_ENDPOINT_POD_LABEL,
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
+    nb_scc_name = (
+        constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
+        else constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
+    )
+    nb_service_account = (
+        constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
+        else constants.NOOBAA_DB_SERVICE_ACCOUNT
+    )
 
     @tier4c
     @pytest.mark.parametrize(
@@ -174,8 +184,8 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         # Teardown function to revert back the scc changes made
         def finalizer():
-            scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+            scc_name = self.nb_scc_name
+            service_account = self.nb_service_account
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
@@ -239,8 +249,8 @@ class TestMCGResourcesDisruptions(MCGTest):
         Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
 
         """
-        scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+        scc_name = self.nb_scc_name
+        service_account = self.nb_service_account
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],
