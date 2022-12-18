@@ -3,7 +3,10 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    wait_for_ceph_cmd_execute_successfully,
+)
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.framework.testlib import (
@@ -16,6 +19,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     skipif_upgraded_from,
     skipif_vsphere_ipi,
+    skipif_ms_provider,
 )
 
 log = logging.getLogger(__name__)
@@ -26,6 +30,7 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @skipif_bm
 @skipif_vsphere_ipi
+@skipif_ms_provider
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 @polarion_id("OCS-2235")
@@ -58,6 +63,8 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
 
         def finalizer():
             nodes.restart_nodes_by_stop_and_start_teardown()
+            log.info("Verify that we can execute a Ceph command successfully")
+            wait_for_ceph_cmd_execute_successfully()
             assert ceph_health_check(), "Ceph cluster health is not OK"
             log.info("Ceph cluster health is OK")
 
@@ -179,6 +186,10 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
                 fio_filename=f"{pod_obj.name}_file",
                 end_fsync=1,
             )
+
+        assert (
+            wait_for_ceph_cmd_execute_successfully()
+        ), "Failed to execute a ceph command"
 
         log.info("Wait for IO to complete on all pods")
         for pod_obj in new_pods_list:
