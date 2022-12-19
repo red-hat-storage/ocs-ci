@@ -1278,8 +1278,13 @@ class Deployment(object):
             )
             run_cmd(f"oc create -f {rolebinding_config_file} -n default")
         # end of workaround
+        if float(lvmo_version) >= 4.12:
+            lvm_bundle_filename = "lvms-bundle.yaml"
+        else:
+            lvm_bundle_filename = "lvm-bundle.yaml"
+
         bundle_config_file = os.path.join(
-            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-bundle.yaml"
+            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, lvm_bundle_filename
         )
         run_cmd(f"oc create -f {bundle_config_file} -n {self.namespace}")
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
