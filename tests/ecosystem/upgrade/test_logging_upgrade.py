@@ -6,7 +6,6 @@ from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.utility.deployment_openshift_logging import (
     check_health_of_clusterlogging,
-    get_clusterlogging_subscription,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
@@ -84,11 +83,9 @@ def check_csv_version_post_upgrade(channel):
         and config.UPGRADE["upgrade_logging_channel"] in elasticsearch_csv
     ):
         logger.info(
-            f"Upgraded version of Cluster-logging " f"operator {cluster_logging_csv}"
+            f"Upgraded version of Cluster-logging operator {cluster_logging_csv}"
         )
-        logger.info(
-            f"Upgraded version of Elastic-search " f"operator {elasticsearch_csv}"
-        )
+        logger.info(f"Upgraded version of Elastic-search operator {elasticsearch_csv}")
         return True
     return False
 
@@ -139,11 +136,9 @@ def upgrade_info(channel):
     """
 
     logging_csv, elasticsearch_csv, images = get_csv_version(channel)
-    logger.info(f"Cluster-logging CSV for channel {channel} " f"{logging_csv}")
-    logger.info(f"Elastic-search CSV for channel {channel} " f"{elasticsearch_csv}")
-    logger.info(
-        f"Images of cluster-logging components for channel {channel} " f"{images}"
-    )
+    logger.info(f"Cluster-logging CSV for channel {channel} {logging_csv}")
+    logger.info(f"Elastic-search CSV for channel {channel} {elasticsearch_csv}")
+    logger.info(f"Images of cluster-logging components for channel {channel} {images}")
 
 
 @post_ocp_upgrade
@@ -179,8 +174,12 @@ class TestUpgradeLogging:
             # Matching the OCP version and cluster-Logging version
             ocp_version = get_ocp_version()
             logger.info(f"OCP version {ocp_version}")
-            subscription = get_clusterlogging_subscription()
-            logging_channel = subscription.get("spec").get("channel")
+            clusterlogging_subscription = ocp.OCP(
+                kind=constants.SUBSCRIPTION,
+                namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+            )
+            subscription_info = clusterlogging_subscription.get(out_yaml_format=True)
+            logging_channel = subscription_info.get("spec").get("channel")
             logger.info(f"Current Logging channel {logging_channel}")
             upgrade_info(logging_channel)
             upgrade_channel = config.UPGRADE["upgrade_logging_channel"]
@@ -213,5 +212,5 @@ class TestUpgradeLogging:
                 check_cluster_logging()
             else:
                 logger.info(
-                    "Logging Version matches the OCP version, " "No upgrade needed"
+                    "Logging Version matches the OCP version, No upgrade needed"
                 )
