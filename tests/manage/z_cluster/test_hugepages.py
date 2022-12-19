@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.framework.testlib import (
     bugzilla,
+    skipif_external_mode,
     skipif_ocs_version,
     ignore_leftovers,
     E2ETest,
@@ -67,6 +68,7 @@ class TestHugePages(E2ETest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_external_mode
     def test_hugepages_post_odf_deployment(
         self,
         pvc_factory,
