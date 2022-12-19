@@ -625,13 +625,19 @@ def get_ceph_tools_pod(skip_creating_pod=False):
 
     """
     ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.POD,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.TOOL_APP_LABEL,
     )
-    ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
+    ct_pod_items = ocp_pod_obj.data["items"]
     if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
-        ct_pod_items = ocp_pod_obj.get(selector="app=rook-ceph-tools")["items"]
+        ct_pod_items = ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=constants.TOOL_APP_LABEL,
+        ).data["items"]
 
     if not ct_pod_items:
         raise CephToolBoxNotFoundException
@@ -657,9 +663,6 @@ def get_csi_provisioner_pod(interface):
     Returns:
         Pod object: The provisioner pod object based on iterface
     """
-    ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
     selector = (
         "app=csi-rbdplugin-provisioner"
         if (
@@ -668,7 +671,12 @@ def get_csi_provisioner_pod(interface):
         )
         else "app=csi-cephfsplugin-provisioner"
     )
-    provision_pod_items = ocp_pod_obj.get(selector=selector)["items"]
+    ocp_pod_obj = OCP(
+        kind=constants.POD,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=selector,
+    )
+    provision_pod_items = ocp_pod_obj.data["items"]
     assert provision_pod_items, f"No {interface} provisioner pod found"
     provisioner_pod = (
         Pod(**provision_pod_items[0]).name,
