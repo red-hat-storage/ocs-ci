@@ -254,7 +254,8 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
-DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "lvms-vg1"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVMS = "lvms-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -420,6 +421,8 @@ CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml"
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
 
 CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
+
+CSI_LVMS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot-lvms.yaml")
 
 CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml")
 
@@ -1384,6 +1387,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "noobaa-operator",
     "ocs-operator",
     "odf-csi-addons-operator",
+    "odf-lvm-operator",
     "lvms-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
@@ -1396,7 +1400,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
-        "lvms-operator",
+        "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
@@ -1407,6 +1411,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "ocs-operator",
         "odf-csi-addons-operator",
         "lvms-operator",
+        "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],

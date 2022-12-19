@@ -1263,10 +1263,16 @@ class Deployment(object):
         if "old" in file_version:
             file_version = file_version.split("-")[0]
 
-        cluster_config_file = os.path.join(
-            constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
-            f"lvm-cluster-{file_version}.yaml",
-        )
+        if "lvms" in config.DEPLOYMENT["ocs_registry_image"]:
+            cluster_config_file = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
+                "lvms-cluster.yaml",
+            )
+        else:
+            cluster_config_file = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
+                f"lvm-cluster-{file_version}.yaml",
+            )
 
         if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
             lvmo_version_without_period = "default"
