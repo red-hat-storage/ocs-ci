@@ -570,7 +570,7 @@ class ValidationUI(PageNavigator):
         """
         Function to verify the unprivileged users can't access ODF dashbaord
         """
-        self.do_click(self.validation_loc["Developer_dropdown"])
+        self.do_click(self.validation_loc["developer_dropdown"])
         self.do_click(self.validation_loc["select_administrator"], timeout=5)
         try:
             self.navigate_odf_overview_page()
