@@ -3876,6 +3876,8 @@ def snapshot_restore_factory_fixture(request):
         elif (
             snapshot_info["spec"]["volumeSnapshotClassName"]
             == constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVM
+            or snapshot_info["spec"]["volumeSnapshotClassName"]
+            == constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVMS
         ):
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_LVM_PVC_RESTORE_YAML
             no_interface = True

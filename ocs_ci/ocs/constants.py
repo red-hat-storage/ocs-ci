@@ -154,6 +154,7 @@ VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
+LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 
 # Provisioners
