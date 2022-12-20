@@ -384,7 +384,6 @@ class PageNavigator(BaseUI):
         self.ocp_version = get_ocp_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
-        self.validation_loc = locators[self.ocp_version]["validation"]
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
@@ -764,6 +763,7 @@ class StorageSystemNavigator(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
+        self.validation_loc = locators[self.ocp_version]["validation"]
 
     def navigate_cephblockpool(self):
         """

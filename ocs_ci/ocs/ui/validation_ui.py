@@ -21,7 +21,7 @@ class ValidationUI(StorageSystemNavigator):
     """
 
     def __init__(self, driver):
-        StorageSystemNavigator.__init__(self, driver=driver)
+        super().__init__(driver)
         self.dep_loc = locators[self.ocp_version]["deployment"]
         self.ocp_version = get_ocp_version()
         self.err_list = list()
