@@ -331,7 +331,7 @@ class PrometheusAPI(object):
         """
         if (
             config.ENV_DATA["platform"].lower() == "ibm_cloud"
-            and config.ENV_DATA[""] == "managed"
+            and config.ENV_DATA["deployment_type"] == "managed"
         ):
             self._user = user or "apikey"
             self._password = password or config.AUTH["ibmcloud"]["api_key"]
@@ -349,7 +349,7 @@ class PrometheusAPI(object):
         # TODO: generate certificate for IBM cloud platform
         if (
             not config.ENV_DATA["platform"].lower() == "ibm_cloud"
-            and config.ENV_DATA[""] == "managed"
+            and config.ENV_DATA["deployment_type"] == "managed"
         ):
             self.generate_cert()
 
@@ -442,7 +442,7 @@ class PrometheusAPI(object):
                     self.refresh_connection()
                     if (
                         not config.ENV_DATA["platform"].lower() == "ibm_cloud"
-                        and config.ENV_DATA[""] == "managed"
+                        and config.ENV_DATA["deployment_type"] == "managed"
                     ):
                         logger.warning("Generating new certificate")
                         self.generate_cert()
