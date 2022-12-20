@@ -52,7 +52,6 @@ class TestUserInterfaceValidation(object):
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
-    @skipif_external_mode
     @skipif_mcg_only
     def test_odf_storagesystems_ui(self, setup_ui_class):
         """

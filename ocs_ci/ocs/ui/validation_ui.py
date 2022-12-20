@@ -465,7 +465,11 @@ class ValidationUI(StorageSystemNavigator):
                 self.do_click(
                     self.validation_loc["blockandfile"], enable_screenshot=True
                 )
-        self.navigate_cephblockpool_verify_statusready()
+        if not (
+            config.DEPLOYMENT.get("external_mode")
+            or config.ENV_DATA["mcg_only_deployment"]
+        ):
+            self.navigate_cephblockpool_verify_statusready()
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
