@@ -17,6 +17,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
+    check_toleration_on_pods,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
@@ -26,7 +27,6 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.helpers.sanity_helpers import Sanity
-
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +70,14 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. Respin all ocs pods and check if it runs on ocs nodes with tolerations
+        3. Check toleration on all ocs pods.
         4. Add Capacity
 
         """
+
+        number_of_pods_before = len(
+            get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        )
 
         # Taint all nodes with non-ocs taint
         ocs_nodes = get_worker_nodes()
@@ -96,6 +100,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
         )
         storagecluster_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
         # Add tolerations to the subscription
         sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
@@ -111,6 +116,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 kind=constants.SUBSCRIPTION,
             )
             sub_obj.patch(params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {sub}")
 
         # Add tolerations to the ocsinitializations.ocs.openshift.io
         param = (
@@ -118,13 +124,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
             '"value": "true"}]}}'
         )
-
         ocsini_obj = ocp.OCP(
             resource_name=constants.OCSINIT,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.OCSINITIALIZATION,
         )
         ocsini_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
 
         # Add tolerations to the configmap rook-ceph-operator-config
         configmap_obj = ocp.OCP(
@@ -132,29 +138,33 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         )
-        toleration = configmap_obj.get().get("data").get("CSI_PLUGIN_TOLERATIONS")
-        toleration += (
+        toleration = (
             '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
         )
         toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
-        param_cmd = (
-            f'[{{"op": "replace", "path": "/data/CSI_PLUGIN_TOLERATIONS", "value": "{toleration}" }}, '
-            f'{{"op": "replace", "path": "/data/CSI_PROVISIONER_TOLERATIONS", "value": "{toleration}" }}]'
+
+        params = (
+            f'{{"data": {{"CSI_PLUGIN_TOLERATIONS": "{toleration}", '
+            f'"CSI_PROVISIONER_TOLERATIONS": "{toleration}"}}}}'
         )
-        configmap_obj.patch(params=param_cmd, format_type="json")
+
+        configmap_obj.patch(params=params, format_type="merge")
+        logger.info(f"Successfully added toleration to {configmap_obj.kind}")
 
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
-        # Respin all pods and check it if is still running
-        pod_list = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-        )
-        for pod in pod_list:
-            pod.delete(wait=False)
-
-        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        # Check non ocs toleration on all pods under openshift-storage
+        check_toleration_on_pods(toleration_key="xyz")
         self.sanity_helpers.health_check()
+
+        # check number of pods before and after adding non ocs taint
+        number_of_pods_after = len(
+            get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        )
+        assert (
+            number_of_pods_before == number_of_pods_after
+        ), "Number of pods didn't match"
 
         # Add capacity to check if new osds has toleration
         osd_size = storage_cluster.get_osd_size()
