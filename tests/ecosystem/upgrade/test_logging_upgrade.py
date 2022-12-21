@@ -179,7 +179,9 @@ class TestUpgradeLogging:
                 namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
             )
             subscription_info = clusterlogging_subscription.get(out_yaml_format=True)
-            logging_channel = subscription_info.get("spec").get("channel")
+            logging_channel = (
+                subscription_info.get("items")[0].get("spec").get("channel")
+            )
             logger.info(f"Current Logging channel {logging_channel}")
             upgrade_info(logging_channel)
             upgrade_channel = config.UPGRADE["upgrade_logging_channel"]
