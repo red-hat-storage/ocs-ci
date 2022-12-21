@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     polarion_id,
     tier2,
+    tier1,
     E2ETest,
 )
 from time import sleep
@@ -67,7 +68,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     """
 
     @ui
-    @tier2
+    @tier1
     @bugzilla("2103975")
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role

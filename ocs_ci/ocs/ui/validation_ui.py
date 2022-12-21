@@ -2,6 +2,7 @@ import logging
 import warnings
 import time
 
+from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
@@ -574,9 +575,9 @@ class ValidationUI(PageNavigator):
         self.do_click(self.validation_loc["select_administrator"], timeout=5)
         try:
             self.navigate_odf_overview_page()
-        except Exception:
+        except TimeoutException as ex:
             logger.info(
-                "As expected, ODF dashboard is not available for the unprivileged user"
+                f"As expected, ODF dashboard is not available for the unprivileged user: {ex}"
             )
         else:
             assert False, "Unexpected, unprivileged users can access ODF dashboard"
