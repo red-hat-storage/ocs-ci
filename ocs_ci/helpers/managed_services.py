@@ -16,6 +16,74 @@ import ocs_ci.ocs.cluster
 log = logging.getLogger(__name__)
 
 
+def get_machine_pool_info_list():
+    """
+    Get the machine pool info list
+
+    Returns:
+        list: The machine pool info list
+
+    """
+    cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
+    out = run_cmd(cmd)
+    return yaml.safe_load(out)
+
+
+def get_ceph_osd_nodepool_info():
+    """
+    Get the ceph osd node pool info from the machine pool info list
+
+    Returns:
+        dict: The ceph osd node pool info
+
+    """
+    machine_pool_info_list = get_machine_pool_info_list()
+    log.info(f"Number of machine pools = {len(machine_pool_info_list)}")
+    log.info(f"Machine pools details: {machine_pool_info_list}")
+    for machine_pool_info in machine_pool_info_list:
+        if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
+            return machine_pool_info
+
+
+def verify_provider_osd_nodes_on_correct_machine_pools(ceph_osd_nodepool_info=None):
+    """
+    Verify OSD running nodes are part of the correct machine pool
+
+    Args:
+        ceph_osd_nodepool_info (dict): The ceph osd node pool info to check if the osd nodes are part of.
+            If not provided, it gets the ceph osd node pool info from the current machine pool info list
+
+    """
+    if not ceph_osd_nodepool_info:
+        ceph_osd_nodepool_info = get_ceph_osd_nodepool_info()
+        assert ceph_osd_nodepool_info, "OSD node pool not found"
+
+    osd_nodes = get_osd_running_nodes()
+    osd_node_objs = get_node_objs(osd_nodes)
+    for node_obj in osd_node_objs:
+        annotation = (
+            node_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("machine.openshift.io/machine")
+        )
+        assert (
+            ceph_osd_nodepool_info["id"] in annotation
+        ), f"OSD running node {node_obj.name} is part of the machinepool {ceph_osd_nodepool_info['id']}"
+    log.info(
+        f"OSD running nodes are part of the machinepool {ceph_osd_nodepool_info['id']}"
+    )
+
+    # Verify that other pods are not running on OSD nodes
+    for node_obj in osd_node_objs:
+        pods_on_node = get_node_pods(node_name=node_obj.name)
+        for pod_name in pods_on_node:
+            assert pod_name.startswith(
+                ("rook-ceph-osd", "rook-ceph-crashcollector")
+            ), f"Pod {pod_name} is running on OSD running node {node_obj.name}"
+    log.info("Verified that other pods are not running on OSD nodes")
+
+
 def verify_provider_topology():
     """
     Verify topology in a Managed Services provider cluster

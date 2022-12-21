@@ -36,6 +36,9 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.helpers.managed_services import (
+    verify_provider_osd_nodes_on_correct_machine_pools,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -124,6 +127,7 @@ class TestNodesRestartMS(ManageTest):
 
         logger.info("Verify the worker nodes security groups on the provider...")
         assert verify_worker_nodes_security_groups()
+        verify_provider_osd_nodes_on_correct_machine_pools()
 
     @tier4a
     @pytest.mark.parametrize(
@@ -293,5 +297,6 @@ class TestNodesRestartMS(ManageTest):
                 cephcluster_yaml["status"]["phase"] == expected_phase
             ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
 
+        verify_provider_osd_nodes_on_correct_machine_pools()
         # Create PVCs and pods
         self.sanity_helpers.create_resources_on_ms_consumers()

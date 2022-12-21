@@ -38,6 +38,9 @@ from ocs_ci.ocs.node import (
     consumers_verification_steps_after_provider_node_replacement,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.helpers.managed_services import (
+    verify_provider_osd_nodes_on_correct_machine_pools,
+)
 
 log = logging.getLogger(__name__)
 
@@ -303,6 +306,8 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
 
         log.info("Checking that the ceph health is ok on the provider")
         ceph_health_check()
+
+        verify_provider_osd_nodes_on_correct_machine_pools()
 
         log.info("Checking that the ceph health is ok on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()

@@ -33,6 +33,9 @@ from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
 )
 from ocs_ci.ocs.cluster import is_managed_service_cluster
+from ocs_ci.helpers.managed_services import (
+    verify_provider_osd_nodes_on_correct_machine_pools,
+)
 
 log = logging.getLogger(__name__)
 
@@ -205,6 +208,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
             wait_for_node_count_to_reach_status(node_count=len(wnodes), timeout=900)
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
+            verify_provider_osd_nodes_on_correct_machine_pools()
         else:
             log.info(f"Starting the node '{node_name}' again...")
             nodes.start_nodes(nodes=[ocs_node])
