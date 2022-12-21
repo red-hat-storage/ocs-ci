@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
-    brown_squad,
     skipif_external_mode,
     skipif_mcg_only,
 )
@@ -66,7 +65,7 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @brown_squad
+    @black_squad
     @skipif_ocs_version("<4.9")
     @skipif_external_mode
     @skipif_mcg_only
