@@ -461,6 +461,11 @@ pvc_4_9 = {
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
+
+pvc_4_10 = {
+    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+}
+
 pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
@@ -1222,6 +1227,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "developer_dropdown": (
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
@@ -1288,6 +1295,13 @@ validation_4_11 = {
     ),
     "select_administrator": (
         "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        By.XPATH,
+    ),
+}
+
+validation_4_12 = {
+    "storage-system-on-installed-operators": (
+        "//a[normalize-space()='Storage System']",
         By.XPATH,
     ),
 }
@@ -1563,8 +1577,9 @@ locators = {
             **validation_4_9,
             **validation_4_10,
             **validation_4_11,
+            **validation_4_12,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10, **pvc_4_12},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1592,7 +1607,7 @@ locators = {
             **validation_4_10,
             **validation_4_11,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1618,7 +1633,7 @@ locators = {
             **validation_4_9,
             **validation_4_10,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {**acm_page_nav, **acm_configuration},
     },
     "4.9": {

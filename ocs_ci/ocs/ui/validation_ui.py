@@ -525,7 +525,13 @@ class ValidationUI(PageNavigator):
 
         """
         if self.ocp_version_semantic > version.VERSION_4_9:
-            self.navigate_to_ocs_operator_page()
+            self.navigate_installed_operators_page()
+            logger.info("Search and select openshift-storage namespace")
+            self.do_click(self.validation_loc["pvc_project_selector"])
+            self.do_send_keys(
+                self.validation_loc["search-project"], text="openshift-storage"
+            )
+            self.wait_for_namespace_selection(project_name="openshift-storage")
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
