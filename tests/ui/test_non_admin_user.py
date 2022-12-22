@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-
+from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.mcg_ui import ObcUi
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs import ocp
@@ -77,4 +77,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
 
         # login with the user created
         validation_ui_obj = ValidationUI(login_factory(user[0], user[1]))
-        validation_ui_obj.validate_unprivileged_access()
+        try:
+            validation_ui_obj.validate_unprivileged_access()
+        except UnexpectedODFAccessException:
+            assert False, "Unexpected, unprivileged users can access ODF dashboard"
