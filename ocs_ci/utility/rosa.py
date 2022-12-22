@@ -169,9 +169,7 @@ def appliance_mode_cluster(cluster_name):
     if config.ENV_DATA.get("subnet_ids", ""):
         subnet_ids = config.ENV_DATA.get("subnet_ids")
     else:
-        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
-        "private_subnet"
-        ]
+        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region]["private_subnet"]
         if not private_link:
             subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
     cmd = (
