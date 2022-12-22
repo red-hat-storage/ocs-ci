@@ -228,7 +228,7 @@ class ValidationUI(PageNavigator):
             plugin_availability_check = self.wait_until_expected_text_is_found(
                 locator=self.dep_loc["plugin-available"],
                 expected_text="Plugin available",
-                timeout=30,
+                timeout=60,
             )
             if plugin_availability_check:
                 logger.info(
@@ -517,6 +517,46 @@ class ValidationUI(PageNavigator):
             logger.error(f"The pod {pod_name} not found on capacity_breakdown")
             res = False
         return res
+
+    def validate_storage_cluster_ui(self):
+        """
+
+        Function to validate status of Storage Cluster on UI
+
+        """
+        if self.ocp_version_semantic > version.VERSION_4_9:
+            self.navigate_to_ocs_operator_page()
+            logger.info(
+                "Click on Storage System under Provided APIs on Installed Operators Page"
+            )
+            self.do_click(self.validation_loc["storage-system-on-installed-operators"])
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' on Operator details page"
+            )
+            self.do_click(
+                self.validation_loc["ocs-storagecluster-storgesystem"],
+                enable_screenshot=True,
+            )
+            logger.info("Click on Resources")
+            self.do_click(self.validation_loc["resources-tab"], enable_screenshot=True)
+            logger.info("Storage Cluster Status Check")
+            storage_cluster_status_check = self.wait_until_expected_text_is_found(
+                locator=self.validation_loc["storage_cluster_readiness"],
+                expected_text="Ready",
+                timeout=300,
+            )
+            assert (
+                storage_cluster_status_check
+            ), "Storage Cluster Status reported on UI is not 'Ready', Timeout 1200 seconds exceeded"
+            logger.info(
+                "Storage Cluster Status reported on UI is 'Ready', verification successful"
+            )
+            logger.info("Click on 'ocs-storagecluster")
+            self.do_click(
+                self.validation_loc["ocs-storagecluster"], enable_screenshot=True
+            )
+        else:
+            warnings.warn("Not supported for OCP version less than 4.9")
 
     def validate_unprivileged_access(self):
         """

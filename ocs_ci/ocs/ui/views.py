@@ -1063,6 +1063,7 @@ validation = {
     ),
     "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
     "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
+    "storage_cluster_readiness": ("//*[contains(text(),'Ready')]", By.XPATH),
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
