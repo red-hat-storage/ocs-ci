@@ -70,6 +70,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     @ui
     @tier1
     @bugzilla("2103975")
+    @polarion_id("OCS-4667")
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role
         user = user_factory()

@@ -578,7 +578,7 @@ class ValidationUI(PageNavigator):
             self.navigate_odf_overview_page()
         except TimeoutException:
             logger.info(
-                f"As expected, ODF dashboard is not available for the unprivileged user"
+                "As expected, ODF dashboard is not available for the unprivileged user"
             )
         else:
             raise UnexpectedODFAccessException
