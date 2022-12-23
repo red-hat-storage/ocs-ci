@@ -1982,3 +1982,10 @@ TOPOLVM_ALERTS = {
     "metadata_75_precent": "ThinPoolMetaDataUsageAtThresholdNearFull",
     "metadata_85_precent": "ThinPoolMetaDataUsageAtThresholdCritical",
 }
+
+CUSTOM_CEPHFS_SC_NO_EXPANSION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "custom_cephfs_sc_no_expnasion.yaml"
+)
+CUSTOM_RBD_SC_NO_EXPANSION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "custom_rbd_sc_no_expnasion.yaml"
+)
