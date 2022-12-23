@@ -125,7 +125,7 @@ def user_factory(request, htpasswd_path):
             ocp_obj = ocp.OCP(
                 kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
-            secret = ocp_obj.get(resource_name="htpass-secret") or None
+            secret = ocp_obj.get(resource_name="htpass-secret", dont_raise=True) or None
             if secret:
                 create_htpasswd_secret(htpasswd_path, replace=True)
             else:
