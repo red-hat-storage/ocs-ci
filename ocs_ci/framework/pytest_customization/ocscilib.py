@@ -23,6 +23,8 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+    END,
+    START,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -41,6 +43,16 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
 )
+
+from ocs_ci.utility.memory import (
+    ConsumedRamLogEntry,
+    consumed_ram_log,
+    get_consumed_ram,
+    get_memory_consumption_report,
+    start_monitor_memory,
+    stop_monitor_memory,
+)
+from psutil._common import bytes2human
 
 __all__ = [
     "pytest_addoption",
@@ -728,3 +740,46 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    start_monitor_memory()
+    consumed_memory = get_consumed_ram()
+    log_entry = ConsumedRamLogEntry(item.nodeid, START, consumed_memory)
+    consumed_ram_log.append(log_entry)
+    log.debug(
+        f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_memory)}"
+    )
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item):
+    consumed_memory = get_consumed_ram()
+    log_entry = ConsumedRamLogEntry(item.nodeid, END, consumed_memory)
+    consumed_ram_log.append(log_entry)
+    _, peak_rss_table, peak_vms_table = stop_monitor_memory(save_csv=False)
+
+    log.debug(
+        f"Consumed memory at the end of TC {item.nodeid}: {consumed_memory / 1024 / 1024}MB"
+    )
+    log.info(
+        f"Peak rss consumed during {item.nodeid}: "
+        f"{peak_rss_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+    )
+    log.info(
+        f"Peak vms consumed during {item.nodeid}: "
+        f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+    )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_terminal_summary(terminalreporter):
+    yield
+    report_data = get_memory_consumption_report()
+    if report_data:
+        terminalreporter.section("Memory leak report")
+        terminalreporter.currentfspath = 1
+        terminalreporter.ensure_newline()
+        for line in report_data:
+            terminalreporter.write(f"{line}\n")
