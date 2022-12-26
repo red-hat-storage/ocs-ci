@@ -25,12 +25,19 @@ COPY scripts/install-ocs-ci.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*.sh
 
 # Copy edit_yaml.py script inside the container.
-COPY scripts/edit_yaml.py /usr/local/bin/
-RUN chmod 755 /usr/local/bin/*.py
+COPY scripts/edit_yaml.py /opt
+RUN chmod 755 /opt/*.py
+
+# Copy build_config.yaml inside the container.
+COPY scripts/build_config.yaml /opt
 
 # Get OCS-CI Branch-id argument
 ARG BRANCH_ID_ARG
 ENV BRANCH_ID=${BRANCH_ID_ARG}
+
+# Get OCS-CI Branch-id argument
+ARG PROVIDER_NAME_ARG
+ENV PROVIDER_NAME=${PROVIDER_NAME_ARG}
 
 # Install ocs-ci inside the container.
 RUN install-ocs-ci.sh
