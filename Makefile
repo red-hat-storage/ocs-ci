@@ -14,7 +14,7 @@ test-odf:
 
 deployment-ms-setup:
 	@echo "Deploy Managed Service SetUp"
-	Docker_files/ocsci_container/scripts/running-container.sh
+	Docker_files/ocsci_container/scripts/managed-service-depolyment.sh
 
 test-ms:
 	@echo "Running test on existing Managed Service SetUp"

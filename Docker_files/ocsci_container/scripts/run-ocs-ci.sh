@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 
-mkdir -p /opt/cluster/logs_ocsci_container
+#mkdir -p /opt/cluster/logs_ocsci_container
+#
+## Execute run-ci
+#cd /opt/ocs-ci
+#exec "$@" > /opt/cluster/logs_ocsci_container/output_"$@".txt
 
-# Execute run-ci
-cd /opt/ocs-ci
-exec "$@" > /opt/cluster/logs_ocsci_container/output.txt
+if [[ $@ == *"provider"* ]]; then
+  echo $@
+fi

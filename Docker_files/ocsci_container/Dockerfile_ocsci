@@ -24,6 +24,10 @@ ENV OCSCI_INSTALL_DIR=/opt/ocs-ci
 COPY scripts/install-ocs-ci.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*.sh
 
+# Copy edit_yaml.py script inside the container.
+COPY scripts/edit_yaml.py /usr/local/bin/
+RUN chmod 755 /usr/local/bin/*.py
+
 # Get OCS-CI Branch-id argument
 ARG BRANCH_ID_ARG
 ENV BRANCH_ID=${BRANCH_ID_ARG}
