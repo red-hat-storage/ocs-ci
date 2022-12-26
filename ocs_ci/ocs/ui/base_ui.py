@@ -42,7 +42,7 @@ from ocs_ci.utility.utils import (
     get_kubeadmin_password,
     get_ocp_version,
 )
-from ocs_ci.ocs.ui.validation_ui import odf_console_plugin_check
+from ocs_ci.ocs.ui import validation_ui
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +392,7 @@ class PageNavigator(BaseUI):
             if self.ocs_version_semantic >= version.VERSION_4_9
             else OCS_OPERATOR
         )
+        self.validation_ui = validation_ui
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.generic_locators = locators[self.ocp_version]["generic"]
 
@@ -675,7 +676,7 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Checking if console plugin is enabled or not.")
-        odf_console_plugin_check()
+        self.validation_ui.odf_console_plugin_check()
         if self.ocp_version_full <= version.VERSION_4_8:
             logger.info("Navigate to block pools page")
             self.navigate_to_ocs_operator_page()
