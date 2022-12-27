@@ -88,10 +88,10 @@ def get_consumed_virt_mem(proc: Process = Process(os.getpid())):
 
     ! Important notice !
     'vms' will be larger than physical memory capacity:
-        Shared libraries and frameworks are counted as part of the virtual memory for
-        every application that uses them, e.g. if you have 100 processes
-        running on a computer, and a 5 MB library used by all those processes,
-        then that library is counted as 500 MB of virtual memory.
+    Shared libraries and frameworks are counted as part of the virtual memory for
+    every application that uses them, e.g. if you have 100 processes
+    running on a computer, and a 5 MB library used by all those processes,
+    then that library is counted as 500 MB of virtual memory.
     """
     return proc.memory_info().vms
 
@@ -171,7 +171,7 @@ def read_peak_mem_stats(
                         will be ignored in case if df != None
 
     Returns: DataFrame similar to:
-                         name                  proc_start                    proc_end           rss_peak
+    name                                     proc_start                    proc_end           rss_peak
     0                    Google Chrome  2022-12-23 14:25:36.301757  2022-12-23 14:27:32.194759  156 MB
     1  Google Chrome Helper (Renderer)  2022-12-23 14:25:39.451159  2022-12-23 14:27:32.214615  784 MB
     2                           Python  2022-12-23 14:25:22.814883  2022-12-23 14:27:32.151046  228 MB
