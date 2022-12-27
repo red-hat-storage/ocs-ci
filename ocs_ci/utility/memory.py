@@ -10,8 +10,7 @@ from collections import namedtuple
 from itertools import groupby
 import numpy as np
 import pandas as pd
-import psutil
-from psutil import Process
+from psutil import Process, ZombieProcess, NoSuchProcess
 from psutil._common import bytes2human
 from ocs_ci.ocs import constants
 from threading import Timer
@@ -67,9 +66,9 @@ def _rec_memory(proc: Process):
             get_consumed_virt_mem(proc),
             proc.status(),
         ]
-    except psutil.ZombieProcess:
+    except ZombieProcess:
         pass
-    except psutil.NoSuchProcess:
+    except NoSuchProcess:
         pass
 
 
