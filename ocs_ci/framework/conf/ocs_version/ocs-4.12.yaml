@@ -6,6 +6,7 @@ DEPLOYMENT:
   default_ocp_version: '4.12'
 ENV_DATA:
   ocs_version: '4.12'
+  acm_unreleased_image: '2.7.0-DOWNSTREAM-2022-12-22-16-54-54'
 REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.12'
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
