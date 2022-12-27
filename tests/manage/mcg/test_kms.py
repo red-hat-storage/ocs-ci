@@ -22,6 +22,7 @@ class TestNoobaaKMS(MCGTest):
         """
         Validate from logs that there is successfully used NooBaa with KMS integration.
         """
+        # Collect the current logs from the noobaa-operator pod
         operator_pod = pod.get_pods_having_label(
             label=constants.NOOBAA_OPERATOR_POD_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -29,6 +30,7 @@ class TestNoobaaKMS(MCGTest):
         operator_pod_name = operator_pod["metadata"]["name"]
         operator_logs = pod.get_pod_logs(pod_name=operator_pod_name)
 
+        # If the pod restarted, collect the previous logs as well
         restart_count = operator_pod["status"]["containerStatuses"][0]["restartCount"]
         if restart_count > 0:
             previous_logs = pod.get_pod_logs(pod_name=operator_pod_name, previous=True)
@@ -39,6 +41,7 @@ class TestNoobaaKMS(MCGTest):
                 )
             )
 
+        # Check whether the logs contain a positive record of the integration
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_10:
             assert "found root secret in external KMS successfully" in operator_logs
         else:
