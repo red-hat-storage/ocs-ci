@@ -521,7 +521,7 @@ class ValidationUI(PageNavigator):
     def validate_storage_cluster_ui(self):
         """
 
-        Function to validate status of Storage Cluster on UI for ODF 4.9 and above
+        Function to validate Storage Cluster on UI for ODF 4.9 and above
 
         """
         if self.ocp_version_semantic > version.VERSION_4_9:
