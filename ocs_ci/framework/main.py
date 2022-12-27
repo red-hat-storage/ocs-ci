@@ -121,6 +121,7 @@ def process_ocsci_conf(arguments):
             "4.10",
             "4.11",
             "4.12",
+            "4.13",
         ],
     )
     parser.add_argument("--ocs-registry-image")
