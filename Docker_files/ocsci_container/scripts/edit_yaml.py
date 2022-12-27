@@ -21,7 +21,7 @@ def yaml_to_dict(path=None):
     with open(full_path, "r") as file:
         res = yaml.load(file.read(), Loader=yaml.Loader) or {}
         if not isinstance(res, dict):
-            raise ValueError(f"Invalid yaml file")
+            raise ValueError("Invalid yaml file")
         return res
 
 
@@ -54,5 +54,5 @@ endpoint = endpoint_ls[5].replace("\n", "")
 build_config = yaml_to_dict("build_config.yaml")
 build_config["AUTH"]["external"]["ceph_admin_key"] = ceph_key
 build_config["DEPLOYMENT"]["storage_provider_endpoint"] = endpoint
-build_config["ENV_DATA"]["provider_name"] = cli_args[0]
+build_config["ENV_DATA"]["provider_name"] = "oviner-pr"
 dict_to_yaml(path="/opt/cluster", data=build_config)

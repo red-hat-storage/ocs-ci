@@ -1,21 +1,6 @@
 .PHONY: \
-	deployment-odf\
-	test-odf \
-	deployment-ms-setup \
-	test-ms \
+	run-ocs-ci\
 
-deployment-odf:
-	@echo "Deploy ODF Cluster"
-	Docker_files/ocsci_container/scripts/deploy-odf-cluster.sh
-
-test-odf:
-	@echo "Running test on existing cluster"
-	Docker_files/ocsci_container/scripts/test-odf.sh
-
-deployment-ms-setup:
-	@echo "Deploy Managed Service SetUp"
-	Docker_files/ocsci_container/scripts/managed-service-depolyment.sh
-
-test-ms:
-	@echo "Running test on existing Managed Service SetUp"
-	Docker_files/ocsci_container/scripts/running-container.sh
+run-ocs-ci:
+	@echo "Running OCS-CI"
+	Docker_files/ocsci_container/scripts/run-script.sh
