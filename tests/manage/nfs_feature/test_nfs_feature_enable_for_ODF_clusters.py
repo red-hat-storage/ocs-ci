@@ -2,6 +2,7 @@ import pytest
 import logging
 import time
 import yaml
+import os
 
 
 from ocs_ci.utility import nfs_utils
@@ -90,10 +91,6 @@ class TestNfsEnable(ManageTest):
             private_key (str): Private key  to connect to load balancer
             password (password): Password for host
 
-        Prerequisites:
-            On the client host machine openshift-dev pub key in authorized_keys should be available
-            and nfs-utils package should be installed.
-
         Steps:
         ---Setup---
         1:- Create objects for storage_cluster, configmap, pod, pv, pvc, service and storageclass
@@ -118,9 +115,28 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
-        run_id = config.RUN.get("run_id")
-        self.test_folder = f"mnt/test_nfs_{run_id}"
+        self.run_id = config.RUN.get("run_id")
+        self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
+        custom_config_file = os.path.join(
+            constants.TOP_DIR, "conf/ocsci/custom_config.yaml"
+        )
+        with open(custom_config_file) as file_stream:
+            result = {
+                k: (v if v is not None else {})
+                for (k, v) in yaml.safe_load(file_stream).items()
+            }
+
+        self.nfs_client_ip = result["ENV_DATA"]["nfs_client_ip"]
+        log.info(f"nfs_client_ip is: {self.nfs_client_ip}")
+
+        self.nfs_client_user = result["ENV_DATA"]["user"]
+        log.info(f"nfs_client_user is: {self.nfs_client_user}")
+
+        self.nfs_client_pwd = result["ENV_DATA"]["password"]
+        log.info(f"nfs_client_pwd is: {self.nfs_client_pwd}")
+
+        self.con = ""
 
         # Enable nfs feature
         log.info("----Enable nfs----")
@@ -134,12 +150,6 @@ class TestNfsEnable(ManageTest):
         # Create loadbalancer service for nfs
         self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
             self.storage_cluster_obj,
-        )
-
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            "10.0.151.68", user="root", private_key=constants.SSH_PRIV_KEY, stdout=False
         )
         yield
 
@@ -162,18 +172,21 @@ class TestNfsEnable(ManageTest):
         Check if any nfs idle mount is available out of cluster
         and remove those.
         """
-        retcode, stdout, _ = self.con.exec_cmd("findmnt -t nfs4 " + self.test_folder)
-        if stdout:
-            log.info("unmounting existing nfs mount")
-            retry(
-                (CommandFailed),
-                tries=200,
-                delay=10,
-            )(self.con.exec_cmd("umount -f " + self.test_folder))
-            retcode, _, _ = self.con.exec_cmd("findmnt -M  " + self.test_folder)
-            assert retcode == 1
-        log.info("Delete mount point")
-        _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
+        if self.con:
+            retcode, stdout, _ = self.con.exec_cmd(
+                "findmnt -t nfs4 " + self.test_folder
+            )
+            if stdout:
+                log.info("unmounting existing nfs mount")
+                retry(
+                    (CommandFailed),
+                    tries=200,
+                    delay=10,
+                )(self.con.exec_cmd("umount -f " + self.test_folder))
+                retcode, _, _ = self.con.exec_cmd("findmnt -M  " + self.test_folder)
+                assert retcode == 1
+            log.info("Delete mount point")
+            _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
 
     @tier1
     @polarion_id("OCS-4269")
@@ -285,6 +298,10 @@ class TestNfsEnable(ManageTest):
         - Create a LoadBalancer Service pointing to the CephNFS server
         - Direct external NFS clients to the Service endpoint from the step above
 
+        Prerequisites:
+            On the client host machine openshift-dev pub key in authorized_keys should be available
+            and nfs-utils package should be installed.
+
         Steps:
         1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         2:- Create nginx pod with nfs pvcs mounted
@@ -301,6 +318,20 @@ class TestNfsEnable(ManageTest):
         13:- Deletion of Pods and PVCs
 
         """
+        if not self.nfs_client_ip:
+            pytest.skip(
+                "Skipped the test as a valid nfs client ip is required, "
+                " for nfs outcluster export validation. "
+            )
+
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            self.nfs_client_ip,
+            user=self.nfs_client_user,
+            password=self.nfs_client_pwd,
+            private_key=constants.SSH_PRIV_KEY,
+        )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
@@ -478,6 +509,20 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
+        if not self.nfs_client_ip:
+            pytest.skip(
+                "Skipped the test as a valid nfs client ip is required, "
+                " for nfs outcluster export validation. "
+            )
+
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            self.nfs_client_ip,
+            user=self.nfs_client_user,
+            password=self.nfs_client_pwd,
+            private_key=constants.SSH_PRIV_KEY,
+        )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
@@ -627,6 +672,21 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
+        if not self.nfs_client_ip:
+            pytest.skip(
+                "Skipped the test as a valid nfs client ip is required, "
+                " for nfs outcluster export validation. "
+            )
+
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            self.nfs_client_ip,
+            user=self.nfs_client_user,
+            password=self.nfs_client_pwd,
+            private_key=constants.SSH_PRIV_KEY,
+        )
+
         # Create nfs pvc with storageclass ocs-storagecluster-ceph-nfs
         pvc_objs = []
         nfs_pvc_obj = helpers.create_pvc(
@@ -772,6 +832,20 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
+        if not self.nfs_client_ip:
+            pytest.skip(
+                "Skipped the test as a valid nfs client ip is required, "
+                " for nfs outcluster export validation. "
+            )
+
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            self.nfs_client_ip,
+            user=self.nfs_client_user,
+            password=self.nfs_client_pwd,
+            private_key=constants.SSH_PRIV_KEY,
+        )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
