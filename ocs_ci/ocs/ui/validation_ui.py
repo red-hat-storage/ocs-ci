@@ -221,7 +221,7 @@ class ValidationUI(PageNavigator):
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
-            self.page_has_loaded()
+            self.page_has_loaded(retries=25, sleep=10)
             logger.info(
                 "Check if 'Plugin available' option is available on the Installed Operators page"
             )
