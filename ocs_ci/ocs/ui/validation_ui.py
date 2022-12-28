@@ -221,7 +221,7 @@ class ValidationUI(PageNavigator):
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
-            self.page_has_loaded(retries=25, sleep=10)
+            self.page_has_loaded(retries=25, sleep_time=10)
             logger.info(
                 "Check if 'Plugin available' option is available on the Installed Operators page"
             )
@@ -549,7 +549,7 @@ class ValidationUI(PageNavigator):
             storage_cluster_status_check = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["storage_cluster_readiness"],
                 expected_text="Ready",
-                timeout=300,
+                timeout=600,
             )
             assert (
                 storage_cluster_status_check
