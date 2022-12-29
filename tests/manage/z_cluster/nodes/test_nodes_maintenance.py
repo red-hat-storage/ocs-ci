@@ -507,9 +507,15 @@ class TestNodesMaintenance(ManageTest):
         time.sleep(40)
 
         # Validate OSD PDBs
-        assert (
-            validate_existence_of_blocking_pdb()
-        ), "Blocking PDBs not created post second drain"
+        pdb_sample_2 = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=validate_existence_of_blocking_pdb,
+        )
+        if not pdb_sample_2:
+            log.error("Blocking PDBs not created post second drain")
+        else:
+            log.info("Blocking PDBs are created post second drain")
 
         # Mark the node-B back to schedulable and recover the cluster
         schedule_nodes([node_B])
