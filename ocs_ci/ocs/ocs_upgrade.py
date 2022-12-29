@@ -577,7 +577,8 @@ def run_ocs_upgrade(
         f"{upgrade_ocs.version_before_upgrade}"
     )
 
-    # Before ODF upgrade, login to OCP console and enable console plugin if not already
+    # Before ODF upgrade, login to OCP console and enable console plugin if not already,
+    # refresh the web console is pop-up is found
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
         validation_ui_obj = ValidationUI(setup_ui_class)
@@ -700,12 +701,6 @@ def run_ocs_upgrade(
             time.sleep(30)
             # End of workaround
 
-        # Login to OCP console and enable console plugin if not already
-        if semantic_upgrade_version >= version.VERSION_4_9:
-            validation_ui_obj = ValidationUI(setup_ui_class)
-            validation_ui_obj.refresh_web_console()
-            validation_ui_obj.odf_console_plugin_check()
-
         for sample in TimeoutSampler(
             timeout=725,
             sleep=5,
@@ -722,6 +717,7 @@ def run_ocs_upgrade(
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
+
     verify_image_versions(
         old_image,
         upgrade_ocs.get_parsed_versions()[1],
@@ -755,6 +751,13 @@ def run_ocs_upgrade(
         )
         exec_cmd(cmd)
 
+    # Login to OCP console and enable console plugin if not already,
+    # refresh the web console is pop-up is found
+    if semantic_upgrade_version >= version.VERSION_4_9:
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj.refresh_web_console()
+        validation_ui_obj.odf_console_plugin_check()
+
     if config.ENV_DATA.get("mcg_only_deployment"):
         mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
     else:
@@ -769,6 +772,7 @@ def run_ocs_upgrade(
     # Login to OCP console and run ODF dashboard validation check
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
+        validation_ui_obj = ValidationUI(setup_ui_class)
         validation_ui_obj.validate_storage_cluster_ui()
         validation_ui_obj.refresh_web_console()
         validation_ui_obj.odf_overview_ui()
