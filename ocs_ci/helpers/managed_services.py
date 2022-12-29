@@ -251,6 +251,6 @@ def verify_osds_are_on_correct_machinepool():
             .get("machine.openshift.io/machine")
         )
         assert (
-            "ceph-osd-nodepool" in annotation
+            constants.OSD_NODE_POOL in annotation
         ), f"OSD running node {node_obj.name} is not part of the machinepool {constants.OSD_NODE_POOL}"
     log.info(f"OSD running nodes are part of the machinepool {constants.OSD_NODE_POOL}")
