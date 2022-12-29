@@ -19,7 +19,6 @@ from ocs_ci.framework.testlib import (
     workloads,
     tier1,
     ignore_leftovers,
-    skipif_ocs_version,
 )
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
@@ -36,7 +35,6 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@skipif_ocs_version("==4.12")
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
 class Testopenshiftloggingonocs(E2ETest):
