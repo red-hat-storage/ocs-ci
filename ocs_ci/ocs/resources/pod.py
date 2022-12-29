@@ -3135,3 +3135,16 @@ def get_containers_names_by_pod(pod: OCP) -> set:
     logger.debug(f"Containers: {container_names}")
 
     return set(container_names)
+
+
+def get_ceph_daemon_id(pod_obj=None):
+    """
+    Get Ceph Daemon ID of osd, mds, mon, rgw, mgr
+
+    Args:
+       pod_obj (POD Obj): pod object
+
+    Returns:
+        str: ceph_daemon_id
+    """
+    return pod_obj.get("labels").get("metadata").get("labels").get("ceph_daemon_id")
