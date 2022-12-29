@@ -6,7 +6,7 @@ import re
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.resources.pod import get_mgr_pods
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -53,6 +53,35 @@ class TestLogsRotate(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    def get_pod_obj_based_on_id(self, pod_type):
+        """
+        Get Pod Obj
+
+        Args:
+            pod_type (str):
+
+        Returns:
+            POD Obj:
+        """
+        pod_objs = self.podtype_id[pod_type][0]()
+        for pod_obj in pod_objs:
+            if self.podtype_id[pod_type][1] == pod.get_ceph_daemon_id(pod_obj):
+                return pod_obj
+
+    def verify_new_log_created(self, pod_type):
+        pod_obj = self.get_pod_obj(pod_type)
+        output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
+        expected_string = (
+            self.podtype_id[pod_type][2]
+            if pod_type == "rgw"
+            else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
+        )
+        cnt_logs = len(re.findall(expected_string, output_cmd))
+        if cnt_logs != int(self.podtype_id[pod_type][3]) + 1:
+            log.info(output_cmd)
+            return False
+        return True
+
     def test_logs_rotate(self):
         """
         Test Process:
@@ -63,12 +92,44 @@ class TestLogsRotate(ManageTest):
             5.Delete logCollector from Storagecluster
 
         """
-        pod_mgr_obj = get_mgr_pods()[0]
-        self.mgr_id = (
-            pod_mgr_obj.get("data").get("metadata").get("labels").get("ceph_daemon_id")
-        )
-        output_cmd = pod_mgr_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
-        self.ceph_mgr_count = len(re.findall(f"ceph-mgr.{self.mgr_id}", output_cmd))
+        self.podtype_id = dict()
+        self.podtype_id["mgr"] = [
+            pod.get_mgr_pods,
+            pod.get_ceph_daemon_id(pod.get_mgr_pods()[0]),
+            "ceph-mgr.",
+        ]
+        self.podtype_id["osd"] = [
+            pod.get_osd_pods,
+            pod.get_ceph_daemon_id(pod.get_osd_pods()[0]),
+            "ceph-osd.",
+        ]
+        self.podtype_id["mon"] = [
+            pod.get_mon_pods,
+            pod.get_ceph_daemon_id(pod.get_mon_pods()[0]),
+            "ceph-mon.",
+        ]
+        self.podtype_id["rgw"] = [
+            pod.get_rgw_pods,
+            pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
+            "ceph-client.rgw.ocs.storagecluster.cephobjectstore.a",
+        ]
+        self.podtype_id["mds"] = [
+            pod.get_mds_pods,
+            pod.get_ceph_daemon_id(pod.get_mds_pods()[0]),
+            "ceph-mds.",
+        ]
+
+        for pod_type in self.podtype_id:
+            pod_obj = self.get_pod_obj(pod_type)
+            output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
+            expected_string = (
+                self.podtype_id[pod_type][2]
+                if pod_type == "rgw"
+                else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
+            )
+            self.podtype_id[pod_type].append(
+                len(re.findall(expected_string, output_cmd))
+            )
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -83,30 +144,26 @@ class TestLogsRotate(ManageTest):
         time.sleep(30)
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
-        sample = TimeoutSampler(
-            timeout=963,
-            sleep=40,
-            func=self.verify_new_log_created,
-            container_name="log-collector",
-            command=f"dd if=/dev/urandom of=/var/log/ceph/ceph-mgr.{self.mgr_id}.log bs=1M count=530",
-        )
-        if not sample.wait_for_func_status(result=True):
-            log.error("New log is not created after timeout")
-            raise TimeoutExpiredError("New log is not created after timeout")
 
-    def verify_new_log_created(self, container_name, command):
-        try:
-            mgr_obj = get_mgr_pods()[0]
-            mgr_obj.exec_cmd_on_container(
-                container_name=container_name, command=command
+        for pod_type in self.podtype_id:
+            pod_obj = self.get_pod_obj(pod_type)
+            expected_string = (
+                self.podtype_id[pod_type][2]
+                if pod_type == "rgw"
+                else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            output_cmd = mgr_obj.exec_cmd_on_pod(
-                command="ls -l --block-size=M /var/log/ceph"
+            pod_obj.exec_cmd_on_container(
+                container_name="log-collector",
+                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}log bs=1M count=530",
             )
-            if len(re.findall("ceph-mgr", output_cmd)) != self.ceph_mgr_count + 1:
-                log.info(output_cmd)
-                return False
-            return True
-        except Exception as e:
-            log.error(e)
-            return False
+
+        for pod_type in self.podtype_id:
+            sample = TimeoutSampler(
+                timeout=963,
+                sleep=40,
+                func=self.verify_new_log_created,
+                pod_type=pod_type,
+            )
+            if not sample.wait_for_func_status(result=True):
+                log.error("New log is not created after timeout")
+                raise TimeoutExpiredError("New log is not created after timeout")
