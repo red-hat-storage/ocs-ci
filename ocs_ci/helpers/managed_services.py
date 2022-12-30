@@ -3,8 +3,8 @@ Managed Services related functionalities
 """
 import logging
 import yaml
-from semantic_version import Version
 
+from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -251,4 +251,4 @@ def get_ocs_osd_deployer_version():
         "ocs-osd-deployer" in deployer_csv["items"][0]["metadata"]["name"]
     ), "Couldn't find ocs-osd-deployer CSV"
     deployer_version = deployer_csv["items"][0]["spec"]["version"]
-    return Version.coerce(deployer_version)
+    return get_semantic_version(deployer_version)
