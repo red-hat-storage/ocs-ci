@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_ocs_version,
+    skipif_external_mode,
     bugzilla,
 )
 
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @tier2
 @bugzilla("1962821")
 @skipif_ocs_version("<4.8")
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2581")
 class TestRookCephOperatorLogType(ManageTest):
     """
