@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 class TestLogsRotate(ManageTest):
     """
     Test Logs Rotate
+
     """
 
     @pytest.fixture(autouse=True)
@@ -69,7 +70,17 @@ class TestLogsRotate(ManageTest):
                 return pod_obj
 
     def verify_new_log_created(self, pod_type):
-        pod_obj = self.get_pod_obj(pod_type)
+        """
+        Verify new log created on /var/log/ceph
+
+        Args:
+            pod_type (str):
+
+        Returns:
+            bool: True if a new log created, otherwise False
+
+        """
+        pod_obj = self.get_pod_obj_based_on_id(pod_type)
         output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
         expected_string = (
             self.podtype_id[pod_type][2]
@@ -85,9 +96,9 @@ class TestLogsRotate(ManageTest):
     def test_logs_rotate(self):
         """
         Test Process:
-            1.Verify the number of MGR logs
+            1.Verify the number of MGR,MDS,OSD,MON,RGW logs
             2.Add logCollector to spec section on Storagecluster
-            3.Write 500M to ceph-mgr.a.log
+            3.Write 500M to MGR,MDS,OSD,MON,RGW
             4.Verify new log created
             5.Delete logCollector from Storagecluster
 
@@ -120,7 +131,7 @@ class TestLogsRotate(ManageTest):
         ]
 
         for pod_type in self.podtype_id:
-            pod_obj = self.get_pod_obj(pod_type)
+            pod_obj = self.get_pod_obj_based_on_id(pod_type)
             output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
             expected_string = (
                 self.podtype_id[pod_type][2]
@@ -146,7 +157,7 @@ class TestLogsRotate(ManageTest):
         verify_storage_cluster()
 
         for pod_type in self.podtype_id:
-            pod_obj = self.get_pod_obj(pod_type)
+            pod_obj = self.get_pod_obj_based_on_id(pod_type)
             expected_string = (
                 self.podtype_id[pod_type][2]
                 if pod_type == "rgw"
@@ -154,7 +165,7 @@ class TestLogsRotate(ManageTest):
             )
             pod_obj.exec_cmd_on_container(
                 container_name="log-collector",
-                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}log bs=1M count=530",
+                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=530",
             )
 
         for pod_type in self.podtype_id:
