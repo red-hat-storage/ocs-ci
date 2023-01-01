@@ -176,6 +176,6 @@ class TestLogsRotate(ManageTest):
                 pod_type=pod_type,
             )
             if not sample.wait_for_func_status(result=True):
-                error_log = f"New {pod_type} log is not created after timeout"
+                error_log = f"New {pod_type} log is not created after timeout."
                 log.error(error_log)
                 raise TimeoutExpiredError(error_log)
