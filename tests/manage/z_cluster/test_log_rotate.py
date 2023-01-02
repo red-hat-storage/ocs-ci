@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 @bugzilla("2116416")
 @skipif_external_mode
 @skipif_ocs_version("<4.10")
-@pytest.mark.polarion_id("OCS-XYZ")
+@pytest.mark.polarion_id("OCS-4684")
 class TestLogsRotate(ManageTest):
     """
     Test Logs Rotate
