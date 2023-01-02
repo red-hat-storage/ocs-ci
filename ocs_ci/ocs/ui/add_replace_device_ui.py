@@ -19,7 +19,7 @@ class AddReplaceDeviceUI(PageNavigator):
 
     def add_capacity_ui(self):
         """
-        Add Capacity via UI.
+        Add Capacity via UI
 
         """
         self.add_capacity_ui = locators[self.ocp_version]["add_capacity"]
