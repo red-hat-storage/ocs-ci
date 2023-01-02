@@ -33,7 +33,7 @@ def yaml_to_dict(path=None):
 
 def dict_to_yaml(path, data):
     """
-    Convert Dictionary to Yaml file
+    Convert Dictionary to Yaml file.
 
     Args:
         path (str): path to yaml file
