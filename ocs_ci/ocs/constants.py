@@ -1053,6 +1053,7 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
 S3CLI_APP_LABEL = "s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
+OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
