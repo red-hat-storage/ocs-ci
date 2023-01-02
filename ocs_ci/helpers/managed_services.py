@@ -4,6 +4,7 @@ Managed Services related functionalities
 import logging
 import yaml
 
+from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -12,6 +13,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_node_pods,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, run_cmd
@@ -233,3 +235,20 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             )
             return True
     return False
+
+
+def get_ocs_osd_deployer_version():
+    """
+    Get OCS OSD deployer version from CSV
+
+    Returns:
+         Version: OCS OSD deployer version
+
+    """
+    csv_kind = OCP(kind="ClusterServiceVersion", namespace="openshift-storage")
+    deployer_csv = csv_kind.get(selector=constants.OCS_OSD_DEPLOYER_CSV_LABEL)
+    assert (
+        "ocs-osd-deployer" in deployer_csv["items"][0]["metadata"]["name"]
+    ), "Couldn't find ocs-osd-deployer CSV"
+    deployer_version = deployer_csv["items"][0]["spec"]["version"]
+    return get_semantic_version(deployer_version)
