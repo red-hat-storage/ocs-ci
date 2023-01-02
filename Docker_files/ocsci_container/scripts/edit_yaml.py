@@ -16,6 +16,12 @@ def yaml_to_dict(path=None):
     """
     Convert Yaml File to Dictionary
 
+    Args:
+        path (str): path to yaml file
+
+    Returns:
+        res (dic): return dictionary [yaml source]
+
     """
     full_path = os.path.join(Path(__file__).parent, path)
     with open(full_path, "r") as file:
@@ -28,6 +34,13 @@ def yaml_to_dict(path=None):
 def dict_to_yaml(path, data):
     """
     Convert Dictionary to Yaml file
+
+    Args:
+        path (str): path to yaml file
+        data (dic): data of yaml
+
+    Returns:
+        path (dic): return path to yaml file
 
     """
     path = os.path.join(path, "build_config.yaml")
