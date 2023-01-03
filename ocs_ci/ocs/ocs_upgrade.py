@@ -775,6 +775,9 @@ def run_ocs_upgrade(
         validation_ui_obj = ValidationUI(setup_ui_class)
         validation_ui_obj.validate_storage_cluster_ui()
         validation_ui_obj.refresh_web_console()
+        # TODO: Remove next line to hard refresh the page after bug 2157876 is fixed.
+        #  This is currently added as a workaround.
+        validation_ui_obj.refresh_page()
         validation_ui_obj.odf_overview_ui()
         validation_ui_obj.odf_storagesystems_ui()
 
