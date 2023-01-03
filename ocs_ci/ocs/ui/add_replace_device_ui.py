@@ -19,7 +19,7 @@ class AddReplaceDeviceUI(PageNavigator):
 
     def add_capacity_ui(self):
         """
-        Add Capacity via UI.
+        Add Capacity via UI
 
         """
         self.add_capacity_ui = locators[self.ocp_version]["add_capacity"]
@@ -31,11 +31,14 @@ class AddReplaceDeviceUI(PageNavigator):
             self.do_click(self.add_capacity_ui["ocs_operator"])
             self.do_click(self.add_capacity_ui["storage_cluster_tab"])
         self.do_click(self.add_capacity_ui["kebab_storage_cluster"])
-        self.do_click(self.add_capacity_ui["add_capacity_button"])
-        self.do_click(
-            self.add_capacity_ui["select_sc_add_capacity"], enable_screenshot=True
+        self.wait_until_expected_text_is_found(
+            locator=self.add_capacity_ui["add_capacity_button"],
+            timeout=10,
+            expected_text="Add Capacity",
         )
-        self.do_click(self.add_capacity_ui[self.storage_class], enable_screenshot=True)
+        self.take_screenshot()
+        self.do_click(self.add_capacity_ui["add_capacity_button"])
+        self.take_screenshot()
         self.do_click(
             self.add_capacity_ui["confirm_add_capacity"], enable_screenshot=True
         )

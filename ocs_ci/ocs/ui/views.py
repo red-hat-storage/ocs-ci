@@ -20,6 +20,7 @@ login = {
     ),
     "skip_tour": (By.CSS_SELECTOR, 'button[data-test="tour-step-footer-secondary"]'),
 }
+
 login_4_11 = {
     "ocp_page": "Overview · Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
@@ -689,7 +690,6 @@ acm_ui_specific = {
     "acm_2_4": {"cc_create_cluster_endswith_url": "create-cluster"},
 }
 
-
 acm_configuration_4_11 = {
     "install-submariner-btn": ("install-submariner", By.ID),
     "nat-t-checkbox": ("natt-enable", By.ID),
@@ -725,7 +725,7 @@ add_capacity = {
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
-    "confirm_add_capacity": ('button[data-test="confirm-action"', By.CSS_SELECTOR),
+    "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
@@ -738,12 +738,10 @@ add_capacity_4_11 = {
     "standard_sc": ("standard-link", By.ID),
     "localblock_sc": ("localblock-link", By.ID),
 }
-add_capacity_4_12 = {
-    "standard_csi_sc": ("standard-csi-link", By.ID),
-}
 
 add_capacity_4_12 = {
     "add_capacity_button": ("//span[text()='Add Capacity']", By.XPATH),
+    "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
 block_pool = {
@@ -1091,6 +1089,7 @@ validation_4_10 = {
         By.XPATH,
     ),
 }
+
 validation_4_11 = {
     "overview": ("//span[normalize-space()='Overview']", By.XPATH),
     "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
@@ -1170,7 +1169,7 @@ locators = {
             **acm_configuration,
             **acm_configuration_4_11,
         },
-        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "add_capacity": {**add_capacity, **add_capacity_4_11},
         "obc": obc,
     },
     "4.10": {
