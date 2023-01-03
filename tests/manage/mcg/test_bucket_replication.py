@@ -161,7 +161,7 @@ class TestReplication(MCGTest):
             ),
         ],
         ids=[
-            "AZUREtoAWS-NS-Hybrid",
+            "AWStoAZURE-NS-Hybrid",
         ],
     )
     def test_unidirectional_namespace_bucket_replication(
