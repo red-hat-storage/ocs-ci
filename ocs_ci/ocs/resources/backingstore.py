@@ -123,18 +123,41 @@ class BackingStore:
             "cli": _cli_deletion_flow,
         }
 
-        if retry:
-            sample = TimeoutSampler(
-                timeout=120,
-                sleep=20,
-                func=cmdMap[self.method],
-            )
-            if not sample.wait_for_func_status(result=True):
-                err_msg = f"Failed to delete {self.name}"
-                log.error(err_msg)
-                raise TimeoutExpiredError(err_msg)
-        else:
-            cmdMap[self.method]()
+        def _delete_backingstore():
+            try:
+                if retry:
+                    sample = TimeoutSampler(
+                        timeout=120,
+                        sleep=20,
+                        func=cmdMap[self.method],
+                    )
+                    if not sample.wait_for_func_status(result=True):
+                        err_msg = f"Failed to delete {self.name}"
+                        log.error(err_msg)
+                        raise TimeoutExpiredError(err_msg)
+                else:
+                    cmdMap[self.method]()
+                return True
+            except TimeoutExpiredError as e:
+                if all(
+                    err in e.args[0]
+                    for err in [
+                        "cannot complete because objects in Backingstore",
+                        "are still being deleted, Please try later",
+                    ]
+                ):
+                    log.warning(
+                        "Backingstore deletion failed because the objects are still getting deleted; Retrying"
+                    )
+                    return False
+                else:
+                    raise
+
+        TimeoutSampler(
+            timeout=1200,
+            sleep=20,
+            func=_delete_backingstore,
+        )
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
