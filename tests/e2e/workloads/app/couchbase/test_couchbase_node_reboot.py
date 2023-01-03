@@ -5,7 +5,12 @@ import pytest
 
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers, skipif_ocp_version
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    ignore_leftovers,
+    skipif_ocp_version,
+)
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
     get_nodes,
