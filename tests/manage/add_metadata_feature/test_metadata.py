@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     pre_upgrade,
     ignore_leftovers,
+    polarion_id,
 )
 
 
@@ -47,6 +48,7 @@ class TestMetadataUnavailable(ManageTest):
             ),
         ],
     )
+    @polarion_id("OCS-4669")
     def test_metadata_feature_unavailable_for_previous_versions(
         self, project_factory_class, sc_name, fs
     ):
@@ -151,6 +153,8 @@ class TestDefaultMetadataDisabled(ManageTest):
             )
         ],
     )
+    @polarion_id("OCS-4671")
+    @polarion_id("OCS-4674")
     def test_metadata_not_enabled_by_default(
         self, pvc_factory, pvc_clone_factory, fs, sc_name
     ):
@@ -271,9 +275,12 @@ class TestMetadata(ManageTest):
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
+                marks=pytest.mark.polarion_id("OCS-4676"),
             ),
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                constants.DEFAULT_STORAGECLASS_RBD,
+                marks=pytest.mark.polarion_id("OCS-4679"),
             ),
         ],
     )
@@ -404,6 +411,8 @@ class TestMetadata(ManageTest):
             )
         ],
     )
+    @polarion_id("OCS-4673")
+    @polarion_id("OCS-4683")
     def test_verify_metadata_details_for_new_pvc_same_named(self, fs, sc_name):
         """
         This test case verifies the behavior for creating a PVC for CSI_ENABLE_METADATA flag
@@ -492,9 +501,12 @@ class TestMetadata(ManageTest):
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
+                marks=pytest.mark.polarion_id("OCS-4677"),
             ),
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                constants.DEFAULT_STORAGECLASS_RBD,
+                marks=pytest.mark.polarion_id("OCS-4678"),
             ),
         ],
     )
@@ -642,6 +654,7 @@ class TestMetadata(ManageTest):
             ),
         ],
     )
+    @polarion_id("OCS-4672")
     def test_disable_metadata_flag_after_enabling(self, fs, sc_name):
         """
         This test case is to validate the behavior for, disable CSI_ENABLE_METADATA flag
@@ -751,6 +764,8 @@ class TestMetadata(ManageTest):
             ),
         ],
     )
+    @polarion_id("OCS-4680")
+    @polarion_id("OCS-4681")
     def test_metadata_update_for_PV_Retain(self, fs, sc_name, project_factory_class):
         """
         This test is to validate metadata is updated after a PVC is deleted by setting ReclaimPloicy: Retain on PV
@@ -919,6 +934,7 @@ class TestMetadata(ManageTest):
             pytest.param("add-metadata"),
         ],
     )
+    @polarion_id("OCS-4682")
     def test_negative_values_for_enable_metadata_flag(self, flag_value):
         """
         Validate negative scenarios by providing various un acceptable values for, CSI_ENABLE_METADATA flag.

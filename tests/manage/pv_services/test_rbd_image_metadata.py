@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")
+    @polarion_id("OCS-4675")
     @bugzilla("2099965")
     def test_rbd_image_metadata(
         self, pvc_factory, pvc_clone_factory, snapshot_restore_factory
