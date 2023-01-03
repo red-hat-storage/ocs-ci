@@ -132,7 +132,10 @@ class TestUpgrade(ManageTest):
         wait_for_storage_pods(timeout=10), "Some pods were not in expected state"
         pod_objs = get_ocs_operator_pod()
         pod_name = pod_objs.name
-        expected_log_after_upgrade = '"Error patching PersistentVolume"'
+        expected_log_after_upgrade = (
+            "spec.csi.controllerExpandSecretRef.name: Required value,"
+            " spec.csi.controllerExpandSecretRef.namespace: Required value"
+        )
         pod_logs = get_pod_logs(pod_name=pod_name, all_containers=True)
         assert expected_log_after_upgrade not in pod_logs, (
             f"The expected log after upgrade '{expected_log_after_upgrade}'exist"
