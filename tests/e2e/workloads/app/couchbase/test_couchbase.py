@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, skipif_ocp_version
 from ocs_ci.ocs.couchbase import CouchBase
 
 log = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ def couchbase(request):
     return couchbase
 
 
+@skipif_ocp_version("<4.12")
 @workloads
 @pytest.mark.polarion_id("OCS-785")
 class TestCouchBaseWorkload(E2ETest):
