@@ -1626,6 +1626,7 @@ SQUADS = {
     "Orange": ["/scale/"],
     "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
+    "Turquoise": ["/regional-dr/"],
 }
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
