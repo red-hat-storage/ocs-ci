@@ -28,8 +28,10 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.11")
 class TestUpgrade(ManageTest):
     """
-    Tests to check upgrade of OCS when we set without expansion secret and allowExpansion set to false
+    Tests to check upgrade of OCS when we set without expansion secret and allowExpansion to false
     """
+
+    all_sc_obj = []
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -42,7 +44,7 @@ class TestUpgrade(ManageTest):
         """
         Delete storageclass
         """
-        log.info("Teardown for custome sc")
+        log.info("Teardown for custom sc")
         for instance in self.all_sc_obj:
             instance.delete(wait=True)
 
@@ -58,14 +60,11 @@ class TestUpgrade(ManageTest):
         5. Update ocs-operator to 4.12.0
         6. Verify All pods are restarted and in running state after upgrade.
         7. Verify that logs should not found related to ocs operator trying to patch non expandable PVC.
-            e.g "msg":"Error patching PersistentVolume."
         """
         size_list = ["1", "3", "5"]
-        self.all_sc_obj = []
 
         access_modes_cephfs = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
         access_modes_rbd = [
-            constants.ACCESS_MODE_RWO,
             f"{constants.ACCESS_MODE_RWO}-Block",
             f"{constants.ACCESS_MODE_RWX}-Block",
         ]
@@ -82,8 +81,7 @@ class TestUpgrade(ManageTest):
         custom_rbd_sc = helpers.create_resource(**custom_rbd_sc_no_expnasion_data)
 
         # Appending all the pvc obj to base case param for cleanup and evaluation
-        self.all_sc_obj.append(custom_cephfs_sc)
-        self.all_sc_obj.append(custom_rbd_sc)
+        self.all_sc_obj.extend(custom_cephfs_sc + custom_rbd_sc)
 
         log.info("Create pvcs for custom sc as well as for default sc")
         project_obj = project_factory()
@@ -93,16 +91,17 @@ class TestUpgrade(ManageTest):
                 access_modes=access_modes_rbd,
                 project=project_obj,
                 size=size,
-                num_of_pvc=3,
+                num_of_pvc=2,
             )
-            assert rbd_pvcs, "Failed to create rbd_pvcs PVC"
+            log.info(f"rbd_pvc created for size {size}")
+            assert rbd_pvcs, f"Failed to create rbd_pvcs of size {size}"
 
             cephfs_pvcs = multi_pvc_factory(
                 interface=constants.CEPHFILESYSTEM,
                 project=project_obj,
                 access_modes=access_modes_cephfs,
                 size=size,
-                num_of_pvc=1,
+                num_of_pvc=2,
             )
             assert cephfs_pvcs, "Failed to create cephfs_pvcs PVC"
 
@@ -112,7 +111,7 @@ class TestUpgrade(ManageTest):
                 access_modes=access_modes_rbd,
                 storageclass=custom_rbd_sc,
                 size=size,
-                num_of_pvc=1,
+                num_of_pvc=2,
             )
             assert custom_rbd_pvcs, "Failed to create custom_rbd_pvcs PVC"
 
@@ -122,7 +121,7 @@ class TestUpgrade(ManageTest):
                 access_modes=access_modes_cephfs,
                 storageclass=custom_cephfs_sc,
                 size=size,
-                num_of_pvc=1,
+                num_of_pvc=2,
             )
             assert custom_cephfs_pvcs, "Failed to create custom_cephfs_pvcs PVC"
 
@@ -132,12 +131,11 @@ class TestUpgrade(ManageTest):
         wait_for_storage_pods(timeout=10), "Some pods were not in expected state"
         pod_objs = get_ocs_operator_pod()
         pod_name = pod_objs.name
-        expected_log_after_upgrade = (
+        unexpected_log_after_upgrade = (
             "spec.csi.controllerExpandSecretRef.name: Required value,"
             " spec.csi.controllerExpandSecretRef.namespace: Required value"
         )
         pod_logs = get_pod_logs(pod_name=pod_name, all_containers=True)
-        assert expected_log_after_upgrade not in pod_logs, (
-            f"The expected log after upgrade '{expected_log_after_upgrade}'exist"
-            f" on pod {pod_name}"
-        )
+        assert not (
+            unexpected_log_after_upgrade in pod_logs
+        ), f"The unexpected log after upgrade exist on pod {pod_name}"
