@@ -190,6 +190,8 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
                 size=f"{self.pvc_size - 1}G",
                 io_direction="write",
                 runtime=60,
+                end_fsync=1,
+                direct=1,
             )
         log.info("IO started on all pods")
 
