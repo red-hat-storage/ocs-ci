@@ -1,7 +1,9 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name, get_snapshot_content_obj
+from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, bugzilla
 
@@ -44,9 +46,14 @@ class TestRbdImageMetadata:
         rbd_images.append(clone_obj.get_rbd_image_name)
 
         # check the metadata on each images
+        rbd_pool_name = (
+            (config.ENV_DATA.get("rbd_name") or RBD_NAME)
+            if config.DEPLOYMENT["external_mode"]
+            else constants.DEFAULT_CEPHBLOCKPOOL
+        )
         ceph_tool_pod = get_ceph_tools_pod()
         for image in rbd_images:
-            cmd = f"rbd image-meta list {constants.DEFAULT_CEPHBLOCKPOOL}/{image}"
+            cmd = f"rbd image-meta list {rbd_pool_name}/{image}"
             metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
             log.info(f"Metdata for {image}\n{metadata}")
             assert (
