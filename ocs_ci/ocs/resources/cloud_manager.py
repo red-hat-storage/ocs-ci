@@ -134,7 +134,7 @@ class CloudClient(ABC):
 
         try:
             for deletion_result in TimeoutSampler(
-                60, 5, self.internal_delete_uls, self, name
+                60, 5, self.internal_delete_uls, name
             ):
                 if deletion_result:
                     logger.info("ULS deleted.")
