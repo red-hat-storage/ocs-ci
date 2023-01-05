@@ -7,6 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.helpers.helpers import verify_quota_resource_exist
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -40,6 +41,7 @@ def setup_sc(storageclass_factory_class):
 @bugzilla("2024545")
 @skipif_external_mode
 @skipif_managed_service
+@skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-4472")
 class TestOverProvisionLevelPolicyControl(ManageTest):
     """
@@ -114,6 +116,15 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        # Bug fixed on ODF4.11 https://bugzilla.redhat.com/show_bug.cgi?id=2158277
+        if ocs_version == version.VERSION_4_10:
+            quota_names[
+                constants.CEPHBLOCKPOOL_SC
+            ] = "ocs-ocs-storagecluster-ceph-rbd-quota-sc-test"
+            quota_names[
+                constants.CEPHFILESYSTEM_SC
+            ] = "ocs-ocs-storagecluster-cephfs-quota-sc-test"
         self.quota_name = quota_names[sc_name]
         log.info("Create project with “openshift-quota” label")
         project_name = "ocs-quota-sc-test"
