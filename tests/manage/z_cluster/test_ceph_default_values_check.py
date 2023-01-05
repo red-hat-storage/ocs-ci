@@ -122,6 +122,8 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
         elif ocs_version >= version.VERSION_4_11:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
+        elif ocs_version >= version.VERSION_4_12:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
