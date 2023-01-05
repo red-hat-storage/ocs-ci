@@ -69,6 +69,7 @@ class TestUserInterfaceValidation(object):
     @skipif_external_mode
     @skipif_mcg_only
     @pytest.mark.bugzilla("2096414")
+    @polarion_id("OCS-4685")
     def test_odf_cephblockpool_compression_status(self, setup_ui_class):
         """
         Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
