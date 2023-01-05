@@ -32,7 +32,7 @@ rosa = config.AUTH.get("rosa", {})
 
 def login():
     """
-    Login to ROSA client
+    Login to ROSA client.
     """
     token = ocm["token"]
     cmd = f"rosa login --token={token}"
