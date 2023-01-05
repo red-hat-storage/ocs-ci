@@ -114,18 +114,21 @@ class TestCephDefaultValuesCheck(ManageTest):
             "confiMap, match the ones stored in ocs-ci"
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
+
         if ocs_version == version.VERSION_4_8:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
         elif ocs_version == version.VERSION_4_9:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
         elif ocs_version == version.VERSION_4_10:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
-        elif ocs_version >= version.VERSION_4_11:
+        elif ocs_version == version.VERSION_4_11:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
         elif ocs_version >= version.VERSION_4_12:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        log.info(f"OCS version is {ocs_version}")
+        log.info(f"Stored values are {stored_values}")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
