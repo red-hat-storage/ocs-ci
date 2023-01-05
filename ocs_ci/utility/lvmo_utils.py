@@ -144,8 +144,8 @@ def get_lvm_cluster_name():
     returns:
         (str) lvm cluster name.
     """
-
-    if "lvms" in config.DEPLOYMENT["ocs_registry_image"]:
-        return constants.LVMSCLUSTER
-
-    return constants.LVMCLUSTER
+    if "ocs_registry_image" in config.DEPLOYMENT.keys():
+        if "lvms" in config.DEPLOYMENT["ocs_registry_image"]:
+            return constants.LVMSCLUSTER
+        return constants.LVMCLUSTER
+    return ""
