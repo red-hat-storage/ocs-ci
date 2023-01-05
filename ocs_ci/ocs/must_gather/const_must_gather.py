@@ -722,7 +722,6 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-db-pg-0-pod-describe.txt",
     "noobaa-endpoint-scc-describe.txt",
     "NooBaaList_crs.yaml",
-    "noobaa-scc-describe.txt",
     "obc_list",
     "subscription",
     "odf-operator.yaml",
@@ -776,7 +775,6 @@ GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE = [
     "odf-operator.yaml",
     "noobaa-db-pg-0.yaml",
     "db-noobaa-db-pg-0.yaml",
-    "noobaa-scc-describe.txt",
     "db-noobaa-db-pg-0-pvc-describe.txt",
 ]
 
