@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 from abc import ABC, abstractmethod
-from time import sleep
 
 import boto3
 import google.api_core.exceptions as GoogleExceptions
@@ -407,17 +406,37 @@ class GoogleClient(CloudClient):
            name (str): The Underlying Storage name to be deleted
 
         """
-        # Todo: Replace with a TimeoutSampler
-        for _ in range(10):
+
+        def _exec_uls_deletion(self, name):
+
+            if self.verify_uls_exists(name) is False:
+                return True
+
+            deleted_flag = False
+
             try:
                 bucket = GCPBucket(client=self.client, name=name)
                 blobs = self.client.list_blobs(bucket)
                 bucket.delete_blobs(list(blobs))
                 bucket.delete()
-                break
+                deleted_flag = True
+
             except GoogleExceptions.NotFound:
-                logger.warning("Failed to delete some of the bucket blobs. Retrying...")
-                sleep(10)
+                logger.warning("Failed to delete some of the bucket blobs.")
+                deleted_flag = False
+
+            return deleted_flag
+
+        try:
+            for deletion_result in TimeoutSampler(
+                60, 5, _exec_uls_deletion, self, name
+            ):
+                if deletion_result:
+                    logger.info("ULS deleted.")
+                    break
+
+        except TimeoutExpiredError:
+            logger.error("Failed to delete ULS.")
 
     def get_all_uls_names(self):
         """
