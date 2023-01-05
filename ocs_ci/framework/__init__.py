@@ -352,5 +352,59 @@ class MultiClusterConfig:
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
         return "consumer" in cluster_types
 
+    def is_cluster_type_exist(self, cluster_type):
+        """
+        Check if the given cluster type exists in the clusters
+
+        Args:
+            cluster_type (str): The cluster type
+
+        Returns:
+            bool: True, if the given cluster type exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return cluster_type in cluster_types
+
+    def get_cluster_type_indexes_list(self, cluster_type):
+        """
+        Get the cluster type indexes
+
+        Returns:
+            list: the cluster type indexes
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find any cluster with the cluster type
+
+        """
+        cluster_type_indexes_list = []
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_type"] == cluster_type:
+                cluster_type_indexes_list.append(i)
+
+        if not cluster_type_indexes_list:
+            raise ClusterNotFoundException(
+                f"Didn't find any cluster with the cluster type '{cluster_type}'"
+            )
+
+        return cluster_type_indexes_list
+
+    def switch_to_cluster_by_cluster_type(self, cluster_type, num_of_cluster=0):
+        """
+        Switch to the cluster with the given cluster type
+
+        Args:
+            cluster_type (str): The cluster type
+            num_of_cluster (int): The cluster index to switch to. The default cluster number
+                is 0 - which means it will switch to the first cluster.
+                1 - is the second, 2 - is the third, and so on.
+        Raises:
+            ClusterNotFoundException: In case it didn't find any cluster with the cluster type
+
+        """
+        self.switch_ctx(
+            self.get_cluster_type_indexes_list(cluster_type)[num_of_cluster]
+        )
+
 
 config = MultiClusterConfig()
