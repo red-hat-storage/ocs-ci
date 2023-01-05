@@ -119,12 +119,8 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         ocs_version = version.get_semantic_ocs_version_from_config()
         # Bug fixed on ODF4.11 https://bugzilla.redhat.com/show_bug.cgi?id=2158277
         if ocs_version == version.VERSION_4_10:
-            quota_names[
-                constants.CEPHBLOCKPOOL_SC
-            ] = "ocs-ocs-storagecluster-ceph-rbd-quota-sc-test"
-            quota_names[
-                constants.CEPHFILESYSTEM_SC
-            ] = "ocs-ocs-storagecluster-cephfs-quota-sc-test"
+            for sc in quota_names:
+                quota_names[sc] = f"ocs-{quota_names[sc]}"
         self.quota_name = quota_names[sc_name]
         log.info("Create project with “openshift-quota” label")
         project_name = "ocs-quota-sc-test"
