@@ -86,14 +86,14 @@ class MustGather(object):
         Validate the journal and kernel logs exist
 
         """
-        if self.type_log == "OTHERS" or self.ocs_version >= version.VERSION_4_12:
+        if self.type_log == "OTHERS" and self.ocs_version >= version.VERSION_4_12:
             worker_node_objs = get_nodes()
             cnt_kernel_logs, cnt_journal_logs = 0, 0
             for path, subdirs, files in os.walk(self.root):
                 for file in files:
-                    if re.match(r"^kernel_", file) is not None:
+                    if re.search(r"kernel_.*.gz", file):
                         cnt_kernel_logs += 1
-                    if re.match(r"^journal_", file) is not None:
+                    if re.search(r"journal_.*.gz", file):
                         cnt_journal_logs += 1
             assert len(worker_node_objs) == cnt_kernel_logs, (
                 f"The number of kernel logs [{cnt_kernel_logs}] is not "
