@@ -3872,7 +3872,17 @@ def enable_huge_pages():
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+    # Wait for Master nodes ready state when Compact mode 3M 0W config
+    from ocs_ci.ocs.node import get_nodes
+
+    if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
+        wait_for_machineconfigpool_status(
+            node_type=constants.MASTER_MACHINE, timeout=1200
+        )
+    else:
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=1200
+        )
 
 
 def disable_huge_pages():
