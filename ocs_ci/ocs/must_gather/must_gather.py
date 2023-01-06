@@ -6,7 +6,7 @@ import re
 import tarfile
 from pathlib import Path
 
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_ocs_node_objs
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
@@ -87,7 +87,7 @@ class MustGather(object):
 
         """
         if self.type_log == "OTHERS" and self.ocs_version >= version.VERSION_4_12:
-            worker_node_objs = get_nodes()
+            worker_node_objs = get_ocs_node_objs()
             cnt_kernel_logs, cnt_journal_logs = 0, 0
             for path, subdirs, files in os.walk(self.root):
                 for file in files:

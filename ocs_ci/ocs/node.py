@@ -2599,3 +2599,19 @@ def consumers_verification_steps_after_provider_node_replacement():
 
     log.info("All the consumers verification steps finished successfully")
     return True
+
+
+def get_ocs_node_objs():
+    """
+    Get Nodes with OCS label
+
+    Returns:
+        list: The nodes with OCS label OCP instances
+    """
+    node_objs = get_node_objs()
+    node_ocs_objs = list()
+    for node_obj in node_objs:
+        node_lables = node_obj.get("data").get("metadata")["labels"]
+        if "cluster.ocs.openshift.io/openshift-storage" in node_lables:
+            node_ocs_objs.append(node_obj)
+    return node_ocs_objs
