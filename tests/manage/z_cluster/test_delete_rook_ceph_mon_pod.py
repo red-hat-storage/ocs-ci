@@ -1,5 +1,6 @@
 import logging
 import pytest
+from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
@@ -10,6 +11,7 @@ log = logging.getLogger(__name__)
 
 
 @tier2
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2481")
 @pytest.mark.bugzilla("1859033")
 class TestDeleteRookCephMonPod(ManageTest):
