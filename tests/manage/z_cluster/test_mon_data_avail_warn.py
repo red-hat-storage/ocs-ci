@@ -8,7 +8,13 @@ import random
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import E2ETest, tier2, bugzilla, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier2,
+    bugzilla,
+    skipif_ocs_version,
+    skipif_external_mode,
+)
 from ocs_ci.ocs import node, defaults
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import CephCluster
@@ -119,6 +125,7 @@ class TestMonDataAvailWarn(E2ETest):
             self.mon_pod.exec_sh_cmd_on_pod(command=write_cmd, sh="sh")
         self.dd_seek_count += 1
 
+    @skipif_external_mode
     @pytest.mark.usefixtures(workloads_dir_setup.__name__)
     def test_mon_data_avail_warn(self):
         """
