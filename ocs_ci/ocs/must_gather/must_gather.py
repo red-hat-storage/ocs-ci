@@ -6,6 +6,7 @@ import re
 import tarfile
 from pathlib import Path
 
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
@@ -79,6 +80,29 @@ class MustGather(object):
                     self.files_path[file] = os.path.join(dir_name, file)
                     self.files_not_exist.remove(file)
                     break
+
+    def validate_journal_kernel_logs(self):
+        """
+        Validate the journal and kernel logs exist
+
+        """
+        if self.type_log == "OTHERS" or self.ocs_version >= version.VERSION_4_12:
+            worker_node_objs = get_nodes()
+            cnt_kernel_logs, cnt_journal_logs = 0, 0
+            for path, subdirs, files in os.walk(self.root):
+                for file in files:
+                    if re.match(r"^kernel_", file) is not None:
+                        cnt_kernel_logs += 1
+                    if re.match(r"^journal_", file) is not None:
+                        cnt_journal_logs += 1
+            assert len(worker_node_objs) == cnt_kernel_logs, (
+                f"The number of kernel logs [{cnt_kernel_logs}] is not "
+                f"equl to number of worker nodes [{len(worker_node_objs)}]"
+            )
+            assert len(worker_node_objs) == cnt_journal_logs, (
+                f"The number of journal logs [{cnt_journal_logs}] is not "
+                f"equl to number of worker nodes [{len(worker_node_objs)}]"
+            )
 
     def validate_file_size(self):
         """
@@ -244,6 +268,7 @@ class MustGather(object):
         self.validate_expected_files()
         self.print_invalid_files()
         self.compare_running_pods()
+        self.validate_journal_kernel_logs()
 
     def cleanup(self):
         """
