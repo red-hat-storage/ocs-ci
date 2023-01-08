@@ -10,12 +10,20 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
     sync_object_directory,
 )
-from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    skipif_disconnected_cluster,
+    skipif_aws_creds_are_missing,
+    tier2,
+)
 from ocs_ci.framework.testlib import MCGTest
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_disconnected_cluster
+@skipif_aws_creds_are_missing
 class TestCachedBuckets(MCGTest):
     """
     Tests Noobaa cache bucket caching mechanism
