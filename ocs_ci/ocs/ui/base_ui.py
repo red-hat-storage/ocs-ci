@@ -2,6 +2,7 @@ from pathlib import Path
 import datetime
 import logging
 import os
+import gc
 import time
 import zipfile
 
@@ -836,8 +837,24 @@ def take_screenshot(driver):
     time.sleep(0.5)
 
 
-@retry(TimeoutException, tries=3, delay=3, backoff=2)
-@retry(WebDriverException, tries=3, delay=3, backoff=2)
+def garbage_collector_webdriver():
+    """
+    Garbage Collector for webdriver objs
+
+    """
+    collected_objs = gc.get_objects()
+    for obj in collected_objs:
+        if str(type(obj)) == "<class 'selenium.webdriver.chrome.webdriver.WebDriver'>":
+            try:
+                obj.close()
+            except Exception as e:
+                logger.error(e)
+
+
+@retry(TimeoutException, tries=3, delay=3, backoff=2, func=garbage_collector_webdriver)
+@retry(
+    WebDriverException, tries=3, delay=3, backoff=2, func=garbage_collector_webdriver
+)
 def login_ui(console_url=None, username=None, password=None):
     """
     Login to OpenShift Console
@@ -880,7 +897,7 @@ def login_ui(console_url=None, username=None, password=None):
 
         # headless browsers are web browsers without a GUI
         headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
+        if not headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("window-size=1920,1400")
 
@@ -946,23 +963,20 @@ def login_ui(console_url=None, username=None, password=None):
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console(driver)
-    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
-        "import_clusters_to_acm"
-    ):
-        try:
-            element = wait.until(
-                ec.element_to_be_clickable(
-                    (
-                        login_loc["kubeadmin_login_approval"][1],
-                        login_loc["kubeadmin_login_approval"][0],
-                    )
+    try:
+        element = wait.until(
+            ec.element_to_be_clickable(
+                (
+                    login_loc["kubeadmin_login_approval"][1],
+                    login_loc["kubeadmin_login_approval"][0],
                 )
             )
-            element.click()
-        except TimeoutException as e:
-            take_screenshot(driver)
-            copy_dom(driver)
-            logger.error(e)
+        )
+        element.click()
+    except TimeoutException as e:
+        take_screenshot(driver)
+        copy_dom(driver)
+        logger.error(e)
 
     if username is not None:
         try:
