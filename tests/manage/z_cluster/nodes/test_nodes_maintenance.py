@@ -512,10 +512,9 @@ class TestNodesMaintenance(ManageTest):
             sleep=10,
             func=validate_existence_of_blocking_pdb,
         )
-        if not pdb_sample_2:
-            log.error("Blocking PDBs not created post second drain")
-        else:
-            log.info("Blocking PDBs are created post second drain")
+        assert not pdb_sample_2, "Blocking PDBs not created post second drain"
+
+        log.info("Blocking PDBs are created post second drain")
 
         # Mark the node-B back to schedulable and recover the cluster
         schedule_nodes([node_B])
