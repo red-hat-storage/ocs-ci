@@ -53,6 +53,7 @@ class DRWorkload(object):
 
         """
         resources = [
+            constants.DEPLOYMENT,
             constants.POD,
             constants.VOLUME_REPLICATION_GROUP,
             constants.VOLUME_REPLICATION,

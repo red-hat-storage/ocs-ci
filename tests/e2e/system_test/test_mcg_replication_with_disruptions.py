@@ -2,9 +2,18 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version, skipif_mcg_only
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    skipif_ocs_version,
+    skipif_mcg_only,
+    skipif_external_mode,
+)
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, system_test
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    system_test,
+    skipif_vsphere_ipi,
+)
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
@@ -26,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 @system_test
 @skipif_ocs_version("<4.9")
+@skipif_vsphere_ipi
+@skipif_external_mode
 @skipif_mcg_only
 class TestMCGReplicationWithDisruptions(E2ETest):
 

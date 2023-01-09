@@ -329,7 +329,10 @@ class PrometheusAPI(object):
         Args:
             user (str): OpenShift username used to connect to API
         """
-        if config.ENV_DATA["platform"].lower() == "ibm_cloud":
+        if (
+            config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and config.ENV_DATA["deployment_type"] == "managed"
+        ):
             self._user = user or "apikey"
             self._password = password or config.AUTH["ibmcloud"]["api_key"]
         else:
@@ -344,7 +347,10 @@ class PrometheusAPI(object):
         self._threading_lock = threading_lock
         self.refresh_connection()
         # TODO: generate certificate for IBM cloud platform
-        if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+        if (
+            not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and config.ENV_DATA["deployment_type"] == "managed"
+        ):
             self.generate_cert()
 
     def refresh_connection(self):
@@ -434,7 +440,10 @@ class PrometheusAPI(object):
                     logger.warning(f"There was an error in response: {response.text}")
                     logger.warning("Refreshing connection")
                     self.refresh_connection()
-                    if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+                    if (
+                        not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+                        and config.ENV_DATA["deployment_type"] == "managed"
+                    ):
                         logger.warning("Generating new certificate")
                         self.generate_cert()
                     logger.warning("Connection refreshed")

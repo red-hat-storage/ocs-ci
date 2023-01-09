@@ -207,6 +207,18 @@ class BaseUI:
         """
         return self.driver.find_element(by=locator[1], value=locator[0]).text
 
+    def get_elements(self, locator):
+        """
+        Get an elements list. Useful to count number of elements presented on page, etc.
+
+        Args:
+            locator (set): (GUI element needs to operate on (str), type (By)).
+
+        Return:
+            list: The list of WebElements
+        """
+        return self.driver.find_elements(by=locator[1], value=locator[0])
+
     def page_has_loaded(self, retries=5, sleep_time=1):
         """
         Waits for page to completely load by comparing current page hash values.

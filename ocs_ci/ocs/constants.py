@@ -1057,6 +1057,7 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
 S3CLI_APP_LABEL = "s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
+OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
@@ -1631,6 +1632,7 @@ SQUADS = {
     "Orange": ["/scale/"],
     "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
+    "Turquoise": ["/regional-dr/"],
 }
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
@@ -1733,6 +1735,19 @@ mon_max_pg_per_osd = 600
 mon_pg_warn_max_object_skew = 0
 mon_data_avail_warn = 15
 rbd_mirror_die_after_seconds = 3600
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+"""
+
+ROOK_CEPH_CONFIG_VALUES_412 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.8
 """

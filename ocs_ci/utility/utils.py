@@ -47,6 +47,7 @@ from ocs_ci.ocs.exceptions import (
     UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
+    NotFoundError,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -1738,20 +1739,24 @@ def get_csi_versions():
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
 
-    ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    csi_provisioners = ["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"]
-    for provisioner in csi_provisioners:
-        csi_provisioner_pod = run_cmd(
-            f"oc -n {config.ENV_DATA['cluster_namespace']} get pod -l "
-            f"'app={provisioner}' -o jsonpath='{{.items[0].metadata.name}}'"
+    for provisioner in [
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    ]:
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=provisioner,
         )
-        desc = ocp_pod_obj.get(csi_provisioner_pod)
-        for container in desc["spec"]["containers"]:
-            name = container["name"]
-            version = container["image"].split("/")[-1].split(":")[1]
-            csi_versions[name] = version
+        for container in ocp_pod_obj.data["items"][0]["spec"]["containers"]:
+            try:
+                name = container["name"]
+                version = container["image"].split("/")[-1].split(":")[1]
+                csi_versions[name] = version
+            except ValueError:
+                raise NotFoundError(
+                    f"items | spec | containers " f"not found:\n {str(container)}"
+                )
     return csi_versions
 
 
@@ -3867,7 +3872,17 @@ def enable_huge_pages():
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+    # Wait for Master nodes ready state when Compact mode 3M 0W config
+    from ocs_ci.ocs.node import get_nodes
+
+    if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
+        wait_for_machineconfigpool_status(
+            node_type=constants.MASTER_MACHINE, timeout=1200
+        )
+    else:
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=1200
+        )
 
 
 def disable_huge_pages():

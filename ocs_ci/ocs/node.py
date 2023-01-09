@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     CommandFailed,
     ResourceNotFoundError,
+    NotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1414,7 +1415,7 @@ def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=Fals
             if pod.get_pod_node(p).name == node_name:
                 node_pods.append(p)
         # Check if the command failed because the pod not found
-        except CommandFailed as ex:
+        except (CommandFailed, NotFoundError) as ex:
             if "not found" not in str(ex):
                 raise ex
             # Check the 2 cases of pod not found error

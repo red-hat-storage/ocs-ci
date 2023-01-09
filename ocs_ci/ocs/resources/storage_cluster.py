@@ -10,7 +10,10 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.managed_services import verify_provider_topology
+from ocs_ci.helpers.managed_services import (
+    verify_provider_topology,
+    get_ocs_osd_deployer_version,
+)
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -953,7 +956,7 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
     return new_storage_devices_sets_count
 
 
-def add_capacity_lso():
+def add_capacity_lso(ui_flag=False):
     """
     Add capacity on LSO cluster.
 
@@ -961,6 +964,8 @@ def add_capacity_lso():
     Because the UI backend check the pv and available state and base on it
     change the count param on StorageCluster.
 
+    Args:
+        ui_flag(bool): add capacity via ui [true] or via cli [false]
     """
     from ocs_ci.ocs.cluster import (
         is_flexible_scaling_enabled,
@@ -982,15 +987,9 @@ def add_capacity_lso():
         num_available_pv = 3
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
-    if ui_add_capacity_conditions():
-        try:
-            osd_size = get_osd_size()
-            ui_add_capacity(osd_size)
-        except Exception as e:
-            log.error(
-                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
-            )
-            set_deviceset_count(set_count)
+    if ui_add_capacity_conditions() and ui_flag:
+        osd_size = get_osd_size()
+        ui_add_capacity(osd_size)
     else:
         set_deviceset_count(set_count)
 
@@ -1335,8 +1334,7 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
-        # TODO: Update the condition based on the deployer version when the feature is available in a particular version
-        if config.ENV_DATA["addon_name"] == "ocs-provider-dev":
+        if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
             verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
