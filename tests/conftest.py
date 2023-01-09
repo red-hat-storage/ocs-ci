@@ -1487,8 +1487,11 @@ def cluster(
             # If KMS is configured, clean up the backend resources
             # we are doing it before OCP cleanup
             if config.DEPLOYMENT.get("kms_deployment"):
-                kms = KMS.get_kms_deployment()
-                kms.cleanup()
+                try:
+                    kms = KMS.get_kms_deployment()
+                    kms.cleanup()
+                except Exception as ex:
+                    log.error(f"Failed to cleanup KMS. Exception is: {ex}")
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
