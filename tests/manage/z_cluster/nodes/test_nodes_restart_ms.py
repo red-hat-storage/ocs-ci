@@ -25,6 +25,7 @@ from ocs_ci.ocs.node import (
     wait_for_node_count_to_reach_status,
     drain_nodes,
     schedule_nodes,
+    rand_nodes_from_different_rack_or_zones,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import SanityManagedService
@@ -39,6 +40,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers.managed_services import (
     verify_provider_osd_nodes_on_correct_machine_pools,
 )
+from ocs_ci.helpers.helpers import get_failure_domin
 
 
 logger = logging.getLogger(__name__)
@@ -299,4 +301,72 @@ class TestNodesRestartMS(ManageTest):
 
         verify_provider_osd_nodes_on_correct_machine_pools()
         # Create PVCs and pods
+        self.sanity_helpers.create_resources_on_ms_consumers()
+
+    @polarion_id("OCS-3982")
+    def test_provider_worker_nodes_restart(self, nodes):
+        """
+        Restart one osd and one mon nodes in the provider cluster.
+        The nodes will pick up randomly.
+
+        """
+        # Switch to provider cluster for the test
+        if is_ms_consumer_cluster():
+            logger.info(
+                "The test is applicable only for an MS provider cluster. "
+                "Switching to the provider cluster..."
+            )
+            config.switch_to_provider()
+
+        node_count = len(get_nodes())
+        osd_nodes = get_node_objs(get_osd_running_nodes())
+        osd_node = random.choice(osd_nodes)
+        mon_pod = random.choice(pod.get_mon_pods())
+        ocs_nodes = [pod.get_pod_node(osd_node), pod.get_pod_node(mon_pod)]
+        logger.info(f"ocs nodes to restart: {[n.name for n in ocs_nodes]}")
+
+        nodes.restart_nodes(nodes=ocs_nodes, wait=False)
+        wait_for_node_count_to_reach_status(
+            node_count=node_count, node_type=constants.WORKER_MACHINE
+        )
+        ceph_health_check(tries=40)
+        verify_provider_osd_nodes_on_correct_machine_pools()
+        self.sanity_helpers.create_resources_on_ms_consumers()
+
+    @pytest.mark.polarion_id("OCS-2015")
+    def test_rolling_provider_worker_nodes_restart(self, nodes):
+        """
+        Test restart provider worker nodes one after the other and check health status in between
+        The test will pick up two osd nodes from different zones, one mgr node, and one mon node.
+        The nodes will pick up randomly.
+
+        """
+        # Switch to provider cluster for the test
+        if is_ms_consumer_cluster():
+            logger.info(
+                "The test is applicable only for an MS provider cluster. "
+                "Switching to the provider cluster..."
+            )
+            config.switch_to_provider()
+
+        node_count = len(get_nodes())
+
+        osd_nodes = get_node_objs(get_osd_running_nodes())
+        osd_nodes = rand_nodes_from_different_rack_or_zones(
+            get_failure_domin(), osd_nodes, k=2
+        )
+        mgr_pod = pod.get_mgr_pods()[0]
+        mon_pod = random.choice(pod.get_mon_pods())
+        mon_nodes = [pod.get_pod_node(mgr_pod), pod.get_pod_node(mon_pod)]
+
+        ocs_nodes = osd_nodes + mon_nodes
+        logger.info(f"ocs nodes to restart: {[n.name for n in ocs_nodes]}")
+        for node in ocs_nodes:
+            nodes.restart_nodes(nodes=[node], wait=False)
+            wait_for_node_count_to_reach_status(
+                node_count=node_count, node_type=constants.WORKER_MACHINE
+            )
+            ceph_health_check(tries=40)
+            verify_provider_osd_nodes_on_correct_machine_pools()
+
         self.sanity_helpers.create_resources_on_ms_consumers()

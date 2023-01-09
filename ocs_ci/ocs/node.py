@@ -1,5 +1,6 @@
 import copy
 import logging
+import random
 import re
 import time
 from prettytable import PrettyTable
@@ -2604,3 +2605,91 @@ def consumers_verification_steps_after_provider_node_replacement():
 
     log.info("All the consumers verification steps finished successfully")
     return True
+
+
+def get_zone_node_dict(node_objs=None):
+    """
+    Get the zone per node dictionary from the node objects.
+
+    Args:
+        node_objs (list): The node objects to check in which zone they are located.
+            If not specified, it takes all the worker nodes.
+
+    Returns:
+        dict: The zone per node dictionary from the node objects.
+
+    """
+    node_objs = node_objs or get_nodes()
+    zone_node_dict = dict()
+    for n in node_objs:
+        n_zone = get_node_zone(n)
+        zone_node_dict[n_zone] = zone_node_dict.get(n_zone, [])
+        zone_node_dict[n_zone].append(n)
+
+    return zone_node_dict
+
+
+def get_rack_node_dict(node_objs=None):
+    """
+    Get the rack per node dictionary from the node objects.
+
+    Args:
+        node_objs (list): The node objects to check in which rack they are located.
+            If not specified, it takes all the worker nodes.
+
+    Returns:
+        dict: The rack per node dictionary from the node objects.
+
+    """
+    node_objs = node_objs or get_nodes()
+    rack_node_dict = dict()
+    for n in node_objs:
+        n_rack = get_node_rack(n)
+        rack_node_dict[n_rack] = rack_node_dict.get(n_rack, [])
+        rack_node_dict[n_rack].append(n)
+
+    return rack_node_dict
+
+
+def get_rack_or_zone_node_dict(failure_domain, node_objs=None):
+    """
+    Get the rack or zone per node dictionary from the node objects.
+
+    Args:
+        failure_domain (str): The failure domain('rack' or 'zone')
+        node_objs (list): The node objects to check in which rack or zone they are located.
+            If not specified, it takes all the worker nodes.
+
+    Returns:
+        dict: The rack or zone per node dictionary from the node objects.
+
+    """
+    return (
+        get_zone_node_dict(node_objs)
+        if failure_domain == "zone"
+        else get_rack_node_dict(node_objs)
+    )
+
+
+def rand_nodes_from_different_rack_or_zones(failure_domain, node_objs=None, k=2):
+    """
+    Returns a list with randomly selected nodes in different rack or zones
+    from the specified node object list
+
+    Args:
+        failure_domain (str): The failure domain
+        node_objs (list): The specified list of the node objects to select the nodes
+        k (int): An integer defining the length of the returned list. The default value is 2.
+
+    Returns:
+        list: The list with the randomly selected nodes in different rack or zones
+
+    """
+    rack_or_zone_node_dict = get_rack_or_zone_node_dict(failure_domain, node_objs)
+    rack_or_zone_choices = random.choices(list(rack_or_zone_node_dict), k=k)
+
+    node_choices = []
+    for rack_or_zone in rack_or_zone_choices:
+        node_choices.append(random.choice(rack_or_zone_node_dict[rack_or_zone]))
+
+    return node_choices
