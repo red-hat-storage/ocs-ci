@@ -2,7 +2,6 @@ import pytest
 import logging
 import time
 import yaml
-import os
 
 
 from ocs_ci.utility import nfs_utils
@@ -118,22 +117,22 @@ class TestNfsEnable(ManageTest):
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
-        custom_config_file = os.path.join(
-            constants.TOP_DIR, "conf/ocsci/custom_config.yaml"
-        )
-        with open(custom_config_file) as file_stream:
-            result = {
-                k: (v if v is not None else {})
-                for (k, v) in yaml.safe_load(file_stream).items()
-            }
+        # custom_config_file = os.path.join(
+        #     constants.TOP_DIR, "conf/ocsci/custom_config.yaml"
+        # )
+        # with open(custom_config_file) as file_stream:
+        #     result = {
+        #         k: (v if v is not None else {})
+        #         for (k, v) in yaml.safe_load(file_stream).items()
+        #     }
 
-        self.nfs_client_ip = result["ENV_DATA"]["nfs_client_ip"]
+        self.nfs_client_ip = config.RUN["ENV_DATA"].get("nfs_client_ip")
         log.info(f"nfs_client_ip is: {self.nfs_client_ip}")
 
-        self.nfs_client_user = result["ENV_DATA"]["user"]
+        self.nfs_client_user = config.RUN["ENV_DATA"].get("nfs_client_user")
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
-        self.nfs_client_pwd = result["ENV_DATA"]["password"]
+        self.nfs_client_pwd = config.RUN["ENV_DATA"].get("nfs_client_pwd")
         log.info(f"nfs_client_pwd is: {self.nfs_client_pwd}")
 
         self.con = ""
