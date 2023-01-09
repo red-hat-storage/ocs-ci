@@ -126,7 +126,7 @@ class CloudClient(ABC):
         """
         if self.verify_uls_exists(name) is False:
             logger.warning(
-                f"Underlying Storage {name} does not exist, hence was not deleted."
+                f"Underlying Storage {name} does not exist, hence it can't be deleted."
             )
             return
 
