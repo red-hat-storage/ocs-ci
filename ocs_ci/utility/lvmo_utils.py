@@ -141,7 +141,8 @@ def delete_lvm_cluster():
 def get_lvm_cluster_name():
     """
     Get LVM clustername Dynamically
-    returns:
+
+    Returns:
         (str) lvm cluster name.
     """
     if "ocs_registry_image" in config.DEPLOYMENT.keys():
