@@ -315,10 +315,13 @@ class OCSUpgrade(object):
             )
         # For IBM ROKS cloud, there is no possibility to use internal build of must gather image.
         # If we are not testing the live upgrade, then we will need to change images to the upsream.
-        ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-        use_upstream_mg_image = ibm_cloud_platform and not upgrade_in_same_source
+        managed_ibmcloud_platform = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        use_upstream_mg_image = managed_ibmcloud_platform and not upgrade_in_same_source
         if (live_deployment and upgrade_in_same_source) or (
-            ibm_cloud_platform and not use_upstream_mg_image
+            managed_ibmcloud_platform and not use_upstream_mg_image
         ):
             update_live_must_gather_image()
         elif use_upstream_mg_image:

@@ -5701,7 +5701,10 @@ def set_live_must_gather_images(pytestconfig):
     Set live must gather images
     """
     live_deployment = config.DEPLOYMENT["live_deployment"]
-    ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    managed_ibmcloud_platform = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
     # For ROSA platforms, we use upstream must gather image
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         log.debug(
@@ -5710,12 +5713,12 @@ def set_live_must_gather_images(pytestconfig):
         return
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
-    if live_deployment or ibm_cloud_platform:
+    if live_deployment or managed_ibmcloud_platform:
         update_live_must_gather_image()
     # For non GAed version of ODF as a W/A we need to use upstream must gather image
     # for IBM Cloud platform
     if (
-        ibm_cloud_platform
+        managed_ibmcloud_platform
         and not live_deployment
         and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11)
     ):
