@@ -852,7 +852,7 @@ def garbage_collector_webdriver():
 
 
 @retry(
-    (TimeoutException, WebDriverException),
+    exception_to_check=(TimeoutException, WebDriverException),
     tries=3,
     delay=3,
     backoff=2,
