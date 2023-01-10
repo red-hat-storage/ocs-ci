@@ -81,7 +81,7 @@ class TestLogsRotate(ManageTest):
 
         """
         pod_obj = self.get_pod_obj_based_on_id(pod_type)
-        output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
+        output_cmd = pod_obj.exec_cmd_on_pod(command="ls -lh /var/log/ceph")
         expected_string = (
             self.podtype_id[pod_type][2]
             if pod_type == "rgw"
@@ -90,6 +90,10 @@ class TestLogsRotate(ManageTest):
         cnt_logs = len(re.findall(expected_string, output_cmd))
         if cnt_logs != int(self.podtype_id[pod_type][3]) + 1:
             log.info(output_cmd)
+            log.error(
+                f"pod_type:{pod_type} cnt_logs_before_fill_log:"
+                f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
+            )
             return False
         return True
 
@@ -165,6 +169,7 @@ class TestLogsRotate(ManageTest):
             )
             pod_obj.exec_cmd_on_pod(
                 command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=530",
+                out_yaml_format=False,
                 container_name="log-collector",
             )
 
