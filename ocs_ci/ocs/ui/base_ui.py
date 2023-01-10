@@ -844,16 +844,19 @@ def garbage_collector_webdriver():
     """
     collected_objs = gc.get_objects()
     for obj in collected_objs:
-        if str(type(obj)) == "<class 'selenium.webdriver.chrome.webdriver.WebDriver'>":
+        if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
                 obj.close()
             except Exception as e:
                 logger.error(e)
 
 
-@retry(TimeoutException, tries=3, delay=3, backoff=2, func=garbage_collector_webdriver)
 @retry(
-    WebDriverException, tries=3, delay=3, backoff=2, func=garbage_collector_webdriver
+    (TimeoutException, WebDriverException),
+    tries=3,
+    delay=3,
+    backoff=2,
+    func=garbage_collector_webdriver,
 )
 def login_ui(console_url=None, username=None, password=None):
     """

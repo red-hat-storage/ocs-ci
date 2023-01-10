@@ -1819,6 +1819,7 @@ CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
 CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
     "ui", "chrome-proxy-extension-background.js.j2"
 )
+WEB_DRIVER_CHROME_OBJ_TYPE = "<class 'selenium.webdriver.chrome.webdriver.WebDriver'>"
 
 # storage system status
 STORAGE_SYSTEM_STATUS = {
