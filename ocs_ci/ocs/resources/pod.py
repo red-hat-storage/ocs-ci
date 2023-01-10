@@ -154,7 +154,13 @@ class Pod(OCS):
             raise
 
     def exec_cmd_on_pod(
-        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+        self,
+        command,
+        out_yaml_format=True,
+        secrets=None,
+        timeout=600,
+        container_name=None,
+        **kwargs,
     ):
         """
         Execute a command on a pod (e.g. oc rsh)
@@ -168,43 +174,15 @@ class Pod(OCS):
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
-
-        Returns:
-            Munch Obj: This object represents a returned yaml file
-        """
-        rsh_cmd = f"rsh {self.name} "
-        rsh_cmd += command
-        return self.ocp.exec_oc_cmd(
-            rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
-        )
-
-    def exec_cmd_on_container(
-        self,
-        container_name,
-        command,
-        out_yaml_format=False,
-        secrets=None,
-        timeout=600,
-        **kwargs,
-    ):
-        """
-        Execute a command on a container (e.g. oc rsh)
-
-        Args:
             container_name (str): The container name
-            command (str): The command to execute on the given pod
-            out_yaml_format (bool): whether to return yaml loaded python
-                object OR to return raw output
-
-            secrets (list): A list of secrets to be masked with asterisks
-                This kwarg is popped in order to not interfere with
-                subprocess.run(``**kwargs``)
-            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
-
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
-        cmd = f"exec {self.name} -c {container_name} {command}"
+        if container_name:
+            cmd = f"exec {self.name} -c {container_name} {command}"
+        else:
+            cmd = f"rsh {self.name} "
+            cmd += command
         return self.ocp.exec_oc_cmd(
             cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
