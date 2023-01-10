@@ -1658,6 +1658,7 @@ VAULT_CLIENT_CERT_PEM = os.path.join(DATA_DIR, "vault-client-cert.pem")
 VAULT_PRIVKEY_PEM = os.path.join(DATA_DIR, "vault-privkey.pem")
 VAULT_KMS_PROVIDER = "vault"
 HPCS_KMS_PROVIDER = "hpcs"
+KMIP_KMS_PROVIDER = "kmip"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"

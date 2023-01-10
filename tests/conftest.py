@@ -98,7 +98,7 @@ from ocs_ci.utility.environment_check import (
     get_status_after_execution,
 )
 from ocs_ci.utility.flexy import load_cluster_info
-from ocs_ci.utility.kms import is_kms_enabled
+from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
@@ -118,6 +118,7 @@ from ocs_ci.utility.utils import (
     skipif_upgraded_from,
     update_container_with_mirrored_image,
     skipif_ui_not_support,
+    run_cmd,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
@@ -4638,6 +4639,71 @@ def pv_encryption_vault_setup_factory(request):
             vault.remove_vault_policy()
         if vault.vault_namespace:
             vault.remove_vault_namespace()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="function")
+def pv_encryption_kmip_setup_factory(request):
+    """
+    Create KMIP resources and setup csi-kms-connection-details configMap
+
+    """
+    kmip = KMS.KMIP()
+
+    def factory():
+        """
+        Returns:
+            object: KMIP (KMS) object
+        """
+        kmip.update_kmip_env_vars()
+        get_ksctl_cli()
+        kmip.kmsid = create_unique_resource_name("test", "kmip")
+        kmip.kmip_secret_name = kmip.create_kmip_secret(type="csi")
+
+        # If csi-kms-connection-details exists, edit the configmap to add new kmip config
+        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            # new_kmsid = vault_resource_name
+            vdict = defaults.KMIP_CSI_CONNECTION_CONF
+            for key in vdict.keys():
+                old_key = key
+            vdict[kmip.kmsid] = vdict.pop(old_key)
+            vdict[kmip.kmsid]["KMS_SERVICE_NAME"] = kmip.kmsid
+            vdict[kmip.kmsid][
+                "KMIP_ENDPOINT"
+            ] = f"{kmip.kmip_endpoint}:{kmip.kmip_port}"
+            vdict[kmip.kmsid]["KMIP_SECRET_NAME"] = kmip.kmip_secret_name
+            vdict[kmip.kmsid]["TLS_SERVER_NAME"] = kmip.kmip_tls_server_name
+            KMS.update_csi_kms_vault_connection_details(vdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                kmip.kmsid = "1-kmip"
+                kmip.create_kmip_csi_kms_connection_details()
+
+        return kmip
+
+    def finalizer():
+        """
+        Remove the kmip config from csi-kms-connection-details configMap
+
+        """
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(kmip.kmsid)
+        if kmip.kmip_secret_name:
+            run_cmd(
+                f"oc delete secret {kmip.kmip_secret_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+        if kmip.kmip_key_identifier:
+            kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
 
     request.addfinalizer(finalizer)
     return factory

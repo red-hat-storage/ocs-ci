@@ -1531,8 +1531,10 @@ class KMIP(KMS):
         logger.info(f"Creating {type} KMIP secret ")
         if type == "csi":
             kmip_kms_secret = templating.load_yaml(constants.KMIP_CSI_KMS_SECRET)
-            self.kmip_key_identifier = self.create_ciphertrust_key()
-            kmip_kms_secret["data"]["UNIQUE_IDENTIFIER"] = self.kmip_key_identifier
+            self.kmip_key_identifier = self.create_ciphertrust_key(key_name=self.kmsid)
+            kmip_kms_secret["data"]["UNIQUE_IDENTIFIER"] = encode(
+                self.kmip_key_identifier
+            )
 
         elif type == "ocs":
             kmip_kms_secret = templating.load_yaml(constants.KMIP_OCS_KMS_SECRET)
@@ -1747,6 +1749,28 @@ class KMIP(KMS):
         if not is_kms_enabled():
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
+
+    def create_kmip_csi_kms_connection_details(
+        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    ):
+        """
+        Create KMIP specific csi-kms-connection-details
+        configmap resource
+
+        """
+
+        csi_kms_conn_details = templating.load_yaml(
+            constants.KMIP_CSI_KMS_CONNECTION_DETAILS
+        )
+        conn_str = csi_kms_conn_details["data"]["1-kmip"]
+        buf = json.loads(conn_str)
+        buf["KMIP_ENDPOINT"] = f"{self.kmip_endpoint}:{self.kmip_port}"
+        buf["KMIP_SECRET_NAME"] = self.kmip_secret_name
+        buf["TLS_SERVER_NAME"] = self.kmip_tls_server_name
+
+        csi_kms_conn_details["data"]["1-kmip"] = json.dumps(buf)
+        csi_kms_conn_details["metadata"]["namespace"] = namespace
+        self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
 
     def cleanup(self):
         """
