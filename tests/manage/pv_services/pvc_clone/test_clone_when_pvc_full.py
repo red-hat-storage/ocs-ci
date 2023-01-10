@@ -14,6 +14,8 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.resources import pod as res_pod
+
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +92,36 @@ class TestCloneWhenFull(ManageTest):
         log.info("Creating clone of the PVCs")
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
         log.info("Created clone of the PVCs. Cloned PVCs are Bound")
+
+        # Bug 2042318
+        for clone_pvc in cloned_pvcs:
+            pv = clone_pvc.get().get("spec").get("volumeName")
+            print(pv)
+            func_calls = ["failed"]
+            error_msg = f"{pv} failed to create clone from subvolume"
+            csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                selector=["csi-cephfsplugin-provisioner"],
+            )
+            relevant_pod_logs = None
+            for pod_obj in csi_cephfsplugin_pod_objs:
+                pod_log = res_pod.get_pod_logs(
+                    pod_name=pod_obj.name, container="csi-cephfsplugin"
+                )
+
+                for f_call in func_calls:
+                    if f_call in pod_log:
+                        relevant_pod_logs = pod_log
+                        log.info(f"Found '{f_call}' call in logs on pod {pod_obj.name}")
+                        break
+
+            assert (
+                relevant_pod_logs
+            ), f"None of {func_calls} were not found on any pod logs"
+            assert (
+                error_msg in relevant_pod_logs
+            ), f"Logs should contain the error message '{error_msg}'"
+            log.info(f"Logs contain the error message '{error_msg}'")
 
         # Attach the cloned PVCs to pods
         log.info("Attach the cloned PVCs to pods")
