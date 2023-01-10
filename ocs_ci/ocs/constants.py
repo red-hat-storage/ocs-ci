@@ -113,7 +113,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
-LVM_SC = "odf-lvm-vg1"
+LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
@@ -154,6 +154,7 @@ VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
+LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 
 # Provisioners
@@ -255,6 +256,7 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVMS = "lvms-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -420,6 +422,8 @@ CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml"
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
 
 CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
+
+CSI_LVMS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot-lvms.yaml")
 
 CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml")
 
@@ -1386,6 +1390,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "ocs-operator",
     "odf-csi-addons-operator",
     "odf-lvm-operator",
+    "lvms-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
@@ -1407,6 +1412,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
+        "lvms-operator",
         "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
@@ -1919,9 +1925,9 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app=vg-manager",
     },
     "default": {
-        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
-        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
-        "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
+        "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
+        "topolvm-controller_label": "app.kubernetes.io/component=topolvm-controller",
+        "topolvm-node_label": "app.kubernetes.io/component=topolvm-node",
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
     "411-old": {
