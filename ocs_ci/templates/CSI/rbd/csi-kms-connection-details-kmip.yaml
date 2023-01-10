@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  1-kmip: '{"KMS_PROVIDER":"kmip","KMS_SERVICE_NAME":"1-kmip","KMIP_ENDPOINT":"","KMIP_SECRET_NAME":"thales-kmip-csi-secret","TLS_SERVER_NAME":"kmip_all.ciphertrustmanager.local"}'
+kind: ConfigMap
+metadata:
+  name: csi-kms-connection-details
+  namespace: openshift-storage
