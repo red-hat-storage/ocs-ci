@@ -163,9 +163,9 @@ class TestLogsRotate(ManageTest):
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            pod_obj.exec_cmd_on_container(
-                container_name="log-collector",
+            pod_obj.exec_cmd_on_pod(
                 command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=530",
+                container_name="log-collector",
             )
 
         for pod_type in self.podtype_id:
