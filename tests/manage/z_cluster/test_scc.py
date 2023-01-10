@@ -2,9 +2,10 @@ import logging
 import pytest
 import time
 
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
-from ocs_ci.utility import templating
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     Pod,
@@ -12,7 +13,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_pod_node,
 )
-from ocs_ci.ocs.resources.deployment import get_deployments_having_label
+from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, tier2
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -80,7 +81,18 @@ class TestSCC:
             raise ex
 
     @pytest.fixture()
-    def setup(self, project_factory, pvc_factory, teardown_factory):
+    def setup(
+        self,
+        project_factory,
+        pvc_factory,
+        teardown_factory,
+        service_account_factory,
+        pod_factory,
+    ):
+        """
+        This is the setup for setting up the simple-app DeploymentConfig,
+        service-account and pvc
+        """
 
         # create a project for simple-app deployment
         project = project_factory(project_name="test-project")
@@ -89,55 +101,45 @@ class TestSCC:
         pvc = pvc_factory(
             project=project,
             access_mode=constants.ACCESS_MODE_RWO,
-            size=5,
+            size=20,
         )
         logger.info(f"Pvc created: {pvc.name}")
 
         # create service account
-        service_account_obj = helpers.create_serviceaccount(project.namespace)
-        helpers.add_scc_policy(service_account_obj.name, project.namespace)
-        teardown_factory(service_account_obj)
+        service_account_obj = service_account_factory(project=project)
 
-        # create simple-app deployment
-        simple_app_data = templating.load_yaml(constants.SIMPLE_APP_POD_YAML)
-        simple_app_data["metadata"]["namespace"] = project.namespace
-        simple_app_data["spec"]["template"]["spec"][
-            "serviceAccountName"
-        ] = service_account_obj.name
-        simple_app_data["spec"]["template"]["spec"]["volumes"][0][
-            "persistentVolumeClaim"
-        ]["claimName"] = pvc.name
-        simple_app_dc = helpers.create_resource(**simple_app_data)
-        teardown_factory(simple_app_dc)
-
-        simple_app_dc_obj = get_deployments_having_label(
-            label="app=simple-app", namespace=project.namespace
-        )[0]
+        # create simple-app DeploymentConfig
+        simple_app_dc = pod_factory(
+            pvc=pvc,
+            deployment_config=True,
+            service_account=service_account_obj,
+            security_context={"fsGroupChangePolicy": "OnRootMismatch"},
+            pod_name="simple-app",
+        )
+        logger.info(simple_app_dc.get())
+        simple_app_dc_obj = Deployment(**simple_app_dc.get())
         simple_app_pod = Pod(
             **get_pods_having_label(
-                label="app=simple-app", namespace=project.namespace
+                label="name=simple-app", namespace=project.namespace
             )[0]
-        )
-        helpers.wait_for_resource_state(
-            resource=simple_app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
         return simple_app_dc_obj, simple_app_pod, pvc.backed_pv_obj
 
     def test_fsgroupchangepolicy_when_depoyment_scaled(self, setup):
-
-        permission_map = {"2770": "", "0770": "", "0775": "", "2755": ""}
+        """
+        To test if any permission change/delay seen reconcile when app pod deployment with huge dumber of
+        object files and SCC setting 'fsGroupChangePolicy: OnRootMismatch'  are scaled down/up.
+        """
+        permission_map = {"2770": "", "0770": "", "0775": "", "2755": "", "0755": ""}
+        timeout = 300
 
         # run simple-app deployment
         simple_app_dc, simple_app_pod, pv = setup
 
-        # create performance directory inside the pod
-        cmd = "mkdir performance"
-        simple_app_pod.exec_cmd_on_pod(command=cmd)
-
         # create objects under performance directory
-        # cmd = "cd performance && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
-        # simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=1200)
+        # cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
+        # simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=5400)
 
         # get node where the simple-app pod scheduled
         node = get_pod_node(simple_app_pod).name
@@ -151,40 +153,91 @@ class TestSCC:
         )
         logger.info(f"Node Mount: {node_mount}")
 
-        for mode in permission_map.keys():
-
+        total_time = 0
+        for index, mode in enumerate(permission_map.keys()):
+            logger.info(f"PERMISSION: {mode}")
             cmd = f"chmod {mode} {node_mount}"
             OCP().exec_oc_debug_cmd(node=node, cmd_list=[cmd])
-            logger.info(f"PERMISSION: {mode}")
 
             cmd = f"ls -ld {node_mount}"
             mode_before = OCP().exec_oc_debug_cmd(node=node, cmd_list=[cmd]).split()[0]
-            logger.info(f"Mode before: {mode_before}")
+            logger.info(
+                f"Node mount permission before simple-app deployment scaling: {mode_before}"
+            )
 
             # scale down simple-app deployment to 0
-            # cmd = "scale deployment/simple-app --replicas=0 "
-            # OCP().exec_oc_cmd(command=cmd)
             simple_app_dc.scale(replicas=0)
+
             assert (
                 simple_app_dc.replicas == 0
             ), "Failed to scale down simple-app deployment"
 
-            time.sleep(3)
-            # cmd = "scale --replicas 1 deployment/simple-app"
-            # OCP().exec_oc_cmd(command=cmd)
+            retry = 20
+            while OCP(kind="pod").get(
+                resource_name=simple_app_pod.name, dont_raise=True
+            ):
+                logger.info(f"{simple_app_pod.name} is still terminating; Retrying")
+                if retry:
+                    retry -= 1
+                    time.sleep(3)
+                else:
+                    raise TimeoutExpiredError(
+                        f"{simple_app_pod.name} didnt scale down within the timeout limit!"
+                    )
+
+            # fetch the time before scale up
+            time_before = datetime.now()
+
+            # scale up simple-app deployment to 1
             simple_app_dc.scale(replicas=1)
             assert (
                 simple_app_dc.replicas == 1
             ), "Failed to scale up simple-app deployment"
             simple_app_pod = Pod(
                 **get_pods_having_label(
-                    label="app=simple-app", namespace="test-project"
+                    label="name=simple-app", namespace="test-project"
                 )[0]
             )
-            helpers.wait_for_resource_state(
-                resource=simple_app_pod, state=constants.STATUS_RUNNING, timeout=300
-            )
+            try:
+                helpers.wait_for_resource_state(
+                    resource=simple_app_pod,
+                    state=constants.STATUS_RUNNING,
+                    timeout=timeout,
+                )
+            except Exception:
+                logger.info(
+                    f"Pod {simple_app_pod.name} didn't reach Running state within expected time {timeout} seconds"
+                )
+                raise
+            logger.info("simple-app deployment is scaled up to replica 1")
 
+            # fetch the time after scale up and add the difference to permission_map
+            time_after = datetime.now()
+            permission_map[mode] = (time_after - time_before).total_seconds() / 60
+            total_time += permission_map[mode] * 60
+
+            # maximum allowed time for the pods to come up is 2 times the avg time taken with other permission
+            timeout = (total_time / (index + 1)) * 2
+
+            node_mount = (
+                OCP()
+                .exec_oc_debug_cmd(node=node, cmd_list=[f"df -h | grep {pv.name}"])
+                .split()[5]
+            )
             cmd = f"ls -ld {node_mount}"
             mode_after = OCP().exec_oc_debug_cmd(node=node, cmd_list=[cmd]).split()[0]
-            logger.info(f"Mode after: {mode_after}")
+            logger.info(
+                f"Node mount permission after simple-app deployment scaling: {mode_after}"
+            )
+
+            mount_mode = simple_app_pod.exec_cmd_on_pod(command="ls -ld /mnt").split()[
+                0
+            ]
+
+            assert (
+                mode_before == mode_after
+            ), "Permissions got changed for the node mount!"
+            assert (
+                mode_before == mount_mode
+            ), "Permissions got changed for the mount inside the pod!"
+        logger.info(f"Permission and time map: {permission_map}")
