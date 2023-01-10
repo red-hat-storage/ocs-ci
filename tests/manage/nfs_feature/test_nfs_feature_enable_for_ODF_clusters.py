@@ -117,24 +117,12 @@ class TestNfsEnable(ManageTest):
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
-        # custom_config_file = os.path.join(
-        #     constants.TOP_DIR, "conf/ocsci/custom_config.yaml"
-        # )
-        # with open(custom_config_file) as file_stream:
-        #     result = {
-        #         k: (v if v is not None else {})
-        #         for (k, v) in yaml.safe_load(file_stream).items()
-        #     }
-
-        # self.nfs_client_ip = config.RUN["ENV_DATA"].get("nfs_client_ip")
         self.nfs_client_ip = config.ENV_DATA["nfs_client_ip"]
         log.info(f"nfs_client_ip is: {self.nfs_client_ip}")
 
-        # self.nfs_client_user = config.RUN["ENV_DATA"].get("nfs_client_user")
         self.nfs_client_user = config.ENV_DATA["nfs_client_user"]
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
-        # self.nfs_client_pwd = config.RUN["ENV_DATA"].get("nfs_client_pwd")
         self.nfs_client_pwd = config.ENV_DATA["nfs_client_pwd"]
         log.info(f"nfs_client_pwd is: {self.nfs_client_pwd}")
 
@@ -290,7 +278,6 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4273")
-    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_outcluster_nfs_export(
         self,
         pod_factory,
@@ -488,7 +475,6 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4274")
-    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_multiple_nfs_based_PVs(
         self,
         pod_factory,
@@ -652,7 +638,6 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4293")
-    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_multiple_mounts_of_same_nfs_volume(
         self,
         pod_factory,
@@ -811,7 +796,6 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4312")
-    @pytest.mark.skip(reason="Skipped because of the issue: #6579")
     def test_external_nfs_client_can_write_read_new_file(
         self,
         pod_factory,
