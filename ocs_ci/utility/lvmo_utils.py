@@ -25,14 +25,15 @@ def lvmo_health_check_base():
     Returns:
         bool: True if all checks passed, raise exception otherwise
     """
+    lvm_clustername = get_lvm_cluster_name()
     oc_obj = OCP(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         kind="lvmcluster",
-        resource_name=constants.LVMCLUSTER,
+        resource_name=lvm_clustername,
     )
 
     try:
-        lvmcluster_status = oc_obj.get(constants.LVMCLUSTER)
+        lvmcluster_status = oc_obj.get(lvm_clustername)
         lvmcluster_status.get("status")["ready"]
     except (KeyError, TypeError) as e:
         log.info("lvm cluster status is not available")
@@ -126,13 +127,26 @@ def delete_lvm_cluster():
         execption if lvmcluster cant be deleted
     """
     clean_all_test_projects()
+    lvm_clustername = get_lvm_cluster_name()
     lmvcluster = OCP(kind="LVMCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     try:
-        lmvcluster.delete(resource_name=constants.LVMCLUSTER)
+        lmvcluster.delete(resource_name=lvm_clustername)
     except CommandFailed as e:
-        if f'lvmclusters.lvm.topolvm.io "{constants.LVMCLUSTER}" not found' not in str(
-            e
-        ):
+        if f'lvmclusters.lvm.topolvm.io "{lvm_clustername}" not found' not in str(e):
             raise e
         else:
             log.info("LVMCluster not found, procced with creation of new one")
+
+
+def get_lvm_cluster_name():
+    """
+    Get LVM clustername Dynamically
+
+    Returns:
+        (str) lvm cluster name.
+    """
+    if "ocs_registry_image" in config.DEPLOYMENT.keys():
+        if "lvms" in config.DEPLOYMENT["ocs_registry_image"]:
+            return constants.LVMSCLUSTER
+        return constants.LVMCLUSTER
+    return ""
