@@ -1,4 +1,0 @@
-ENV_DATA:
-  nfs_client_ip: "10.0.151.68"
-  user: "root"
-  password: ""

@@ -85,10 +85,23 @@ class TestNfsEnable(ManageTest):
         """
         Setup-Teardown for the class
 
-        Args:
-            host (str): Hostname or IP to connect.
-            private_key (str): Private key  to connect to load balancer
-            password (password): Password for host
+        Pre-Req:
+        By default in our jenkins jobs we are creating one of our custom config file,
+        so we can make sure
+        ENV_DATA:
+            nfs_client_ip: "10.0.151.68"
+            nfs_client_user: "root"
+            nfs_client_pwd: ""
+        these values are provided in all our automation runs in Jenkins.
+
+        But if someone will run locally, they will need to create custom config file and provide that via
+        --ocsci-conf in order to run the external nfs consume tests. Example:
+        ENV_DATA:
+            nfs_client_ip: "10.10.10.10"
+            nfs_client_user: "root"
+            nfs_client_pwd: ""
+
+        If this VM IP is not available in config, then the external nfs consume tests will be skipped.
 
         Steps:
         ---Setup---
