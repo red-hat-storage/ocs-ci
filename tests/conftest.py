@@ -4202,7 +4202,7 @@ def pvc_clone_factory_fixture(request):
         if not no_interface:
             clone_pvc_obj.interface = interface
         if status:
-            helpers.wait_for_resource_state(clone_pvc_obj, status)
+            helpers.wait_for_resource_state(clone_pvc_obj, status, timeout=120)
         return clone_pvc_obj
 
     def finalizer():
