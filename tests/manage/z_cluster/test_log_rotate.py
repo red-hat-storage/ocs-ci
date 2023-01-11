@@ -59,7 +59,7 @@ class TestLogsRotate(ManageTest):
         Get Pod Obj
 
         Args:
-            pod_type (str):
+            pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
             POD Obj:
@@ -74,7 +74,7 @@ class TestLogsRotate(ManageTest):
         Verify new log created on /var/log/ceph
 
         Args:
-            pod_type (str):
+            pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
             bool: True if a new log created, otherwise False
