@@ -775,24 +775,32 @@ def pytest_runtest_teardown(item):
             f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
         )
 
-        stats_log_dir = create_stats_dir()
-
-        peak_rss_file_detailed = os.path.join(
-            stats_log_dir, f"{item.name}.peak_rss_table"
-        )
-        peak_vms_file_detailed = os.path.join(
-            stats_log_dir, f"{item.name}.peak_vms_table"
-        )
-
         if ocsci_config.REPORTING.get("save_mem_report"):
+            stats_log_dir = create_stats_dir()
+
+            peak_rss_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_rss_table"
+            )
+            peak_vms_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_vms_table"
+            )
             peak_rss_table.to_csv(peak_rss_file_detailed)
             log.info(f"peak_rss_table saved to {peak_rss_file_detailed}")
             peak_vms_table.to_csv(peak_vms_file_detailed)
             log.info(f"peak_vms_table saved to {peak_vms_file_detailed}")
 
         global consumed_ram_start_test
-        mem_diff = consumed_ram_start_test - get_consumed_ram()
-        leaked_ram = mem_diff if mem_diff > 0 else 0
+        leaked_ram = consumed_ram_start_test - get_consumed_ram()
+        # rss of the process is drastically changes each measurement, meaning that
+        # processes may be closed immediately after measurement causing no leakage.
+        # leaked_ram intentionally left without check on negative digit to record
+        # gain of free memory
+        if leaked_ram > 0:
+            log.info(f"Leak RAM at the end of the test: {bytes2human(leaked_ram)}")
+        else:
+            log.info(
+                f"Free RAM gain at the end of the test: {bytes2human(leaked_ram * -1)}"
+            )
 
         df_ram_max, df_virt_max = get_peak_sum_mem()
 

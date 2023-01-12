@@ -109,7 +109,7 @@ def start_monitor_memory(interval: int = 3, create_csv: bool = False) -> MemoryM
     Start memory monitor Timer process
 
     Args:
-        interval (int): interval in sec to read measurements
+        interval (int): interval in sec to read measurements. Min interval is 2 sec
         create_csv (bool): create csv during test run. With this option it is possible
             to upload file as artifact (to be done) or preserve csv file in the system
     Returns:
@@ -117,9 +117,14 @@ def start_monitor_memory(interval: int = 3, create_csv: bool = False) -> MemoryM
     """
     global _mem_csv
     global mon
+    global _df
+    _df = pd.DataFrame(columns=_columns_df)
     _mem_csv_path = f"mem-data-{get_testrun_name()}"
     if create_csv:
         _mem_csv = tempfile.mktemp(prefix=_mem_csv_path)
+    # interval cannot be smaller than 2 sec, otherwise we get mistakes in calculation
+    if interval < 2:
+        interval = 2
     mon = MemoryMonitor(interval, _get_memory_per_process)
     mon.daemon = True
     mon.start()
@@ -212,10 +217,9 @@ def peak_mem_stats_human_readable(
 def get_peak_sum_mem() -> tuple:
     """
     get peak summarized memory stats for the test. Each test df file created anew.
-    spikes defined per measurment (once in a second by default)
+    spikes defined per measurment (once in three seconds by default -> start_monitor_memory())
     """
     df = _df.reset_index(drop=True)
-    df = df.drop_duplicates(subset=["name", "ts"])
     df = (
         df.drop(["status", "pid", "name"], axis=1).groupby(["ts"], as_index=False).sum()
     )
