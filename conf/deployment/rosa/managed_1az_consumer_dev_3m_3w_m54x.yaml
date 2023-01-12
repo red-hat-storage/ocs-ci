@@ -12,7 +12,7 @@ ENV_DATA:
   worker_instance_type: 'm5.4xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-consumer-dev"
-  region: 'us-east-1'
+  region: 'us-east-2'
 DEPLOYMENT:
   force_download_ocm_cli: True
   ocm_cli_version: '0.1.60'
