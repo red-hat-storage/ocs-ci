@@ -382,6 +382,7 @@ def check_all_obcs_status(namespace=None):
             obc_not_bound_list.append(status)
     return obc_bound_list, obc_not_bound_list
 
+
 def get_noobaa_pods_status():
     """
     Check Noobaa pod status to ensure it is in Running state.
@@ -406,7 +407,6 @@ def get_noobaa_pods_status():
             ret_val = False
     return ret_val
 
-<<<<<<< HEAD
 
 def check_memory_leak_in_noobaa_endpoint_log():
     """
@@ -432,7 +432,8 @@ def check_memory_leak_in_noobaa_endpoint_log():
         raise UnexpectedBehaviour(f"Log contains memory leak: {pod_list}")
     else:
         log.info("No memory leak is seen in Noobaa endpoint logs")
-=======
+
+
 def hsbench_setup():
     """
     Setup and install hsbench
