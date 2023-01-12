@@ -967,14 +967,24 @@ def login_ui(console_url=None, username=None, password=None):
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console(driver)
     try:
-        element = wait.until(
-            ec.element_to_be_clickable(
-                (
-                    login_loc["kubeadmin_login_approval"][1],
-                    login_loc["kubeadmin_login_approval"][0],
+        if username is not None:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["username_my_htpasswd"][1],
+                        login_loc["username_my_htpasswd"][0],
+                    )
                 )
             )
-        )
+        else:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
+                )
+            )
         element.click()
     except TimeoutException as e:
         take_screenshot(driver)
