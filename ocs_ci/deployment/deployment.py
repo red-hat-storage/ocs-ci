@@ -1252,20 +1252,29 @@ class Deployment(object):
         lvmo_version = config.ENV_DATA["ocs_version"]
         lvmo_version_without_period = lvmo_version.replace(".", "")
         label_version = constants.LVMO_POD_LABEL
-        create_catalog_source()
+
         # this is a workaround for 2103818
         lvm_full_version = get_lvm_full_version()
-        major, minor = lvm_full_version.split("-")
-        if int(minor) > 105 and major == "4.11.0":
-            lvmo_version_without_period = "411"
-        elif int(minor) < 105 and major == "4.11.0":
-            lvmo_version_without_period = "411-old"
 
-        file_version = lvmo_version_without_period
-        if "old" in file_version:
-            file_version = file_version.split("-")[0]
+        if config.DEPLOYMENT.get("stage_rh_osbs") or config.DEPLOYMENT.get(
+            "live_deployment"
+        ):
+            logger.info("Using stage or live image")
+            if config.DEPLOYMENT.get("stage_rh_osbs"):
+                create_catalog_source()
+        else:
+            create_catalog_source()
+            major, minor = lvm_full_version.split("-")
+            if int(minor) > 105 and major == "4.11.0":
+                lvmo_version_without_period = "411"
+            elif int(minor) < 105 and major == "4.11.0":
+                lvmo_version_without_period = "411-old"
 
-        if "lvms" in config.DEPLOYMENT["ocs_registry_image"]:
+            file_version = lvmo_version_without_period
+            if "old" in file_version:
+                file_version = file_version.split("-")[0]
+
+        if config.ENV_DATA.get("lvms"):
             cluster_config_file = os.path.join(
                 constants.TEMPLATE_DEPLOYMENT_DIR_LVMO,
                 "lvms-cluster.yaml",
@@ -1279,17 +1288,8 @@ class Deployment(object):
         if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
             lvmo_version_without_period = "default"
 
-        # this is a workaround for 2101343
-        if 110 > int(minor) > 98 and major == "4.11.0":
-            rolebinding_config_file = os.path.join(
-                constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
-            )
-            run_cmd(f"oc create -f {rolebinding_config_file} -n default")
-        # end of workaround
         lvm_bundle_filename = (
-            "lvms-bundle.yaml"
-            if "lvms" in config.DEPLOYMENT["ocs_registry_image"]
-            else "lvm-bundle.yaml"
+            "lvms-bundle.yaml" if config.ENV_DATA.get("lvms") else "lvm-bundle.yaml"
         )
 
         bundle_config_file = os.path.join(

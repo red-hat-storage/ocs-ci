@@ -231,7 +231,6 @@ class PVC(OCS):
             OCS: Kind Snapshot
 
         """
-        from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
 
         assert self.provisioner in constants.OCS_PROVISIONERS, "Unknown provisioner"
         if self.provisioner == "openshift-storage.rbd.csi.ceph.com":
@@ -248,8 +247,8 @@ class PVC(OCS):
             constants.LVM_PROVISIONER_4_11,
             constants.LVM_PROVISIONER,
         ]:
-            lvm_name = get_lvm_cluster_name()
-            if "lvms" in lvm_name:
+
+            if config.ENV_DATA.get("lvms"):
                 snap_yaml = constants.CSI_LVMS_SNAPSHOT_YAML
                 snapshotclass = constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVMS
             else:
