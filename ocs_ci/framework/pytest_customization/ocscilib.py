@@ -8,10 +8,11 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-
+import traceback
+import pandas as pd
 import pytest
 from junitparser import JUnitXml
-
+import ocs_ci.utility.memory
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
@@ -23,8 +24,6 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
-    END,
-    START,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -42,16 +41,16 @@ from ocs_ci.utility.utils import (
     get_ocs_build_number,
     get_testrun_name,
     load_config_file,
+    create_stats_dir,
 )
 
 from ocs_ci.utility.memory import (
-    ConsumedRamLogEntry,
-    consumed_ram_log,
     get_consumed_ram,
-    get_memory_consumption_report,
     start_monitor_memory,
     stop_monitor_memory,
+    get_peak_sum_mem,
 )
+from ocs_ci.ocs import constants
 from psutil._common import bytes2human
 
 __all__ = [
@@ -742,44 +741,104 @@ def set_log_level(config):
     log.setLevel(logging.getLevelName(level))
 
 
+global consumed_ram_start_test
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
-    start_monitor_memory()
-    consumed_memory = get_consumed_ram()
-    log_entry = ConsumedRamLogEntry(item.nodeid, START, consumed_memory)
-    consumed_ram_log.append(log_entry)
-    log.debug(
-        f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_memory)}"
-    )
+    try:
+        start_monitor_memory()
+
+        global consumed_ram_start_test
+        consumed_memory = get_consumed_ram()
+        consumed_ram_start_test = get_consumed_ram()
+
+        log.debug(
+            f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_memory)}"
+        )
+    except Exception:
+        log.warning(
+            f"Got exception while start monitor memory \n{traceback.format_exc()}"
+        )
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_teardown(item):
-    consumed_memory = get_consumed_ram()
-    log_entry = ConsumedRamLogEntry(item.nodeid, END, consumed_memory)
-    consumed_ram_log.append(log_entry)
-    _, peak_rss_table, peak_vms_table = stop_monitor_memory(save_csv=False)
+    try:
+        _, peak_rss_table, peak_vms_table = stop_monitor_memory(save_csv=False)
+        log.info(
+            f"Peak rss consumers during {item.nodeid}:\n"
+            f"{peak_rss_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+        log.info(
+            f"Peak vms consumers during {item.nodeid}:\n"
+            f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
 
-    log.debug(
-        f"Consumed memory at the end of TC {item.nodeid}: {consumed_memory / 1024 / 1024}MB"
-    )
-    log.info(
-        f"Peak rss consumed during {item.nodeid}: "
-        f"{peak_rss_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
-    )
-    log.info(
-        f"Peak vms consumed during {item.nodeid}: "
-        f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
-    )
+        stats_log_dir = create_stats_dir()
 
+        peak_rss_file_detailed = os.path.join(
+            stats_log_dir, f"{item.name}.peak_rss_table"
+        )
+        peak_vms_file_detailed = os.path.join(
+            stats_log_dir, f"{item.name}.peak_vms_table"
+        )
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_terminal_summary(terminalreporter):
-    yield
-    report_data = get_memory_consumption_report()
-    if report_data:
-        terminalreporter.section("Memory leak report")
-        terminalreporter.currentfspath = 1
-        terminalreporter.ensure_newline()
-        for line in report_data:
-            terminalreporter.write(f"{line}\n")
+        if ocsci_config.REPORTING.get("save_mem_report"):
+            peak_rss_table.to_csv(peak_rss_file_detailed)
+            log.info(f"peak_rss_table saved to {peak_rss_file_detailed}")
+            peak_vms_table.to_csv(peak_vms_file_detailed)
+            log.info(f"peak_vms_table saved to {peak_vms_file_detailed}")
+
+        global consumed_ram_start_test
+        mem_diff = consumed_ram_start_test - get_consumed_ram()
+        leaked_ram = mem_diff if mem_diff > 0 else 0
+
+        df_ram_max, df_virt_max = get_peak_sum_mem()
+
+        report_columns = [
+            "TC name",
+            "Peak total RAM consumed",
+            "Peak total VMS consumed",
+            "RAM leak",
+        ]
+        if "memory" not in ocsci_config.RUN:
+            ocsci_config.RUN["memory"] = pd.DataFrame(data=[], columns=report_columns)
+            ocsci_config.RUN["memory"].reset_index(drop=True, inplace=True)
+
+        df_report_line = pd.DataFrame(
+            [
+                [
+                    item.nodeid,
+                    df_ram_max[constants.RAM].values[0],
+                    df_virt_max[constants.VIRT].values[0],
+                    leaked_ram,
+                ]
+            ],
+            columns=report_columns,
+        )
+        df_report_line.reset_index(drop=True, inplace=True)
+        ocsci_config.RUN["memory"] = pd.concat(
+            [
+                ocsci_config.RUN["memory"],
+                df_report_line,
+            ]
+        )
+
+        log.debug("Report Memory performance report: ")
+        log.debug(
+            "\n".join(
+                ocsci_config.RUN["memory"].to_markdown(
+                    headers="keys", index=False, tablefmt="grid"
+                )
+            )
+        )
+    except Exception:
+        log.warning(
+            f"Got exception while stop monitor memory \n{traceback.format_exc()}"
+        )
+    finally:
+        if hasattr(ocs_ci.utility.memory, "mon"):
+            mon = ocs_ci.utility.memory.mon
+            if mon and mon.is_alive():
+                mon.cancel()

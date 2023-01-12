@@ -19,6 +19,7 @@ import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import pandas as pd
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 import pexpect
@@ -52,6 +53,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
+from psutil._common import bytes2human
 
 
 log = logging.getLogger(__name__)
@@ -1549,6 +1551,34 @@ def move_summary_to_top(soup):
         main_header.insert_after(tag)
 
 
+def add_mem_stats(soup):
+    """
+    Add performance summary to the soup to print the table:
+    columns = ['TC name', 'Peak RAM consumed', 'Peak VMS consumed', 'RAM leak']
+    """
+    if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.Dataframe):
+        mem_table = config.RUN["memory"]
+        mem_table["Peak RAM consumed"] = mem_table["Peak RAM consumed"].apply(
+            bytes2human
+        )
+        mem_table["Peak VMS consumed"] = mem_table["Peak VMS consumed"].apply(
+            bytes2human
+        )
+        mem_div = soup.new_tag("div")
+        mem_h2_tag = soup.new_tag("h2")
+        mem_h2_tag.string = "Memory Test Performance:"
+        mem_div.append(mem_h2_tag)
+        mem_div.append(
+            pd.DataFrame(config.RUN["memory"]).to_markdown(
+                headers="keys", index=False, tablefmt="grid"
+            )
+        )
+    else:
+        log.debug(
+            "No memory records was found, skip Memory Test Performance email reporting"
+        )
+
+
 def email_reports(session):
     """
     Email results of test run
@@ -1592,6 +1622,7 @@ def email_reports(session):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
     part1 = MIMEText(soup, "html")
+    add_mem_stats(soup)
     msg.attach(part1)
     try:
         s = smtplib.SMTP(config.REPORTING["email"]["smtp_server"])
@@ -1600,6 +1631,21 @@ def email_reports(session):
         log.info(f"Results have been emailed to {recipients}")
     except Exception:
         log.exception("Sending email with results failed!")
+
+
+def save_reports():
+    """
+    Save reports of test run to slave
+
+    """
+    try:
+        if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.DataFrame):
+            stats_dir = create_stats_dir()
+            mem_report_file = os.path.join(stats_dir, "session_mem_report_file")
+            config.RUN["memory"].to_csv(mem_report_file, index=False)
+        log.info(f"Memory performance report saved to '{mem_report_file}'")
+    except Exception:
+        log.info(f"Failed save reports to slave \n{traceback.format_exc()}")
 
 
 def get_cluster_version_info():
@@ -1933,6 +1979,18 @@ def create_directory_path(path):
         os.makedirs(path)
     else:
         log.debug(f"{path} already exists")
+
+
+def create_stats_dir():
+    """
+    create directory for Test run performance stats
+    """
+    stats_log_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"stats_log_dir_{config.RUN['run_id']}",
+    )
+    create_directory_path(stats_log_dir)
+    return stats_log_dir
 
 
 def ocsci_log_path():

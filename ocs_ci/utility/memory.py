@@ -6,8 +6,6 @@ Module for memory related util functions.
 import os
 import logging
 import tempfile
-from collections import namedtuple
-from itertools import groupby
 import numpy as np
 import pandas as pd
 from psutil import Process, ZombieProcess, NoSuchProcess
@@ -19,10 +17,6 @@ from ocs_ci.utility.utils import get_testrun_name
 
 current_factory = logging.getLogRecordFactory()
 log = logging.getLogger(__name__)
-
-ConsumedRamLogEntry = namedtuple(
-    "ConsumedRamLogEntry", ("nodeid", "on", "consumed_ram")
-)
 
 
 class MemoryMonitor(Timer):
@@ -36,9 +30,9 @@ class MemoryMonitor(Timer):
 
 
 consumed_ram_log = []
-_proc = Process(os.getpid())
-_df = pd.DataFrame(columns=["pid", "name", "ts", "rss", "vms", "status"])
-_mon: MemoryMonitor
+_columns_df = ["pid", "name", "ts", "rss", "vms", "status"]
+_df = pd.DataFrame(columns=_columns_df)
+mon: MemoryMonitor
 _mem_csv: str
 
 
@@ -46,10 +40,12 @@ def _get_memory_per_process():
     """
     Function to add memory rss and vms of current process and all subprocesses to dataframe obj (_df)
     """
-    _rec_memory(_proc)
-    children = _proc.children(recursive=True)
+    proc = Process(os.getpid())
+    _rec_memory(proc)
+    children = proc.children(recursive=True)
     for child in children:
         _rec_memory(child)
+    del proc
 
 
 def _rec_memory(proc: Process):
@@ -58,17 +54,30 @@ def _rec_memory(proc: Process):
     to structure: "pid", "name", "ts", "rss", "vms", "status"
     """
     try:
-        _df.loc[len(_df)] = [
-            proc.pid,
-            proc.name(),
-            pd.Timestamp.now(),
-            get_consumed_ram(proc),
-            get_consumed_virt_mem(proc),
-            proc.status(),
-        ]
+        global _df
+        _df = pd.concat(
+            [
+                _df,
+                pd.DataFrame(
+                    [
+                        [
+                            proc.pid,
+                            proc.name(),
+                            pd.Timestamp.now().strftime("%Y-%m-%d %X"),
+                            get_consumed_ram(proc),
+                            get_consumed_virt_mem(proc),
+                            proc.status(),
+                        ]
+                    ],
+                    columns=_columns_df,
+                ),
+            ]
+        )
     except ZombieProcess:
         pass
     except NoSuchProcess:
+        pass
+    except ValueError:
         pass
 
 
@@ -107,13 +116,14 @@ def start_monitor_memory(interval: int = 3, create_csv: bool = False) -> MemoryM
          MemoryMonitor: monitor object MemoryMonitor(Timer)
     """
     global _mem_csv
-    global _mon
+    global mon
     _mem_csv_path = f"mem-data-{get_testrun_name()}"
     if create_csv:
         _mem_csv = tempfile.mktemp(prefix=_mem_csv_path)
-    _mon = MemoryMonitor(interval, _get_memory_per_process)
-    _mon.start()
-    return _mon
+    mon = MemoryMonitor(interval, _get_memory_per_process)
+    mon.daemon = True
+    mon.start()
+    return mon
 
 
 def stop_monitor_memory(save_csv: bool = False) -> tuple:
@@ -129,32 +139,17 @@ def stop_monitor_memory(save_csv: bool = False) -> tuple:
                 table with results for rss peak memory processes,
                 table with results for vms peak memory processes)
     """
-    global _mon
+    global mon
+    mon.cancel()
     global _mem_csv
-    _mon.cancel()
     if save_csv:
         _df.to_csv(_mem_csv)
     else:
         _mem_csv = None
-    table_rss = read_peak_mem_stats(constants.RAM, _df)
-    table_vms = read_peak_mem_stats(constants.VIRT, _df)
-    del _mon
+    table_rss = peak_mem_stats_human_readable(constants.RAM, _df)
+    table_vms = peak_mem_stats_human_readable(constants.VIRT, _df)
+    del mon
     return _mem_csv, table_rss, table_vms
-
-
-def get_memory_consumption_report() -> list:
-    """
-    Get the memory consumption report data
-    Returns:
-        list: lines of the report with consumed memory by TC
-    """
-    report_data = []
-    grouped = groupby(consumed_ram_log, lambda entry: entry.nodeid)
-    for nodeid, (start_entry, end_entry) in grouped:
-        leaked = end_entry.consumed_ram - start_entry.consumed_ram
-        if leaked > constants.LEAK_LIMIT:
-            report_data.append("LEAKED {}MB in {}".format(bytes2human(leaked), nodeid))
-    return report_data
 
 
 def read_peak_mem_stats(
@@ -162,6 +157,8 @@ def read_peak_mem_stats(
 ) -> pd.DataFrame:
     """
     Read peak memory stats from Dataframe or csv file. Processes with stat above avg will be taken
+    Table will be reduced to only processes with stat > avg(stat) if number of processes will be
+    larger than 10
 
     Args:
         stat (constants): stat either 'rss' or 'vms' (constants.RAM | constants.VIRT)
@@ -169,11 +166,11 @@ def read_peak_mem_stats(
         csv_path (str): path to csv file with structure: index,pid,name,ts,rss,vms,status;
                         will be ignored in case if df != None
 
-    Returns: DataFrame similar to:
-    name                                     proc_start                    proc_end           rss_peak
-    0                    Google Chrome  2022-12-23 14:25:36.301757  2022-12-23 14:27:32.194759  156 MB
-    1  Google Chrome Helper (Renderer)  2022-12-23 14:25:39.451159  2022-12-23 14:27:32.214615  784 MB
-    2                           Python  2022-12-23 14:25:22.814883  2022-12-23 14:27:32.151046  228 MB
+    Returns: pd.DataFrame similar to:
+    name                                     proc_start             proc_end                rss_peak
+    0                    Google Chrome  2022-12-23 14:25:36      2022-12-23 14:27:32         156 MB
+    1  Google Chrome Helper (Renderer)  2022-12-23 14:25:39      2022-12-23 14:27:32         784 MB
+    2                           Python  2022-12-23 14:25:22      2022-12-23 14:27:32         228 MB
     """
     excluded_stat = list(filter(lambda x: x != stat, [constants.RAM, constants.VIRT]))[
         0
@@ -181,16 +178,62 @@ def read_peak_mem_stats(
     if df is None:
         df = pd.read_csv(csv_path)
     df.reset_index(drop=True)
-    stat_high = df.loc[df[stat] > (df[stat].mean())]
-    high_pid = stat_high.pid.unique()
-    stat_high_full = df[df.pid.isin(high_pid)]
+    if len(df.name.unique()) > 10:
+        stat_high = df.loc[df[stat] > (df[stat].mean())]
+        high_pid = stat_high.pid.unique()
+        df = df[df.pid.isin(high_pid)]
     table = (
-        stat_high_full.drop(["status", excluded_stat], axis=1)
+        df.drop(["status", excluded_stat], axis=1)
         .groupby("name", as_index=False)
         .agg({"ts": [np.min, np.max], stat: [np.max]})
     )
     table = pd.DataFrame(
         table.values, columns=["name", "proc_start", "proc_end", f"{stat}_peak"]
     )
-    table[f"{stat}_peak"] = table[f"{stat}_peak"].apply(bytes2human)
     return table
+
+
+def peak_mem_stats_human_readable(
+    stat: constants, df: pd.DataFrame = None, csv_path: str = None
+) -> pd.DataFrame:
+    """
+    make peak mem stats dataframe human readable
+    dataframe columns = [name, proc_start, proc_end, rss_peak]
+
+    Returns:
+        pd.DataFrame: peak memory stats dataframe
+    """
+    df = read_peak_mem_stats(stat, df, csv_path)
+    df = df.sort_values(by=f"{stat}_peak", ascending=False)
+    df[f"{stat}_peak"] = df[f"{stat}_peak"].apply(bytes2human)
+    return df
+
+
+def get_peak_sum_mem() -> tuple:
+    """
+    get peak summarized memory stats for the test. Each test df file created anew.
+    spikes defined per measurment (once in a second by default)
+    """
+    df = _df.reset_index(drop=True)
+    df = df.drop_duplicates(subset=["name", "ts"])
+    df = (
+        df.drop(["status", "pid", "name"], axis=1).groupby(["ts"], as_index=False).sum()
+    )
+
+    ram_max = df[df[constants.RAM] == df[constants.RAM].max()].drop(
+        [constants.VIRT], axis=1
+    )
+    virt_max = df[df[constants.VIRT] == df[constants.VIRT].max()].drop(
+        [constants.RAM], axis=1
+    )
+
+    log.info(
+        "Peak total ram memory consumption: "
+        f"{bytes2human(int(ram_max[constants.RAM]))} at {ram_max['ts'].values[0]}"
+    )
+    log.info(
+        "Peak total virtual memory consumption: "
+        f"{bytes2human(int(virt_max[constants.VIRT]))} at {ram_max['ts'].values[0]}"
+    )
+
+    return ram_max, virt_max
