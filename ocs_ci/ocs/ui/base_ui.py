@@ -991,25 +991,10 @@ def login_ui(console_url=None, username=None, password=None):
         copy_dom(driver)
         logger.error(e)
 
-    if username is not None:
-        try:
-            element = wait.until(
-                ec.element_to_be_clickable(
-                    (
-                        login_loc["username_my_htpasswd"][1],
-                        login_loc["username_my_htpasswd"][0],
-                    )
-                )
-            )
-            element.click()
-        except TimeoutException as e:
-            take_screenshot(driver)
-            logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
     take_screenshot(driver)
-
     copy_dom(driver)
     if username is None:
         username = constants.KUBEADMIN
