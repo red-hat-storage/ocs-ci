@@ -1234,6 +1234,14 @@ class VSPHEREUPI(VSPHEREBASE):
                         installer_release_branch,
                         force_checkout=True,
                     )
+
+                    # comment sensitive variable as current terraform version doesn't support
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        >= version.VERSION_4_11
+                    ):
+                        comment_sensitive_var()
+
                     if (
                         original_installed_ocp_version_major_minor_obj
                         == version.VERSION_4_10
