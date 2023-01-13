@@ -1096,7 +1096,7 @@ class OCP(object):
         resource_name = resource_name or self.resource_name
         cmd = f"annotate {self.kind} {resource_name} {annotation}"
         if overwrite:
-            cmd += f" --overwrite"
+            cmd += " --overwrite"
         log.info(f"Annotate {self.kind} {resource_name} with '{annotation}'")
         result = self.exec_oc_cmd(cmd)
         return result
