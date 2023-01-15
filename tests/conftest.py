@@ -3378,15 +3378,16 @@ def htpasswd_identity_provider(request):
 
     def finalizer():
         """
-        Remove HTPasswd IdP
+        Remove identityProviders
 
         """
-        # TODO(fbalak): remove HTPasswd identityProvider
-        # cluster.ocp.patch(
-        #     resource_name='cluster',
-        #     params=f'[{ "op": "remove", "path": "/spec/identityProviders" }]'
-        # )
-        # users.delete_htpasswd_secret()
+        log.info("Delete identityProviders from OAuth yaml file")
+        cluster_oauth_obj = OCP(
+            resource_name="cluster",
+            kind=constants.OAUTH,
+        )
+        params = '[{"op": "remove", "path": "/spec/identityProviders"}]'
+        cluster_oauth_obj.patch(params=params, format_type="json")
 
     request.addfinalizer(finalizer)
     return cluster

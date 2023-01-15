@@ -64,6 +64,41 @@ def delete_htpasswd_secret():
     exec_cmd(cmd)
 
 
+def delete_user(user_name=None):
+    """
+    Delete user
+
+    Args:
+        user_name (str): the user to delete
+    """
+    if user_name is None:
+        cmd = "oc delete user --all"
+    else:
+        cmd = f"oc delete user {user_name}"
+    try:
+        exec_cmd(cmd)
+    except Exception as e:
+        logging.error(e)
+
+
+def delete_identity(user_name=None):
+    """
+    Delete identity
+
+    Args:
+        user_name (str): the user to delete
+
+    """
+    if user_name is None:
+        cmd = f"oc delete identity --all"
+    else:
+        cmd = f"oc delete identity my_htpasswd_provider:{user_name}"
+    try:
+        exec_cmd(cmd)
+    except Exception as e:
+        logging.error(e)
+
+
 def create_htpasswd_idp():
     """
     Create OAuth identity provider of HTPasswd type. It uses htpass-secret
@@ -135,7 +170,7 @@ def user_factory(request, htpasswd_path):
 
         # : is a delimiter in htpasswd file and it will ensure that only full
         # usernames are deleted
-        _users.append(f"{username}:")
+        _users.append(username)
 
         return (username, password)
 
@@ -144,13 +179,9 @@ def user_factory(request, htpasswd_path):
         Delete all users created by the factory
 
         """
-        with open(htpasswd_path) as f:
-            htpasswd = f.readlines()
-        new_htpasswd = [line for line in htpasswd if not line.startswith(tuple(_users))]
-        with open(htpasswd_path, "w+") as f:
-            for line in new_htpasswd:
-                f.write(line)
-        create_htpasswd_secret(htpasswd_path, replace=True)
+        for user in _users:
+            delete_user(user)
+            delete_identity(user)
 
     request.addfinalizer(_finalizer)
     return _factory
