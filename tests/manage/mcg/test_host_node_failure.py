@@ -221,7 +221,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         wait_for_pods_to_be_running(timeout=300)
 
         # Check cluster health
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=30)
 
         # Creates bucket then writes, reads and deletes objects
         # TODO: Reduce timeout in future versions once 2028559 is fixed
