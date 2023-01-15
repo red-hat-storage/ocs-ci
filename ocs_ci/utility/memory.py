@@ -151,8 +151,8 @@ def stop_monitor_memory(save_csv: bool = False) -> tuple:
         _df.to_csv(_mem_csv)
     else:
         _mem_csv = None
-    table_rss = peak_mem_stats_human_readable(constants.RAM, _df)
-    table_vms = peak_mem_stats_human_readable(constants.VIRT, _df)
+    table_rss = peak_mem_stats_human_readable(constants.RAM)
+    table_vms = peak_mem_stats_human_readable(constants.VIRT)
     del mon
     return _mem_csv, table_rss, table_vms
 
@@ -177,16 +177,20 @@ def read_peak_mem_stats(
     1  Google Chrome Helper (Renderer)  2022-12-23 14:25:39      2022-12-23 14:27:32         784 MB
     2                           Python  2022-12-23 14:25:22      2022-12-23 14:27:32         228 MB
     """
-    excluded_stat = list(filter(lambda x: x != stat, [constants.RAM, constants.VIRT]))[
-        0
-    ]
+
     if df is None:
         df = pd.read_csv(csv_path)
+
+    df = catch_empty_mem_df(df)
+
     df.reset_index(drop=True)
     if len(df.name.unique()) > 10:
         stat_high = df.loc[df[stat] > (df[stat].mean())]
         high_pid = stat_high.pid.unique()
         df = df[df.pid.isin(high_pid)]
+    excluded_stat = list(filter(lambda x: x != stat, [constants.RAM, constants.VIRT]))[
+        0
+    ]
     table = (
         df.drop(["status", excluded_stat], axis=1)
         .groupby("name", as_index=False)
@@ -199,19 +203,24 @@ def read_peak_mem_stats(
 
 
 def peak_mem_stats_human_readable(
-    stat: constants, df: pd.DataFrame = None, csv_path: str = None
+    stat: constants, csv_path: str = None
 ) -> pd.DataFrame:
     """
-    make peak mem stats dataframe human readable
+    make peak mem stats dataframe human-readable
     dataframe columns = [name, proc_start, proc_end, rss_peak]
 
+    Args:
+        stat (constants): stat either 'rss' or 'vms' (constants.RAM | constants.VIRT)
+        csv_path (str): path to csv file with structure: index,pid,name,ts,rss,vms,status;
+                        will be ignored in case if df != None
     Returns:
         pd.DataFrame: peak memory stats dataframe
     """
-    df = read_peak_mem_stats(stat, df, csv_path)
-    df = df.sort_values(by=f"{stat}_peak", ascending=False)
-    df[f"{stat}_peak"] = df[f"{stat}_peak"].apply(bytes2human)
-    return df
+    global _df
+    df_peak = read_peak_mem_stats(stat, _df, csv_path)
+    df_peak = df_peak.sort_values(by=f"{stat}_peak", ascending=False)
+    df_peak[f"{stat}_peak"] = df_peak[f"{stat}_peak"].apply(bytes2human)
+    return df_peak
 
 
 def get_peak_sum_mem() -> tuple:
@@ -219,6 +228,10 @@ def get_peak_sum_mem() -> tuple:
     get peak summarized memory stats for the test. Each test df file created anew.
     spikes defined per measurment (once in three seconds by default -> start_monitor_memory())
     """
+    global _df
+    _df = catch_empty_mem_df(_df)
+
+    _df = _df.drop_duplicates(subset=["pid", "ts"], keep="last").reset_index(drop=True)
     df = _df.reset_index(drop=True)
     df = (
         df.drop(["status", "pid", "name"], axis=1).groupby(["ts"], as_index=False).sum()
@@ -231,13 +244,38 @@ def get_peak_sum_mem() -> tuple:
         [constants.RAM], axis=1
     )
 
-    log.info(
-        "Peak total ram memory consumption: "
-        f"{bytes2human(int(ram_max[constants.RAM]))} at {ram_max['ts'].values[0]}"
-    )
-    log.info(
-        "Peak total virtual memory consumption: "
-        f"{bytes2human(int(virt_max[constants.VIRT]))} at {ram_max['ts'].values[0]}"
-    )
+    # catch psutil and calculation failures for rss and vms cells and fill with failure markers
+    # therefore we may see number of failures and ignore them in report csv file while analysing
+    try:
+        log.info(
+            "Peak total ram memory consumption: "
+            f"{bytes2human(ram_max[constants.RAM].values[0].astype(int))} at {ram_max['ts'].values[0]}"
+        )
+    except IndexError:
+        ram_max = pd.DataFrame(columns=ram_max.columns, data=[[-1, pd.to_datetime(0)]])
+    try:
+        log.info(
+            "Peak total virtual memory consumption: "
+            f"{bytes2human(virt_max[constants.VIRT].values[0].astype(int))} at {virt_max['ts'].values[0]}"
+        )
+    except IndexError:
+        virt_max = pd.DataFrame(
+            columns=virt_max.columns, data=[[-1, pd.to_datetime(0)]]
+        )
 
     return ram_max, virt_max
+
+
+def catch_empty_mem_df(df: pd.DataFrame):
+    """
+    routine function to catch psutil failures and fill memory dataframe with failure markers,
+    therefore we may see number of failures and ignore them on examination stage
+    """
+    if df.empty:
+        log.debug("Dataframe is empty, reinitializing")
+        global _columns_df
+        df = pd.DataFrame(
+            columns=_columns_df,
+            data=[[0, "empty_name", pd.to_datetime(0), -1, -1, "empty_status"]],
+        )
+    return df
