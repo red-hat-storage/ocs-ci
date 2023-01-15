@@ -90,7 +90,7 @@ def delete_identity(user_name=None):
 
     """
     if user_name is None:
-        cmd = f"oc delete identity --all"
+        cmd = "oc delete identity --all"
     else:
         cmd = f"oc delete identity my_htpasswd_provider:{user_name}"
     try:
