@@ -1639,11 +1639,17 @@ def save_reports():
 
     """
     try:
-        if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.DataFrame):
+        if (
+            "memory" in config.RUN
+            and isinstance(config.RUN["memory"], pd.DataFrame)
+            and not config.RUN["memory"].empty
+        ):
             stats_dir = create_stats_dir()
             mem_report_file = os.path.join(stats_dir, "session_mem_report_file")
             config.RUN["memory"].to_csv(mem_report_file, index=False)
-        log.info(f"Memory performance report saved to '{mem_report_file}'")
+            log.info(f"Memory performance report saved to '{mem_report_file}'")
+        else:
+            log.info(f"Memory performance report not saved - no data")
     except Exception:
         log.info(f"Failed save reports to slave \n{traceback.format_exc()}")
 
