@@ -1381,6 +1381,7 @@ MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
 MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
 # following packages are required for live disconnected cluster installation
 # (all images related to those packages will be mirrored to the mirror registry)
+# for OCP <= 4.10
 DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
@@ -1390,11 +1391,10 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "ocs-operator",
     "odf-csi-addons-operator",
     "odf-lvm-operator",
-    "lvms-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
-
+# for OCP >= 4.11
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.11": [
         "cluster-logging",
@@ -1409,11 +1409,12 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.12": [
         "cluster-logging",
         "elasticsearch-operator",
+        # we might need to uncomment next line, if we would like to use it in
+        # disconnected deployment:
+        # "lvms-operator",
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
-        "lvms-operator",
-        "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
