@@ -105,6 +105,7 @@ class TestListOfObjects(E2ETest):
         )
 
     @bugzilla("2110504")
+    @skipif_ocs_version("<4.12")
     @pytest.mark.polarion_id("OCS-4650")
     def test_list_with_prefix_delimiter(self, bucket_factory, scale_cli_pod, mcg_obj):
         """
