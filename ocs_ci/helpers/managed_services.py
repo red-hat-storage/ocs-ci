@@ -2,21 +2,15 @@
 Managed Services related functionalities
 """
 import logging
-import yaml
 
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import (
-    get_osd_running_nodes,
-    get_worker_nodes,
-    get_node_objs,
-    get_node_pods,
-)
+from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.utility.utils import convert_device_size, run_cmd
+from ocs_ci.utility.utils import convert_device_size
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
