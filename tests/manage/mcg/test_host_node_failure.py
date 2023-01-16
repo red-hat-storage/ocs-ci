@@ -16,7 +16,6 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
-from ocs_ci.ocs.node import get_nodes, recover_node_to_ready_state
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
@@ -56,19 +55,6 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
             self.sanity_helpers = SanityExternalCluster()
         else:
             self.sanity_helpers = Sanity()
-
-    @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
-        """
-        Make sure all the worker nodes are up again
-        """
-
-        def finalizer():
-            wnodes = get_nodes()
-            for n in wnodes:
-                recover_node_to_ready_state(n)
-
-        request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames=["noobaa_sts", "respin_noobaa_operator"],
@@ -221,7 +207,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         wait_for_pods_to_be_running(timeout=300)
 
         # Check cluster health
-        self.sanity_helpers.health_check(tries=30)
+        self.sanity_helpers.health_check(tries=40)
 
         # Creates bucket then writes, reads and deletes objects
         # TODO: Reduce timeout in future versions once 2028559 is fixed
