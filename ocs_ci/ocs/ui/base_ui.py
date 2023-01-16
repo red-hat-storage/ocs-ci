@@ -847,7 +847,7 @@ def garbage_collector_webdriver():
         if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
                 obj.close()
-            except Exception as e:
+            except WebDriverException as e:
                 logger.error(e)
 
 
@@ -960,7 +960,7 @@ def login_ui(console_url=None, username=None, password=None):
     else:
         raise ValueError(f"Not Support on {browser}")
 
-    wait = WebDriverWait(driver, 60)
+    wait = WebDriverWait(driver, 40)
     driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
@@ -990,7 +990,6 @@ def login_ui(console_url=None, username=None, password=None):
         take_screenshot(driver)
         copy_dom(driver)
         logger.error(e)
-
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
@@ -1029,6 +1028,7 @@ def close_browser(driver):
     take_screenshot(driver)
     copy_dom(driver)
     driver.close()
+    garbage_collector_webdriver()
 
 
 def proceed_to_login_console(driver: WebDriver):
