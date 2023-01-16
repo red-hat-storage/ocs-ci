@@ -1649,7 +1649,7 @@ def save_reports():
             config.RUN["memory"].to_csv(mem_report_file, index=False)
             log.info(f"Memory performance report saved to '{mem_report_file}'")
         else:
-            log.info(f"Memory performance report not saved - no data")
+            log.info("Memory performance report not saved - no data")
     except Exception:
         log.info(f"Failed save reports to slave \n{traceback.format_exc()}")
 
