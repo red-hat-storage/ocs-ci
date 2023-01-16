@@ -216,7 +216,7 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.6'
+  rosa_cli_version: '1.2.11'
   appliance_mode: true
   ms_osd_pod_memory: "5700Mi"
 
