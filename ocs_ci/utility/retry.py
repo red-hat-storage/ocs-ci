@@ -5,7 +5,9 @@ from functools import wraps
 logger = logging.getLogger(__name__)
 
 
-def retry(exception_to_check, tries=4, delay=3, backoff=2, text_in_exception=None):
+def retry(
+    exception_to_check, tries=4, delay=3, backoff=2, text_in_exception=None, func=None
+):
     """
     Retry calling the decorated function using exponential backoff.
 
@@ -15,6 +17,7 @@ def retry(exception_to_check, tries=4, delay=3, backoff=2, text_in_exception=Non
         delay: initial delay between retries in seconds
         backoff: backoff multiplier e.g. value of 2 will double the delay each retry
         text_in_exception: Retry only when text_in_exception is in the text of exception
+        func: function for garbage collector
     """
 
     def deco_retry(f):
@@ -23,6 +26,8 @@ def retry(exception_to_check, tries=4, delay=3, backoff=2, text_in_exception=Non
             mtries, mdelay = tries, delay
             while mtries > 1:
                 try:
+                    if func is not None:
+                        func()
                     return f(*args, **kwargs)
                 except exception_to_check as e:
                     if text_in_exception:
@@ -39,6 +44,8 @@ def retry(exception_to_check, tries=4, delay=3, backoff=2, text_in_exception=Non
                     time.sleep(mdelay)
                     mtries -= 1
                     mdelay *= backoff
+                    if func is not None:
+                        func()
             return f(*args, **kwargs)
 
         return f_retry
