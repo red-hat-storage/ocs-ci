@@ -55,6 +55,15 @@ else:
                 "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2651")
             ),
         ]
+    if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.12"):
+        argvalues.append(
+            pytest.param(
+                "v1",
+                constants.KMIP_KMS_PROVIDER,
+                False,
+                marks=pytest.mark.polarion_id("OCS-4687"),
+            )
+        )
 
 
 @tier1
@@ -81,6 +90,7 @@ class TestEncryptedRbdClone(ManageTest):
         kms_provider,
         use_vault_namespace,
         pv_encryption_kms_setup_factory,
+        pv_encryption_kmip_setup_factory,
         project_factory,
         multi_pvc_factory,
         pod_factory,
@@ -92,7 +102,13 @@ class TestEncryptedRbdClone(ManageTest):
         """
 
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+        if kms_provider == constants.KMIP_KMS_PROVIDER:
+            if config.ENV_DATA["platform"].lower() != "aws":
+                pytest.skip("Test will run on AWS cluster only")
+            else:
+                self.kms = pv_encryption_kmip_setup_factory()
+        else:
+            self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
         # Create a project

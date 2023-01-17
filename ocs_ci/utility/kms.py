@@ -1941,12 +1941,13 @@ def remove_kmsid(kmsid):
 
     """
     ocp_obj = ocp.OCP()
-    patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
-    patch_cmd = (
-        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
-        f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
-    )
-    ocp_obj.exec_oc_cmd(command=patch_cmd)
+    if kmsid:
+        patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
+        patch_cmd = (
+            f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
+            f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
+        )
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
     kmsid_list = get_encryption_kmsid()
     if kmsid in kmsid_list:
         raise KMSResourceCleaneupError(f"KMS ID {kmsid} deletion failed")

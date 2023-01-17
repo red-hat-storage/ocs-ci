@@ -4540,7 +4540,7 @@ def load_cluster_info_file(request):
     load_cluster_info()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def pv_encryption_kms_setup_factory(request):
     """
     Create vault resources and setup csi-kms-connection-details configMap
@@ -4644,7 +4644,7 @@ def pv_encryption_vault_setup_factory(request):
     return factory
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def pv_encryption_kmip_setup_factory(request):
     """
     Create KMIP resources and setup csi-kms-connection-details configMap
