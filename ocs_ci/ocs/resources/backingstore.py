@@ -114,7 +114,7 @@ class BackingStore:
                         "are still being deleted, Please try later",
                     ]
                 ):
-                    log.warning(
+                    log.error(
                         "Backingstore deletion failed because the objects are still getting deleted; Retrying"
                     )
                     raise ObjectsStillBeingDeletedException
