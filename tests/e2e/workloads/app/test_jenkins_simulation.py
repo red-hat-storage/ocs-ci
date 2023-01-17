@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.resources import pod as res_pod
+from ocs_ci.utility import prometheus
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class TestJenkinsSimulation(ManageTest):
         git clones a large repository
         Added test coverage for BZ #2096395
         """
+        api = prometheus.PrometheusAPI()
         csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             selector=["csi-cephfsplugin"],
@@ -95,5 +97,5 @@ class TestJenkinsSimulation(ManageTest):
             kubelet_volume_stats in relevant_pod_logs
         ), f"Logs should not contain the message '{kubelet_volume_stats}'"
         logger.info(f"Logs did not contain the error message '{kubelet_volume_stats}'")
-
+        
         pod.run_git_clone()
