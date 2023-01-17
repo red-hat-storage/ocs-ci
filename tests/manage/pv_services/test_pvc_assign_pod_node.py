@@ -3,11 +3,12 @@ import pytest
 import random
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
+from ocs_ci.framework.testlib import ManageTest, tier1, acceptance, bugzilla
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.resources import pod as res_pod
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,25 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1258 - CephFS: Assign nodeName to a POD using RWX PVC
     OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
+
+    @bugzilla("2132270")
+    def verify_access_token_notin_odf_pod_logs(self):
+        """
+        This function will verify logs of kube-rbac-proxy container in odf-operator-controller-manager pod
+        shouldn't contain api access token
+        """
+        odf_operator_pod_objs = res_pod.get_all_pods(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            selector_label="app.kubernetes.io/name",
+            selector=["odf-operator"],
+        )
+        error_msg = "Authorization: Bearer"
+        pod_log = res_pod.get_pod_logs(
+            pod_name=odf_operator_pod_objs[0].name, container="kube-rbac-proxy"
+        )
+        assert not (
+            error_msg in pod_log
+        ), f"Logs should not contain the error message '{error_msg}'"
 
     @acceptance
     @tier1
@@ -73,6 +93,8 @@ class TestPvcAssignPodNode(ManageTest):
         logger.info(f"Running IO on pod {pod_obj.name}")
         pod_obj.run_io(storage_type="fs", size="512M", runtime=30, invalidate=0)
         pod.get_fio_rw_iops(pod_obj)
+
+        self.verify_access_token_notin_odf_pod_logs()
 
     @acceptance
     @tier1
@@ -139,7 +161,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod_obj.reload()
             assert pod.verify_node_name(pod_obj, selected_node), (
                 f"Pod {pod_obj.name} is running on a different node "
-                f"than the selected node"
+                "than the selected node"
             )
 
         # Run IOs on all pods. FIO Filename is kept same as pod name
@@ -158,3 +180,5 @@ class TestPvcAssignPodNode(ManageTest):
         # Check IO from all pods
         for pod_obj in pod_list:
             pod.get_fio_rw_iops(pod_obj)
+
+        self.verify_access_token_notin_odf_pod_logs()
