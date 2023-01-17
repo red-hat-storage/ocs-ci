@@ -3,6 +3,7 @@ Managed Services related functionalities
 """
 import logging
 
+from ocs_ci.utility.rosa import get_machine_pool_info_list, get_ceph_osd_nodepool_info
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -14,35 +15,6 @@ from ocs_ci.utility.utils import convert_device_size
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
-
-
-def get_machine_pool_info_list():
-    """
-    Get the machine pool info list
-
-    Returns:
-        list: The machine pool info list
-
-    """
-    cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
-    out = run_cmd(cmd)
-    return yaml.safe_load(out)
-
-
-def get_ceph_osd_nodepool_info():
-    """
-    Get the ceph osd node pool info from the machine pool info list
-
-    Returns:
-        dict: The ceph osd node pool info
-
-    """
-    machine_pool_info_list = get_machine_pool_info_list()
-    log.info(f"Number of machine pools = {len(machine_pool_info_list)}")
-    log.info(f"Machine pools details: {machine_pool_info_list}")
-    for machine_pool_info in machine_pool_info_list:
-        if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
-            return machine_pool_info
 
 
 def verify_provider_osd_nodes_on_correct_machine_pools(ceph_osd_nodepool_info=None):
@@ -77,7 +49,8 @@ def verify_provider_osd_nodes_on_correct_machine_pools(ceph_osd_nodepool_info=No
     # Verify that other pods are not running on OSD nodes
     for node_obj in osd_node_objs:
         pods_on_node = get_node_pods(node_name=node_obj.name)
-        for pod_name in pods_on_node:
+        pod_names = [p.name for p in pods_on_node]
+        for pod_name in pod_names:
             assert pod_name.startswith(
                 ("rook-ceph-osd", "rook-ceph-crashcollector")
             ), f"Pod {pod_name} is running on OSD running node {node_obj.name}"

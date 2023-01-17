@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -25,6 +26,7 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -709,3 +711,32 @@ def edit_addon_installation(
     utils.run_cmd(cmd)
     if wait:
         wait_for_addon_to_be_ready(cluster_name, addon_name)
+
+
+def get_machine_pool_info_list():
+    """
+    Get the machine pool info list
+
+    Returns:
+        list: The machine pool info list
+
+    """
+    cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
+    out = run_cmd(cmd)
+    return yaml.safe_load(out)
+
+
+def get_ceph_osd_nodepool_info():
+    """
+    Get the ceph osd node pool info from the machine pool info list
+
+    Returns:
+        dict: The ceph osd node pool info
+
+    """
+    machine_pool_info_list = get_machine_pool_info_list()
+    logger.info(f"Number of machine pools = {len(machine_pool_info_list)}")
+    logger.info(f"Machine pools details: {machine_pool_info_list}")
+    for machine_pool_info in machine_pool_info_list:
+        if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
+            return machine_pool_info
