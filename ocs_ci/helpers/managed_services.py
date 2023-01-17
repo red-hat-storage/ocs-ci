@@ -3,11 +3,16 @@ Managed Services related functionalities
 """
 import logging
 
-from ocs_ci.utility.rosa import get_machine_pool_info_list, get_ceph_osd_nodepool_info
+from ocs_ci.utility.rosa import get_ceph_osd_nodepool_info
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    get_node_objs,
+    get_node_pods,
+    get_osd_running_nodes,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -68,6 +73,7 @@ def verify_provider_topology():
     5. Verify worker node instance count
     6. Verify OSD count
     7. Verify OSD cpu
+    8. Verify OSD running nodes are part of the correct machine pool
 
     """
     # importing here to avoid circular import
@@ -166,6 +172,9 @@ def verify_provider_topology():
                     f"Request is {container['resources']['requests']['cpu']}"
                 )
     log.info("Verified OSD CPU")
+
+    # Verify OSD running nodes are part of the correct machine pool
+    verify_provider_osd_nodes_on_correct_machine_pools()
 
 
 def get_used_capacity(msg):
