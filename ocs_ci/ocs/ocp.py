@@ -1089,6 +1089,8 @@ class OCP(object):
             annotation (str): Annotation string (key=value pair or key- for
                 removing annotation) E.g: 'cluster.x-k8s.io/paused=""'
             resource_name (str): Name of the resource you want to label
+            overwrite (bool): Overwrite existing annotation with the same key,
+                (default: True)
 
         Returns:
             dict: Dictionary represents a returned yaml file
