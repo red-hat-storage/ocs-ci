@@ -280,7 +280,7 @@ def get_latest_rosa_version(version):
 
     """
     cmd = "rosa list versions"
-    output = utils.run_cmd(cmd)
+    output = utils.run_cmd(cmd, timeout=1800)
     logger.info(f"Looking for z-stream version of {version}")
     rosa_version = None
     for line in output.splitlines():
