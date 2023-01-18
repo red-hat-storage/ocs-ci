@@ -182,6 +182,8 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         """
 
+        self.restore_sa_flag = False
+
         # Teardown function to revert back the scc changes made
         def finalizer():
             scc_name = self.nb_scc_name
@@ -207,7 +209,7 @@ class TestMCGResourcesDisruptions(MCGTest):
                     f'"value": "{service_account}"}}]',
                     format_type="json",
                 )
-            if not helpers.validate_scc_policy(
+            if self.restore_sa_flag and not helpers.validate_scc_policy(
                 sa_name=scc_name,
                 namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 scc_name=scc_name,
@@ -261,18 +263,22 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_data = pod_obj.get()
 
         log.info(f"Verifying current SCC is {scc_name} in db pod")
+
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
             == scc_name
         ), "Invalid default scc"
 
-        log.info("Deleting the user array from the Noobaa scc")
-        ocp_scc.patch(
-            resource_name=scc_name,
-            params='[{"op": "remove", "path": "/users/0", '
-            f'"value": "{service_account}"}}]',
-            format_type="json",
-        )
+        scc_yaml_dict = ocp_scc.get(resource_name=scc_name)
+        if service_account in scc_yaml_dict["users"]:
+            self.restore_sa_flag = True
+            log.info("Deleting the SA user from the Noobaa scc")
+            ocp_scc.patch(
+                resource_name=scc_name,
+                params='[{"op": "remove", "path": "/users/0", '
+                f'"value": "{service_account}"}}]',
+                format_type="json",
+            )
         assert not helpers.validate_scc_policy(
             sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
