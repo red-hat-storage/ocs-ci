@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_managed_service,
+    skipif_external_mode,
 )
 
 
@@ -27,6 +28,7 @@ def setup_sc(storageclass_factory_class):
 
 @tier1
 @pytest.mark.polarion_id("OCS-3778")
+@skipif_external_mode
 @skipif_managed_service
 class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
     """
