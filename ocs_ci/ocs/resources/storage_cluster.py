@@ -10,10 +10,11 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.managed_services import (
-    verify_provider_topology,
-    get_ocs_osd_deployer_version,
-)
+
+# from ocs_ci.helpers.managed_services import (
+#    verify_provider_topology,
+#    get_ocs_osd_deployer_version,
+# )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
