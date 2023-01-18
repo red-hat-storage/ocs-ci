@@ -1334,8 +1334,9 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
-        if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
-            verify_provider_topology()
+        # TODO: adjust topology check when the final version is known
+        # if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
+        #    verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()
