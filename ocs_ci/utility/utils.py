@@ -847,7 +847,9 @@ def get_rosa_cli(
         rosa_binary_path,
         current_file_permissions.st_mode | stat.S_IEXEC,
     )
-    rosa_version = run_cmd(f"{rosa_binary_path} version")
+    rosa_version = run_cmd(
+        f"{rosa_binary_path} version", ignore_error=True, timeout=1800
+    )
     log.info(f"rosa version: {rosa_version}")
 
     return rosa_binary_path
