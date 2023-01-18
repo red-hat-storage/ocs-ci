@@ -263,53 +263,64 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_data = pod_obj.get()
 
         log.info(f"Verifying current SCC is {scc_name} in db pod")
-
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
             == scc_name
         ), "Invalid default scc"
 
+        log.info(f"Looking for the {service_account} SA user in {scc_name} scc")
         scc_yaml_dict = ocp_scc.get(resource_name=scc_name)
         if service_account in scc_yaml_dict["users"]:
-            self.restore_sa_flag = True
-            log.info("Deleting the SA user from the Noobaa scc")
+            log.info(f"Deleting {service_account} SA user from {scc_name} scc")
             ocp_scc.patch(
                 resource_name=scc_name,
                 params='[{"op": "remove", "path": "/users/0", '
                 f'"value": "{service_account}"}}]',
                 format_type="json",
             )
+            self.restore_sa_flag = True
+        else:
+            log.warn(f"The {service_account} SA user was not found")
+
+        log.info(f"Verifying the {service_account} SA user is not in {scc_name} scc")
         assert not helpers.validate_scc_policy(
             sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             scc_name=scc_name,
-        ), "SA name is  present in noobaa scc"
-        log.info("Adding the noobaa system sa user to anyuid scc")
+        ), "SA name is present in noobaa scc"
+
+        log.info(f"Adding the {service_account} SA user to the anyuid scc")
         ocp_scc.patch(
             resource_name=constants.ANYUID,
             params='[{"op": "add", "path": "/users/0", '
             f'"value": "{service_account}"}}]',
             format_type="json",
         )
+
+        log.info(f"Verifying {service_account} was added to the anyuid scc")
         assert helpers.validate_scc_policy(
             sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             scc_name=constants.ANYUID,
         ), "SA name is not present in anyuid scc"
 
+        log.info(
+            "Deleting the db pod and waiting for the new pod to reach 'RUNNNING' status"
+        )
         pod_obj.delete(force=True)
-        # Verify that the new pod has reached a 'RUNNNING' status
         assert pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map["noobaa_db"],
             resource_count=1,
             timeout=300,
         ), "Noobaa pod did not reach running state"
+
+        log.info("Verifying the SCC in the db pod is now anyuid")
         pod_data = pod_obj.get()
-        log.info("Verifying SCC is now anyuid in the db pod")
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
             == constants.ANYUID
         ), "Invalid scc"
-        # Check the NB status to verify the system is healthy
+
+        log.info("Checking the NB status to verify the system is healthy")
         self.cl_obj.wait_for_noobaa_health_ok()
