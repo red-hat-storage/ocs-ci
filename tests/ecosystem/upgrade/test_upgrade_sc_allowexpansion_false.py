@@ -17,8 +17,6 @@ from ocs_ci.ocs.resources.pod import (
     get_ocs_operator_pod,
     get_pod_logs,
 )
-from ocs_ci.utility import templating
-from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +24,7 @@ log = logging.getLogger(__name__)
 @tier1
 @bugzilla("2125815")
 @skipif_ocs_version("<4.11")
+@pytest.mark.polarion_id("OCS-4689")
 class TestUpgrade(ManageTest):
     """
     Tests to check upgrade of OCS when we set without expansion secret and allowExpansion to false
@@ -40,14 +39,6 @@ class TestUpgrade(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def storageclass_obj_cleanup(self):
-        """
-        Delete storageclass
-        """
-        log.info("Teardown for custom sc")
-        for instance in self.all_sc_obj:
-            instance.delete(wait=True)
-
     @pre_ocs_upgrade
     def test_ocs_upgrade_with_allowexpansion_false(
         self, project_factory, storageclass_factory, multi_pvc_factory
@@ -58,8 +49,6 @@ class TestUpgrade(ManageTest):
         3. Created few cephfs and rbd PVCs
         4. Create new pvc's from custom sc
         5. Update ocs-operator to 4.12.0
-        6. Verify All pods are restarted and in running state after upgrade.
-        7. Verify that logs should not found related to ocs operator trying to patch non expandable PVC.
         """
         size_list = ["1", "3", "5"]
 
@@ -70,15 +59,13 @@ class TestUpgrade(ManageTest):
         ]
 
         # Create custom storage class
-        custom_cephfs_sc_no_expnasion_data = templating.load_yaml(
-            constants.CUSTOM_CEPHFS_SC_NO_EXPANSION_YAML
-        )
-        custom_rbd_sc_no_expnasion_data = templating.load_yaml(
-            constants.CUSTOM_RBD_SC_NO_EXPANSION_YAML
-        )
 
-        custom_cephfs_sc = helpers.create_resource(**custom_cephfs_sc_no_expnasion_data)
-        custom_rbd_sc = helpers.create_resource(**custom_rbd_sc_no_expnasion_data)
+        custom_cephfs_sc = storageclass_factory(
+            interface=constants.CEPHFILESYSTEM, allowvolumeexpansion=False
+        )
+        custom_rbd_sc = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL, allowvolumeexpansion=False
+        )
 
         # Appending all the pvc obj to base case param for cleanup and evaluation
         self.all_sc_obj.extend(custom_cephfs_sc + custom_rbd_sc)
@@ -127,10 +114,13 @@ class TestUpgrade(ManageTest):
 
     @post_ocs_upgrade
     def test_logs_pod_status_after_upgrade(self):
+        """
+        1. Verify All pods are restarted and in running state after upgrade.
+        2. Verify that logs should not found related to ocs operator trying to patch non expandable PVC.
+        """
 
         wait_for_storage_pods(timeout=10), "Some pods were not in expected state"
-        pod_objs = get_ocs_operator_pod()
-        pod_name = pod_objs.name
+        pod_name = get_ocs_operator_pod().name
         unexpected_log_after_upgrade = (
             "spec.csi.controllerExpandSecretRef.name: Required value,"
             " spec.csi.controllerExpandSecretRef.namespace: Required value"
