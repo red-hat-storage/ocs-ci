@@ -22,7 +22,7 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
-    @bugzilla("2132270")
+    @bugzilla("2136852")
     def verify_access_token_notin_odf_pod_logs(self):
         """
         This function will verify logs of kube-rbac-proxy container in odf-operator-controller-manager pod
