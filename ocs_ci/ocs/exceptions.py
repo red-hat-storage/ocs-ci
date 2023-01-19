@@ -582,3 +582,7 @@ class LVMOHealthException(Exception):
 
 class VolumesExistError(Exception):
     pass
+
+
+class UnexpectedODFAccessException(Exception):
+    pass

@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    ignore_leftovers,
+    skipif_ocp_version,
+)
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -9,6 +14,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
+@skipif_ocp_version(">=4.12")
 @workloads
 @ignore_leftovers
 class TestCouchBasePodRespin(E2ETest):

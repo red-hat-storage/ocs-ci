@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     CommandFailed,
     ResourceNotFoundError,
+    NotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1414,7 +1415,7 @@ def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=Fals
             if pod.get_pod_node(p).name == node_name:
                 node_pods.append(p)
         # Check if the command failed because the pod not found
-        except CommandFailed as ex:
+        except (CommandFailed, NotFoundError) as ex:
             if "not found" not in str(ex):
                 raise ex
             # Check the 2 cases of pod not found error
@@ -1619,13 +1620,18 @@ def verify_all_nodes_created():
 
     existing_num_nodes = len(get_all_nodes())
     if expected_num_nodes != existing_num_nodes:
+        platforms_to_wait = [
+            constants.VSPHERE_PLATFORM,
+            constants.IBMCLOUD_PLATFORM,
+            constants.AZURE_PLATFORM,
+        ]
         if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
             log.warning(
                 f"Expected number of nodes is {expected_num_nodes} but "
                 f"created during deployment is {existing_num_nodes}"
             )
         elif (
-            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            config.ENV_DATA["platform"].lower() in platforms_to_wait
             and config.ENV_DATA["deployment_type"] == "ipi"
         ):
             try:

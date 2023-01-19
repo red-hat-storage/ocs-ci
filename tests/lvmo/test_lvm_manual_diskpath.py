@@ -14,13 +14,19 @@ from ocs_ci.utility.lvmo_utils import (
 from ocs_ci.framework.pytest_customization.marks import skipif_lvm_not_installed, tier1
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
 
 
 log = logging.getLogger(__name__)
 
+lvmcluster_template = (
+    "lvms-cluster.yaml"
+    if "lvms" in get_lvm_cluster_name()
+    else "lvm-cluster-default.yaml"
+)
 
 LVMCLUSTER_TEMPLATE = os.path.join(
-    constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "lvm-cluster-default.yaml"
+    constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, lvmcluster_template
 )
 
 

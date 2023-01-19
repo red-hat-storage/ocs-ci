@@ -118,7 +118,7 @@ class Jenkins(object):
                     cmd = f"logs {jenkins_deploy_pod.name}"
                     ocp_obj = OCP(namespace=project)
                     output_log = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-                    cmd = f"describe {jenkins_deploy_pod.name}"
+                    cmd = f"describe pod {jenkins_deploy_pod.name}"
                     output_describe = ocp_obj.exec_oc_cmd(
                         command=cmd, out_yaml_format=False
                     )

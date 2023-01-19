@@ -54,6 +54,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
 
 logger = logging.getLogger(__name__)
 
@@ -2426,7 +2427,7 @@ class LVM(object):
         lvmc_cop = OCP(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             kind="lvmcluster",
-            resource_name=constants.LVMCLUSTER,
+            resource_name=get_lvm_cluster_name(),
         )
         lvmc_ocs = lvmc_cop.data
         self.lvmcluster = lvmc_ocs
@@ -2904,7 +2905,7 @@ def check_clusters():
     try:
         lvmcluster_obj = OCP(
             kind="lvmcluster",
-            resource_name=constants.LVMCLUSTER,
+            resource_name=get_lvm_cluster_name(),
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             silent=True,
         )

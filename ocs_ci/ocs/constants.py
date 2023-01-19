@@ -113,7 +113,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
-LVM_SC = "odf-lvm-vg1"
+LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
@@ -154,7 +154,9 @@ VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
+LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
+MACHINEHEALTHCHECK = "machinehealthcheck"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -255,6 +257,7 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD = f"{DEFAULT_CLUSTERNAME}-rbdplugin-snapclass"
 DEFAULT_VOLUMESNAPSHOTCLASS_LVM = "odf-lvm-vg1"
+DEFAULT_VOLUMESNAPSHOTCLASS_LVMS = "lvms-vg1"
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephfsplugin-snapclass"
 )
@@ -420,6 +423,8 @@ CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml"
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
 
 CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
+
+CSI_LVMS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot-lvms.yaml")
 
 CSI_CEPHFS_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshotclass.yaml")
 
@@ -1053,6 +1058,7 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
 S3CLI_APP_LABEL = "s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
+OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
 
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
@@ -1380,6 +1386,7 @@ MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
 MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
 # following packages are required for live disconnected cluster installation
 # (all images related to those packages will be mirrored to the mirror registry)
+# for OCP <= 4.10
 DISCON_CL_REQUIRED_PACKAGES = [
     "cluster-logging",
     "elasticsearch-operator",
@@ -1392,7 +1399,7 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-multicluster-orchestrator",
     "odf-operator",
 ]
-
+# for OCP >= 4.11
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.11": [
         "cluster-logging",
@@ -1407,10 +1414,12 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.12": [
         "cluster-logging",
         "elasticsearch-operator",
+        # we might need to uncomment next line, if we would like to use it in
+        # disconnected deployment:
+        # "lvms-operator",
         "mcg-operator",
         "ocs-operator",
         "odf-csi-addons-operator",
-        "odf-lvm-operator",
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
@@ -1629,6 +1638,7 @@ SQUADS = {
     "Orange": ["/scale/"],
     "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
+    "Turquoise": ["/regional-dr/"],
 }
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
@@ -1654,6 +1664,7 @@ VAULT_CLIENT_CERT_PEM = os.path.join(DATA_DIR, "vault-client-cert.pem")
 VAULT_PRIVKEY_PEM = os.path.join(DATA_DIR, "vault-privkey.pem")
 VAULT_KMS_PROVIDER = "vault"
 HPCS_KMS_PROVIDER = "hpcs"
+KMIP_KMS_PROVIDER = "kmip"
 VAULT_NOOBAA_ROOT_SECRET_PATH = "NOOBAA_ROOT_SECRET_PATH"
 VAULT_KMS_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
 VAULT_KMS_CSI_TOKEN = "ceph-csi-kms-token"
@@ -1735,6 +1746,19 @@ rbd_mirror_die_after_seconds = 3600
 osd_memory_target_cgroup_limit_ratio = 0.8
 """
 
+ROOK_CEPH_CONFIG_VALUES_412 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+"""
+
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 20
@@ -1808,6 +1832,7 @@ CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE = os.path.join(
 CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE = os.path.join(
     "ui", "chrome-proxy-extension-background.js.j2"
 )
+WEB_DRIVER_CHROME_OBJ_TYPE = "<class 'selenium.webdriver.chrome.webdriver.WebDriver'>"
 
 # storage system status
 STORAGE_SYSTEM_STATUS = {
@@ -1908,9 +1933,9 @@ LVMO_POD_LABEL = {
         "vg-manager_label": "app=vg-manager",
     },
     "default": {
-        "controller_manager_label": "app.kubernetes.io/name=lvm-operator",
-        "topolvm-controller_label": "app.kubernetes.io/name=topolvm-controller",
-        "topolvm-node_label": "app.kubernetes.io/name=topolvm-node",
+        "controller_manager_label": "app.kubernetes.io/name=lvms-operator",
+        "topolvm-controller_label": "app.kubernetes.io/component=topolvm-controller",
+        "topolvm-node_label": "app.kubernetes.io/component=topolvm-node",
         "vg-manager_label": "app.kubernetes.io/name=vg-manager",
     },
     "411-old": {

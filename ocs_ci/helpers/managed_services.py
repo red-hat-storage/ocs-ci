@@ -2,19 +2,15 @@
 Managed Services related functionalities
 """
 import logging
-import yaml
 
+from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import (
-    get_osd_running_nodes,
-    get_worker_nodes,
-    get_node_objs,
-    get_node_pods,
-)
+from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.utility.utils import convert_device_size, run_cmd
+from ocs_ci.utility.utils import convert_device_size
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
@@ -27,13 +23,10 @@ def verify_provider_topology():
     1. Verify replica count
     2. Verify total size
     3. Verify OSD size
-    4. Verify OSD running worker nodes count
-    5. Verify worker node instance type
+    4. Verify worker node instance type
+    5. Verify worker node instance count
     6. Verify OSD count
     7. Verify OSD cpu
-    8. Verify machine pools
-    9. Verify OSD running nodes are part of the correct machinepool
-    10. Verify that other pods are not running on OSD nodes
 
     """
     # importing here to avoid circular import
@@ -42,15 +35,13 @@ def verify_provider_topology():
     size = f"{config.ENV_DATA.get('size', 4)}Ti"
     replica_count = 3
     osd_size = 4
-    instance_type = "m5.xlarge"
+    instance_type = "m5.2xlarge"
     size_map = {
         "4Ti": {"total_size": 12, "osd_count": 3, "instance_count": 3},
-        "8Ti": {"total_size": 24, "osd_count": 6, "instance_count": 3},
+        "8Ti": {"total_size": 24, "osd_count": 6, "instance_count": 6},
         "12Ti": {"total_size": 36, "osd_count": 9, "instance_count": 6},
         "16Ti": {"total_size": 48, "osd_count": 12, "instance_count": 6},
-        "20Ti": {"total_size": 60, "osd_count": 15, "instance_count": 9},
-        "48Ti": {"total_size": 144, "osd_count": 36, "instance_count": 18},
-        "96Ti": {"total_size": 288, "osd_count": 72, "instance_count": 36},
+        "20Ti": {"total_size": 60, "osd_count": 15, "instance_count": 6},
     }
     cluster_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     storage_cluster = StorageCluster(
@@ -90,14 +81,6 @@ def verify_provider_topology():
         ), f"Size of OSD PVC {pvc_obj.name} is not {osd_size}Ti"
     log.info(f"Verified that the size of each OSD is {osd_size}Ti")
 
-    # Verify OSD running worker nodes count
-    osd_nodes = get_osd_running_nodes()
-    assert len(osd_nodes) == size_map[size]["instance_count"], (
-        f"Worker node instance count is not as expected. Actual instance count is {len(osd_nodes)}. "
-        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {osd_nodes}"
-    )
-    log.info("Verified the number of worker nodes where OSD is running.")
-
     # Verify worker node instance type
     worker_node_names = get_worker_nodes()
     worker_nodes = get_node_objs(worker_node_names)
@@ -109,7 +92,14 @@ def verify_provider_topology():
             .get("beta.kubernetes.io/instance-type")
             == instance_type
         ), f"Instance type of the worker node {node_obj.name} is not {instance_type}"
-    log.info(f"Verified that the instance type of wokeer nodes is {instance_type}")
+    log.info(f"Verified that the instance type of worker nodes is {instance_type}")
+
+    # Verify worker node instance count
+    assert len(worker_node_names) == size_map[size]["instance_count"], (
+        f"Worker node instance count is not as expected. Actual instance count is {len(worker_node_names)}. "
+        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {worker_node_names}"
+    )
+    log.info("Verified the number of worker nodes.")
 
     # Verify OSD count
     osd_count = get_osd_count()
@@ -135,65 +125,6 @@ def verify_provider_topology():
                     f"Request is {container['resources']['requests']['cpu']}"
                 )
     log.info("Verified OSD CPU")
-
-    # Verify machine pools
-    cmd = f"rosa list machinepool --cluster={config.ENV_DATA['cluster_name']} -o yaml"
-    out = run_cmd(cmd)
-    machine_pool_info_list = yaml.safe_load(out)
-    assert (
-        len(machine_pool_info_list) == 2
-    ), f"Number of machinepools is not 2. Machinepools details: {machine_pool_info_list}"
-
-    machine_pool_ids = []
-    ceph_osd_nodepool_info = None
-    for machine_pool_info in machine_pool_info_list:
-        machine_pool_ids.append(machine_pool_info["id"])
-        assert machine_pool_info["instance_type"] == instance_type, (
-            f"Instance type of machinepool {machine_pool_info['id']} is {machine_pool_info['instance_type']}. "
-            f"Expected instance type is {instance_type}"
-        )
-        if "node.ocs.openshift.io/osd" in machine_pool_info.get("labels", {}):
-            ceph_osd_nodepool_info = machine_pool_info
-    log.info(f"Machinepool IDs: {machine_pool_ids}")
-
-    assert ceph_osd_nodepool_info, "OSD node pool not found"
-    log.info(f"OSD node pool machinepool id is {ceph_osd_nodepool_info['id']}")
-    assert ceph_osd_nodepool_info["replicas"] == size_map[size]["instance_count"], (
-        f"Replicas of OSD node pool machinepool is {ceph_osd_nodepool_info['replicas']}. "
-        f"Expected {size_map[size]['instance_count']}."
-    )
-    assert ("key", "node.ocs.openshift.io/osd") in ceph_osd_nodepool_info["taints"][
-        0
-    ].items(), (
-        f"Verification of taints failed for machinepool {ceph_osd_nodepool_info['id']}. "
-        f"Machinepool info: {ceph_osd_nodepool_info}"
-    )
-    log.info(f"Verified taints on machinepool {ceph_osd_nodepool_info['id']}")
-
-    # Verify OSD running nodes are part of the correct machinepool
-    osd_node_objs = get_node_objs(osd_nodes)
-    for node_obj in osd_node_objs:
-        annotation = (
-            node_obj.get()
-            .get("metadata")
-            .get("annotations")
-            .get("machine.openshift.io/machine")
-        )
-        assert (
-            ceph_osd_nodepool_info["id"] in annotation
-        ), f"OSD running node {node_obj.name} is part of the machinepool {ceph_osd_nodepool_info['id']}"
-    log.info(
-        f"OSD running nodes are part of the machinepool {ceph_osd_nodepool_info['id']}"
-    )
-
-    # Verify that other pods are not running on OSD nodes
-    for node_obj in osd_node_objs:
-        pods_on_node = get_node_pods(node_name=node_obj.name)
-        for pod_name in pods_on_node:
-            assert pod_name.startswith(
-                ("rook-ceph-osd", "rook-ceph-crashcollector")
-            ), f"Pod {pod_name} is running on OSD running node {node_obj.name}"
-    log.info("Verified that other pods are not running on OSD nodes")
 
 
 def get_used_capacity(msg):
@@ -233,3 +164,20 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             )
             return True
     return False
+
+
+def get_ocs_osd_deployer_version():
+    """
+    Get OCS OSD deployer version from CSV
+
+    Returns:
+         Version: OCS OSD deployer version
+
+    """
+    csv_kind = OCP(kind="ClusterServiceVersion", namespace="openshift-storage")
+    deployer_csv = csv_kind.get(selector=constants.OCS_OSD_DEPLOYER_CSV_LABEL)
+    assert (
+        "ocs-osd-deployer" in deployer_csv["items"][0]["metadata"]["name"]
+    ), "Couldn't find ocs-osd-deployer CSV"
+    deployer_version = deployer_csv["items"][0]["spec"]["version"]
+    return get_semantic_version(deployer_version)

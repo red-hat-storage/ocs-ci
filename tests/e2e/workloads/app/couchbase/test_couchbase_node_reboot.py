@@ -5,7 +5,12 @@ import pytest
 
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    ignore_leftovers,
+    skipif_ocp_version,
+)
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
     get_nodes,
@@ -20,6 +25,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 log = logging.getLogger(__name__)
 
 
+@skipif_ocp_version(">=4.12")
 @workloads
 @ignore_leftovers
 class TestCouchBaseNodeReboot(E2ETest):

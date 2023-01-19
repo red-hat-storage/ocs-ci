@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     tier3,
     polarion_id,
+    bugzilla,
 )
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 # bucket_factory_session teardown, due to it being session-scoped.
 # Thus, it falsely recognizes leftovers that are deleted in a later stage
 @ignore_leftovers
+@bugzilla("1981732")
 class TestAdmissionWebhooks(MCGTest):
     @pytest.mark.parametrize(
         argnames="spec_dict,err_msg",
@@ -155,7 +157,7 @@ class TestAdmissionWebhooks(MCGTest):
                             "secret": {"name": ""},
                         },
                     },
-                    "please provide secret name",
+                    "please provide a valid ARN or secret name",
                 ],
                 marks=[tier3, polarion_id("OCS-2786")],
             ),

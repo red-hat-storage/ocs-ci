@@ -2,6 +2,8 @@ import logging
 import warnings
 import time
 
+from selenium.common.exceptions import TimeoutException
+from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
@@ -291,6 +293,11 @@ class ValidationUI(PageNavigator):
                     self.validation_loc["storage-system-status-card-hyperlink"],
                     enable_screenshot=True,
                 )
+            # verify that only one BlockPools tab is present. BZ #2096513
+            blockpools_tabs = self.get_elements(self.validation_loc["blockpools"])
+            if len(blockpools_tabs) > 1:
+                logger.critical("Multiple BlockPools tabs were found. BZ #2096513")
+                warnings.warn("Multiple BlockPools tabs were found. BZ #2096513")
             logger.info("Click on StorageSystems breadcrumb")
             self.do_click((self.validation_loc["storagesystems"]))
             logger.info("Navigate back to ODF Overview page")
@@ -565,3 +572,18 @@ class ValidationUI(PageNavigator):
             logger.error(f"The pod {pod_name} not found on capacity_breakdown")
             res = False
         return res
+
+    def validate_unprivileged_access(self):
+        """
+        Function to verify the unprivileged users can't access ODF dashbaord
+        """
+        self.do_click(self.validation_loc["developer_dropdown"])
+        self.do_click(self.validation_loc["select_administrator"], timeout=5)
+        try:
+            self.navigate_odf_overview_page()
+        except TimeoutException:
+            logger.info(
+                "As expected, ODF dashboard is not available for the unprivileged user"
+            )
+        else:
+            raise UnexpectedODFAccessException

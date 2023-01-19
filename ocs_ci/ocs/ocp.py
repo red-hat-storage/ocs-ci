@@ -54,7 +54,7 @@ class OCP(object):
         silent=False,
     ):
         """
-        Initializer function
+        Initializer function. Avoid shallow request, func is resource consuming
 
         Args:
             api_version (str): TBD
@@ -1080,6 +1080,28 @@ class OCP(object):
                 f"{self.resource_name} did not reach the expected state within the time limit."
             )
             return False
+
+    def annotate(self, annotation, resource_name="", overwrite=True):
+        """
+        Update the annotations on resource.
+
+        Args:
+            annotation (str): Annotation string (key=value pair or key- for
+                removing annotation) E.g: 'cluster.x-k8s.io/paused=""'
+            resource_name (str): Name of the resource you want to label
+            overwrite (bool): Overwrite existing annotation with the same key,
+                (default: True)
+
+        Returns:
+            dict: Dictionary represents a returned yaml file
+        """
+        resource_name = resource_name or self.resource_name
+        cmd = f"annotate {self.kind} {resource_name} {annotation}"
+        if overwrite:
+            cmd += " --overwrite"
+        log.info(f"Annotate {self.kind} {resource_name} with '{annotation}'")
+        result = self.exec_oc_cmd(cmd)
+        return result
 
 
 def get_all_resource_names_of_a_kind(kind):

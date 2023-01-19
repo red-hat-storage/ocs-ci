@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.framework.testlib import ui, skipif_ocs_version, tier2, skipif_ibm_cloud
-from ocs_ci.framework.pytest_customization.marks import purple_squad
+from ocs_ci.framework.pytest_customization.marks import black_squad
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class TestPvcUserInterface(object):
     @skipif_ibm_cloud
     @tier2
     @skipif_ocs_version("<4.7")
-    @purple_squad
+    @black_squad
     @pytest.mark.parametrize(
         argnames=["title"],
         argvalues=[

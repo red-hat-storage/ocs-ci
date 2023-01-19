@@ -37,18 +37,19 @@ from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 logger = logging.getLogger(__name__)
 
 
-def add_capacity_test():
+def add_capacity_test(ui_flag=False):
+    """
+    Add capacity on non-lso cluster
+
+    Args:
+        ui_flag(bool): add capacity via ui [true] or via cli [false]
+
+    """
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    if ui_add_capacity_conditions():
-        try:
-            result = ui_add_capacity(osd_size)
-        except Exception as e:
-            logger.error(
-                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
-            )
-            result = storage_cluster.add_capacity(osd_size)
+    if ui_add_capacity_conditions() and ui_flag:
+        result = ui_add_capacity(osd_size)
     else:
         result = storage_cluster.add_capacity(osd_size)
     osd_pods_post_expansion = get_osd_pods()
@@ -94,8 +95,6 @@ def add_capacity_test():
 
 
 @ignore_leftovers
-@tier1
-@acceptance
 @polarion_id("OCS-1191")
 @pytest.mark.second_to_last
 @skipif_managed_service
@@ -111,16 +110,22 @@ class TestAddCapacity(ManageTest):
     Automates adding variable capacity to the cluster
     """
 
-    def test_add_capacity(self, reduce_and_resume_cluster_load):
+    @acceptance
+    def test_add_capacity_cli(self, reduce_and_resume_cluster_load):
         """
-        Test to add variable capacity to the OSD cluster while IOs running
+        Add capacity on non-lso cluster via cli on Acceptance suite
         """
-        add_capacity_test()
+        add_capacity_test(ui_flag=False)
+
+    @tier1
+    def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
+        """
+        Add capacity on non-lso cluster via UI on tier1 suite
+        """
+        add_capacity_test(ui_flag=True)
 
 
 @ignore_leftovers
-@tier1
-@acceptance
 @polarion_id("OCS-4647")
 @pytest.mark.second_to_last
 @skipif_managed_service
@@ -133,14 +138,22 @@ class TestAddCapacity(ManageTest):
 @skipif_no_lso
 class TestAddCapacityLSO(ManageTest):
     """
-    Automates adding variable capacity to lso cluster
+    Add capacity on lso cluster
     """
 
-    def test_add_capacity_lso(self, reduce_and_resume_cluster_load):
+    @acceptance
+    def test_add_capacity_lso_cli(self, reduce_and_resume_cluster_load):
         """
-        Test to add variable capacity to the OSD cluster while IOs running
+        Add capacity on lso cluster via CLI on Acceptance suite
         """
-        storage_cluster.add_capacity_lso()
+        storage_cluster.add_capacity_lso(ui_flag=False)
+
+    @tier1
+    def test_add_capacity_lso_ui(self, reduce_and_resume_cluster_load):
+        """
+        Add capacity on lso cluster via UI on tier1 suite
+        """
+        storage_cluster.add_capacity_lso(ui_flag=True)
 
 
 @skipif_ocs_version("<4.4")
