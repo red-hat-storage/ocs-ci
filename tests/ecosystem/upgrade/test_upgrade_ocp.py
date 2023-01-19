@@ -17,6 +17,14 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.utility.ocp_upgrade import (
+    pause_machinehealthcheck,
+    resume_machinehealthcheck,
+)
+from ocs_ci.utility.version import (
+    get_semantic_ocp_running_version,
+    VERSION_4_8,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +118,10 @@ class TestUpgradeOCP(ManageTest):
                     logger.info(f"OCP Channel:{ocp_channel}")
                     break
 
+            # pause a MachineHealthCheck resource
+            if get_semantic_ocp_running_version() > VERSION_4_8:
+                pause_machinehealthcheck()
+
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
             ocp.upgrade_ocp(image=target_image, image_path=image_path)
@@ -140,6 +152,10 @@ class TestUpgradeOCP(ManageTest):
                         break
                     else:
                         logger.info(f"{ocp_operator} upgrade did not completed yet!")
+
+            # resume a MachineHealthCheck resource
+            if get_semantic_ocp_running_version() > VERSION_4_8:
+                resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
             cluster_operators = ocp.get_all_cluster_operators()
