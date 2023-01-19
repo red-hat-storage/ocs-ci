@@ -417,6 +417,12 @@ def install_odf_addon(cluster):
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
     cmd = f"rosa install addon --cluster={cluster} {addon_name} --yes"
+    # TODO(fbalak) it needs to be determined if this option is needed
+    # This option was introduced in new rosa cli version and it seems that
+    # it is a mandatory parameter (although rosa install addon --help says
+    # that there is a default value)
+    billing_model = config.ENV_DATA.get("rosa_billing_model")
+    cmd = cmd + f" --billing-model {billing_model}"
     if notification_email_0:
         cmd = cmd + f" --notification-email-0 {notification_email_0}"
     if notification_email_1:
