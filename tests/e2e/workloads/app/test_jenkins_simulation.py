@@ -41,6 +41,7 @@ class TestJenkinsSimulation(ManageTest):
     @workloads
     @polarion_id("OCS-4668")
     @bugzilla("2096395")
+    @bugzilla("2132270")
     def test_git_clone(self, pod):
         """
         git clones a large repository
@@ -55,6 +56,8 @@ class TestJenkinsSimulation(ManageTest):
         func_calls = ["NodeStageVolume", "NodeGetVolumeStats"]
         error_msg = "System has not been booted with systemd"
         inode_info = '"unit":2'
+        kubelet_volume_stats = "kubelet_volume_stats_inodes"
+
         # Get the node running this pod
         node_name = res_pod.get_pod_node(pod_obj=pod).name
 
@@ -82,9 +85,15 @@ class TestJenkinsSimulation(ManageTest):
         ), f"Logs should not contain the error message '{error_msg}'"
         logger.info(f"Logs did not contain the error message '{error_msg}'")
 
+        # Test coverage for BZ 2132270
         assert not (
             inode_info in relevant_pod_logs
         ), f"Logs should not contain the message '{inode_info}'"
         logger.info(f"Logs did not contain the error message '{inode_info}'")
+
+        assert not (
+            kubelet_volume_stats in relevant_pod_logs
+        ), f"Logs should not contain the message '{kubelet_volume_stats}'"
+        logger.info(f"Logs did not contain the error message '{kubelet_volume_stats}'")
 
         pod.run_git_clone()
