@@ -156,6 +156,7 @@ RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
+MACHINEHEALTHCHECK = "machinehealthcheck"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
