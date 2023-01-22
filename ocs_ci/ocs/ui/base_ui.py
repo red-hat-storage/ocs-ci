@@ -846,7 +846,7 @@ def garbage_collector_webdriver():
     for obj in collected_objs:
         if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
-                obj.close()
+                obj.quit()
             except WebDriverException as e:
                 logger.error(e)
 
@@ -1027,7 +1027,8 @@ def close_browser(driver):
     logger.info("Close browser")
     take_screenshot(driver)
     copy_dom(driver)
-    driver.close()
+    driver.quit()
+    time.sleep(10)
     garbage_collector_webdriver()
 
 
