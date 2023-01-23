@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_managed_service
+@skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
 class TestMultiRegion(MCGTest):
     """
