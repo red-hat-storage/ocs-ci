@@ -496,6 +496,7 @@ acm_page_nav = {
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
     "Kubeconfig_text": ("kubeConfigEntry", By.ID),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
+    "Acm_import_endswith_url": "import",
 }
 
 acm_configuration = {

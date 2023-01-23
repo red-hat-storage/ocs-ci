@@ -4,6 +4,7 @@ import os
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.by import By
 
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.acm.acm_constants import (
@@ -21,6 +22,7 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
 from ocs_ci.utility.version import compare_versions
+from ocs_ci.ocs.exceptions import ACMClusterImportException
 
 log = logging.getLogger(__name__)
 
@@ -44,18 +46,24 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         self.navigate_clusters_page()
-        time.sleep(40)
+        if not self.check_element_presence(
+            (By.ID, self.acm_page_nav["Import_cluster"][0]), timeout=100
+        ):
+            raise ACMClusterImportException("Import button not found")
         self.driver.find_element_by_id("importCluster").click()
         log.info("Clicked on Import cluster")
-        time.sleep(60)
+        time.sleep(10)
+        if not self.driver.current_url.endswith(
+            self.acm_page_nav["Acm_import_endswith_url"]
+        ):
+            raise ACMClusterImportException("Couldn't find import cluster URL")
+
         self.do_send_keys(
             self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
         )
-        log.info("Keys sent")
-        log.info("sent input to the text box")
         self.do_click(self.page_nav["Import_mode"])
         self.do_click(self.page_nav["choose_kubeconfig"])
-        log.info(f"Coping Kubeconfig {kubeconfig_location}")
+        log.info(f"Copying Kubeconfig {kubeconfig_location}")
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
         for line in kubeconfig_to_import:
             if len(line) > 100:
