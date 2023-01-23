@@ -18,6 +18,7 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
     skipif_ocs_version,
+    skipif_disconnected_cluster,
     tier1,
     tier2,
     tier4c,
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_managed_service
 @skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
 @skipif_ocs_version("<4.7")
 class TestNamespace(MCGTest):
     """
