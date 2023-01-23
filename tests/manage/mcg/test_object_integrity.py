@@ -13,6 +13,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_ocs_version,
+    skipif_disconnected_cluster,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class TestObjectIntegrity(MCGTest):
     Test data integrity of various objects
     """
 
+    @skipif_disconnected_cluster
     @pytest.mark.polarion_id("OCS-1321")
     @pytest.mark.parametrize(
         argnames="bucketclass_dict",
