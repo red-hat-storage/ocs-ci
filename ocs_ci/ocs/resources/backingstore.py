@@ -141,7 +141,7 @@ class BackingStore:
         try:
             cmdMap[self.method]()
         except ObjectsStillBeingDeletedException:
-            timeout = 18000
+            timeout = 19800
         except CommandFailed:
             timeout = 120
 
