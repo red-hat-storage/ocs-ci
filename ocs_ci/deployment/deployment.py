@@ -1033,7 +1033,9 @@ class Deployment(object):
         from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
         from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
-        create_catalog_source()
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if not live_deployment:
+            create_catalog_source()
         setup_ui = login_ui()
         deployment_obj = DeploymentUI(setup_ui)
         deployment_obj.install_ocs_ui()
