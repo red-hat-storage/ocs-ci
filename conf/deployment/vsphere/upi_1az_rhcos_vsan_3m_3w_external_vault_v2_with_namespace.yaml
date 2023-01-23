@@ -15,11 +15,14 @@ ENV_DATA:
   fio_storageutilization_min_mbps: 10.0
   encryption_at_rest: true
   vault_deploy_mode: external
-  use_vault_namespace: true 
+  use_vault_namespace: true
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
+  VAULT_AUTH_METHOD: token
   VAULT_CACERT: "ocs-kms-ca-secret"
+  VAULT_CA_ONLY: true
   VAULT_CLIENT_CERT: "ocs-kms-client-cert"
   VAULT_CLIENT_KEY: "ocs-kms-client-key"
+  vault_hcp: true
   VAULT_SKIP_VERIFY: false
   VAULT_BACKEND: "v2"
