@@ -497,6 +497,7 @@ acm_page_nav = {
     "Kubeconfig_text": ("kubeConfigEntry", By.ID),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
     "Acm_import_endswith_url": "import",
+    "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
 }
 
 acm_configuration = {

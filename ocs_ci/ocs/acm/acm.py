@@ -50,9 +50,9 @@ class AcmAddClusters(AcmPageNavigator):
             (By.ID, self.acm_page_nav["Import_cluster"][0]), timeout=100
         ):
             raise ACMClusterImportException("Import button not found")
-        self.driver.find_element_by_id("importCluster").click()
+        self.do_click(self.acm_page_nav["Import_cluster"])
         log.info("Clicked on Import cluster")
-        time.sleep(10)
+        time.sleep(50)
         if not self.driver.current_url.endswith(
             self.acm_page_nav["Acm_import_endswith_url"]
         ):
