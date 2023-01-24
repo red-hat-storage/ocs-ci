@@ -2,6 +2,7 @@ from pathlib import Path
 import datetime
 import logging
 import os
+import gc
 import time
 import zipfile
 
@@ -836,8 +837,27 @@ def take_screenshot(driver):
     time.sleep(0.5)
 
 
-@retry(TimeoutException, tries=3, delay=3, backoff=2)
-@retry(WebDriverException, tries=3, delay=3, backoff=2)
+def garbage_collector_webdriver():
+    """
+    Garbage Collector for webdriver objs
+
+    """
+    collected_objs = gc.get_objects()
+    for obj in collected_objs:
+        if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
+            try:
+                obj.quit()
+            except WebDriverException as e:
+                logger.error(e)
+
+
+@retry(
+    exception_to_check=(TimeoutException, WebDriverException),
+    tries=3,
+    delay=3,
+    backoff=2,
+    func=garbage_collector_webdriver,
+)
 def login_ui(console_url=None, username=None, password=None):
     """
     Login to OpenShift Console
@@ -940,32 +960,14 @@ def login_ui(console_url=None, username=None, password=None):
     else:
         raise ValueError(f"Not Support on {browser}")
 
-    wait = WebDriverWait(driver, 60)
+    wait = WebDriverWait(driver, 40)
     driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console(driver)
-    if config.ENV_DATA.get("flexy_deployment") or config.ENV_DATA.get(
-        "import_clusters_to_acm"
-    ):
-        try:
-            element = wait.until(
-                ec.element_to_be_clickable(
-                    (
-                        login_loc["kubeadmin_login_approval"][1],
-                        login_loc["kubeadmin_login_approval"][0],
-                    )
-                )
-            )
-            element.click()
-        except TimeoutException as e:
-            take_screenshot(driver)
-            copy_dom(driver)
-            logger.error(e)
-
-    if username is not None:
-        try:
+    try:
+        if username is not None:
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -974,15 +976,24 @@ def login_ui(console_url=None, username=None, password=None):
                     )
                 )
             )
-            element.click()
-        except TimeoutException as e:
-            take_screenshot(driver)
-            logger.error(e)
+        else:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
+                )
+            )
+        element.click()
+    except TimeoutException as e:
+        take_screenshot(driver)
+        copy_dom(driver)
+        logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
     take_screenshot(driver)
-
     copy_dom(driver)
     if username is None:
         username = constants.KUBEADMIN
@@ -1016,7 +1027,9 @@ def close_browser(driver):
     logger.info("Close browser")
     take_screenshot(driver)
     copy_dom(driver)
-    driver.close()
+    driver.quit()
+    time.sleep(10)
+    garbage_collector_webdriver()
 
 
 def proceed_to_login_console(driver: WebDriver):

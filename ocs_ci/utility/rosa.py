@@ -167,11 +167,15 @@ def appliance_mode_cluster(cluster_name):
         )
     public_key_only = remove_header_footer_from_key(public_key)
 
-    subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
-        "private_subnet"
-    ]
-    if not private_link:
-        subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
+    if config.ENV_DATA.get("subnet_ids", ""):
+        subnet_ids = config.ENV_DATA.get("subnet_ids")
+    else:
+        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
+            "private_subnet"
+        ]
+        if not private_link:
+            subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
+
     cmd = (
         f"rosa create service --type {addon_name} --name {cluster_name} "
         f"--machine-cidr {machine_cidr} --size {size} "
@@ -280,7 +284,7 @@ def get_latest_rosa_version(version):
 
     """
     cmd = "rosa list versions"
-    output = utils.run_cmd(cmd)
+    output = utils.run_cmd(cmd, timeout=1800)
     logger.info(f"Looking for z-stream version of {version}")
     rosa_version = None
     for line in output.splitlines():
@@ -413,6 +417,12 @@ def install_odf_addon(cluster):
     notification_email_1 = config.REPORTING.get("notification_email_1")
     notification_email_2 = config.REPORTING.get("notification_email_2")
     cmd = f"rosa install addon --cluster={cluster} {addon_name} --yes"
+    # TODO(fbalak) it needs to be determined if this option is needed
+    # This option was introduced in new rosa cli version and it seems that
+    # it is a mandatory parameter (although rosa install addon --help says
+    # that there is a default value)
+    billing_model = config.ENV_DATA.get("rosa_billing_model")
+    cmd = cmd + f" --billing-model {billing_model}"
     if notification_email_0:
         cmd = cmd + f" --notification-email-0 {notification_email_0}"
     if notification_email_1:

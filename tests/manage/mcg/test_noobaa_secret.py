@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     skipif_ocs_version,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
@@ -59,6 +60,7 @@ def cleanup(request):
 
 @tier2
 @skipif_ocs_version("<4.11")
+@skipif_disconnected_cluster
 class TestNoobaaSecrets:
     @bugzilla("1992090")
     @polarion_id("OCS-4466")

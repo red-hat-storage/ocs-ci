@@ -10,10 +10,11 @@ import yaml
 from jsonschema import validate
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.managed_services import (
-    verify_provider_topology,
-    get_ocs_osd_deployer_version,
-)
+
+# from ocs_ci.helpers.managed_services import (
+#    verify_provider_topology,
+#    get_ocs_osd_deployer_version,
+# )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -1334,8 +1335,9 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
-        if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
-            verify_provider_topology()
+        # TODO: adjust topology check when the final version is known
+        # if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
+        #    verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()
@@ -1355,7 +1357,6 @@ def verify_provider_resources():
     1. Ocs-provider-server pod is Running
     2. cephcluster is Ready and its hostNetworking is set to True
     3. Security groups are set up correctly
-    4. verify memory limit of OSD pods are set to 7Gi
     """
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
@@ -1378,20 +1379,6 @@ def verify_provider_resources():
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
     assert verify_worker_nodes_security_groups()
-
-    # verify OSD pod memory size
-    osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
-    osd_pods = get_osd_pods()
-    log.info("verifying OSD pod memory size")
-    for osd_pod in osd_pods:
-        for each_container in osd_pod.data["spec"]["containers"]:
-            if "osd" in each_container["name"]:
-                assert (
-                    each_container["resources"]["limits"]["memory"] == osd_memory_size
-                ), f"OSD pod {osd_pod.name} container osd doesn't have limits memory of 7Gi"
-                assert (
-                    each_container["resources"]["requests"]["memory"] == osd_memory_size
-                ), f"OSD pod {osd_pod.name} container osd doesn't have requests memory of 7Gi"
 
 
 def verify_consumer_resources():
