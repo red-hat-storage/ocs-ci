@@ -316,10 +316,6 @@ def create_pod(
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
-                security_context = {"capabilities": {"add": ["SYS_ADMIN"]}}
-                pod_data["spec"]["template"]["spec"]["containers"][0][
-                    "securityContext"
-                ] = security_context
 
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeDevices"
