@@ -25,6 +25,7 @@ from ocs_ci.ocs.node import (
     wait_for_node_count_to_reach_status,
     drain_nodes,
     schedule_nodes,
+    generate_nodes_for_provider_worker_node_tests,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import SanityManagedService
@@ -36,7 +37,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP
-
 
 logger = logging.getLogger(__name__)
 
@@ -294,4 +294,29 @@ class TestNodesRestartMS(ManageTest):
             ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
 
         # Create PVCs and pods
+        self.sanity_helpers.create_resources_on_ms_consumers()
+
+    def test_rolling_provider_worker_nodes_restart(self, nodes):
+        """
+        Test restart provider worker nodes one after the other and check health status in between
+        It selects the worker nodes according to the function 'generate_nodes_for_provider_worker_node_tests'.
+
+        """
+        # Switch to provider cluster for the test
+        if is_ms_consumer_cluster():
+            logger.info(
+                "The test is applicable only for an MS provider cluster. "
+                "Switching to the provider cluster..."
+            )
+            config.switch_to_provider()
+
+        node_count = len(get_nodes())
+        ocs_nodes = generate_nodes_for_provider_worker_node_tests()
+        for node in ocs_nodes:
+            nodes.restart_nodes(nodes=[node], wait=False)
+            wait_for_node_count_to_reach_status(
+                node_count=node_count, node_type=constants.WORKER_MACHINE
+            )
+            ceph_health_check(tries=40)
+
         self.sanity_helpers.create_resources_on_ms_consumers()
