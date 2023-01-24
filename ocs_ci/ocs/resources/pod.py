@@ -1013,7 +1013,7 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
     else:
         file_path = file_name
 
-    md5sum_cmd_out = OCP().exec_oc_cmd(
+    md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
         command=f"exec {pod_obj.name} -- md5sum {file_path}"
     )
     md5sum = md5sum_cmd_out.split()[0]
