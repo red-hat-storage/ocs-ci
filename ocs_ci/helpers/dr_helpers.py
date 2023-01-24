@@ -9,6 +9,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.deployment import get_deployments_having_label
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility import version
@@ -254,6 +255,26 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
 
     config.switch_ctx(restore_index)
     return True
+
+
+def get_pv_count(namespace):
+    """
+    Gets PV resource count in the given namespace
+
+    Args:
+        namespace (str): the namespace of the workload
+
+    Returns:
+         int: PV resource count
+
+    """
+    all_pvs = get_all_pvs()["items"]
+    workload_pvs = [
+        pv
+        for pv in all_pvs
+        if pv.get("spec").get("claimRef").get("namespace") == namespace
+    ]
+    return len(workload_pvs)
 
 
 def get_vr_count(namespace):
@@ -564,6 +585,40 @@ def wait_for_all_resources_deletion(
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=timeout, sleep=5
         )
+
+    logger.info("Waiting for all PVs to be deleted")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_pv_count,
+        namespace=namespace,
+    )
+    sample.wait_for_func_value(0)
+
+
+def get_image_uuids(namespace):
+    """
+    Gets all image UUIDs associated with the PVCs in the given namespace
+
+    Args:
+        namespace (str): the namespace of the VR resources
+
+    Returns:
+        list: List of all image UUIDs
+
+    """
+    image_uuids = []
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(
+            f"Fetching image UUIDs from cluster: {cluster.ENV_DATA['cluster_name']}"
+        )
+        all_pvcs = get_all_pvc_objs(namespace=namespace)
+        for pvc_obj in all_pvcs:
+            image_uuids.append(pvc_obj.image_uuid)
+    image_uuids = list(set(image_uuids))
+    logger.info(f"All image UUIDs from managed clusters: {image_uuids}")
+    return image_uuids
 
 
 def get_all_drpolicy():
