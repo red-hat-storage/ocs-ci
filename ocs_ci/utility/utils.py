@@ -1651,7 +1651,7 @@ def save_reports():
         else:
             log.info("Memory performance report not saved - no data")
     except Exception:
-        log.info(f"Failed save reports to slave \n{traceback.format_exc()}")
+        log.exception("Failed save reports to slave")
 
 
 def get_cluster_version_info():

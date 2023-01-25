@@ -74,9 +74,9 @@ def _rec_memory(proc: Process):
             ]
         )
     except ZombieProcess:
-        pass
+        log.exception("Cannot access ZombieProcess. Recording skipped")
     except NoSuchProcess:
-        pass
+        log.exception("Process is unavailable. Recording skipped")
     except ValueError:
         pass
 

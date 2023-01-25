@@ -8,7 +8,6 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-import traceback
 import pandas as pd
 import pytest
 from junitparser import JUnitXml
@@ -757,9 +756,7 @@ def pytest_runtest_setup(item):
             f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_memory)}"
         )
     except Exception:
-        log.warning(
-            f"Got exception while start monitor memory \n{traceback.format_exc()}"
-        )
+        log.exception("Got exception while start to monitor memory")
 
 
 @pytest.hookimpl(trylast=True)
@@ -842,9 +839,7 @@ def pytest_runtest_teardown(item):
             )
         )
     except Exception:
-        log.warning(
-            f"Got exception while stop monitor memory \n{traceback.format_exc()}"
-        )
+        log.exception("Got exception while stop to monitor memory")
     finally:
         if hasattr(ocs_ci.utility.memory, "mon"):
             mon = ocs_ci.utility.memory.mon
