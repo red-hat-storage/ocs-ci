@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.ocp import OCP
@@ -37,7 +36,7 @@ class TestAddCapacityMS(ManageTest):
         self.consumer_indexes = config.get_consumer_indexes_list()
 
     def test_add_capacity_managed_service(
-        self, pvc_factory, pod_factory, teardown_project_factory
+        self, pvc_factory, pod_factory, project_factory
     ):
         """
         Test to add capacity on MS
@@ -55,8 +54,7 @@ class TestAddCapacityMS(ManageTest):
 
         """
         config.switch_ctx(self.consumer_indexes[0])
-        self.project_obj = helpers.create_project()
-        teardown_project_factory(self.project_obj)
+        self.project_obj = project_factory()
 
         logger.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
         pvc_obj_rbd1 = pvc_factory(
