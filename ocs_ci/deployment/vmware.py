@@ -992,10 +992,16 @@ class VSPHEREUPI(VSPHEREBASE):
                 # remove bootstrap node
                 if not config.DEPLOYMENT["preserve_bootstrap_node"]:
                     logger.info("removing bootstrap node")
+                    bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE_413
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        < version.VERSION_4_13
+                    ):
+                        bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE
                     os.chdir(self.terraform_data_dir)
                     if self.folder_structure:
                         self.terraform.destroy_module(
-                            self.terraform_var, constants.BOOTSTRAP_MODULE
+                            self.terraform_var, bootstrap_module_to_remove
                         )
                     else:
                         self.terraform.apply(
