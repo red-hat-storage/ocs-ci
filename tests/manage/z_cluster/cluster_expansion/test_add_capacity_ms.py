@@ -40,20 +40,22 @@ class TestAddCapacityMS(ManageTest):
         self, pvc_factory, pod_factory, teardown_project_factory
     ):
         """
-        Test to add variable capacity to the OSD cluster while IOs running
+        Test to add capacity on MS
+
+        1.Crate new project on Consumer cluster
+        2.Create PVC and FIO POD
+        3.Generate 1G data
+        4.check md5sum on FIO POD
+        5.Get current size via rosa cmd on Provider Cluster
+        6.Configure New size via rosa cmd on Provider Cluster
+        7.Verify all osd pods are running [based on size] on Provider Cluster
+        8.Check Ceph Status
+        9.Create new PVC on Consumer Cluster and verify it moved to bound state
+        10.Verify md5sum is equal to step 4
+
         """
-        SIZE = {
-            "4": "8",
-            "8": "12",
-            "12": "16",
-            "16": "20",
-            "20": "48",
-            "48": "69",
-            "96": "96",
-        }
         config.switch_ctx(self.consumer_indexes[0])
-        project_name = "add-capacity-test"
-        self.project_obj = helpers.create_project(project_name=project_name)
+        self.project_obj = helpers.create_project()
         teardown_project_factory(self.project_obj)
 
         logger.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
@@ -85,7 +87,8 @@ class TestAddCapacityMS(ManageTest):
         config.switch_ctx(self.provider_cluster_index)
 
         current_size = get_managed_service_size(config.ENV_DATA["cluster_name"])
-        new_size = SIZE[current_size]
+        logger.info(f"The current size is {current_size}")
+        new_size = config.ENV_DATA.get("ms_size", "-1")
         configure_managed_service_size(size=new_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         pod.wait_for_resource(
@@ -94,7 +97,7 @@ class TestAddCapacityMS(ManageTest):
             selector="app=rook-ceph-osd",
             resource_count=constants.SIZE_MAP_MANAGED_SERVICE[new_size]["osd_count"],
         )
-        verify_provider_topology(size="8")
+        verify_provider_topology(size=new_size)
         assert ceph_health_check(delay=120, tries=50), "Ceph health check failed"
 
         config.switch_ctx(self.consumer_indexes[0])

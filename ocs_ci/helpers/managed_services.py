@@ -16,7 +16,7 @@ import ocs_ci.ocs.cluster
 log = logging.getLogger(__name__)
 
 
-def verify_provider_topology():
+def verify_provider_topology(size=None):
     """
     Verify topology in a Managed Services provider cluster
 
@@ -28,21 +28,17 @@ def verify_provider_topology():
     6. Verify OSD count
     7. Verify OSD CPU and memory
 
+    Args:
+        size(str): cluster size
+
     """
     # importing here to avoid circular import
     from ocs_ci.ocs.resources.storage_cluster import StorageCluster, get_osd_count
 
-    size = f"{config.ENV_DATA.get('size', 4)}Ti"
+    size = size if size is not None else f"{config.ENV_DATA.get('ms_size')}"
     replica_count = 3
     osd_size = 4
     instance_type = "m5.2xlarge"
-    size_map = {
-        "4Ti": {"total_size": 12, "osd_count": 3, "instance_count": 3},
-        "8Ti": {"total_size": 24, "osd_count": 6, "instance_count": 6},
-        "12Ti": {"total_size": 36, "osd_count": 9, "instance_count": 6},
-        "16Ti": {"total_size": 48, "osd_count": 12, "instance_count": 6},
-        "20Ti": {"total_size": 60, "osd_count": 15, "instance_count": 6},
-    }
     cluster_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     storage_cluster = StorageCluster(
         resource_name="ocs-storagecluster",
@@ -66,10 +62,13 @@ def verify_provider_topology():
     total_size = convert_device_size(
         unformatted_size=f"{total_size}Ki", units_to_covert_to="TB", convert_size=1024
     )
-    assert (
-        total_size == size_map[size]["total_size"]
-    ), f"Total size {total_size}Ti is not matching the expected total size {size_map[size]['total_size']}Ti"
-    log.info(f"Verified that the total size is {size_map[size]['total_size']}Ti")
+    assert total_size == constants.SIZE_MAP_MANAGED_SERVICE[size]["total_size"], (
+        f"Total size {total_size}Ti is not matching the expected total size "
+        f"{constants.SIZE_MAP_MANAGED_SERVICE[size]['total_size']}Ti"
+    )
+    log.info(
+        f"Verified that the total size is {constants.SIZE_MAP_MANAGED_SERVICE[size]['total_size']}Ti"
+    )
 
     # Verify OSD size
     osd_pvc_objs = get_all_pvc_objs(
@@ -95,18 +94,25 @@ def verify_provider_topology():
     log.info(f"Verified that the instance type of worker nodes is {instance_type}")
 
     # Verify worker node instance count
-    assert len(worker_node_names) == size_map[size]["instance_count"], (
+    assert (
+        len(worker_node_names)
+        == constants.SIZE_MAP_MANAGED_SERVICE[size]["instance_count"]
+    ), (
         f"Worker node instance count is not as expected. Actual instance count is {len(worker_node_names)}. "
-        f"Expected {size_map[size]['instance_count']}. List of worker nodes : {worker_node_names}"
+        f"Expected {constants.SIZE_MAP_MANAGED_SERVICE[size]['instance_count']}."
+        f" List of worker nodes : {worker_node_names}"
     )
     log.info("Verified the number of worker nodes.")
 
     # Verify OSD count
     osd_count = get_osd_count()
-    assert (
-        osd_count == size_map[size]["osd_count"]
-    ), f"OSD count is not as expected. Actual:{osd_count}. Expected:{size_map[size]['osd_count']}"
-    log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
+    assert osd_count == constants.SIZE_MAP_MANAGED_SERVICE[size]["osd_count"], (
+        f"OSD count is not as expected. Actual:{osd_count}. "
+        f"Expected:{constants.SIZE_MAP_MANAGED_SERVICE[size]['osd_count']}"
+    )
+    log.info(
+        f"Verified that the OSD count is {constants.SIZE_MAP_MANAGED_SERVICE[size]['osd_count']}"
+    )
 
     # Verify OSD CPU and memory
     osd_cpu_limit = "1750m"
