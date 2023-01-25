@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     bugzilla,
     config,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
 from ocs_ci.utility import kms
@@ -44,6 +45,7 @@ else:
 )
 @tier1
 @skipif_ocs_version("<4.10")
+@skipif_managed_service
 @bugzilla("2050056")
 class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
     """
