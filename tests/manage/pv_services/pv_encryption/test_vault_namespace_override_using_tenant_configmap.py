@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     bugzilla,
     config,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
 from ocs_ci.utility import kms
@@ -102,6 +103,7 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_managed_service
     def test_encryptedrbd_pvc_status_with_tenant_configmap_override(
         self,
         request,
