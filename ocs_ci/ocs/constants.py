@@ -1506,6 +1506,7 @@ FILE_PATH = "/tmp/ceph.tar.gz"
 
 # terraform tfstate modules
 BOOTSTRAP_MODULE = "module.ipam_bootstrap"
+BOOTSTRAP_MODULE_413 = "module.bootstrap"
 LOAD_BALANCER_MODULE = "module.ipam_lb"
 COMPUTE_MODULE = "module.ipam_compute"
 CONTROL_PLANE = "module.ipam_control_plane"
