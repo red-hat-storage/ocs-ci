@@ -5,6 +5,10 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
+    kms_config_required,
+    skipif_managed_service,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     ManageTest,
     tier1,
     bugzilla,
@@ -45,6 +49,10 @@ else:
 @tier1
 @skipif_ocs_version("<4.10")
 @bugzilla("2050056")
+@kms_config_required
+@skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
     """
     Tests to check Tenant configmap override vault namespace or not
