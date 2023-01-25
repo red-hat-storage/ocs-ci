@@ -1589,11 +1589,22 @@ def clone_openshift_installer():
                 clone_type="normal",
             )
         else:
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO,
-                upi_repo_path,
-                f"release-{ocp_version}",
-            )
+            # due to failure domain changes in 4.13, use 4.12 branch till
+            # we incorporate changes
+            if version.get_semantic_version(
+                ocp_version
+            ) >= version.get_semantic_version("4.13"):
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    f"release-4.12",
+                )
+            else:
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    f"release-{ocp_version}",
+                )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO,
