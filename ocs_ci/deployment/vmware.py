@@ -1026,6 +1026,16 @@ class VSPHEREUPI(VSPHEREBASE):
                 # patch image registry to null
                 self.configure_storage_for_image_registry(self.kubeconfig)
 
+                # copy tfstate file to terraform_data directory
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_13
+                ):
+                    copyfile(
+                        f"{constants.VSPHERE_DIR}terraform.tfstate",
+                        f"{self.terraform_data_dir}/terraform.tfstate",
+                    )
+
                 # wait for install to complete
                 logger.info("waiting for install to complete")
                 run_cmd(
@@ -1110,8 +1120,11 @@ class VSPHEREUPI(VSPHEREBASE):
         try:
             with open(terraform_log_path, "r") as fd:
                 logger.debug(f"Reading terraform version from {terraform_log_path}")
-                version_line = fd.readline()
-                terraform_version = version_line.split()[-1]
+                for each_line in fd:
+                    if "Terraform version:" in each_line:
+                        terraform_version = each_line.split()[-1]
+                        break
+
         except FileNotFoundError:
             logger.debug(f"{terraform_log_path} file not found")
             terraform_version = config.DEPLOYMENT["terraform_version"]
