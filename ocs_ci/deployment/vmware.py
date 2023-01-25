@@ -1591,13 +1591,15 @@ def clone_openshift_installer():
         else:
             # due to failure domain changes in 4.13, use 4.12 branch till
             # we incorporate changes
+            # Once https://github.com/openshift/installer/issues/6810 issue is fixed,
+            # we need to revert the changes
             if version.get_semantic_version(
                 ocp_version
             ) >= version.get_semantic_version("4.13"):
                 clone_repo(
                     constants.VSPHERE_INSTALLER_REPO,
                     upi_repo_path,
-                    f"release-4.12",
+                    "release-4.12",
                 )
             else:
                 clone_repo(
