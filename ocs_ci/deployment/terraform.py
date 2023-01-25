@@ -79,14 +79,15 @@ class Terraform(object):
         )
         module_param = f"-target={module}" if module else ""
         refresh_param = "-refresh=false" if not refresh else ""
-        chdir_param = (
-            f"-chdir={self.path}"
-            if not self.is_directory_path_supported
-            else f"{self.path}"
-        )
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
         cmd = (
             f"{self.terraform_installer} {chdir_param} apply {module_param} {refresh_param} '-var-file={tfvars}'"
-            f" -auto-approve {bootstrap_complete_param}"
+            f" -auto-approve {bootstrap_complete_param} {dir_path}"
         )
 
         run_cmd(cmd, timeout=1500)
@@ -101,14 +102,15 @@ class Terraform(object):
         """
         logger.info("Destroying the cluster")
         refresh_param = "-refresh=false" if not refresh else ""
-        chdir_param = (
-            f"-chdir={self.path}"
-            if not self.is_directory_path_supported
-            else f"{self.path}"
-        )
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
         cmd = (
             f"{self.terraform_installer} {chdir_param} destroy {refresh_param}"
-            f" '-var-file={tfvars}' -auto-approve"
+            f" '-var-file={tfvars}' -auto-approve {dir_path}"
         )
         run_cmd(cmd, timeout=1200)
 
@@ -144,12 +146,13 @@ class Terraform(object):
 
         """
         logger.info(f"Destroying the module: {module}")
-        chdir_param = (
-            f"-chdir={self.path}"
-            if not self.is_directory_path_supported
-            else f"{self.path}"
-        )
-        cmd = f"terraform {chdir_param} destroy -auto-approve -target={module} '-var-file={tfvars}'"
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
+        cmd = f"terraform {chdir_param} destroy -auto-approve -target={module} '-var-file={tfvars}' {dir_path}"
         run_cmd(cmd, timeout=1200)
 
     def change_statefile(self, module, resource_type, resource_name, instance):
