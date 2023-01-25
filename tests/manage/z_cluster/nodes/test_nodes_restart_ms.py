@@ -296,6 +296,8 @@ class TestNodesRestartMS(ManageTest):
         # Create PVCs and pods
         self.sanity_helpers.create_resources_on_ms_consumers()
 
+    @tier4b
+    @pytest.mark.polarion_id("OCS-2015")
     def test_rolling_provider_worker_nodes_restart(self, nodes):
         """
         Test restart provider worker nodes one after the other and check health status in between
