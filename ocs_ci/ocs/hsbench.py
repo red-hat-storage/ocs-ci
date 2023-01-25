@@ -2,6 +2,7 @@ import logging
 import os
 import csv
 import filecmp
+import time
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers import helpers
@@ -172,7 +173,7 @@ class HsBench(object):
             timeout=timeout,
         )
         if validate:
-            self.validate_hsbench_workload(result=result)
+            self.validate_hsbench_workload(result=self.result)
 
     def validate_hsbench_workload(self, result=None):
         """
@@ -357,6 +358,7 @@ class HsBench(object):
             CommandFailed: If reshard process fails
 
         """
+        bucket_name = self.bucket_prefix + "000000000000"
         log.info("Starting checking bucket limit and start reshard process")
         try:
             self.toolbox.exec_cmd_on_pod(
@@ -365,7 +367,7 @@ class HsBench(object):
             self.toolbox.exec_cmd_on_pod("radosgw-admin reshard list")
             self.toolbox.exec_cmd_on_pod("radosgw-admin reshard process")
             self.toolbox.exec_cmd_on_pod(
-                f"radosgw-admin reshard status --bucket={self.bucket_name}"
+                f"radosgw-admin reshard status --bucket={bucket_name}"
             )
         except CommandFailed as cf:
             log.error("Failed during reshard process")
@@ -383,7 +385,7 @@ class HsBench(object):
             timeout=self.timeout_clean,
         )
 
-    def cleanup(self):
+    def cleanup(self, timeout=600):
         """
         Clear all objects in the associated bucket
         Clean up deployment config, pvc, pod and test user
@@ -392,3 +394,4 @@ class HsBench(object):
         log.info("Deleting pods and deployment config")
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
+        time.sleep(timeout)
