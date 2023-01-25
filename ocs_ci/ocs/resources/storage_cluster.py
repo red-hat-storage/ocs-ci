@@ -11,10 +11,7 @@ from jsonschema import validate
 
 from ocs_ci.framework import config
 
-# from ocs_ci.helpers.managed_services import (
-#    verify_provider_topology,
-#    get_ocs_osd_deployer_version,
-# )
+from ocs_ci.helpers.managed_services import verify_provider_topology
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -1337,7 +1334,8 @@ def verify_managed_service_resources():
         verify_provider_resources()
         # TODO: adjust topology check when the final version is known
         # if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
-        #    verify_provider_topology()
+        if config.ENV_DATA["addon_name"] == "ocs-provider-dev":
+            verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()
