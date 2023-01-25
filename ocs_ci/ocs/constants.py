@@ -1037,12 +1037,10 @@ OSD_DEPLOYER = "ocs-osd-deployer"
 OSE_PROMETHEUS_OPERATOR = "ose-prometheus-operator"
 SIZE_MAP_MANAGED_SERVICE = {
     "4": {"total_size": 12, "osd_count": 3, "instance_count": 3},
-    "8": {"total_size": 24, "osd_count": 6, "instance_count": 3},
+    "8": {"total_size": 24, "osd_count": 6, "instance_count": 6},
     "12": {"total_size": 36, "osd_count": 9, "instance_count": 6},
     "16": {"total_size": 48, "osd_count": 12, "instance_count": 6},
-    "20": {"total_size": 60, "osd_count": 15, "instance_count": 9},
-    "48": {"total_size": 144, "osd_count": 36, "instance_count": 18},
-    "96": {"total_size": 288, "osd_count": 72, "instance_count": 36},
+    "20": {"total_size": 60, "osd_count": 15, "instance_count": 6},
 }
 
 # Inventory
