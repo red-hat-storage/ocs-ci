@@ -9,6 +9,7 @@ from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusExcept
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
 from ocs_ci.ocs import constants, machine, ocp, defaults
+from ocs_ci.ocs.resources.pod import get_pods_having_label, wait_for_pods_to_be_running
 from ocs_ci.ocs.node import (
     drain_nodes,
     schedule_nodes,
@@ -142,8 +143,15 @@ class TestNodesMaintenance(ManageTest):
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
-        # Maintenance the node (unschedule and drain)
-        drain_nodes([typed_node_name])
+        # check csi-cephfsplugin-provisioner's are ready, see BZ #2162504
+        ceph_provis_pods = get_pods_having_label(
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        ceph_provis_pod_names = [p["metadata"]["name"] for p in ceph_provis_pods]
+        wait_for_pods_to_be_running(
+            pod_names=ceph_provis_pod_names, raise_pod_not_found_error=True
+        )
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
