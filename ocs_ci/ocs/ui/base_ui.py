@@ -174,7 +174,7 @@ class BaseUI:
         locator (set): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator)
+        current_mode = self.is_expanded(locator=locator, timeout=100)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 

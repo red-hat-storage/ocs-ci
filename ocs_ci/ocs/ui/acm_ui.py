@@ -145,7 +145,14 @@ class AcmPageNavigator(BaseUI):
         """
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
-        self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
 
         if not self.check_element_presence(
             (

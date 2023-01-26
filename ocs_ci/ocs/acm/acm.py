@@ -17,7 +17,11 @@ from ocs_ci.ocs.acm.acm_constants import (
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility.utils import TimeoutSampler, get_running_acm_version
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_running_acm_version,
+    string_chunkify,
+)
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
@@ -67,11 +71,11 @@ class AcmAddClusters(AcmPageNavigator):
         kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
         for line in kubeconfig_to_import:
             if len(line) > 100:
-                for c in line:
-                    self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{c}")
+                for chunk in string_chunkify(line, 100):
+                    self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{chunk}")
             else:
                 self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
-            time.sleep(10)
+            time.sleep(2)
         # With ACM2.6 there will be 1 more page
         # 1. Automation
         # So we have to click 'Next' button

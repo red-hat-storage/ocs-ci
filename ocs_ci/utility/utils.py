@@ -4021,3 +4021,20 @@ def convert_hostnames_to_ips(hostnames):
 
     """
     return [socket.gethostbyname(host) for host in hostnames]
+
+
+def string_chunkify(cstring, csize):
+    """
+    Create string chunks of size csize from cstring and
+    yield chunk by chunk
+
+    Args:
+        cstring (str): Original string which need to be chunkified
+        csize (int): size of each chunk
+
+    """
+    i = 0
+    while len(cstring[i:]) > csize:
+        yield cstring[i : i + csize]
+        i += csize
+    yield cstring[i:]

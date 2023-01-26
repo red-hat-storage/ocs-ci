@@ -482,7 +482,10 @@ acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
-    "Infrastructure": ("//button[normalize-space()='Infrastructure']", By.XPATH),
+    "Infrastructure": (
+        "//button[normalize-space()='Infrastructure' and @class='pf-c-nav__link']",
+        By.XPATH,
+    ),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
     "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
     "Automation_page": ("Automation", By.LINK_TEXT),
