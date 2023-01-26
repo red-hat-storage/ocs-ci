@@ -23,9 +23,9 @@ class TestWorkLoadsManagedService(object):
         """
         test workloads managed service
         """
-        self.jenkins_deployment_status = False
-        self.pgsql_deployment_status = False
-        self.amq_deployment_status = False
+        self.jenkins_deployment_status = None
+        self.pgsql_deployment_status = None
+        self.amq_deployment_status = None
 
         multi_consumer_wl_dict = {
             1: [["jenkins", "pgsql", "amq"]],
@@ -55,6 +55,7 @@ class TestWorkLoadsManagedService(object):
                         )
                         self.jenkins_deployment_status = True
                     except Exception as e:
+                        self.jenkins_deployment_status = f"Jenkins workload errors {e},"
                         log.error(e)
 
                 elif workload == "pgsql":
@@ -70,6 +71,7 @@ class TestWorkLoadsManagedService(object):
                         )
                         self.pgsql_deployment_status = True
                     except Exception as e:
+                        self.pgsql_deployment_status = f"Pgsql workload errors {e},"
                         log.error(e)
 
                 elif workload == "amq":
@@ -85,31 +87,19 @@ class TestWorkLoadsManagedService(object):
                         )
                         self.amq_deployment_status = True
                     except Exception as e:
+                        self.amq_deployment_status = f"AMQ workload errors {e},"
                         log.error(e)
 
-                # elif workload == "couchbase":
-                #     workloads_cluster_index["couchbase"] = sub_workloads[
-                #         len(sub_workloads) - 1
-                #     ]
-                #     try:
-                #         couchbase_obj = couchbase_factory_fixture(
-                #             consumer_index=workloads_cluster_index["couchbase"],
-                #             wait_for_pillowfights_to_complete=False,
-                #         )
-                #         self.couchbase_deployment_status = True
-                #     except Exception as e:
-                #         log.error(e)
-
-        if self.jenkins_deployment_status:
+        if self.jenkins_deployment_status is True:
             try:
                 config.switch_ctx(workloads_cluster_index["jenkins"])
                 log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
                 jenkins_obj.wait_for_build_to_complete()
             except Exception as e:
                 log.error(e)
-                self.jenkins_deployment_status = False
+                self.jenkins_deployment_status = f"Jenkins workload errors {e}"
 
-        if self.pgsql_deployment_status:
+        if self.pgsql_deployment_status is True:
             try:
                 config.switch_ctx(workloads_cluster_index["pgsql"])
                 log.info(f"consumer_index={workloads_cluster_index['pgsql']}")
@@ -118,18 +108,9 @@ class TestWorkLoadsManagedService(object):
                 pgsql_obj.validate_pgbench_run(pgbench_pods)
             except Exception as e:
                 log.error(e)
-                self.pgsql_deployment_status = False
+                self.pgsql_deployment_status = f"PGSQL workload errors {e}"
 
-        # if self.couchbase_deployment_status:
-        #     try:
-        #         log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
-        #         config.switch_ctx(workloads_cluster_index["couchbase"])
-        #         # couchbase_obj.run_workload(replicas=3)
-        #     except Exception as e:
-        #         log.error(e)
-        #         self.couchbase_deployment_status = False
-
-        if self.amq_deployment_status:
+        if self.amq_deployment_status is True:
             try:
                 log.info(f"consumer_index={workloads_cluster_index['amq']}")
                 config.switch_ctx(workloads_cluster_index["amq"])
@@ -137,10 +118,13 @@ class TestWorkLoadsManagedService(object):
                 amq.validate_messages_are_consumed()
             except Exception as e:
                 log.error(e)
-                self.amq_deployment_status = False
+                self.amq_deployment_status = f"AMQ workload errors {e}"
 
+        log.info(
+            f"{self.jenkins_deployment_status}\n{self.pgsql_deployment_status}\n{self.amq_deployment_status}"
+        )
         assert [
             self.jenkins_deployment_status,
             self.pgsql_deployment_status,
             self.amq_deployment_status,
-        ] == [True, True], "Not all Workloads pass"
+        ] == [True, True, True], "Not all Workloads pass"
