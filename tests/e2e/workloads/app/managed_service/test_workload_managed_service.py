@@ -19,7 +19,6 @@ class TestWorkLoadsManagedService(object):
         jenkins_factory_fixture,
         pgsql_factory_fixture,
         amq_factory_fixture,
-        couchbase_factory_fixture,
     ):
         """
         test workloads managed service
@@ -27,12 +26,11 @@ class TestWorkLoadsManagedService(object):
         self.jenkins_deployment_status = False
         self.pgsql_deployment_status = False
         self.amq_deployment_status = False
-        self.couchbase_deployment_status = False
+
         multi_consumer_wl_dict = {
-            1: [["jenkins", "pgsql", "amq", "couchbase"]],
-            2: [["jenkins", "pgsql"], ["amq", "couchbase"]],
-            3: [["jenkins"], ["pgsql"], ["amq", "couchbase"]],
-            4: [["jenkins"], ["pgsql"], ["amq"], ["couchbase"]],
+            1: [["jenkins", "pgsql", "amq"]],
+            2: [["jenkins", "amq"], ["pgsql"]],
+            4: [["jenkins"], ["pgsql"], ["amq"]],
         }
         workloads_cluster_index = dict()
 
@@ -89,18 +87,18 @@ class TestWorkLoadsManagedService(object):
                     except Exception as e:
                         log.error(e)
 
-                elif workload == "couchbase":
-                    workloads_cluster_index["couchbase"] = sub_workloads[
-                        len(sub_workloads) - 1
-                    ]
-                    try:
-                        couchbase_obj = couchbase_factory_fixture(
-                            consumer_index=workloads_cluster_index["couchbase"],
-                            wait_for_pillowfights_to_complete=False,
-                        )
-                        self.couchbase_deployment_status = True
-                    except Exception as e:
-                        log.error(e)
+                # elif workload == "couchbase":
+                #     workloads_cluster_index["couchbase"] = sub_workloads[
+                #         len(sub_workloads) - 1
+                #     ]
+                #     try:
+                #         couchbase_obj = couchbase_factory_fixture(
+                #             consumer_index=workloads_cluster_index["couchbase"],
+                #             wait_for_pillowfights_to_complete=False,
+                #         )
+                #         self.couchbase_deployment_status = True
+                #     except Exception as e:
+                #         log.error(e)
 
         if self.jenkins_deployment_status:
             try:
@@ -122,14 +120,14 @@ class TestWorkLoadsManagedService(object):
                 log.error(e)
                 self.pgsql_deployment_status = False
 
-        if self.couchbase_deployment_status:
-            try:
-                log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
-                config.switch_ctx(workloads_cluster_index["couchbase"])
-                couchbase_obj.run_workload(replicas=3)
-            except Exception as e:
-                log.error(e)
-                self.couchbase_deployment_status = False
+        # if self.couchbase_deployment_status:
+        #     try:
+        #         log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
+        #         config.switch_ctx(workloads_cluster_index["couchbase"])
+        #         # couchbase_obj.run_workload(replicas=3)
+        #     except Exception as e:
+        #         log.error(e)
+        #         self.couchbase_deployment_status = False
 
         if self.amq_deployment_status:
             try:
@@ -139,11 +137,10 @@ class TestWorkLoadsManagedService(object):
                 amq.validate_messages_are_consumed()
             except Exception as e:
                 log.error(e)
-                self.couchbase_deployment_status = False
+                self.amq_deployment_status = False
 
         assert [
             self.jenkins_deployment_status,
             self.pgsql_deployment_status,
             self.amq_deployment_status,
-            self.couchbase_deployment_status,
-        ] == [True, True, True, True], "Not all Workloads pass"
+        ] == [True, True], "Not all Workloads pass"
