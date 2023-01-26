@@ -2975,7 +2975,7 @@ def pgsql_factory_fixture(request):
     """
     Pgsql factory fixture
     """
-    pgsql = Postgresql()
+    pgsql_objs_list = list()
     consumer_indexes = list()
 
     def factory(
@@ -3005,7 +3005,13 @@ def pgsql_factory_fixture(request):
             consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
+        if consumer_index is not None:
+            log.info(f"consumer_index={consumer_index}")
+            consumer_indexes.append(consumer_index)
+            config.switch_ctx(consumer_index)
         # Setup postgres
+        pgsql = Postgresql()
+        pgsql_objs_list.append(pgsql)
         pgsql.setup_postgresql(replicas=replicas, sc_name=sc_name)
 
         # Create pgbench benchmark
@@ -3018,10 +3024,6 @@ def pgsql_factory_fixture(request):
             samples=samples,
             timeout=timeout,
         )
-        if consumer_index:
-            log.info(f"consumer_index={consumer_index}")
-            consumer_indexes.append(consumer_index)
-            config.switch_ctx(consumer_index)
 
         if wait_for_pgbench_to_complete:
             # Wait for pg_bench pod to initialized and complete
@@ -3041,7 +3043,8 @@ def pgsql_factory_fixture(request):
         if len(consumer_indexes) > 0:
             config.switch_ctx(consumer_indexes[0])
             log.info(f"{consumer_indexes[0]}")
-        pgsql.cleanup()
+        for pgsql_obj in pgsql_objs_list:
+            pgsql_obj.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
@@ -3052,7 +3055,7 @@ def jenkins_factory_fixture(request):
     """
     Jenkins factory fixture
     """
-    jenkins = Jenkins()
+    jenkins_objects_list = list()
     consumer_indexes = list()
 
     def factory(
@@ -3071,10 +3074,12 @@ def jenkins_factory_fixture(request):
             consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
-        if consumer_index:
+        if consumer_index is not None:
             log.info(f"consumer_index={consumer_index}")
             consumer_indexes.append(consumer_index)
             config.switch_ctx(consumer_index)
+        jenkins = Jenkins()
+        jenkins_objects_list.append(jenkins)
         # Jenkins template
         jenkins.create_ocs_jenkins_template()
         # Init number of projects
@@ -3106,7 +3111,8 @@ def jenkins_factory_fixture(request):
         if len(consumer_indexes) > 0:
             config.switch_ctx(consumer_indexes[0])
             log.info(f"{consumer_indexes[0]}")
-        jenkins.cleanup()
+        for jenkins_object in jenkins_objects_list:
+            jenkins_object.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
@@ -3117,7 +3123,7 @@ def couchbase_factory_fixture(request):
     """
     Couchbase factory fixture using Couchbase operator
     """
-    couchbase = CouchBase()
+    couchbase_objs_list = list()
     consumer_indexes = list()
 
     def factory(
@@ -3142,10 +3148,12 @@ def couchbase_factory_fixture(request):
             consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
-        if consumer_index:
+        if consumer_index is not None:
             log.info(f"consumer_index={consumer_index}")
             consumer_indexes.append(consumer_index)
             config.switch_ctx(consumer_index)
+        couchbase = CouchBase()
+        couchbase_objs_list.append(couchbase)
         # Create Couchbase subscription
         couchbase.couchbase_subscription()
         # Create Couchbase worker secrets
@@ -3176,7 +3184,8 @@ def couchbase_factory_fixture(request):
         if len(consumer_indexes) > 0:
             config.switch_ctx(consumer_indexes[0])
             log.info(f"{consumer_indexes[0]}")
-        couchbase.cleanup()
+        for couchbase_obj in couchbase_objs_list:
+            couchbase_obj.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
@@ -3187,7 +3196,7 @@ def amq_factory_fixture(request):
     """
     AMQ factory fixture
     """
-    amq = AMQ()
+    amq_objs_list = list()
     consumer_indexes = list()
 
     def factory(
@@ -3229,10 +3238,12 @@ def amq_factory_fixture(request):
             consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
-        if consumer_index:
+        if consumer_index is not None:
             log.info(f"consumer_index={consumer_index}")
             consumer_indexes.append(consumer_index)
             config.switch_ctx(consumer_index)
+        amq = AMQ()
+        amq_objs_list.append(amq)
         if run_in_bg and not validate_messages:
             raise Exception(
                 "run_in_bg is not allowed to call when validate_messages is set to False"
@@ -3280,7 +3291,8 @@ def amq_factory_fixture(request):
         if len(consumer_indexes) > 0:
             config.switch_ctx(consumer_indexes[0])
             log.info(f"{consumer_indexes[0]}")
-        amq.cleanup()
+        for amq_obj in amq_objs_list:
+            amq_obj.cleanup()
 
     request.addfinalizer(finalizer)
     return factory
