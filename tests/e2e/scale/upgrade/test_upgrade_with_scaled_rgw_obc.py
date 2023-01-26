@@ -6,8 +6,8 @@ import os
 from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade,
-    post_upgrade,
+    # pre_upgrade,
+    # post_upgrade,
     skipif_managed_service,
     skipif_bm,
     skipif_external_mode,
@@ -33,7 +33,6 @@ log_path = ocsci_log_path()
 obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
 
 
-@pre_upgrade
 @vsphere_platform_required
 @skipif_external_mode
 @skipif_bm
@@ -108,7 +107,6 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
         w_obj.write(str(f"OBC_SCALE_LIST: {obc_scaled_list}\n"))
 
 
-@post_upgrade
 @vsphere_platform_required
 @skipif_external_mode
 @skipif_bm
