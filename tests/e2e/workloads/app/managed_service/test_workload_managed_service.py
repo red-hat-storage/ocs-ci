@@ -104,7 +104,7 @@ class TestWorkLoadsManagedService(object):
 
         if self.jenkins_deployment_status:
             try:
-                # config.switch_ctx(workloads_cluster_index["jenkins"])
+                config.switch_ctx(workloads_cluster_index["jenkins"])
                 log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
                 jenkins_obj.wait_for_build_to_complete()
             except Exception as e:
@@ -113,7 +113,7 @@ class TestWorkLoadsManagedService(object):
 
         if self.pgsql_deployment_status:
             try:
-                # config.switch_ctx(workloads_cluster_index["pgsql"])
+                config.switch_ctx(workloads_cluster_index["pgsql"])
                 log.info(f"consumer_index={workloads_cluster_index['pgsql']}")
                 pgsql_obj.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
                 pgbench_pods = pgsql_obj.get_pgbench_pods()
@@ -125,7 +125,7 @@ class TestWorkLoadsManagedService(object):
         if self.couchbase_deployment_status:
             try:
                 log.info(f"consumer_index={workloads_cluster_index['couchbase']}")
-                # config.switch_ctx(workloads_cluster_index["couchbase"])
+                config.switch_ctx(workloads_cluster_index["couchbase"])
                 couchbase_obj.run_workload(replicas=3)
             except Exception as e:
                 log.error(e)
@@ -134,7 +134,7 @@ class TestWorkLoadsManagedService(object):
         if self.amq_deployment_status:
             try:
                 log.info(f"consumer_index={workloads_cluster_index['amq']}")
-                # config.switch_ctx(workloads_cluster_index["amq"])
+                config.switch_ctx(workloads_cluster_index["amq"])
                 amq.validate_messages_are_produced()
                 amq.validate_messages_are_consumed()
             except Exception as e:

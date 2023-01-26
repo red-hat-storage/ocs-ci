@@ -2976,6 +2976,7 @@ def pgsql_factory_fixture(request):
     Pgsql factory fixture
     """
     pgsql = Postgresql()
+    consumer_indexes = list()
 
     def factory(
         replicas,
@@ -2987,6 +2988,7 @@ def pgsql_factory_fixture(request):
         timeout=None,
         sc_name=None,
         wait_for_pgbench_to_complete=True,
+        consumer_index=None,
     ):
         """
         Factory to start pgsql workload
@@ -3000,6 +3002,7 @@ def pgsql_factory_fixture(request):
             samples (int): Number of samples to run
             timeout (int): Time in seconds to wait
             wait_for_pgbench_to_complete (bool): If set to True, the fixture will wait for the pgbench run to complete
+            consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
         # Setup postgres
@@ -3015,6 +3018,10 @@ def pgsql_factory_fixture(request):
             samples=samples,
             timeout=timeout,
         )
+        if consumer_index:
+            log.info(f"consumer_index={consumer_index}")
+            consumer_indexes.append(consumer_index)
+            config.switch_ctx(consumer_index)
 
         if wait_for_pgbench_to_complete:
             # Wait for pg_bench pod to initialized and complete
@@ -3031,6 +3038,9 @@ def pgsql_factory_fixture(request):
         """
         Clean up
         """
+        if len(consumer_indexes) > 0:
+            config.switch_ctx(consumer_indexes[0])
+            log.info(f"{consumer_indexes[0]}")
         pgsql.cleanup()
 
     request.addfinalizer(finalizer)
@@ -3043,8 +3053,14 @@ def jenkins_factory_fixture(request):
     Jenkins factory fixture
     """
     jenkins = Jenkins()
+    consumer_indexes = list()
 
-    def factory(num_projects=1, num_of_builds=1, wait_for_build_to_complete=True):
+    def factory(
+        num_projects=1,
+        num_of_builds=1,
+        wait_for_build_to_complete=True,
+        consumer_index=None,
+    ):
         """
         Factory to start jenkins workload
 
@@ -3052,8 +3068,13 @@ def jenkins_factory_fixture(request):
             num_projects (int): Number of Jenkins projects
             num_of_builds (int): Number of builds per project
             wait_for_build_to_complete (bool): If set to True, the fixture will wait for the Jenkins build to complete
+            consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
+        if consumer_index:
+            log.info(f"consumer_index={consumer_index}")
+            consumer_indexes.append(consumer_index)
+            config.switch_ctx(consumer_index)
         # Jenkins template
         jenkins.create_ocs_jenkins_template()
         # Init number of projects
@@ -3082,6 +3103,9 @@ def jenkins_factory_fixture(request):
         """
         Clean up
         """
+        if len(consumer_indexes) > 0:
+            config.switch_ctx(consumer_indexes[0])
+            log.info(f"{consumer_indexes[0]}")
         jenkins.cleanup()
 
     request.addfinalizer(finalizer)
@@ -3094,6 +3118,7 @@ def couchbase_factory_fixture(request):
     Couchbase factory fixture using Couchbase operator
     """
     couchbase = CouchBase()
+    consumer_indexes = list()
 
     def factory(
         replicas=3,
@@ -3103,6 +3128,7 @@ def couchbase_factory_fixture(request):
         num_items=None,
         num_threads=None,
         wait_for_pillowfights_to_complete=True,
+        consumer_index=None,
     ):
         """
         Factory to start couchbase workload
@@ -3113,8 +3139,13 @@ def couchbase_factory_fixture(request):
             skip_analyze (bool): Skip logs analysis as option
             wait_for_pillowfight_to_complete (bool): If set to True, the fixture will wait for the pillowfight
             workload to reach compelete state
+            consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
+        if consumer_index:
+            log.info(f"consumer_index={consumer_index}")
+            consumer_indexes.append(consumer_index)
+            config.switch_ctx(consumer_index)
         # Create Couchbase subscription
         couchbase.couchbase_subscription()
         # Create Couchbase worker secrets
@@ -3142,6 +3173,9 @@ def couchbase_factory_fixture(request):
         """
         Clean up
         """
+        if len(consumer_indexes) > 0:
+            config.switch_ctx(consumer_indexes[0])
+            log.info(f"{consumer_indexes[0]}")
         couchbase.cleanup()
 
     request.addfinalizer(finalizer)
@@ -3154,6 +3188,7 @@ def amq_factory_fixture(request):
     AMQ factory fixture
     """
     amq = AMQ()
+    consumer_indexes = list()
 
     def factory(
         sc_name,
@@ -3170,6 +3205,7 @@ def amq_factory_fixture(request):
         since_time=1800,
         run_in_bg=True,
         validate_messages=True,
+        consumer_index=None,
     ):
         """
         Factory to start amq workload
@@ -3190,8 +3226,13 @@ def amq_factory_fixture(request):
             run_in_bg (bool): If set to True, validate of messages are done in a bg job
             validate_messages (bool): If set to True, the fixture will validate that all the messages are
             sent and recieved to Producer and Consumer Pods respectively.
+            consumer_index (int): switch to relevant consumer cluster on Managed Service setup
 
         """
+        if consumer_index:
+            log.info(f"consumer_index={consumer_index}")
+            consumer_indexes.append(consumer_index)
+            config.switch_ctx(consumer_index)
         if run_in_bg and not validate_messages:
             raise Exception(
                 "run_in_bg is not allowed to call when validate_messages is set to False"
@@ -3236,6 +3277,9 @@ def amq_factory_fixture(request):
 
         """
         # Clean up
+        if len(consumer_indexes) > 0:
+            config.switch_ctx(consumer_indexes[0])
+            log.info(f"{consumer_indexes[0]}")
         amq.cleanup()
 
     request.addfinalizer(finalizer)
