@@ -458,12 +458,12 @@ def ocs_install_verification(
                 ]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
-    if post_upgrade_verification:
-        retry((ValidationError), tries=3, delay=60)(verify_osd_tree_schema)(
-            ct_pod, deviceset_pvcs
-        )
-    else:
-        verify_osd_tree_schema(ct_pod, deviceset_pvcs)
+        if post_upgrade_verification:
+            retry((ValidationError), tries=3, delay=60)(verify_osd_tree_schema)(
+                ct_pod, deviceset_pvcs
+            )
+        else:
+            verify_osd_tree_schema(ct_pod, deviceset_pvcs)
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
