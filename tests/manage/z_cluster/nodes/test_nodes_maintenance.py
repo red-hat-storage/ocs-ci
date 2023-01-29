@@ -143,6 +143,9 @@ class TestNodesMaintenance(ManageTest):
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
+        # Maintenance the node (unschedule and drain)
+        drain_nodes([typed_node_name])
+
         # check csi-cephfsplugin-provisioner's are ready, see BZ #2162504
         ceph_provis_pods = get_pods_having_label(
             constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
