@@ -65,37 +65,51 @@ def delete_htpasswd_secret():
     exec_cmd(cmd)
 
 
-def delete_user(user_name=None):
+def delete_user(user_name):
     """
-    Delete user if user_name is None delete all users
+    Delete a user
 
     Args:
         user_name (str): the user to delete
     """
-    if user_name is None:
-        cmd = "oc delete user --all"
-    else:
-        cmd = f"oc delete user {user_name}"
     try:
-        exec_cmd(cmd)
+        exec_cmd(f"oc delete user {user_name}")
     except CommandFailed as e:
         log.error(e)
 
 
-def delete_identity(user_name=None):
+def delete_all_users():
     """
-    Delete identity
+    Delete all users
+
+    """
+    try:
+        exec_cmd("oc delete user --all")
+    except CommandFailed as e:
+        log.error(e)
+
+
+def delete_identity(user_name):
+    """
+    Delete identity of user
 
     Args:
         user_name (str): the user to delete
 
     """
-    if user_name is None:
-        cmd = "oc delete identity --all"
-    else:
-        cmd = f"oc delete identity my_htpasswd_provider:{user_name}"
     try:
-        exec_cmd(cmd)
+        exec_cmd(f"oc delete identity my_htpasswd_provider:{user_name}")
+    except CommandFailed as e:
+        log.error(e)
+
+
+def delete_all_identities():
+    """
+    Delete all identities
+
+    """
+    try:
+        exec_cmd("oc delete identity --all")
     except CommandFailed as e:
         log.error(e)
 
