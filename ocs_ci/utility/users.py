@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -77,8 +78,8 @@ def delete_user(user_name=None):
         cmd = f"oc delete user {user_name}"
     try:
         exec_cmd(cmd)
-    except Exception as e:
-        logging.error(e)
+    except CommandFailed as e:
+        log.error(e)
 
 
 def delete_identity(user_name=None):
@@ -95,8 +96,8 @@ def delete_identity(user_name=None):
         cmd = f"oc delete identity my_htpasswd_provider:{user_name}"
     try:
         exec_cmd(cmd)
-    except Exception as e:
-        logging.error(e)
+    except CommandFailed as e:
+        log.error(e)
 
 
 def create_htpasswd_idp():
