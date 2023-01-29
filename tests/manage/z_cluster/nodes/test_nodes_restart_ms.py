@@ -32,6 +32,7 @@ from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
     is_ms_consumer_cluster,
+    CephCluster,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -321,4 +322,8 @@ class TestNodesRestartMS(ManageTest):
             )
             ceph_health_check(tries=40)
 
+        logger.info("Wait for noobaa health to be OK")
+        ceph_cluster_obj = CephCluster()
+        ceph_cluster_obj.wait_for_noobaa_health_ok()
+        logger.info("Create resources on MS consumers")
         self.sanity_helpers.create_resources_on_ms_consumers()

@@ -2619,12 +2619,14 @@ def generate_nodes_for_provider_worker_node_tests():
         list: The list of the node objects for the provider node tests
 
     """
-    wnodes = get_worker_nodes()
-    if len(wnodes) <= 3:
-        log.info(f"Generated nodes for provider node tests: {wnodes}")
-        return get_node_objs(wnodes)
+    wnode_names = get_worker_nodes()
+    if len(wnode_names) <= 3:
+        generated_nodes = get_node_objs(wnode_names)
+        log.info(f"Generated nodes for provider node tests: {wnode_names}")
+        return generated_nodes
 
-    mgr_node_name = pod.get_pod_node(pod.get_mgr_pods()[0]).name
+    mgr_pod = random.choice(pod.get_mgr_pods())
+    mgr_node_name = pod.get_pod_node(mgr_pod).name
     mon_node_names = get_mon_running_nodes()
     if mgr_node_name in mon_node_names:
         mon_node_names.remove(mgr_node_name)
@@ -2646,6 +2648,8 @@ def generate_nodes_for_provider_worker_node_tests():
 
     osd_exclude_ceph_node_set = osd_node_set - ceph_node_set
     osd_choices = random.sample(osd_exclude_ceph_node_set, k=num_of_osds_to_add)
-    node_choices = list(ceph_node_set) + osd_choices
-    log.info(f"Generated nodes for provider node tests: {node_choices}")
-    return get_node_objs(node_choices)
+    node_choice_names = list(ceph_node_set) + osd_choices
+
+    generated_nodes = get_node_objs(node_choice_names)
+    log.info(f"Generated nodes for provider node tests: {node_choice_names}")
+    return generated_nodes
