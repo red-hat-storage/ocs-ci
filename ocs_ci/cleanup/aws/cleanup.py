@@ -185,9 +185,10 @@ def get_clusters(
 
     def determine_cluster_deletion_base_name(ec2_instance_objs, vpc_id):
         # Get all instances
-        vpc_ids = []
-        for ec2_instance in ec2_instance_objs:
-            vpc_ids.append(ec2_instance.get("Instances")[0].get("VpcId"))
+        vpc_ids = [
+            ec2_instance.get("Instances")[0].get("VpcId")
+            for ec2_instance in ec2_instance_objs
+        ]
         # Verify vpc_id exist and all ec2 instances on same vpc
         if vpc_id in vpc_ids and len(set(vpc_ids)) == 1:
             return True
