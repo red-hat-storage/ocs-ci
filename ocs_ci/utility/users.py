@@ -67,7 +67,7 @@ def delete_htpasswd_secret():
 
 def delete_user(user_name=None):
     """
-    Delete user
+    Delete user if user_name is None delete all users
 
     Args:
         user_name (str): the user to delete
