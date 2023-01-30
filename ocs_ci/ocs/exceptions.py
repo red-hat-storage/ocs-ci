@@ -276,6 +276,10 @@ class ExternalClusterCephfsMissing(Exception):
     pass
 
 
+class ExternalClusterCephSSHAuthDetailsMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
