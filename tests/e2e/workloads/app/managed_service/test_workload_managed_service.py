@@ -30,11 +30,11 @@ class TestWorkLoadsManagedService(object):
         multi_consumer_wl_dict = {
             1: [["jenkins", "pgsql", "amq"]],
             2: [["jenkins", "amq"], ["pgsql"]],
-            4: [["jenkins"], ["pgsql"], ["amq"]],
+            3: [["jenkins"], ["pgsql"], ["amq"]],
         }
         workloads_cluster_index = dict()
 
-        workloads = multi_consumer_wl_dict.get(len(config.index_consumer_clusters), 4)
+        workloads = multi_consumer_wl_dict.get(len(config.index_consumer_clusters), 3)
         for sub_workloads, index_consumer in zip(
             workloads, config.index_consumer_clusters
         ):
