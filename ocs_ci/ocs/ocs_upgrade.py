@@ -570,8 +570,8 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
     )
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
-        host, user, password = get_external_cluster_client()
-        external_cluster = ExternalCluster(host, user, password)
+        host, user, password, ssh_key = get_external_cluster_client()
+        external_cluster = ExternalCluster(host, user, password, ssh_key)
 
     # For external cluster , create the secrets if upgraded version is 4.8
     if (
