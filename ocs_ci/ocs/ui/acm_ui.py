@@ -80,7 +80,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
+        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout, enable_screenshot=True)
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -113,7 +113,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Infrastructure_environments_page"])
+        self.do_click(locator=self.acm_page_nav["Infrastructure_environments_page"], enable_screenshot=True)
 
     def navigate_applications_page(self):
         """
@@ -145,6 +145,7 @@ class AcmPageNavigator(BaseUI):
             self.take_screenshot()
             raise NoSuchElementException
         self.do_click_by_id(self.acm_page_nav["local-cluster"])
+        self.take_screenshot()
         if not self.check_element_presence(self.acm_page_nav["all-clusters"]):
             log.error("All Clusters is not found, can not switch to ACM console")
             self.take_screenshot()
@@ -158,7 +159,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["data-services"]
         )
-        self.do_click(locator=self.acm_page_nav["data-policies"])
+        self.do_click(locator=self.acm_page_nav["data-policies"], enable_screenshot=True)
 
     def navigate_from_ocp_to_acm_cluster_page(self):
         """

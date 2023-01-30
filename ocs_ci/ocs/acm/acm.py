@@ -198,62 +198,64 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
 
-    def submariner_validation_ui(self):
+    def submariner_validation_ui(self, submariner_ui_installation=False):
         """
         Checks available status of imported clusters after submariner creation
 
         """
-
-        self.navigate_clusters_page()
-        self.page_has_loaded(retries=15, sleep_time=5)
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
-        log.info("Click on Cluster sets")
-        self.do_click(self.page_nav["cluster-sets"])
-        self.page_has_loaded(retries=15, sleep_time=5)
-        log.info("Click on the cluster set created")
-        self.do_click(
-            format_locator(
-                locator=self.page_nav["cluster-set-selection"],
-                string_to_insert=cluster_set_name,
+        if submariner_ui_installation:
+            self.navigate_clusters_page()
+            self.page_has_loaded(retries=15, sleep_time=5)
+            self.do_click(locator=self.acm_page_nav["Clusters_page"])
+            log.info("Click on Cluster sets")
+            self.do_click(self.page_nav["cluster-sets"])
+            self.page_has_loaded(retries=15, sleep_time=5)
+            log.info("Click on the cluster set created")
+            self.do_click(
+                format_locator(
+                    locator=self.page_nav["cluster-set-selection"],
+                    string_to_insert=cluster_set_name,
+                )
             )
-        )
-        log.info("Click on 'Submariner add-ons' tab")
-        self.do_click(self.page_nav["submariner-tab"])
-        log.info("Checking connection status of both the imported clusters")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["connection-status-1"],
-            expected_text="Healthy",
-            timeout=600,
-        ), "Connection status 1 is unhealthy for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["connection-status-2"],
-            expected_text="Healthy",
-            timeout=600,
-        ), "Connection status 2 is unhealthy for Submariner"
-        log.info("Checking agent status of both the imported clusters")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["agent-status-1"],
-            expected_text="Healthy",
-            timeout=600,
-        ), "Agent status 1 is unhealthy for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["agent-status-2"],
-            expected_text="Healthy",
-            timeout=600,
-        ), "Agent status 2 is unhealthy for Submariner"
-        log.info("Checking if nodes of both the imported clusters are labeled or not")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["node-label-1"],
-            expected_text="Nodes labeled",
-            timeout=600,
-        ), "First gateway node label check did not pass for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["node-label-2"],
-            expected_text="Nodes labeled",
-            timeout=600,
-        ), "Second gateway node label check did not pass for Submariner"
-        self.take_screenshot()
-        log.info("Submariner is healthy, check passed")
+            log.info("Click on 'Submariner add-ons' tab")
+            self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
+            log.info("Checking connection status of both the imported clusters")
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["connection-status-1"],
+                expected_text="Healthy",
+                timeout=600,
+            ), "Connection status 1 is unhealthy for Submariner"
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["connection-status-2"],
+                expected_text="Healthy",
+                timeout=600,
+            ), "Connection status 2 is unhealthy for Submariner"
+            log.info("Checking agent status of both the imported clusters")
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["agent-status-1"],
+                expected_text="Healthy",
+                timeout=600,
+            ), "Agent status 1 is unhealthy for Submariner"
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["agent-status-2"],
+                expected_text="Healthy",
+                timeout=600,
+            ), "Agent status 2 is unhealthy for Submariner"
+            log.info("Checking if nodes of both the imported clusters are labeled or not")
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["node-label-1"],
+                expected_text="Nodes labeled",
+                timeout=600,
+            ), "First gateway node label check did not pass for Submariner"
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["node-label-2"],
+                expected_text="Nodes labeled",
+                timeout=600,
+            ), "Second gateway node label check did not pass for Submariner"
+            self.take_screenshot()
+            log.info("Submariner is healthy, check passed")
+        else:
+            log.error("Submariner is not installed via ACM UI, skipping UI validation")
 
 
 def copy_kubeconfig(file):

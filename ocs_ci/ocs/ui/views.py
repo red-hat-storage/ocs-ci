@@ -722,6 +722,25 @@ acm_configuration_4_12 = {
     "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
     "data-services": ("Data Services", By.LINK_TEXT),
     "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
+    "applications-page": (".pf-c-nav__link.pf-m-current[data-test='nav']", By.CSS_SELECTOR),
+    "apply-filter": ("#pf-select-toggle-id-30", By.CSS_SELECTOR),
+    "subscription": ("//input[@id='app.k8s.io/Application']", By.XPATH),
+    "workload-name": ('//*[text()="{}"]', By.XPATH),
+    "kebab-action": ("Actions", By.XPATH),
+    "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
+    "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
+    "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
+    "select-policy": ('//*[text()="{}"]', By.XPATH),
+    "failover-target-cluster-dropdown": ("//button[@id='pf-dropdown-toggle-id-6445']", By.XPATH),
+    "failover-cluster-name": ('//*[text()="{}"]', By.XPATH),
+    "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
+
+
+
+
+
+
+
 
 
 
