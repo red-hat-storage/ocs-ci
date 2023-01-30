@@ -146,14 +146,19 @@ class TestNodesMaintenance(ManageTest):
         # Maintenance the node (unschedule and drain)
         drain_nodes([typed_node_name])
 
-        # check csi-cephfsplugin-provisioner's are ready, see BZ #2162504
-        ceph_provis_pods = get_pods_having_label(
+        # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
+        # are ready, see BZ #2162504
+        provis_pods = get_pods_having_label(
             constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
             defaults.ROOK_CLUSTER_NAMESPACE,
         )
-        ceph_provis_pod_names = [p["metadata"]["name"] for p in ceph_provis_pods]
+        provis_pods += get_pods_having_label(
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+            defaults.ROOK_CLUSTER_NAMESPACE,
+        )
+        provis_pod_names = [p["metadata"]["name"] for p in provis_pods]
         wait_for_pods_to_be_running(
-            pod_names=ceph_provis_pod_names, raise_pod_not_found_error=True
+            pod_names=provis_pod_names, raise_pod_not_found_error=True
         )
 
         # Check basic cluster functionality by creating resources
