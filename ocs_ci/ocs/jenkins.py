@@ -313,6 +313,7 @@ class Jenkins(object):
         # Find Kind: 'PersistentVolumeClaim' position in the objects list, differs in OCP 4.5 and OCP 4.6.
         sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            and config.ENV_DATA["platform"].lower() != constants.ROSA_PLATFORM
             if storagecluster_independent_check()
             else constants.DEFAULT_STORAGECLASS_RBD
         )
