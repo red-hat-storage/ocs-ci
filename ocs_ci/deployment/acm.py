@@ -191,7 +191,8 @@ class Submariner(object):
         try:
             run_subctl_cmd(connct_check)
         except Exception:
-            logger.warning("Submariner verification has issues")
+            logger.error("Submariner verification has issues")
+            raise
 
     def get_primary_cluster_index(self):
         """

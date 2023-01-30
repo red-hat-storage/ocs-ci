@@ -410,6 +410,18 @@ class BaseUI:
             self.take_screenshot()
             return False
 
+    def wait_for_endswith_url(self, endswith, timeout=60):
+        """
+        Wait for endswith url to load
+
+        Args:
+            endswith (string): url endswith string for which we need to wait
+            timeout (int): Timeout in seconds
+
+        """
+        wait = WebDriverWait(self.driver, timeout=timeout)
+        wait.until(ec.url_matches(endswith))
+
 
 class PageNavigator(BaseUI):
     """
