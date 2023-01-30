@@ -5,6 +5,7 @@ import time
 from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
+import random
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -37,7 +38,6 @@ from ocs_ci.ocs.resources.pv import (
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.utility.rosa import is_odf_addon_installed, edit_addon_installation
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-
 
 log = logging.getLogger(__name__)
 
@@ -2604,3 +2604,52 @@ def consumers_verification_steps_after_provider_node_replacement():
 
     log.info("All the consumers verification steps finished successfully")
     return True
+
+
+def generate_nodes_for_provider_worker_node_tests():
+    """
+    Generate worker node objects for the provider worker node tests.
+
+    The function generates the node objects as follows:
+    - If we have 3 worker nodes in the cluster, it generates all the 3 worker nodes
+    - If we have more than 3 worker nodes, it generates one mgr node, 2 mon nodes, and 2 osd nodes.
+    The nodes can overlap, but at least 3 nodes should be selected(and no more than 5 nodes).
+
+    Returns:
+        list: The list of the node objects for the provider node tests
+
+    """
+    wnode_names = get_worker_nodes()
+    if len(wnode_names) <= 3:
+        generated_nodes = get_node_objs(wnode_names)
+        log.info(f"Generated nodes for provider node tests: {wnode_names}")
+        return generated_nodes
+
+    mgr_pod = random.choice(pod.get_mgr_pods())
+    mgr_node_name = pod.get_pod_node(mgr_pod).name
+    mon_node_names = get_mon_running_nodes()
+    if mgr_node_name in mon_node_names:
+        mon_node_names.remove(mgr_node_name)
+        # Set of one mgr node, and one mon node
+        ceph_node_set = {mgr_node_name, random.choice(mon_node_names)}
+    else:
+        # Set of one mgr node, and two mon nodes
+        ceph_node_set = set([mgr_node_name] + random.choices(mon_node_names, k=2))
+
+    osd_node_set = set(get_osd_running_nodes())
+    ceph_include_osd_node_set = ceph_node_set.intersection(osd_node_set)
+
+    if len(ceph_include_osd_node_set) < 2:
+        num_of_osds_to_add = 2 - len(ceph_include_osd_node_set)
+    elif len(ceph_node_set) == 2:
+        num_of_osds_to_add = 1
+    else:
+        num_of_osds_to_add = 0
+
+    osd_exclude_ceph_node_set = osd_node_set - ceph_node_set
+    osd_choices = random.sample(osd_exclude_ceph_node_set, k=num_of_osds_to_add)
+    node_choice_names = list(ceph_node_set) + osd_choices
+
+    generated_nodes = get_node_objs(node_choice_names)
+    log.info(f"Generated nodes for provider node tests: {node_choice_names}")
+    return generated_nodes
