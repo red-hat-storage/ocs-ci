@@ -36,7 +36,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -3229,15 +3229,20 @@ def set_configmap_log_level_rook_ceph_operator(value):
         value (str): type of log
 
     """
-    path = "/data/ROOK_LOG_LEVEL"
-    params = f"""[{{"op": "add", "path": "{path}", "value": "{value}"}}]"""
     configmap_obj = OCP(
         kind=constants.CONFIGMAP,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
     logger.info(f"Setting ROOK_LOG_LEVEL to: {value}")
-    configmap_obj.patch(params=params, format_type="json")
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_12:
+        params = f'{{"data": {{"ROOK_LOG_LEVEL": "{value}"}}}}'
+        configmap_obj.patch(params=params, format_type="merge")
+    else:
+        path = "/data/ROOK_LOG_LEVEL"
+        params = f"""[{{"op": "add", "path": "{path}", "value": "{value}"}}]"""
+        configmap_obj.patch(params=params, format_type="json")
 
 
 def get_logs_rook_ceph_operator():

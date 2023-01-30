@@ -3,6 +3,7 @@ import pytest
 import random
 
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
@@ -45,6 +46,7 @@ class TestRookCephOperatorLogType(ManageTest):
 
     def teardown(self):
         set_configmap_log_level_rook_ceph_operator(value="INFO")
+        ceph_health_check()
 
     def test_rook_ceph_operator_log_type(self):
         """
