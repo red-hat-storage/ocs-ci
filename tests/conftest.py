@@ -143,6 +143,7 @@ from ocs_ci.helpers.longevity_helpers import (
     _multi_obc_lifecycle_factory,
 )
 from ocs_ci.ocs.longevity import start_app_workload
+from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -5952,15 +5953,13 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
         config.switch_ctx(orig_index)
         return consumer_index_per_fio_scale_dict
 
+    @switch_to_default_cluster_index_at_last
     def finalizer():
         log.info("Cleaning the fio_scale instances")
         for consumer_i, fio_scale in consumer_index_per_fio_scale_dict.items():
             config.switch_ctx(consumer_i)
             if not fio_scale.is_cleanup:
                 fio_scale.cleanup()
-
-        if orig_index is not None:
-            config.switch_ctx(orig_index)
 
     request.addfinalizer(finalizer)
     return factory
