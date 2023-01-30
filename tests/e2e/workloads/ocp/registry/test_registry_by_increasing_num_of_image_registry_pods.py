@@ -10,12 +10,14 @@ from ocs_ci.ocs.registry import (
     validate_pvc_mount_on_registry_pod,
 )
 from ocs_ci.framework.testlib import E2ETest, workloads, bugzilla
+from ocs_ci.utility import prometheus
 
 log = logging.getLogger(__name__)
 
 
 @workloads
 @bugzilla("1981639")
+@bugzilla("2128263")
 class TestRegistryByIncreasingNumPods(E2ETest):
     """
     Test to increase number of registry pods
@@ -61,6 +63,8 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         validate all the image-registry pod should have the same PVC backend.
 
         """
+        api = prometheus.PrometheusAPI()
+
         # Increase the replica count to 3
         assert modify_registry_pod_count(
             count
@@ -71,6 +75,20 @@ class TestRegistryByIncreasingNumPods(E2ETest):
 
         # Validate pvc mounted on image registry pod
         validate_pvc_mount_on_registry_pod()
+        # Coverage for Bz 2128263
+        log.info(
+            f"Verifying whether alert {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP} "
+            "has been triggered"
+        )
+        alerts = api.wait_for_alert(
+            name=constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP,
+            timeout=100,
+            sleep=1,
+        )
+        if len(alerts) > 0:
+            assert (
+                False
+            ), f"Failed: There should be no {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP} alert"
 
         # Pull and push images to registries
         log.info("Pull and push images to registries")
