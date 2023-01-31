@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     polarion_id,
+    bugzilla,
     skipif_ocp_version,
 )
 from ocs_ci.ocs.resources import pod
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2353")
+@bugzilla(2042318)
 class TestCloneWhenFull(ManageTest):
     """
     Tests to verify PVC clone when PVC is full
@@ -96,8 +98,7 @@ class TestCloneWhenFull(ManageTest):
         # Bug 2042318
         for clone_pvc in cloned_pvcs:
             pv = clone_pvc.get().get("spec").get("volumeName")
-            print(pv)
-            func_calls = ["failed"]
+            func_calls = "failed"
             error_msg = f"{pv} failed to create clone from subvolume"
             csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -109,15 +110,12 @@ class TestCloneWhenFull(ManageTest):
                     pod_name=pod_obj.name, container="csi-cephfsplugin"
                 )
 
-                for f_call in func_calls:
-                    if f_call in pod_log:
-                        relevant_pod_logs = pod_log
-                        log.info(f"Found '{f_call}' call in logs on pod {pod_obj.name}")
-                        break
+                if func_calls in pod_log:
+                    relevant_pod_logs = pod_log
+                    log.info(f"Found '{func_calls}' call in logs on pod {pod_obj.name}")
+                    break
 
-            assert (
-                relevant_pod_logs
-            ), f"None of {func_calls} were not found on any pod logs"
+            assert relevant_pod_logs, f"{func_calls} were not found on any pod logs"
             assert (
                 error_msg in relevant_pod_logs
             ), f"Logs should contain the error message '{error_msg}'"
