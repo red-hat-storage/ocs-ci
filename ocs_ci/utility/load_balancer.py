@@ -45,9 +45,7 @@ class LoadBalancer(object):
              str: IP Address of load balancer
 
         """
-        self.terraform_state_file = os.path.join(
-            config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
-        )
+        self.terraform_state_file = config.ENV_DATA["terraform_state_file"]
 
         if not os.path.isfile(self.terraform_state_file):
             raise FileNotFoundError(

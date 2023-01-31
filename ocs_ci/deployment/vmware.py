@@ -992,10 +992,16 @@ class VSPHEREUPI(VSPHEREBASE):
                 # remove bootstrap node
                 if not config.DEPLOYMENT["preserve_bootstrap_node"]:
                     logger.info("removing bootstrap node")
+                    bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE_413
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        < version.VERSION_4_13
+                    ):
+                        bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE
                     os.chdir(self.terraform_data_dir)
                     if self.folder_structure:
                         self.terraform.destroy_module(
-                            self.terraform_var, constants.BOOTSTRAP_MODULE
+                            self.terraform_var, bootstrap_module_to_remove
                         )
                     else:
                         self.terraform.apply(
@@ -1019,6 +1025,16 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # patch image registry to null
                 self.configure_storage_for_image_registry(self.kubeconfig)
+
+                # copy tfstate file to terraform_data directory
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_13
+                ):
+                    copyfile(
+                        f"{constants.VSPHERE_DIR}terraform.tfstate",
+                        f"{self.terraform_data_dir}/terraform.tfstate",
+                    )
 
                 # wait for install to complete
                 logger.info("waiting for install to complete")
@@ -1104,8 +1120,11 @@ class VSPHEREUPI(VSPHEREBASE):
         try:
             with open(terraform_log_path, "r") as fd:
                 logger.debug(f"Reading terraform version from {terraform_log_path}")
-                version_line = fd.readline()
-                terraform_version = version_line.split()[-1]
+                for each_line in fd:
+                    if "Terraform version:" in each_line:
+                        terraform_version = each_line.split()[-1]
+                        break
+
         except FileNotFoundError:
             logger.debug(f"{terraform_log_path} file not found")
             terraform_version = config.DEPLOYMENT["terraform_version"]
@@ -1570,11 +1589,24 @@ def clone_openshift_installer():
                 clone_type="normal",
             )
         else:
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO,
-                upi_repo_path,
-                f"release-{ocp_version}",
-            )
+            # due to failure domain changes in 4.13, use 4.12 branch till
+            # we incorporate changes
+            # Once https://github.com/openshift/installer/issues/6810 issue is fixed,
+            # we need to revert the changes
+            if version.get_semantic_version(
+                ocp_version
+            ) >= version.get_semantic_version("4.13"):
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    "release-4.12",
+                )
+            else:
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    f"release-{ocp_version}",
+                )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO,
