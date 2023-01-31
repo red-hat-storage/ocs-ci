@@ -31,6 +31,7 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.dr.dr_workload import BusyBox
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ResourceNotFoundError,
     TimeoutExpiredError,
     CephHealthException,
     ResourceWrongStatusException,
@@ -2161,38 +2162,41 @@ def rgw_endpoint(request):
 
     """
     log.info("Looking for RGW service to expose")
-    oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
-    rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
-    if rgw_service:
-        if config.DEPLOYMENT["external_mode"]:
-            rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
-        else:
-            rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
-        log.info(f"Service {rgw_service} found and will be exposed")
-        # custom hostname is provided because default hostname from rgw service
-        # is too long and OCP rejects it
+
+    try:
         oc = ocp.OCP(
-            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+            kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        route = oc.get(resource_name="noobaa-mgmt")
-        router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
-        rgw_hostname = f"rgw.{router_hostname}"
-        try:
-            oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
-        except CommandFailed as cmdfailed:
-            if "AlreadyExists" in str(cmdfailed):
-                log.warning("RGW route already exists.")
-        # new route is named after service
-        rgw_endpoint = oc.get(resource_name=rgw_service)
-        endpoint_obj = OCS(**rgw_endpoint)
+        rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
+    except CommandFailed as cmdfailed:
+        log.error("The RGW service is not available")
+        raise ResourceNotFoundError(cmdfailed)
 
-        def _finalizer():
-            endpoint_obj.delete()
-
-        request.addfinalizer(_finalizer)
-        return f"http://{rgw_hostname}"
+    if config.DEPLOYMENT["external_mode"]:
+        rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
     else:
-        log.info("RGW service is not available")
+        rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
+    log.info(f"Service {rgw_service} found and will be exposed")
+    # custom hostname is provided because default hostname from rgw service
+    # is too long and OCP rejects it
+    oc = ocp.OCP(kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"])
+    route = oc.get(resource_name="noobaa-mgmt")
+    router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
+    rgw_hostname = f"rgw.{router_hostname}"
+    try:
+        oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+    except CommandFailed as cmdfailed:
+        if "AlreadyExists" in str(cmdfailed):
+            log.warning("RGW route already exists.")
+    # new route is named after service
+    rgw_endpoint = oc.get(resource_name=rgw_service)
+    endpoint_obj = OCS(**rgw_endpoint)
+
+    def _finalizer():
+        endpoint_obj.delete()
+
+    request.addfinalizer(_finalizer)
+    return f"http://{rgw_hostname}"
 
 
 @pytest.fixture()
