@@ -102,7 +102,7 @@ def test_scale_obc_post_upgrade():
         namespace
     )
     log.info(f"OBC Bound list === {obc_bound_list}")
-    log.info(f"OBC Bound list === {obc_not_bound_list}")
+    log.info(f"OBC Not Bound list === {obc_not_bound_list}")
 
     # Check status of OBC scaled in pre-upgrade
     if not len(obc_bound_list) == len(obc_scale_list):

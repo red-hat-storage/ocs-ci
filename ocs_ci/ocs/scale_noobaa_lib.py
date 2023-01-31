@@ -359,7 +359,7 @@ def noobaa_running_node_restart(pod_name):
     helpers.wait_for_resource_state(nb_pod_obj, constants.STATUS_RUNNING, timeout=180)
 
 
-def check_all_obcs_status(namespace=None):
+def check_all_obcs_status(namespace=None, timeout=120):
     """
     Check all OBCs status in given namespace
 
@@ -380,6 +380,7 @@ def check_all_obcs_status(namespace=None):
             obc_bound_list.append(status)
         else:
             obc_not_bound_list.append(status)
+    time.sleep(timeout)
     return obc_bound_list, obc_not_bound_list
 
 
