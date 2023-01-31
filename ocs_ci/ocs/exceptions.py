@@ -504,6 +504,10 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class ACMClusterImportException(Exception):
+    pass
+
+
 class RDRDeploymentException(Exception):
     pass
 

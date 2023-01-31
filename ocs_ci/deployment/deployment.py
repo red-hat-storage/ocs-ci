@@ -36,9 +36,11 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    ChannelNotFound,
     CommandFailed,
     PodNotCreated,
     RBDSideCarContainerException,
+    ResourceNameNotSpecifiedException,
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
@@ -1782,11 +1784,16 @@ class RBDDRDeployOps(object):
             f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
         )
         timeout = 10
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if ocs_version <= version.get_semantic_version("4.11"):
+            rbd_sidecar_count = constants.RBD_SIDECAR_COUNT
+        else:
+            rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_12
         while timeout:
             out = run_cmd(rbd_pods)
             logger.info(out)
             logger.info(len(out.split(" ")))
-            if constants.RBD_SIDECAR_COUNT != len(out.split(" ")):
+            if rbd_sidecar_count != len(out.split(" ")):
                 time.sleep(2)
             else:
                 break
@@ -1898,16 +1905,27 @@ class MultiClusterDROperatorsDeploy(object):
         """
         Deploy multicluster orchestrator
         """
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        current_csv = None
+
+        if not live_deployment:
+            create_catalog_source()
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
         package_manifest = packagemanifest.PackageManifest(
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
+
+        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=5, delay=10)(
+            package_manifest.get_current_csv
+        )(self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE)
+
         current_csv = package_manifest.get_current_csv(
             channel=self.channel,
             csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
         )
+
         logger.info(f"CurrentCSV={current_csv}")
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
         odf_multicluster_orchestrator_data["spec"]["startingCSV"] = current_csv
