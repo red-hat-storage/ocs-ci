@@ -281,6 +281,15 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 
+##### login
+
+Login section under EXTERNAL_MODE with auth details for SSH to the host of RHCS
+Cluster.
+
+* `username` - user to be used for SSH access to the node
+* `password` - password for the ssh user (optional if ssh_key provided)
+* `ssh_key` - path to SSH private key (optional if password is provided)
+
 #### UI_SELENIUM
 
 Configuration specific to ui testing with selenium
