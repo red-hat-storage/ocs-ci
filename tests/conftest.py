@@ -2190,17 +2190,19 @@ def rgw_endpoint(request):
 
     try:
         oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
+
+        def _finalizer():
+            log.info("Deleting the exposed RGW route")
+            rgw_endpoint = oc.get(selector=constants.RGW_APP_LABEL)
+            endpoint_obj = OCS(**rgw_endpoint)
+            endpoint_obj.delete()
+
+        request.addfinalizer(_finalizer)
+
     except CommandFailed as cmdfailed:
         if "AlreadyExists" in str(cmdfailed):
             log.warning("RGW route already exists.")
-    # new route is named after service
-    rgw_endpoint = oc.get(resource_name=rgw_service)
-    endpoint_obj = OCS(**rgw_endpoint)
 
-    def _finalizer():
-        endpoint_obj.delete()
-
-    request.addfinalizer(_finalizer)
     return f"http://{rgw_hostname}"
 
 
