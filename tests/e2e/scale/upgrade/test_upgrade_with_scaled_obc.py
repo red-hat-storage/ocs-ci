@@ -22,8 +22,7 @@ log = logging.getLogger(__name__)
 namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
 sc_name = constants.NOOBAA_SC
 # Number of scaled obc count
-# scale_obc_count = 500
-scale_obc_count = 50
+scale_obc_count = 500
 # Number of obc creating by batch
 num_obc_batch = 50
 # Scale data file
