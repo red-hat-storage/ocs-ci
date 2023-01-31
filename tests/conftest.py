@@ -2175,7 +2175,7 @@ def rgw_endpoint(request):
     rgw_service = (
         constants.RGW_SERVICE_EXTERNAL_MODE
         if config.DEPLOYMENT["external_mode"]
-        else constants.RGW_SERVICE_EXTERNAL_MODE
+        else constants.RGW_SERVICE_INTERNAL_MODE
     )
 
     log.info(f"Service {rgw_service} was found and will be exposed")
@@ -2191,10 +2191,11 @@ def rgw_endpoint(request):
     try:
         oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
 
+        rgw_endpoint = oc.get(selector=constants.RGW_APP_LABEL)
+        endpoint_obj = OCS(**rgw_endpoint)
+
         def _finalizer():
             log.info("Deleting the exposed RGW route")
-            rgw_endpoint = oc.get(selector=constants.RGW_APP_LABEL)
-            endpoint_obj = OCS(**rgw_endpoint)
             endpoint_obj.delete()
 
         request.addfinalizer(_finalizer)
