@@ -6,6 +6,7 @@ import os
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
@@ -22,13 +23,25 @@ class Terraform(object):
 
         Args:
             path (str): Path to the vSphere modules
-            bin_path (str): Path to the terraform binary installer
+            bin_path (str): Path to terraform binary installer
 
         """
         self.path = path
         self.terraform_installer = bin_path or os.path.expanduser(
             config.ENV_DATA["terraform_installer"]
         )
+        self.is_directory_path_supported = False
+        self.terraform_version = config.DEPLOYMENT["terraform_version"]
+        config.ENV_DATA["terraform_state_file"] = os.path.join(
+            self.path, "terraform.tfstate"
+        )
+        if version.get_semantic_version(
+            self.terraform_version
+        ) <= version.get_semantic_version("0.15"):
+            self.is_directory_path_supported = True
+            config.ENV_DATA["terraform_state_file"] = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
 
     def initialize(self, upgrade=False):
         """
@@ -42,8 +55,10 @@ class Terraform(object):
         logger.info("Initializing terraform work directory")
         if upgrade:
             cmd = f"{self.terraform_installer} init -upgrade {self.path}"
-        else:
+        elif self.is_directory_path_supported:
             cmd = f"{self.terraform_installer} init {self.path}"
+        else:
+            cmd = f"{self.terraform_installer} -chdir={self.path} init"
         run_cmd(cmd, timeout=1200)
 
     def apply(self, tfvars, bootstrap_complete=False, module=None, refresh=True):
@@ -64,9 +79,15 @@ class Terraform(object):
         )
         module_param = f"-target={module}" if module else ""
         refresh_param = "-refresh=false" if not refresh else ""
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
         cmd = (
-            f"{self.terraform_installer} apply {module_param} {refresh_param} '-var-file={tfvars}'"
-            f" -auto-approve {bootstrap_complete_param} '{self.path}'"
+            f"{self.terraform_installer} {chdir_param} apply {module_param} {refresh_param} '-var-file={tfvars}'"
+            f" -auto-approve {bootstrap_complete_param} {dir_path}"
         )
 
         run_cmd(cmd, timeout=1500)
@@ -81,9 +102,15 @@ class Terraform(object):
         """
         logger.info("Destroying the cluster")
         refresh_param = "-refresh=false" if not refresh else ""
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
         cmd = (
-            f"{self.terraform_installer} destroy {refresh_param}"
-            f" '-var-file={tfvars}' -auto-approve {self.path}"
+            f"{self.terraform_installer} {chdir_param} destroy {refresh_param}"
+            f" '-var-file={tfvars}' -auto-approve {dir_path}"
         )
         run_cmd(cmd, timeout=1200)
 
@@ -119,7 +146,13 @@ class Terraform(object):
 
         """
         logger.info(f"Destroying the module: {module}")
-        cmd = f"terraform destroy -auto-approve -target={module} '-var-file={tfvars}' '{self.path}'"
+        if self.is_directory_path_supported:
+            chdir_param = ""
+            dir_path = self.path
+        else:
+            chdir_param = f"-chdir={self.path}"
+            dir_path = ""
+        cmd = f"terraform {chdir_param} destroy -auto-approve -target={module} '-var-file={tfvars}' {dir_path}"
         run_cmd(cmd, timeout=1200)
 
     def change_statefile(self, module, resource_type, resource_name, instance):
