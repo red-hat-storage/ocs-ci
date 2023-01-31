@@ -2191,11 +2191,10 @@ def rgw_endpoint(request):
     try:
         oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
 
-        rgw_endpoint = oc.get(selector=constants.RGW_APP_LABEL)
-        endpoint_obj = OCS(**rgw_endpoint)
-
         def _finalizer():
             log.info("Deleting the exposed RGW route")
+            rgw_endpoint = oc.get(selector=constants.RGW_APP_LABEL)["items"][0]
+            endpoint_obj = OCS(**rgw_endpoint)
             endpoint_obj.delete()
 
         request.addfinalizer(_finalizer)
