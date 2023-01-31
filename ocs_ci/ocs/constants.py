@@ -751,6 +751,7 @@ RDR_MODE = "regional-dr"
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
 TOKEN_EXCHANGE_AGENT_LABEL = "app=token-exchange-agent"
+RBD_MIRROR_APP_LABEL = "app=rook-ceph-rbd-mirror"
 RBD_MIRRORING_STORAGECLUSTER_PATCH = (
     "-n openshift-storage --type json --patch  "
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
