@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterObjectStoreUserCreationFailed,
     ExternalClusterCephfsMissing,
 )
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
@@ -307,6 +308,20 @@ class ExternalCluster(object):
             raise ExternalClusterCephfsMissing
         return ceph_fs_list[0]["name"]
 
+    def remove_rbd_images(self, images, pool):
+        """
+        Removes rbd images from external RHCS cluster
+
+        Args:
+            images (list): List of rbd images to delete
+            pool (str): rbd pool name
+
+        """
+        logger.debug(f"deleting rbd images {images} from external RHCS cluster")
+        for each_image in images:
+            cmd = f"rbd rm {each_image} -p {pool}"
+            self.rhcs_conn.exec_cmd(cmd)
+
 
 def generate_exporter_script():
     """
@@ -405,3 +420,14 @@ def get_external_cluster_client():
             return (each["ip_address"], user, password, ssh_key)
     logger.warning("No client role defined, using node1 address!")
     return (nodes["node1"]["ip_address"], user, password, ssh_key)
+
+
+def remove_csi_users():
+    """
+    Remove csi users from external RHCS cluster
+    """
+    toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
