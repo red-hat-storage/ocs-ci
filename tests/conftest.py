@@ -2202,6 +2202,9 @@ def rgw_endpoint(request):
     except CommandFailed as cmdfailed:
         if "AlreadyExists" in str(cmdfailed):
             log.warning("RGW route already exists.")
+            log.info("Getting the existing route hostname")
+            existing_route = oc.get(selector=constants.RGW_APP_LABEL)
+            rgw_hostname = existing_route["items"][0]["status"]["ingress"][0]["host"]
 
     return f"http://{rgw_hostname}"
 
