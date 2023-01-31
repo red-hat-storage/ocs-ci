@@ -86,22 +86,35 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         """
-        try:
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
-            screenshot = (
-                ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-            )
-            if screenshot:
+        if (
+            version.get_semantic_version(get_ocp_version(), True)
+            <= version.VERSION_4_11
+        ):
+            try:
+                wait = WebDriverWait(self.driver, timeout)
+                element = wait.until(
+                    ec.element_to_be_clickable((locator[1], locator[0]))
+                )
+                screenshot = (
+                    ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+                )
+                if screenshot:
+                    self.take_screenshot()
+                element.click()
+                if copy_dom:
+                    self.copy_dom()
+            except TimeoutException as e:
                 self.take_screenshot()
-            element.click()
-            if copy_dom:
                 self.copy_dom()
-        except TimeoutException as e:
-            self.take_screenshot()
-            self.copy_dom()
-            logger.error(e)
-            raise TimeoutException
+                logger.error(e)
+                raise TimeoutException
+        else:
+            self.page_has_loaded()
+            wait = WebDriverWait(self.driver, timeout)
+            element = wait.until(
+                ec.visibility_of_element_located((locator[1], locator[0]))
+            )
+            element.click()
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -115,14 +128,27 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        try:
+        if (
+            version.get_semantic_version(get_ocp_version(), True)
+            <= version.VERSION_4_11
+        ):
+            try:
+                wait = WebDriverWait(self.driver, timeout)
+                element = wait.until(
+                    ec.presence_of_element_located((locator[1], locator[0]))
+                )
+                element.send_keys(text)
+            except TimeoutException as e:
+                self.take_screenshot()
+                logger.error(e)
+                raise TimeoutException
+        else:
+            self.page_has_loaded()
             wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+            element = wait.until(
+                ec.visibility_of_element_located((locator[1], locator[0]))
+            )
             element.send_keys(text)
-        except TimeoutException as e:
-            self.take_screenshot()
-            logger.error(e)
-            raise TimeoutException
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -148,7 +174,7 @@ class BaseUI:
         locator (set): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator)
+        current_mode = self.is_expanded(locator=locator, timeout=100)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 
@@ -383,6 +409,18 @@ class BaseUI:
             logger.error(f"Timedout while waiting for element with {locator}")
             self.take_screenshot()
             return False
+
+    def wait_for_endswith_url(self, endswith, timeout=60):
+        """
+        Wait for endswith url to load
+
+        Args:
+            endswith (string): url endswith string for which we need to wait
+            timeout (int): Timeout in seconds
+
+        """
+        wait = WebDriverWait(self.driver, timeout=timeout)
+        wait.until(ec.url_matches(endswith))
 
 
 class PageNavigator(BaseUI):

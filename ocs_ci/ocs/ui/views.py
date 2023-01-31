@@ -482,7 +482,10 @@ acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
-    "Infrastructure": ("//button[normalize-space()='Infrastructure']", By.XPATH),
+    "Infrastructure": (
+        "//button[normalize-space()='Infrastructure' and @class='pf-c-nav__link']",
+        By.XPATH,
+    ),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
     "Bare_metal_assets_page": ("Bare metal assets", By.LINK_TEXT),
     "Automation_page": ("Automation", By.LINK_TEXT),
@@ -496,6 +499,8 @@ acm_page_nav = {
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
     "Kubeconfig_text": ("kubeConfigEntry", By.ID),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
+    "Acm_import_endswith_url": "import",
+    "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
 }
 
 acm_configuration = {
@@ -693,6 +698,12 @@ acm_ui_specific = {
 acm_configuration_4_11 = {
     "install-submariner-btn": ("install-submariner", By.ID),
     "nat-t-checkbox": ("natt-enable", By.ID),
+}
+
+acm_configuration_4_12 = {
+    **acm_configuration_4_11,
+    "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
+    "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
 }
 
 add_capacity = {
@@ -1144,6 +1155,11 @@ locators = {
             **validation_4_11,
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_12,
+        },
     },
     "4.11": {
         "login": {**login, **login_4_11},
