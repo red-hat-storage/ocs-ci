@@ -1096,8 +1096,8 @@ class Deployment(object):
         self.set_rook_log_level()
 
         # get external cluster details
-        host, user, password = get_external_cluster_client()
-        external_cluster = ExternalCluster(host, user, password)
+        host, user, password, ssh_key = get_external_cluster_client()
+        external_cluster = ExternalCluster(host, user, password, ssh_key)
         external_cluster.get_external_cluster_details()
 
         # get admin keyring
