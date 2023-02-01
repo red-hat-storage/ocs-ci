@@ -145,6 +145,9 @@ Reporting related config. (Do not store secret data in the repository!).
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
 * `post_upgrade` - If True, post-upgrade will be reported in the test suite
   name in the mail subject.
+* `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
+  directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
+  exporting env variable: export SAVE_MEM_REPORT=true
 
 #### ENV_DATA
 

@@ -8,10 +8,10 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-
+import pandas as pd
 import pytest
 from junitparser import JUnitXml
-
+import ocs_ci.utility.memory
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
@@ -40,7 +40,17 @@ from ocs_ci.utility.utils import (
     get_ocs_build_number,
     get_testrun_name,
     load_config_file,
+    create_stats_dir,
 )
+
+from ocs_ci.utility.memory import (
+    get_consumed_ram,
+    start_monitor_memory,
+    stop_monitor_memory,
+    get_peak_sum_mem,
+)
+from ocs_ci.ocs import constants
+from psutil._common import bytes2human
 
 __all__ = [
     "pytest_addoption",
@@ -727,3 +737,109 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+global consumed_ram_start_test
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    try:
+        start_monitor_memory()
+
+        global consumed_ram_start_test
+        consumed_ram_start_test = get_consumed_ram()
+
+        log.debug(
+            f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
+        )
+    except Exception:
+        log.exception("Got exception while start to monitor memory")
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item):
+    try:
+        _, peak_rss_table, peak_vms_table = stop_monitor_memory(save_csv=False)
+        log.info(
+            f"Peak rss consumers during {item.nodeid}:\n"
+            f"{peak_rss_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+        log.info(
+            f"Peak vms consumers during {item.nodeid}:\n"
+            f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+
+        if ocsci_config.REPORTING.get("save_mem_report"):
+            stats_log_dir = create_stats_dir()
+
+            peak_rss_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_rss_table"
+            )
+            peak_vms_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_vms_table"
+            )
+            peak_rss_table.to_csv(peak_rss_file_detailed)
+            log.info(f"peak_rss_table saved to {peak_rss_file_detailed}")
+            peak_vms_table.to_csv(peak_vms_file_detailed)
+            log.info(f"peak_vms_table saved to {peak_vms_file_detailed}")
+
+        global consumed_ram_start_test
+        leaked_ram = consumed_ram_start_test - get_consumed_ram()
+        # rss of the process is drastically changes each measurement, meaning that
+        # processes may be closed immediately after measurement causing no leakage.
+        # leaked_ram intentionally left without check on negative digit to record
+        # gain of free memory
+        if leaked_ram > 0:
+            log.info(f"Leak RAM at the end of the test: {bytes2human(leaked_ram)}")
+        else:
+            log.info(
+                f"Free RAM gain at the end of the test: {bytes2human(leaked_ram * -1)}"
+            )
+
+        df_ram_max, df_virt_max = get_peak_sum_mem()
+
+        report_columns = [
+            "TC name",
+            "Peak total RAM consumed",
+            "Peak total VMS consumed",
+            "RAM leak",
+        ]
+        if "memory" not in ocsci_config.RUN:
+            ocsci_config.RUN["memory"] = pd.DataFrame(data=[], columns=report_columns)
+            ocsci_config.RUN["memory"].reset_index(drop=True, inplace=True)
+
+        df_report_line = pd.DataFrame(
+            [
+                [
+                    item.nodeid,
+                    df_ram_max[constants.RAM].values[0],
+                    df_virt_max[constants.VIRT].values[0],
+                    leaked_ram,
+                ]
+            ],
+            columns=report_columns,
+        )
+        df_report_line.reset_index(drop=True, inplace=True)
+        ocsci_config.RUN["memory"] = pd.concat(
+            [
+                ocsci_config.RUN["memory"],
+                df_report_line,
+            ]
+        )
+
+        log.debug("Report Memory performance report: ")
+        log.debug(
+            "\n".join(
+                ocsci_config.RUN["memory"].to_markdown(
+                    headers="keys", index=False, tablefmt="grid"
+                )
+            )
+        )
+    except Exception:
+        log.exception("Got exception while stop to monitor memory")
+    finally:
+        if hasattr(ocs_ci.utility.memory, "mon"):
+            mon = ocs_ci.utility.memory.mon
+            if mon and mon.is_alive():
+                mon.cancel()
