@@ -31,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
     TimeoutExpiredError,
     PageNotLoaded,
+    CephHealthException,
 )
 from ocs_ci.ocs.ui.views import OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ocp import get_ocp_url
@@ -803,6 +804,93 @@ class PageNavigator(BaseUI):
                 "The resource did not reach the expected state within the time limit."
             )
             return False
+
+
+class StorageSystemNavigator(PageNavigator):
+    """
+    Storage Navigator Class
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.validation_loc = locators[self.ocp_version]["validation"]
+
+    def navigate_cephblockpool(self):
+        """
+        Initial page OCP Home page
+        Navigate to StorageSystem details / ocs-storagecluster-cephblockpool
+
+        """
+        self.navigate_odf_storagesystems()
+        self.navigate_storagecluster_storagesystem()
+        self.navigate_cephblockpool_verify_statusready()
+
+    def navigate_odf_storagesystems(self):
+        """
+        Initial page OCP Home page
+        Navigate to Storage Systems tab
+
+        """
+        self.navigate_odf_overview_page()
+        logger.info("Click on 'Storage Systems' tab")
+        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+
+    def navigate_storagecluster_storagesystem(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab
+        Navigate to StorageSystem details
+
+        """
+        if not config.DEPLOYMENT.get("external_mode"):
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
+            )
+            self.do_click(
+                self.validation_loc["ocs-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+        else:
+            logger.info(
+                "Click on 'ocs-external-storagecluster-storagesystem' link "
+                "from Storage Systems page for External Mode Deployment"
+            )
+            self.do_click(
+                self.validation_loc["ocs-external-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+
+    def navigate_cephblockpool_verify_statusready(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details
+        Navigate to ocs-storagecluster-cephblockpool
+        Verify cephblockpool status is 'Ready'
+
+        Raises:
+            CephHealthException if cephblockpool_status != 'Ready'
+        """
+        logger.info("Click on 'BlockPools' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["blockpools-odf-4-10"],
+                enable_screenshot=True,
+            )
+        else:
+            self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
+        cephblockpool_status = self.get_element_text(
+            self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
+        )
+        if not "Ready" == cephblockpool_status:
+            raise CephHealthException(
+                f"cephblockpool status error | expected status:Ready \n "
+                f"actual status:{cephblockpool_status}"
+            )
 
 
 def screenshot_dom_location(type_loc="screenshot"):
