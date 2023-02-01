@@ -1635,7 +1635,7 @@ def email_reports(session):
 
 def save_reports():
     """
-    Save reports of test run to slave
+    Save reports of test run to logs directory
 
     """
     try:
@@ -1651,7 +1651,7 @@ def save_reports():
         else:
             log.info("Memory performance report not saved - no data")
     except Exception:
-        log.exception("Failed save reports to slave")
+        log.exception("Failed save reports to logs directory")
 
 
 def get_cluster_version_info():

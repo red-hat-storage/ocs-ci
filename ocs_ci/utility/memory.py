@@ -137,7 +137,7 @@ def stop_monitor_memory(save_csv: bool = False) -> tuple:
 
     Args:
         save_csv (bool):  saves csv temporarily, until main process is dead if save_csv = True;
-            reauire create_csv=True at start_monitor_memory(...)
+            require create_csv=True at start_monitor_memory(...)
 
      Returns:
          tuple: (path to csv file with memory stats,

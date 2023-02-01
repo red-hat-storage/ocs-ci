@@ -749,11 +749,10 @@ def pytest_runtest_setup(item):
         start_monitor_memory()
 
         global consumed_ram_start_test
-        consumed_memory = get_consumed_ram()
         consumed_ram_start_test = get_consumed_ram()
 
         log.debug(
-            f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_memory)}"
+            f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
         )
     except Exception:
         log.exception("Got exception while start to monitor memory")
