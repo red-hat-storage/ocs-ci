@@ -143,6 +143,7 @@ def get_clusters(
         prefixes_hours_to_spare (dict): Dictionaries of the cluster prefixes to spare
             along with the maximum time in hours that is allowed for spared
             clusters to continue running
+        cluster_pattern (str): The name of the ec2 instances
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
@@ -184,16 +185,24 @@ def get_clusters(
         return False
 
     def determine_cluster_deletion_base_name(ec2_instance_objs, vpc_id):
+        """
+        Determine cluster deletion base on name
+
+        Args:
+            ec2_instance_objs (list): list of ec2 instance obj
+            vpc_id (str): vpc id
+
+        Returns:
+            bool: True if vpc_id exist and all ec2 instances on same vpc otherwise False
+
+        """
         # Get all instances
         vpc_ids = [
             ec2_instance.get("Instances")[0].get("VpcId")
             for ec2_instance in ec2_instance_objs
         ]
         # Verify vpc_id exist and all ec2 instances on same vpc
-        if vpc_id in vpc_ids and len(set(vpc_ids)) == 1:
-            return True
-        else:
-            return False
+        return True if vpc_id in vpc_ids and len(set(vpc_ids)) == 1 else False
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
@@ -226,14 +235,16 @@ def get_clusters(
                 continue
 
             # Append to clusters_to_delete if cluster should be deleted
-            if cluster_pattern is not None and determine_cluster_deletion_base_name(
-                ec2_instance_objs, vpc_obj.id
-            ):
-                clusters_to_delete.append(cluster_name)
-            elif determine_cluster_deletion(vpc_instances, cluster_name):
-                clusters_to_delete.append(cluster_name)
+            if cluster_pattern is not None:
+                if determine_cluster_deletion_base_name(ec2_instance_objs, vpc_obj.id):
+                    clusters_to_delete.append(cluster_name)
+                else:
+                    remaining_clusters.append(cluster_name)
             else:
-                remaining_clusters.append(cluster_name)
+                if determine_cluster_deletion(vpc_instances, cluster_name):
+                    clusters_to_delete.append(cluster_name)
+                else:
+                    remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
@@ -368,7 +379,7 @@ def aws_cleanup():
             )
             prefixes_hours_to_spare.update({prefix: hours})
 
-    time_to_delete = args.hours * 60 * 60
+    time_to_delete = args.hours * 60 * 60 if args.hours else None
     region = defaults.AWS_REGION if not args.region else args.region
     clusters_to_delete, cf_clusters_to_delete, remaining_clusters = get_clusters(
         time_to_delete=time_to_delete,
