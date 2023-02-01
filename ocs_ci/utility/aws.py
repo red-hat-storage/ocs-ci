@@ -1357,13 +1357,16 @@ class AWS(object):
         logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
         self.delete_cloudformation_stacks([cfs_name])
 
-    def delete_hosted_zone(self, cluster_name, delete_zone=True):
+    def delete_hosted_zone(
+        self, cluster_name, delete_zone=True, delete_from_base_domain=False
+    ):
         """
         Deletes the hosted zone
 
         Args:
             cluster_name (str): Name of the cluster
             delete_zone (bool): Whether to delete complete zone
+            delete_from_base_domain (bool): Whether to delete record from base domain
         """
         cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
         base_domain = config.ENV_DATA["base_domain"]
@@ -1385,6 +1388,11 @@ class AWS(object):
                 self.delete_all_record_sets(hosted_zone_id)
                 if delete_zone:
                     self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+                if delete_from_base_domain:
+                    self.delete_record_from_base_domain(
+                        cluster_name=cluster_name, base_domain=base_domain
+                    )
+
         else:
             logger.info(f"hosted zone {hosted_zone_name} not found")
             return
@@ -1540,7 +1548,7 @@ class AWS(object):
         return full_hosted_zone_id.strip("/hostedzone/")
 
     def update_hosted_zone_record(
-        self, zone_id, record_name, data, type, operation_type, ttl=60
+        self, zone_id, record_name, data, type, operation_type, ttl=60, raw_data=None
     ):
         """
         Update Route53 DNS record
@@ -1553,6 +1561,7 @@ class AWS(object):
             type (str): DNS record type
             operation_type (str): Operation Type (Allowed Values:- Add, Delete)
             ttl (int): Default set to 60 sec
+            raw_data (list): Data to be added as a record
 
         Returns:
             dict: The response from change_resource_record_sets
@@ -1573,6 +1582,8 @@ class AWS(object):
             old_resource_record_list.append({"Value": data})
         elif operation_type == "Delete":
             old_resource_record_list.remove({"Value": data})
+        if raw_data:
+            old_resource_record_list = data
         response = self.route53_client.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
@@ -1629,6 +1640,48 @@ class AWS(object):
             zone["Id"] for zone in hosted_zones if zone["Name"] == f"{domain}."
         ]
         return hosted_zone_ids[0]
+
+    def create_hosted_zone(self, cluster_name):
+        """
+        Create Hosted Zone
+        Args:
+            cluster_name (str): Name of cluster
+        Returns:
+            str: Hosted Zone id
+        """
+        ts = time.time()
+        domain = config.ENV_DATA["base_domain"]
+        full_cluster_name = f"{cluster_name}.{domain}."
+        response = self.route53_client.create_hosted_zone(
+            Name=full_cluster_name, CallerReference=str(ts)
+        )
+
+        full_hosted_zone_id = response["HostedZone"]["Id"]
+        hosted_zone_id = full_hosted_zone_id.strip("/hostedzone/")
+        logger.info(
+            f"Hosted zone Created with id {hosted_zone_id} and name is {response['HostedZone']['Name']}"
+        )
+        return hosted_zone_id
+
+    def get_hosted_zone_details(self, zone_id):
+        """
+        Get Hosted zone Details
+        Args:
+            zone_id (str): Zone Id of cluster_name
+        Returns:
+            dict: Response
+        """
+        return self.route53_client.get_hosted_zone(Id=zone_id)
+
+    def get_ns_for_hosted_zone(self, zone_id):
+        """
+        Get NameServers Details from Hosted Zone
+        Args:
+            zone_id (str): Zone Id of cluster_name
+        Returns:
+            list: NameServers
+        """
+        return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
 
 
 def get_instances_ids_and_names(instances):
