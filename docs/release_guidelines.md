@@ -31,7 +31,7 @@ git fetch upstream
 git checkout release-4.12
 ```
 
-Note that `upstream` is the name of the remote for the base repository, not your personal fork.
+> Note that `upstream` is the name of the remote for the base repository, not your personal fork.
 
 ### Jenkins
 
@@ -39,15 +39,22 @@ From Jenkins we will automatically be using the release branch if no other ocs-c
 
 ## Creating Release Branches
 
-Release branches will branch off of the `stable` branch. Before we can create a release branch, we will need to know which commit to branch off from. Once we know the commit we are basing the branch off of, we can then go about creating the branch from either the git CLI or the Github UI.
+**This process is handled by the project maintainers and done alongside the corresponding ODF GA release**
+
+Release branches will branch off of the `stable` branch. More specifically, we will target one of the tags we use when updating our stable branch. This ensures that the code we are basing the release branch off of has passed our stable branch verification testing. You can view these in the [github tags view](https://github.com/red-hat-storage/ocs-ci/tags), they will have the format `stable-ocs-x.y-timestamp`. Once we know the tag we are basing the branch off of, we can then go about creating the branch from either the git CLI or the Github UI.
 
 ### Github UI
 
-From the Github UI, navigate to the list of [branches](https://github.com/red-hat-storage/ocs-ci/branches). From here you can click on new branch, selecting the `stable` branch as the base. Note that the branch creation process only works this way if the latest stable commit is the point we wish to branch off from. Otherwise we will need to create the branch using the CLI.
+From the Github UI, navigate to the list of [branches](https://github.com/red-hat-storage/ocs-ci/branches). From here you can click on new branch, selecting the `stable` branch as the base.
+
+> Note that the branch creation process only works this way if the latest stable commit is the point we wish to branch off from. Otherwise we will need to create the branch using the CLI.
 
 ### CLI
 
-First, ensure your local repository is up to date with the remote. Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.
+First, ensure your local repository is up to date with the remote.
+
+> Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.
+
 ```
 git checkout master && git fetch --all && git reset --hard upstream/master
 ```
@@ -57,29 +64,30 @@ Checkout the stable branch
 git checkout stable
 ```
 
-Determine the starting point of the new release branch, for this you will need the git hash. You can find this using:
-```
-git log
-```
+Create a local branch using the stable tag
 
-Once you know the hash, we will create the new release branch using the hash from earlier as the base. Note that x.y is the major.minor version.
 ```
-git checkout -b release-x.y 46568b9b4b8c2ceabad665b839655e0b19ab3634
+git checkout -b release-4.12 stable-ocs-4.12-202301310444
 ```
 
 Finally, push the branch to the remote.
 ```
-git push upstream release-x.y
+git push upstream release-4.12
 ```
+
+> Branches with the `release-*` naming convention will automatically be considered protected branches due to our repository configuration.
 
 
 ## Backporting Changes
 
-Most changes to the repository will end up being merged to master, propagage to the stable branch and evnetually end up on the next release branch. Critical bug fixes or important test cases may be selected to be backported to existing release branches. In order to backport changes to an existing release branch, we will need to take the following steps.
+Most changes to the repository will end up being merged to master, propagated to the stable branch and eventually end up on the next release branch. Critical bug fixes or important test cases may be selected to be backported to existing release branches. In order to backport changes to an existing release branch, we will need to take the following steps.
 
 ### Creating a cherry-pick PR
 
-The first step in the process will be to checkout the master branch and ensure it is up to date, as well as fetch remote branches. Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.
+The first step in the process will be to checkout the master branch and ensure it is up to date, as well as fetch remote branches.
+
+> Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.
+
 ```
 git checkout master && git fetch --all && git reset --hard upstream/master
 ```
@@ -104,7 +112,7 @@ And push our branch to our fork of the repository.
 git push origin release-4.8-cherry-pick-pr-4765
 ```
 
-Once we have our branch pushed to our fork, we can then open a pull request from Github. Be sure to change the base branch to the target release branch (in our example this would be `release-4.8`).
+Once we have our branch pushed to our fork, we can then open a pull request from Github. **Be sure to change the base branch to the target release branch (in our example this would be `release-4.8`).**
 
 ### Run PR Validation
 
@@ -113,3 +121,15 @@ Run the PR validation Job using the target release branch as the `OCS_CI_PR_BASE
 ### Merge to the release branch
 
 Once the changes have been verified, merge the PR. You can then perform the same process for any other release branches that your changes may need to be backported to.
+
+## Fixes related to specific release versions
+
+There may be a time where a particular bug fix needs to be applied to a specific release branch while not being something we want to merge to master. In this scenario, we can follow a similar process to how we merge changes to master with two exceptions.
+
+1. The development branch will be based off of the **target release branch**, not master.
+
+2. The target branch of the pull request will be the **release branch**, not master.
+
+For example, a bug is discovered that only affects `4.11` releases that we need to implement a change for. Since this change isn't necessary for the later releases, we don't need to merge this to master and backport the change to previous releases. We can simply create a development branch off of our `release-4.11` branch, implement the fix, raise the pull request with `release-4.11` as the base branch.
+
+> This will likely be a rare occurance as most changes will be aimed at our master branch and backported to previous releases when necessary.
