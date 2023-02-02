@@ -77,6 +77,10 @@ git push upstream release-4.12
 
 > Branches with the `release-*` naming convention will automatically be considered protected branches due to our repository configuration.
 
+### Post-Creation Steps
+
+Given the nature of our release cadence and testing, we will generally want to start preparing for testing the next release after we have prepared a release branch. For example once we create a release branch for 4.12 we will update the code to default to deploying and testing 4.13. This update will include bumping the version in several places in the [default configuration](https://github.com/red-hat-storage/ocs-ci/blob/master/ocs_ci/framework/conf/default_config.yaml) as well as updating the project version in our [setup.py](https://github.com/red-hat-storage/ocs-ci/blob/master/setup.py). You can see an example of one of these updates [here](https://github.com/red-hat-storage/ocs-ci/pull/7028/files).
+
 
 ## Backporting Changes
 
@@ -132,4 +136,6 @@ There may be a time where a particular bug fix needs to be applied to a specific
 
 For example, a bug is discovered that only affects `4.11` releases that we need to implement a change for. Since this change isn't necessary for the later releases, we don't need to merge this to master and backport the change to previous releases. We can simply create a development branch off of our `release-4.11` branch, implement the fix, raise the pull request with `release-4.11` as the base branch.
 
-> This will likely be a rare occurance as most changes will be aimed at our master branch and backported to previous releases when necessary.
+An important thing to remember in a scenario like this is the fact that our release branches support N and N-1 versions. This is significant if the fixes intended for a particular version are required for deployment, upgrades, or pre-upgrade testing it may be necessary to cherry-pick the change to the N+1 release branch. For example, if a bugfix is necessary for 4.10 deployments, the change will also need to be cherry-picked to the 4.11 release branch since `release-4.11` supports deployments of 4.10 for upgrade testing purposes.
+
+> These will likely be rare occurances as most changes will be aimed at our master branch and backported to previous releases when necessary.
