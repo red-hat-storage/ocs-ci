@@ -1558,7 +1558,7 @@ def add_mem_stats(soup):
     Add performance summary to the soup to print the table:
     columns = ['TC name', 'Peak RAM consumed', 'Peak VMS consumed', 'RAM leak']
     """
-    if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.Dataframe):
+    if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.DataFrame):
         mem_table = config.RUN["memory"]
         mem_table["Peak RAM consumed"] = mem_table["Peak RAM consumed"].apply(
             bytes2human
