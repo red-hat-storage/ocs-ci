@@ -1367,6 +1367,7 @@ class AWS(object):
             cluster_name (str): Name of the cluster
             delete_zone (bool): Whether to delete complete zone
             delete_from_base_domain (bool): Whether to delete record from base domain
+
         """
         cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
         base_domain = config.ENV_DATA["base_domain"]
@@ -1644,10 +1645,13 @@ class AWS(object):
     def create_hosted_zone(self, cluster_name):
         """
         Create Hosted Zone
+
         Args:
             cluster_name (str): Name of cluster
+
         Returns:
             str: Hosted Zone id
+
         """
         ts = time.time()
         domain = config.ENV_DATA["base_domain"]
@@ -1666,20 +1670,26 @@ class AWS(object):
     def get_hosted_zone_details(self, zone_id):
         """
         Get Hosted zone Details
+
         Args:
             zone_id (str): Zone Id of cluster_name
+
         Returns:
             dict: Response
+
         """
         return self.route53_client.get_hosted_zone(Id=zone_id)
 
     def get_ns_for_hosted_zone(self, zone_id):
         """
         Get NameServers Details from Hosted Zone
+
         Args:
             zone_id (str): Zone Id of cluster_name
+
         Returns:
             list: NameServers
+
         """
         return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
 
