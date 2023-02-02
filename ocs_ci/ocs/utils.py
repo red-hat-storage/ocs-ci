@@ -896,7 +896,7 @@ def run_must_gather(log_dir_path, image, command=None):
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version >= version.VERSION_4_11:
+    if ocs_version >= version.VERSION_4_10:
         timeout = 2100
     elif ocs_version >= version.VERSION_4_6:
         timeout = 1500
