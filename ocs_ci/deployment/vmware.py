@@ -19,11 +19,16 @@ import shutil
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+    remove_csi_users,
+)
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     RDMDiskNotFound,
@@ -37,7 +42,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -1203,11 +1208,17 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.debug("deleting csi users")
             # In some cases where deployment of external cluster is failed, external tool box doesn't exist
             try:
-                toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+                # remove csi users
+                remove_csi_users()
+
+                # get all PV's
+                pvs = get_all_pvs()
+                pvs_to_delete = [
+                    each_pv["spec"]["csi"]["volumeAttributes"]["imageName"]
+                    for each_pv in pvs["items"]
+                    if each_pv["spec"]["csi"]["volumeAttributes"]["pool"] == "rbd"
+                ]
+
             except exceptions.CephToolBoxNotFoundException:
                 logger.warning(
                     "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
@@ -1291,6 +1302,13 @@ class VSPHEREUPI(VSPHEREBASE):
             terraform.initialize(upgrade=True)
         terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
+
+        if config.DEPLOYMENT["external_mode"]:
+            rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+            # get external cluster details
+            host, user, password, ssh_key = get_external_cluster_client()
+            external_cluster = ExternalCluster(host, user, password, ssh_key)
+            external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
 
         # release IPAM ip from sno
         if config.ENV_DATA["sno"]:
