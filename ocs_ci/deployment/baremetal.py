@@ -350,8 +350,11 @@ class BAREMETALUPI(Deployment):
             api_record_ip_list = []
             apps_record_ip_list = []
             response_list = []
-            cluster_name = f"{constants.BM_DEFAULT_CLUSTER_NAME}"
-            self.aws.delete_hosted_zone(cluster_name=cluster_name, delete_zone=False)
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            self.aws.delete_hosted_zone(
+                cluster_name=cluster_name,
+                delete_from_base_domain=True,
+            )
             for machine in self.mgmt_details:
                 if (
                     self.mgmt_details[machine].get("cluster_name")
@@ -382,7 +385,7 @@ class BAREMETALUPI(Deployment):
                         worker_count += 1
 
             logger.info("Configuring DNS records")
-            zone_id = self.aws.get_hosted_zone_id(cluster_name=cluster_name)
+            zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
 
             if config.ENV_DATA["worker_replicas"] == 0:
                 apps_record_ip_list = api_record_ip_list
@@ -416,6 +419,26 @@ class BAREMETALUPI(Deployment):
                     )
                 )
 
+            ns_list = self.aws.get_ns_for_hosted_zone(zone_id)
+            dns_data_dict = {}
+            ns_list_values = []
+            for value in ns_list:
+                dns_data_dict["Value"] = value
+                ns_list_values.append(dns_data_dict.copy())
+            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(
+                domain=config.ENV_DATA["base_domain"]
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=base_domain_zone_id,
+                    record_name=f"{cluster_name}",
+                    data=ns_list_values,
+                    type="NS",
+                    operation_type="Add",
+                    ttl=300,
+                    raw_data=True,
+                )
+            )
             logger.info("Waiting for Record Response")
             self.aws.wait_for_record_set(response_list=response_list)
             logger.info("Records Created Successfully")
@@ -493,7 +516,7 @@ class BAREMETALUPI(Deployment):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            install_config_obj["metadata"]["name"] = constants.BM_DEFAULT_CLUSTER_NAME
+            install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
@@ -538,6 +561,11 @@ class BAREMETALUPI(Deployment):
             """
             Destroy OCP cluster specific to BM UPI
             """
+            self.aws.delete_hosted_zone(
+                cluster_name=config.ENV_DATA.get("cluster_name"),
+                delete_from_base_domain=True,
+            )
+
             logger.info("Updating BM status")
             result = self.update_bm_status(constants.BM_STATUS_ABSENT)
             assert (
