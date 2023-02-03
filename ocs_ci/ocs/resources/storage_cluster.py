@@ -62,6 +62,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -834,6 +835,21 @@ def osd_encryption_verification():
             log.error(failure_message)
             raise ValueError("Luks header label is not found")
         log.info("Luks header info found for all the encrypted osds")
+
+
+def in_transit_encryption_verification():
+    """
+    Verify in-transit encryption is enabled.
+    """
+    toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    output = toolbox.exec_ceph_cmd("ceph config dump")
+    keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
+    keys_found = [key for key in keys_to_match if key in output]
+
+    if len(keys_to_match) != len(keys_found):
+        return False
+
+    return True
 
 
 def verify_kms_ca_only():
