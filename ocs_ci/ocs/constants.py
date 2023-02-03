@@ -1029,6 +1029,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
+ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

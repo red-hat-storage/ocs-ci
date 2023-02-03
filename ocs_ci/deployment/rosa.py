@@ -13,6 +13,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import (
@@ -249,6 +250,31 @@ class ROSA(CloudDeploymentBase):
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # Workaround for the bug 2166900
+        if config.ENV_DATA.get("cluster_type") == "consumer":
+            configmap_obj = ocp.OCP(
+                kind=constants.CONFIGMAP,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            rook_ceph_mon_configmap = configmap_obj.get(
+                resource_name=constants.ROOK_CEPH_MON_ENDPOINTS
+            )
+            rook_ceph_csi_configmap = configmap_obj.get(
+                resource_name=constants.ROOK_CEPH_CSI_CONFIG
+            )
+            for configmap in (rook_ceph_csi_configmap, rook_ceph_mon_configmap):
+                if not configmap.get("data").get("csi-cluster-config-json"):
+                    logger.warning(
+                        f"Configmap {configmap['metadata']['name']} do not contain csi-cluster-config-json."
+                    )
+                    logger.warning(configmap)
+                    logger.info("Deleting rook-ceph-operator as a workaround")
+                    rook_operator_pod = get_operator_pods(
+                        operator_label=constants.OPERATOR_LABEL,
+                        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    )
+                    rook_operator_pod[0].delete(wait=False)
 
     def destroy_ocs(self):
         """
