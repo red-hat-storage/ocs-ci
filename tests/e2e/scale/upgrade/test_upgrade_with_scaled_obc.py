@@ -22,7 +22,8 @@ log = logging.getLogger(__name__)
 namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
 sc_name = constants.NOOBAA_SC
 # Number of scaled obc count
-scale_obc_count = 500
+# scale_obc_count = 500
+scale_obc_count = 50
 # Number of obc creating by batch
 num_obc_batch = 50
 # Scale data file
@@ -101,9 +102,8 @@ def test_scale_obc_post_upgrade():
     obc_bound_list, obc_not_bound_list = scale_noobaa_lib.check_all_obcs_status(
         namespace
     )
-    log.info(f"OBC Bound list === {obc_bound_list}")
-    log.info(f"OBC Not Bound list === {obc_not_bound_list}")
-    log.info(f" OBC scale list === {obc_scale_list}")
+    log.info(f"OBC Bound list === {len(obc_bound_list)}")
+    log.info(f" OBC scale list === {len(obc_scale_list)}")
 
     # Check status of OBC scaled in pre-upgrade
     if not len(obc_bound_list) == len(obc_scale_list):

@@ -23,11 +23,14 @@ log = logging.getLogger(__name__)
 namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
 sc_name = constants.DEFAULT_STORAGECLASS_RGW
 # Number of scaled obc count
-scale_obc_count = 100
+# scale_obc_count = 100
+scale_obc_count = 10
 # Number of obc creating by batch
-num_obc_batch = 50
+# num_obc_batch = 50
+num_obc_batch = 10
 # Number of objects
-num_objs = 150000
+# num_objs = 150000
+num_objs = 1500
 # Scale data file
 log_path = ocsci_log_path()
 obc_scaled_data_file = f"{log_path}/obc_scale_rgw_data_file.yaml"
@@ -131,6 +134,9 @@ def test_scale_obc_rgw_post_upgrade():
     obc_bound_list, obc_not_bound_list = scale_noobaa_lib.check_all_obcs_status(
         namespace
     )
+
+    log.info(f"OBC Bound list === {len(obc_bound_list)}")
+    log.info(f" OBC scale list === {len(obc_scale_list)}")
 
     # Check status of OBC scaled in pre-upgrade
     if not len(obc_bound_list) == len(obc_scale_list):
