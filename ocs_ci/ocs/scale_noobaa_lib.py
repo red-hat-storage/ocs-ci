@@ -120,16 +120,18 @@ def check_all_obc_reached_bound_state_in_kube_job(
     return obc_bound_list
 
 
-def cleanup(namespace, obc_count=None):
+def cleanup(namespace, obc_list=None):
     """
     Delete all OBCs created in the cluster
 
     Args:
         namespace (str): Namespace of OBC's deleting
+        obc_list (string): List of OBCs to be deleted
 
     """
-    if obc_count is not None:
-        obc_name_list = obc_count
+    obc_name_list = list()
+    if obc_list is not None:
+        obc_name_list = obc_list
     else:
         obc_name_list = oc_get_all_obc_names()
     log.info(f"Deleting {len(obc_name_list)} OBCs")
@@ -359,7 +361,7 @@ def noobaa_running_node_restart(pod_name):
     helpers.wait_for_resource_state(nb_pod_obj, constants.STATUS_RUNNING, timeout=180)
 
 
-def check_all_obcs_status(namespace=None, timeout=120):
+def check_all_obcs_status(namespace=None):
     """
     Check all OBCs status in given namespace
 
@@ -380,7 +382,6 @@ def check_all_obcs_status(namespace=None, timeout=120):
             obc_bound_list.append(status)
         else:
             obc_not_bound_list.append(status)
-    time.sleep(timeout)
     return obc_bound_list, obc_not_bound_list
 
 
@@ -511,3 +512,23 @@ def hsbench_cleanup():
     """
     hsbenchs3.delete_test_user()
     hsbenchs3.cleanup()
+
+
+def create_namespace():
+    """
+    Create and set namespace for obcs to be created
+    """
+    namespace_list = list()
+    namespace_list.append(helpers.create_project())
+    namespace = namespace_list[-1].namespace
+    return namespace
+
+
+def delete_namespace(namespace=None):
+    """
+    Delete namespace which was created for OBCs
+    Args:
+        namespace (str): Namespace where OBCs were created
+    """
+    ocp = OCP(kind=constants.NAMESPACE)
+    ocp.delete(resource_name=namespace)

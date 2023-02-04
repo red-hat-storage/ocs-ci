@@ -19,11 +19,10 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 log = logging.getLogger(__name__)
 
 # Namespace and noobaa storage class
-namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+namespace = scale_noobaa_lib.create_namespace()
 sc_name = constants.NOOBAA_SC
 # Number of scaled obc count
-# scale_obc_count = 500
-scale_obc_count = 50
+scale_obc_count = 500
 # Number of obc creating by batch
 num_obc_batch = 50
 # Scale data file
@@ -102,8 +101,6 @@ def test_scale_obc_post_upgrade():
     obc_bound_list, obc_not_bound_list = scale_noobaa_lib.check_all_obcs_status(
         namespace
     )
-    log.info(f"OBC Bound list === {len(obc_bound_list)}")
-    log.info(f" OBC scale list === {len(obc_scale_list)}")
 
     # Check status of OBC scaled in pre-upgrade
     if not len(obc_bound_list) == len(obc_scale_list):
@@ -118,4 +115,7 @@ def test_scale_obc_post_upgrade():
     utils.ceph_health_check()
 
     # Clean up all scaled obc
-    scale_noobaa_lib.cleanup(namespace=namespace)
+    scale_noobaa_lib.cleanup(namespace=namespace, obc_list=obc_scale_list)
+
+    # Delete namespace
+    scale_noobaa_lib.delete_namespace(namespace=namespace)
