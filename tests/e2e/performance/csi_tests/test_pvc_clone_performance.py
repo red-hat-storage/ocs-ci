@@ -6,6 +6,8 @@ import logging
 import pytest
 import statistics
 
+from ocs_ci.framework.testlib import skip, bugzilla
+
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
@@ -427,6 +429,8 @@ class TestPVCClonePerformance(PASTest):
             ),
         ],
     )
+    @skip
+    @bugzilla("2101874")
     def test_pvc_clone_performance_multiple_files(
         self,
         secret_factory,
@@ -551,10 +555,10 @@ class TestPVCClonePerformance(PASTest):
             test_count=8,
             test_name="PVC Clone",
         )
-        self.add_test_to_results_check(
-            test="test_pvc_clone_performance_multiple_files",
-            # TODO: after BZ-2101874 will fix, change the test_count to 2
-            test_count=1,
-            test_name="PVC Clone Multiple Files",
-        )
+        # TODO: after BZ-2101874 is fixed, add this code
+        # self.add_test_to_results_check(
+        #     test="test_pvc_clone_performance_multiple_files",
+        #     test_count=2,
+        #     test_name="PVC Clone Multiple Files",
+        # )
         self.check_results_and_push_to_dashboard()
