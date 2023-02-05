@@ -18,8 +18,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
-# Namespace and noobaa storage class
-namespace = scale_noobaa_lib.create_namespace()
+# Noobaa storage class
 sc_name = constants.NOOBAA_SC
 # Number of scaled obc count
 scale_obc_count = 500
@@ -40,6 +39,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
     Create scaled MCG OBC using Noobaa storage class before upgrade
     Save scaled obc data in a file for post upgrade validation
     """
+    namespace = scale_noobaa_lib.create_namespace()
     obc_scaled_list = []
     log.info(f"Start creating  {scale_obc_count} " f"OBC in a batch of {num_obc_batch}")
     for i in range(int(scale_obc_count / num_obc_batch)):

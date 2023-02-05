@@ -19,8 +19,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
-# Namespace and noobaa storage class
-namespace = scale_noobaa_lib.create_namespace()
+# Noobaa storage class
 sc_name = constants.DEFAULT_STORAGECLASS_RGW
 # Number of scaled obc count
 scale_obc_count = 100
@@ -48,6 +47,7 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
     """
     # Running hsbench to create buckets with objects before upgrade.
     #  PUT, GET and LIST objects of a bucket.
+    namespace = scale_noobaa_lib.create_namespace()
     scale_noobaa_lib.hsbench_setup()
     scale_noobaa_lib.hsbench_io(
         namespace=namespace,
