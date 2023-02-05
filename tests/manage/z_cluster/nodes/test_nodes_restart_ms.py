@@ -32,6 +32,7 @@ from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
     is_ms_consumer_cluster,
+    is_ms_provider_cluster,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -143,10 +144,9 @@ class TestNodesRestartMS(ManageTest):
 
         """
         node_count = len(get_nodes(node_type=node_type))
-        if node_type == constants.WORKER_MACHINE:
-            ocp_nodes = get_nodes(node_type=node_type)
-        else:
-            ocp_nodes = get_nodes(node_type=node_type, num_of_nodes=2)
+        ocp_nodes = get_nodes(node_type=node_type)
+        num_of_nodes = 1 if is_ms_provider_cluster() else 2
+        ocp_nodes = random.choices(ocp_nodes, k=num_of_nodes)
 
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
