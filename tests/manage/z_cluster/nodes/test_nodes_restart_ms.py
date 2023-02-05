@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     managed_service_required,
+    skipif_ms_provider,
     polarion_id,
 )
 from ocs_ci.ocs import constants
@@ -154,6 +155,7 @@ class TestNodesRestartMS(ManageTest):
         self.sanity_helpers.create_resources_on_ms_consumers()
 
     @tier4b
+    @skipif_ms_provider
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     @pytest.mark.parametrize(
