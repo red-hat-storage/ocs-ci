@@ -3,7 +3,13 @@ import pytest
 import random
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import ManageTest, tier1, acceptance, bugzilla
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    acceptance,
+    bugzilla,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
@@ -22,7 +28,7 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
-    @bugzilla("2136852")
+    @skipif_ocs_version("<4.12")
     def verify_access_token_notin_odf_pod_logs(self):
         """
         This function will verify logs of kube-rbac-proxy container in odf-operator-controller-manager pod
@@ -31,7 +37,7 @@ class TestPvcAssignPodNode(ManageTest):
         odf_operator_pod_objs = res_pod.get_all_pods(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             selector_label="app.kubernetes.io/name",
-            selector=["odf-operator"],
+            selector=[constants.ODF_SUBSCRIPTION],
         )
         error_msg = "Authorization: Bearer"
         pod_log = res_pod.get_pod_logs(
@@ -42,6 +48,7 @@ class TestPvcAssignPodNode(ManageTest):
         ), f"Logs should not contain the error message '{error_msg}'"
 
     @acceptance
+    @bugzilla("2136852")
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],
