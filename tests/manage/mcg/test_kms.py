@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import MCGTest, version
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources import pod
 
+import re
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,13 +24,12 @@ class TestNoobaaKMS(MCGTest):
         """
         Validate from logs that there is successfully used NooBaa with KMS integration.
         """
-        # Define which records to look for based on the version
-        target_records = []
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_10:
-            target_records.append("found root secret in external KMS successfully")
-        else:
-            target_records.append("setKMSConditionStatus Init")
-            target_records.append("setKMSConditionStatus Sync")
+        # Define which record to look for based on the version
+        target_record = (
+            "found root secret in external KMS successfully"
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_10
+            else r"Exists:.* ocs-kms-token"
+        )
 
         # Get the noobaa-operator pod and it's relevant metadata
         operator_pod = pod.get_pods_having_label(
@@ -39,15 +40,15 @@ class TestNoobaaKMS(MCGTest):
         restart_count = operator_pod["status"]["containerStatuses"][0]["restartCount"]
 
         # Look for the target records in the logs of the pod
-        targets_found = False
+        target_found = False
         operator_logs = pod.get_pod_logs(pod_name=operator_pod_name)
-        targets_found = all(target in operator_logs for target in target_records)
+        target_found = re.search(target_record, operator_logs) is not None
 
         # Also check the logs before the last pod restart
-        if not targets_found and restart_count > 0:
+        if not target_found and restart_count > 0:
             operator_logs = pod.get_pod_logs(pod_name=operator_pod_name, previous=True)
-            targets_found = all(target in operator_logs for target in target_records)
+            target_found = re.search(target_record, operator_logs) is not None
 
         assert (
-            targets_found
+            target_found
         ), "No records were found of the integration of NooBaa and KMS"
