@@ -847,6 +847,10 @@ def in_transit_encryption_verification():
     keys_found = [key for key in keys_to_match if key in output]
 
     if len(keys_to_match) != len(keys_found):
+        log.error(
+            f"in-transit encryption keys {','.join(list(set(keys_to_match) - set(keys_found)))} \
+                are not found in 'ceph config dump' output."
+        )
         return False
 
     return True
