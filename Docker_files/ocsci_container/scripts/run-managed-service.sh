@@ -2,9 +2,7 @@
 
 set -e
 PWD=$(pwd)
-
-#Pull image from Registry
-docker image pull quay.io/ocsci/ocs-ci-container:latest
+source Docker_files/ocsci_container/scripts/common.sh
 
 if [ "$AWS_PATH" == "" ]; then
    AWS_PATH=~/.aws
