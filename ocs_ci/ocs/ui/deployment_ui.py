@@ -401,11 +401,8 @@ class DeploymentUI(PageNavigator):
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
         if self.ocp_version_semantic >= version.VERSION_4_7:
-            if operator == "Local Storage":
-                logger.info(
-                    f"Wait 60 seconds until the {operator} operator installation"
-                )
-                time.sleep(60)
+            logger.info(f"Wait 60 seconds until the {operator} operator installation")
+            time.sleep(60)
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
