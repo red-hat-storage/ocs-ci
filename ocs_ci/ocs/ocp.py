@@ -233,6 +233,7 @@ class OCP(object):
         dont_raise=False,
         silent=False,
         field_selector=None,
+        cluster_ctx=None,
     ):
         """
         Get command - 'oc get <resource>'
@@ -275,7 +276,7 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command, silent=silent)
+                return self.exec_oc_cmd(command, silent=silent, cluster_ctx=cluster_ctx)
             except CommandFailed as ex:
                 if not silent:
                     log.warning(

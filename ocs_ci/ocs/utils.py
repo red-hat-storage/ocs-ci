@@ -970,6 +970,8 @@ def collect_noobaa_db_dump(log_dir_path, cluster_ctx=None):
 
     Args:
         log_dir_path (str): directory for dumped Noobaa DB
+        cluster_ctx (MultiClusterConfig): If multicluster scenario then this object will have
+            specific cluster config
 
     """
     from ocs_ci.ocs.resources.pod import (
@@ -987,7 +989,9 @@ def collect_noobaa_db_dump(log_dir_path, cluster_ctx=None):
     try:
         nb_db_pod = Pod(
             **get_pods_having_label(
-                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                label=nb_db_label,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                cluster_ctx=cluster_ctx,
             )[0]
         )
     except IndexError:
@@ -1007,7 +1011,7 @@ def collect_noobaa_db_dump(log_dir_path, cluster_ctx=None):
         cmd = 'bash -c "pg_dump nbcore | gzip > /tmp/nbcore.gz"'
         remote_path = "/tmp/nbcore.gz"
 
-    nb_db_pod.exec_cmd_on_pod(cmd)
+    nb_db_pod.exec_cmd_on_pod(cmd, cluster_ctx=cluster_ctx)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
         remotepath=remote_path,
@@ -1090,7 +1094,7 @@ def _collect_ocs_logs(
         while counter < 5:
             counter += 1
             try:
-                collect_noobaa_db_dump(log_dir_path)
+                collect_noobaa_db_dump(log_dir_path, cluster_ctx)
                 break
             except CommandFailed as ex:
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
@@ -1113,26 +1117,26 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
     """
     results = None
     with ThreadPoolExecutor() as executor:
-        for cluster in ocsci_config.clusters():
-            results = [
-                executor.submit(
-                    _collect_ocs_logs,
-                    cluster,
-                    dir_name=dir_name,
-                    ocp=ocp,
-                    ocs=ocs,
-                    mcg=mcg,
-                    status_failure=status_failure,
-                )
-            ]
+        results = [
+            executor.submit(
+                _collect_ocs_logs,
+                cluster,
+                dir_name=dir_name,
+                ocp=ocp,
+                ocs=ocs,
+                mcg=mcg,
+                status_failure=status_failure,
+            )
+            for cluster in ocsci_config.clusters()
+        ]
 
-        for f in as_completed(results):
-            try:
-                log.info(f.result())
-            except Exception as e:
-                log.error("Must-gather collection failed")
-                log.error(e)
-                raise
+    for f in as_completed(results):
+        try:
+            log.info(f.result())
+        except Exception as e:
+            log.error("Must-gather collection failed")
+            log.error(e)
+            raise
 
 
 def collect_prometheus_metrics(
