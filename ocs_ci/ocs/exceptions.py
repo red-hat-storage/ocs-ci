@@ -38,6 +38,10 @@ class ResourceLeftoversException(Exception):
     pass
 
 
+class ObjectsStillBeingDeletedException(Exception):
+    pass
+
+
 class TimeoutExpiredError(Exception):
     message = "Timed Out"
 
