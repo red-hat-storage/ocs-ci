@@ -70,7 +70,10 @@ def create_cluster(cluster_name, version, region):
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
     rosa_mode = config.ENV_DATA.get("rosa_mode", "")
     private_link = config.ENV_DATA.get("private_link", False)
-    machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
+    machine_cidr = config.ENV_DATA.get("machine_cidr", "10.0.0.0/16")
+    subnet_section_name = "ms_subnet_ids_per_region_" + config.ENV_DATA.get(
+        "subnet_type", "default"
+    )
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--machine-cidr {machine_cidr} --compute-nodes {compute_nodes} "
@@ -96,11 +99,11 @@ def create_cluster(cluster_name, version, region):
         # TODO: improve this for enabling it for selecting private and public subnets
         #  separately. This will enable to create private link cluster using byo-vpc name
     else:
-        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
-            "private_subnet"
-        ]
+        subnet_ids = config.ENV_DATA[subnet_section_name][region]["private_subnet"]
         if not private_link:
-            subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
+            subnet_ids += (
+                f",{config.ENV_DATA[subnet_section_name][region]['public_subnet']}"
+            )
     cmd = f"{cmd} --subnet-ids {subnet_ids}"
 
     if private_link:
@@ -156,7 +159,10 @@ def appliance_mode_cluster(cluster_name):
     notification_email_2 = config.REPORTING.get("notification_email_2")
     region = config.ENV_DATA.get("region", "")
     private_link = config.ENV_DATA.get("private_link", False)
-    machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
+    machine_cidr = config.ENV_DATA.get("machine_cidr", "10.0.0.0/16")
+    subnet_section_name = "ms_subnet_ids_per_region_" + config.ENV_DATA.get(
+        "subnet_type", "default"
+    )
     if not public_key:
         raise ConfigurationError(
             "Public key for Managed Service not defined.\n"
@@ -170,11 +176,11 @@ def appliance_mode_cluster(cluster_name):
     if config.ENV_DATA.get("subnet_ids", ""):
         subnet_ids = config.ENV_DATA.get("subnet_ids")
     else:
-        subnet_ids = config.ENV_DATA["ms_provider_subnet_ids_per_region"][region][
-            "private_subnet"
-        ]
+        subnet_ids = config.ENV_DATA[subnet_section_name][region]["private_subnet"]
         if not private_link:
-            subnet_ids += f",{config.ENV_DATA['ms_provider_subnet_ids_per_region'][region]['public_subnet']}"
+            subnet_ids += (
+                f",{config.ENV_DATA[subnet_section_name][region]['public_subnet']}"
+            )
 
     cmd = (
         f"rosa create service --type {addon_name} --name {cluster_name} "
