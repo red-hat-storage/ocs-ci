@@ -159,7 +159,13 @@ def retrieve_anon_s3_resource():
 
 
 def list_objects_from_bucket(
-    pod_obj, target, prefix=None, s3_obj=None, signed_request_creds=None, **kwargs
+    pod_obj,
+    target,
+    prefix=None,
+    s3_obj=None,
+    signed_request_creds=None,
+    timeout=600,
+    **kwargs,
 ):
     """
     Lists objects in a bucket using s3 ls command
@@ -195,6 +201,7 @@ def list_objects_from_bucket(
         ),
         out_yaml_format=False,
         secrets=secrets,
+        timeout=timeout,
         **kwargs,
     )
 
@@ -315,6 +322,7 @@ def sync_object_directory(
     target,
     s3_obj=None,
     signed_request_creds=None,
+    **kwargs,
 ):
     """
     Syncs objects between a target and source directories
@@ -347,6 +355,7 @@ def sync_object_directory(
         ),
         out_yaml_format=False,
         secrets=secrets,
+        **kwargs,
     ), "Failed to sync objects"
     # Todo: check that all objects were synced successfully
 
