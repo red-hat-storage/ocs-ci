@@ -451,6 +451,7 @@ def run_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    cluster_ctx=None,
     **kwargs,
 ):
     """
@@ -476,7 +477,14 @@ def run_cmd(
         (str) Decoded stdout of command
     """
     completed_process = exec_cmd(
-        cmd, secrets, timeout, ignore_error, threading_lock, silent=silent, **kwargs
+        cmd,
+        secrets,
+        timeout,
+        ignore_error,
+        threading_lock,
+        silent=silent,
+        cluster_ctx=cluster_ctx,
+        **kwargs,
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
@@ -570,6 +578,8 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    use_shell=False,
+    cluster_ctx=None,
     **kwargs,
 ):
     """
@@ -589,6 +599,10 @@ def exec_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        use_shell (bool): If True will pass the cmd without splitting
+        cluster_ctx (MultiClusterConfig): In case of multicluster environment this object
+                will be non-null
+
     Raises:
         CommandFailed: In case the command execution fails
 
@@ -605,6 +619,10 @@ def exec_cmd(
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
+    if cluster_ctx and cmd[0] == "oc":
+        kubepath = cluster_ctx.RUN["kubeconfig"]
+        append_str = f"--kubeconfig {kubepath}"
+        cmd.append(append_str)
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
     completed_process = subprocess.run(
@@ -3207,22 +3225,26 @@ def prepare_customized_pull_secret(images=None):
     return authfile_fo
 
 
-def inspect_image(image, authfile_fo):
+def inspect_image(image, authfile_fo, cluster_ctx=None):
     """
     Inspect image
 
     Args:
         image (str): image to inspect
         authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+        cluster_ctx (MultiClusterConfig): Holds the context of a cluster
 
     Returns:
         dict: json object of the inspected image
 
     """
     # pull original image (to be able to inspect it)
-    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    exec_cmd(
+        f"podman image pull {image} --authfile {authfile_fo.name}",
+        cluster_ctx=cluster_ctx,
+    )
     # inspect the image
-    cmd_result = exec_cmd(f"podman image inspect {image}")
+    cmd_result = exec_cmd(f"podman image inspect {image}", cluster_ctx=cluster_ctx)
     image_inspect = json.loads(cmd_result.stdout)
     return image_inspect
 
@@ -3258,7 +3280,7 @@ def get_image_with_digest(image):
         )
 
 
-def login_to_mirror_registry(authfile):
+def login_to_mirror_registry(authfile, cluster_ctx=None):
     """
     Login to mirror registry
 
@@ -3266,45 +3288,55 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    if not cluster_ctx:
+        cluster_ctx = config
     # load cluster info
-    load_cluster_info()
+    load_cluster_info(cluster_ctx)
 
-    mirror_registry = config.DEPLOYMENT["mirror_registry"]
-    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    mirror_registry = cluster_ctx.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = cluster_ctx.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = cluster_ctx.DEPLOYMENT["mirror_registry_password"]
     login_cmd = (
         f"podman login --authfile {authfile} "
         f"{mirror_registry} -u {mirror_registry_user} "
         f"-p {mirror_registry_password} --tls-verify=false"
     )
-    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+    exec_cmd(
+        login_cmd,
+        (mirror_registry_user, mirror_registry_password),
+        cluster_ctx=cluster_ctx,
+    )
 
 
-def mirror_image(image):
+def mirror_image(image, cluster_ctx=None):
     """
     Mirror image to mirror image registry.
 
     Args:
         image (str): image to be mirrored, can be defined just with name or
             with full url, with or without tag or digest
+        cluster_ctx (MultiClusterConfig): Config object if single cluster, if its multicluster scenario
+            then we will have MultiClusterConfig object
 
     Returns:
         str: the mirrored image link
 
     """
+    if not cluster_ctx:
+        cluster_ctx = config
     with prepare_customized_pull_secret(image) as authfile_fo:
         # login to mirror registry
-        login_to_mirror_registry(authfile_fo.name)
+        login_to_mirror_registry(authfile_fo.name, cluster_ctx)
 
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
-        image_inspect = inspect_image(image, authfile_fo)
+        image_inspect = inspect_image(image, authfile_fo, cluster_ctx)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirror_registry = config.DEPLOYMENT["mirror_registry"]
+        mirror_registry = cluster_ctx.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
@@ -3312,7 +3344,8 @@ def mirror_image(image):
         )
         exec_cmd(
             f"oc image mirror --insecure --registry-config"
-            f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
+            f" {authfile_fo.name} {orig_image_full} {mirrored_image}",
+            cluster_ctx=cluster_ctx,
         )
     return mirrored_image
 

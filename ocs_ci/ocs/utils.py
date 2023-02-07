@@ -7,7 +7,7 @@ import re
 import time
 import traceback
 from subprocess import TimeoutExpired
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from gevent import sleep
@@ -879,7 +879,7 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def run_must_gather(log_dir_path, image, command=None):
+def run_must_gather(log_dir_path, image, command=None, cluster_ctx=None):
     """
     Runs the must-gather tool against the cluster
 
@@ -887,6 +887,7 @@ def run_must_gather(log_dir_path, image, command=None):
         log_dir_path (str): directory for dumped must-gather logs
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
+        cluster_ctx (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
 
     Returns:
         mg_output (str): must-gather cli output
@@ -894,6 +895,8 @@ def run_must_gather(log_dir_path, image, command=None):
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    if not cluster_ctx:
+        cluster_ctx = ocsci_config
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_10:
@@ -902,7 +905,7 @@ def run_must_gather(log_dir_path, image, command=None):
         timeout = 1500
     else:
         timeout = 600
-    must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
+    must_gather_timeout = cluster_ctx.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
@@ -914,7 +917,10 @@ def run_must_gather(log_dir_path, image, command=None):
     occli = OCP()
     try:
         mg_output = occli.exec_oc_cmd(
-            cmd, out_yaml_format=False, timeout=must_gather_timeout
+            cmd,
+            out_yaml_format=False,
+            timeout=must_gather_timeout,
+            cluster_ctx=cluster_ctx,
         )
     except CommandFailed as ex:
         log.error(get_helper_pods_output())
@@ -958,7 +964,7 @@ def get_helper_pods_output():
     return output_describe_mg_helper
 
 
-def collect_noobaa_db_dump(log_dir_path):
+def collect_noobaa_db_dump(log_dir_path, cluster_ctx=None):
     """
     Collect the Noobaa DB dump
 
@@ -972,7 +978,7 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
-    ocs_version = version.get_semantic_ocs_version_from_config()
+    ocs_version = version.get_semantic_ocs_version_from_config(cluster_ctx=cluster_ctx)
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
         if ocs_version < version.VERSION_4_7
@@ -1010,91 +1016,85 @@ def collect_noobaa_db_dump(log_dir_path):
     )
 
 
-def collect_ocs_logs_multicluster(
-    dir_name, ocp=True, ocs=True, mcg=False, status_failure=True
+def _collect_ocs_logs(
+    cluster_ctx, dir_name, ocp=True, ocs=True, mcg=False, status_failure=True
 ):
     """
-    Collect OCS logs from multicluster scenario
+    This function runs in thread
+
     """
-    prev_ctx = ocsci_config.cur_index
-    for i in range(ocsci_config.nclusters):
-        ocsci_config.switch_ctx(i)
-        if not (
-            "KUBECONFIG" in os.environ
-            or os.path.exists(os.path.expanduser("~/.kube/config"))
+    if not (
+        cluster_ctx.RUN.get("kubeconfig", False)
+        or os.path.exists(os.path.expanduser("~/.kube/config"))
+    ):
+        log.warning(
+            "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
+        )
+        return
+    if status_failure:
+        log_dir_path = os.path.join(
+            os.path.expanduser(cluster_ctx.RUN["log_dir"]),
+            f"failed_testcase_ocs_logs_{cluster_ctx.RUN['run_id']}",
+            f"{dir_name}_ocs_logs",
+        )
+    else:
+        log_dir_path = os.path.join(
+            os.path.expanduser(cluster_ctx.RUN["log_dir"]),
+            f"{dir_name}_{cluster_ctx.RUN['run_id']}",
+        )
+
+    if ocs:
+        latest_tag = cluster_ctx.REPORTING.get(
+            "ocs_must_gather_latest_tag",
+            cluster_ctx.REPORTING.get(
+                "default_ocs_must_gather_latest_tag",
+                cluster_ctx.DEPLOYMENT["default_latest_tag"],
+            ),
+        )
+        ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
+        ocs_must_gather_image = cluster_ctx.REPORTING.get(
+            "ocs_must_gather_image",
+            cluster_ctx.REPORTING["default_ocs_must_gather_image"],
+        )
+        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        if cluster_ctx.DEPLOYMENT.get("disconnected"):
+            ocs_must_gather_image_and_tag = mirror_image(
+                ocs_must_gather_image_and_tag, cluster_ctx
+            )
+        mg_output = run_must_gather(
+            ocs_log_dir_path, ocs_must_gather_image_and_tag, cluster_ctx=cluster_ctx
+        )
+        if (
+            ocsci_config.DEPLOYMENT.get("disconnected")
+            and "cannot stat 'jq'" in mg_output
         ):
-            log.warning(
-                "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
+            raise ValueError(
+                f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
             )
-            return
-        if status_failure:
-            log_dir_path = os.path.join(
-                os.path.expanduser(ocsci_config.RUN["log_dir"]),
-                f"{ocsci_config.ENV_DATA['cluster_name']}",
-                f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-                f"{dir_name}_ocs_logs",
-            )
-        else:
-            log_dir_path = os.path.join(
-                os.path.expanduser(ocsci_config.RUN["log_dir"]),
-                f"{ocsci_config.ENV_DATA['cluster_name']}",
-                f"{dir_name}_{ocsci_config.RUN['run_id']}",
-            )
-
-        if ocs:
-            latest_tag = ocsci_config.REPORTING.get(
-                "ocs_must_gather_latest_tag",
-                ocsci_config.REPORTING.get(
-                    "default_ocs_must_gather_latest_tag",
-                    ocsci_config.DEPLOYMENT["default_latest_tag"],
-                ),
-            )
-            ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
-            ocs_must_gather_image = ocsci_config.REPORTING.get(
-                "ocs_must_gather_image",
-                ocsci_config.REPORTING["default_ocs_must_gather_image"],
-            )
-            ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
-            if ocsci_config.DEPLOYMENT.get("disconnected"):
-                ocs_must_gather_image_and_tag = mirror_image(
-                    ocs_must_gather_image_and_tag
-                )
-            mg_output = run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
-            if (
-                ocsci_config.DEPLOYMENT.get("disconnected")
-                and "cannot stat 'jq'" in mg_output
-            ):
-                raise ValueError(
-                    f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
-                )
-        if ocp:
-            ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
-            ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
-            if ocsci_config.DEPLOYMENT.get("disconnected"):
-                ocp_must_gather_image = mirror_image(ocp_must_gather_image)
-            run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-            run_must_gather(
-                ocp_log_dir_path,
-                ocp_must_gather_image,
-                "/usr/bin/gather_service_logs worker",
-            )
-        if mcg:
-            counter = 0
-            while counter < 5:
-                counter += 1
-                try:
-                    collect_noobaa_db_dump(log_dir_path)
-                    break
-                except CommandFailed as ex:
-                    log.error(f"Failed to dump noobaa DB! Error: {ex}")
-                    sleep(30)
-        if ocsci_config.MULTICLUSTER.get("multicluster_mode") == "regional-dr":
-            # importing here to avoid circular imports
-            from ocs_ci.deployment.acm import run_subctl_cmd
-
-            submariner_gather_logs = f"gather --dir {log_dir_path}"
-            run_subctl_cmd(submariner_gather_logs)
-    ocsci_config.switch_ctx(prev_ctx)
+    if ocp:
+        ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_must_gather_image = cluster_ctx.REPORTING["ocp_must_gather_image"]
+        if cluster_ctx.DEPLOYMENT.get("disconnected"):
+            ocp_must_gather_image = mirror_image(ocp_must_gather_image)
+        run_must_gather(
+            ocp_log_dir_path, ocp_must_gather_image, cluster_ctx=cluster_ctx
+        )
+        run_must_gather(
+            ocp_log_dir_path,
+            ocp_must_gather_image,
+            "/usr/bin/gather_service_logs worker",
+            cluster_ctx=cluster_ctx,
+        )
+    if mcg:
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                collect_noobaa_db_dump(log_dir_path)
+                break
+            except CommandFailed as ex:
+                log.error(f"Failed to dump noobaa DB! Error: {ex}")
+                sleep(30)
 
 
 def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
@@ -1111,82 +1111,28 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             allows better naming for folders under logs directory
 
     """
-    if ocsci_config.multicluster:
-        collect_ocs_logs_multicluster(
-            dir_name=dir_name,
-            ocp=ocp,
-            ocs=ocs,
-            mcg=mcg,
-            status_failure=status_failure,
-        )
-    else:
-        if not (
-            "KUBECONFIG" in os.environ
-            or os.path.exists(os.path.expanduser("~/.kube/config"))
-        ):
-            log.warning(
-                "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
-            )
-            return
-        if status_failure:
-            log_dir_path = os.path.join(
-                os.path.expanduser(ocsci_config.RUN["log_dir"]),
-                f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-                f"{dir_name}_ocs_logs",
-            )
-        else:
-            log_dir_path = os.path.join(
-                os.path.expanduser(ocsci_config.RUN["log_dir"]),
-                f"{dir_name}_{ocsci_config.RUN['run_id']}",
-            )
+    results = None
+    with ThreadPoolExecutor() as executor:
+        for cluster in ocsci_config.clusters():
+            results = [
+                executor.submit(
+                    _collect_ocs_logs,
+                    cluster,
+                    dir_name=dir_name,
+                    ocp=ocp,
+                    ocs=ocs,
+                    mcg=mcg,
+                    status_failure=status_failure,
+                )
+            ]
 
-        if ocs:
-            latest_tag = ocsci_config.REPORTING.get(
-                "ocs_must_gather_latest_tag",
-                ocsci_config.REPORTING.get(
-                    "default_ocs_must_gather_latest_tag",
-                    ocsci_config.DEPLOYMENT["default_latest_tag"],
-                ),
-            )
-            ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
-            ocs_must_gather_image = ocsci_config.REPORTING.get(
-                "ocs_must_gather_image",
-                ocsci_config.REPORTING["default_ocs_must_gather_image"],
-            )
-            ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
-            if ocsci_config.DEPLOYMENT.get("disconnected"):
-                ocs_must_gather_image_and_tag = mirror_image(
-                    ocs_must_gather_image_and_tag
-                )
-            mg_output = run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
-            if (
-                ocsci_config.DEPLOYMENT.get("disconnected")
-                and "cannot stat 'jq'" in mg_output
-            ):
-                raise ValueError(
-                    f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
-                )
-        if ocp:
-            ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
-            ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
-            if ocsci_config.DEPLOYMENT.get("disconnected"):
-                ocp_must_gather_image = mirror_image(ocp_must_gather_image)
-            run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-            run_must_gather(
-                ocp_log_dir_path,
-                ocp_must_gather_image,
-                "/usr/bin/gather_service_logs worker",
-            )
-        if mcg:
-            counter = 0
-            while counter < 5:
-                counter += 1
-                try:
-                    collect_noobaa_db_dump(log_dir_path)
-                    break
-                except CommandFailed as ex:
-                    log.error(f"Failed to dump noobaa DB! Error: {ex}")
-                    sleep(30)
+        for f in as_completed(results):
+            try:
+                log.info(f.result())
+            except Exception as e:
+                log.error("Must-gather collection failed")
+                log.error(e)
+                raise
 
 
 def collect_prometheus_metrics(
