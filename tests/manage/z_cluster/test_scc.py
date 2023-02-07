@@ -14,7 +14,12 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
 )
 from ocs_ci.ocs.resources.deployment import Deployment
-from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    tier2,
+    skipif_ocs_version,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
@@ -126,6 +131,10 @@ class TestSCC:
 
         return simple_app_dc_obj, simple_app_pod, pvc.backed_pv_obj
 
+    @tier2
+    @bugzilla("2024870")
+    @polarion_id("OCS-4692")
+    @skipif_ocs_version("<4.10")
     def test_fsgroupchangepolicy_when_depoyment_scaled(self, setup):
         """
         To test if any permission change/delay seen reconcile when app pod deployment with huge dumber of
@@ -138,8 +147,8 @@ class TestSCC:
         simple_app_dc, simple_app_pod, pv = setup
 
         # create objects under performance directory
-        # cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
-        # simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=5400)
+        cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
+        simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=5400)
 
         # get node where the simple-app pod scheduled
         node = get_pod_node(simple_app_pod).name
