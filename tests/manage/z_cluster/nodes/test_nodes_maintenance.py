@@ -184,6 +184,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4a
     @skipif_bm
+    @skipif_managed_service
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -462,6 +463,7 @@ class TestNodesMaintenance(ManageTest):
 
     @bugzilla("1861104")
     @bugzilla("1946573")
+    @skipif_managed_service
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
