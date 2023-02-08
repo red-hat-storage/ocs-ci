@@ -60,6 +60,7 @@ class BaseUI:
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
         )
+        logger.info(f"UI logs directory class {base_ui_logs_dir}")
         self.screenshots_folder = os.path.join(
             base_ui_logs_dir,
             "screenshots_ui",
@@ -905,6 +906,7 @@ def screenshot_dom_location(type_loc="screenshot"):
         os.path.expanduser(ocsci_config.RUN["log_dir"]),
         f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
     )
+    logger.info(f"UI logs directory function {base_ui_logs_dir}")
     if type_loc == "screenshot":
         return os.path.join(
             base_ui_logs_dir,
