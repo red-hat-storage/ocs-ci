@@ -1556,14 +1556,14 @@ def move_summary_to_top(soup):
 def add_mem_stats(soup):
     """
     Add performance summary to the soup to print the table:
-    columns = ['TC name', 'Peak RAM consumed', 'Peak VMS consumed', 'RAM leak']
+    columns = ['TC name', 'Peak total RAM consumed', 'Peak total VMS consumed', 'RAM leak']
     """
     if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.DataFrame):
         mem_table = config.RUN["memory"]
-        mem_table["Peak RAM consumed"] = mem_table["Peak RAM consumed"].apply(
+        mem_table["Peak RAM consumed"] = mem_table["Peak total RAM consumed"].apply(
             bytes2human
         )
-        mem_table["Peak VMS consumed"] = mem_table["Peak VMS consumed"].apply(
+        mem_table["Peak VMS consumed"] = mem_table["Peak total VMS consumed"].apply(
             bytes2human
         )
         mem_div = soup.new_tag("div")
