@@ -225,7 +225,9 @@ class Pod(OCS):
             str: stdout of the command
         """
         cmd = f'exec {self.name} -- {sh} -c "{command}"'
-        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False, timeout=timeout, **kwargs)
+        return self.ocp.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=timeout, **kwargs
+        )
 
     def get_labels(self):
         """
