@@ -67,5 +67,5 @@ endpoint = endpoint_ls[5].replace("\n", "")
 build_config = yaml_to_dict("build_config.yaml")
 build_config["AUTH"]["external"]["ceph_admin_key"] = ceph_key
 build_config["DEPLOYMENT"]["storage_provider_endpoint"] = endpoint
-build_config["ENV_DATA"]["provider_name"] = "oviner-pr"
+build_config["ENV_DATA"]["provider_name"] = cli_args[0]
 dict_to_yaml(path="/opt/cluster", data=build_config)
