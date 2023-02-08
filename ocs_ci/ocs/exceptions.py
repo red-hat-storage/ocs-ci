@@ -38,6 +38,10 @@ class ResourceLeftoversException(Exception):
     pass
 
 
+class ObjectsStillBeingDeletedException(Exception):
+    pass
+
+
 class TimeoutExpiredError(Exception):
     message = "Timed Out"
 
@@ -276,6 +280,10 @@ class ExternalClusterCephfsMissing(Exception):
     pass
 
 
+class ExternalClusterCephSSHAuthDetailsMissing(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -501,6 +509,10 @@ class BenchmarkTestFailed(Exception):
 
 
 class ACMClusterDeployException(Exception):
+    pass
+
+
+class ACMClusterImportException(Exception):
     pass
 
 

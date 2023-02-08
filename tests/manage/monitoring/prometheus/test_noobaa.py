@@ -3,6 +3,8 @@ import logging
 from ocs_ci.framework.testlib import (
     polarion_id,
     bugzilla,
+    skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
     skipif_managed_service,
     tier2,
     tier4a,
@@ -16,8 +18,10 @@ log = logging.getLogger(__name__)
 
 @tier2
 @polarion_id("OCS-1254")
-@bugzilla("1835290")
+@bugzilla("2154250")
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_aws_creds_are_missing
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
@@ -91,6 +95,8 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_aws_creds_are_missing
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """
     Test that there are appropriate alerts when target bucket used of

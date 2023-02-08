@@ -19,11 +19,16 @@ import shutil
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+    remove_csi_users,
+)
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     RDMDiskNotFound,
@@ -37,7 +42,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -992,10 +997,16 @@ class VSPHEREUPI(VSPHEREBASE):
                 # remove bootstrap node
                 if not config.DEPLOYMENT["preserve_bootstrap_node"]:
                     logger.info("removing bootstrap node")
+                    bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE_413
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        < version.VERSION_4_13
+                    ):
+                        bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE
                     os.chdir(self.terraform_data_dir)
                     if self.folder_structure:
                         self.terraform.destroy_module(
-                            self.terraform_var, constants.BOOTSTRAP_MODULE
+                            self.terraform_var, bootstrap_module_to_remove
                         )
                     else:
                         self.terraform.apply(
@@ -1019,6 +1030,16 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # patch image registry to null
                 self.configure_storage_for_image_registry(self.kubeconfig)
+
+                # copy tfstate file to terraform_data directory
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_13
+                ):
+                    copyfile(
+                        f"{constants.VSPHERE_DIR}terraform.tfstate",
+                        f"{self.terraform_data_dir}/terraform.tfstate",
+                    )
 
                 # wait for install to complete
                 logger.info("waiting for install to complete")
@@ -1104,8 +1125,11 @@ class VSPHEREUPI(VSPHEREBASE):
         try:
             with open(terraform_log_path, "r") as fd:
                 logger.debug(f"Reading terraform version from {terraform_log_path}")
-                version_line = fd.readline()
-                terraform_version = version_line.split()[-1]
+                for each_line in fd:
+                    if "Terraform version:" in each_line:
+                        terraform_version = each_line.split()[-1]
+                        break
+
         except FileNotFoundError:
             logger.debug(f"{terraform_log_path} file not found")
             terraform_version = config.DEPLOYMENT["terraform_version"]
@@ -1184,11 +1208,17 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.debug("deleting csi users")
             # In some cases where deployment of external cluster is failed, external tool box doesn't exist
             try:
-                toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+                # remove csi users
+                remove_csi_users()
+
+                # get all PV's
+                pvs = get_all_pvs()
+                pvs_to_delete = [
+                    each_pv["spec"]["csi"]["volumeAttributes"]["imageName"]
+                    for each_pv in pvs["items"]
+                    if each_pv["spec"]["csi"]["volumeAttributes"]["pool"] == "rbd"
+                ]
+
             except exceptions.CephToolBoxNotFoundException:
                 logger.warning(
                     "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
@@ -1272,6 +1302,13 @@ class VSPHEREUPI(VSPHEREBASE):
             terraform.initialize(upgrade=True)
         terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
+
+        if config.DEPLOYMENT["external_mode"]:
+            rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+            # get external cluster details
+            host, user, password, ssh_key = get_external_cluster_client()
+            external_cluster = ExternalCluster(host, user, password, ssh_key)
+            external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
 
         # release IPAM ip from sno
         if config.ENV_DATA["sno"]:
@@ -1570,11 +1607,24 @@ def clone_openshift_installer():
                 clone_type="normal",
             )
         else:
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO,
-                upi_repo_path,
-                f"release-{ocp_version}",
-            )
+            # due to failure domain changes in 4.13, use 4.12 branch till
+            # we incorporate changes
+            # Once https://github.com/openshift/installer/issues/6810 issue is fixed,
+            # we need to revert the changes
+            if version.get_semantic_version(
+                ocp_version
+            ) >= version.get_semantic_version("4.13"):
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    "release-4.12",
+                )
+            else:
+                clone_repo(
+                    constants.VSPHERE_INSTALLER_REPO,
+                    upi_repo_path,
+                    f"release-{ocp_version}",
+                )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO,

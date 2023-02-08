@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.6.0",
+    version="4.13.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -41,10 +41,7 @@ setup(
         "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
         "python-hcl2==3.0.1",
-        # issue opened for botocore
-        # https://github.com/boto/botocore/issues/1872
-        # till above issue fixed, manually pointing python-dateutil to 2.8.0
-        "python-dateutil==2.8.0",
+        "python-dateutil==2.8.2",
         "pytest-ordering==0.6",
         "funcy==1.14",
         "semantic-version==2.8.5",
@@ -53,6 +50,8 @@ setup(
         "google-auth==2.14.1",
         "elasticsearch==7.14.0",
         "numpy==1.22.0",
+        "pandas==1.5.2",
+        "tabulate==0.9.0",
         "python-ipmi==0.4.2",
         "scipy==1.8.1",
         "PrettyTable==0.7.2",
@@ -87,6 +86,7 @@ setup(
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
         "protobuf==4.21.7",
         "ping3>=4.0.3",
+        "psutil==5.9.0",
     ],
     entry_points={
         "console_scripts": [

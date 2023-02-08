@@ -4,6 +4,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework.testlib import ignore_leftovers, tier4c, skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_managed_service
+@skipif_external_mode
 @ignore_leftovers
 @tier4c
 class TestAddCapacityWithResourceDelete:

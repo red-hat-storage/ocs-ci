@@ -199,6 +199,11 @@ MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
 CLUSTERLOGGING_SUBSCRIPTION = "cluster-logging"
 ELASTICSEARCH_SUBSCRIPTION = "elasticsearch-operator"
+START = "START"
+END = "END"
+LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
+RAM = "rss"
+VIRT = "vms"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
@@ -526,6 +531,12 @@ IBM_BDI_DATA_LOAD_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "data-load-job.
 
 IBM_BDI_RUN_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "run-workload.yaml")
 
+SCALECLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "scale-cli-service-ca-configmap.yaml"
+)
+
+SCALECLI_POD_YAML = os.path.join(TEMPLATE_MCG_DIR, "scalecli_pod.yaml")
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -751,6 +762,7 @@ RDR_MODE = "regional-dr"
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
 TOKEN_EXCHANGE_AGENT_LABEL = "app=token-exchange-agent"
+RBD_MIRROR_APP_LABEL = "app=rook-ceph-rbd-mirror"
 RBD_MIRRORING_STORAGECLUSTER_PATCH = (
     "-n openshift-storage --type json --patch  "
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
@@ -764,6 +776,7 @@ RBD_SIDECAR_PATCH_CMD = (
     '{ "op": "add", "path": "/data/CSI_ENABLE_VOLUME_REPLICATION", "value": "true" }]\''
 )
 RBD_SIDECAR_COUNT = 18
+RBD_SIDECAR_COUNT_4_12 = 14
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -1022,6 +1035,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
+ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1318,6 +1332,7 @@ SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
+SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 
@@ -1506,6 +1521,7 @@ FILE_PATH = "/tmp/ceph.tar.gz"
 
 # terraform tfstate modules
 BOOTSTRAP_MODULE = "module.ipam_bootstrap"
+BOOTSTRAP_MODULE_413 = "module.bootstrap"
 LOAD_BALANCER_MODULE = "module.ipam_lb"
 COMPUTE_MODULE = "module.ipam_compute"
 CONTROL_PLANE = "module.ipam_control_plane"
@@ -1904,6 +1920,7 @@ ACM_CLUSTER_DEPLOY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
+ACM_4_7_MULTICLUSTER_URL = "/multicloud/infrastructure/clusters/managed"
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))

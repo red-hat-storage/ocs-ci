@@ -146,6 +146,9 @@ Reporting related config. (Do not store secret data in the repository!).
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
 * `post_upgrade` - If True, post-upgrade will be reported in the test suite
   name in the mail subject.
+* `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
+  directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
+  exporting env variable: export SAVE_MEM_REPORT=true
 
 #### ENV_DATA
 
@@ -281,6 +284,15 @@ Configuration specific to external Ceph cluster
 * `admin_keyring`
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
+
+##### login
+
+Login section under EXTERNAL_MODE with auth details for SSH to the host of RHCS
+Cluster.
+
+* `username` - user to be used for SSH access to the node
+* `password` - password for the ssh user (optional if ssh_key provided)
+* `ssh_key` - path to SSH private key (optional if password is provided)
 
 #### UI_SELENIUM
 

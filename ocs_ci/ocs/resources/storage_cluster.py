@@ -8,13 +8,13 @@ import tempfile
 import yaml
 
 from jsonschema import validate
-
+from jsonschema.exceptions import ValidationError
 from ocs_ci.framework import config
 
-# from ocs_ci.helpers.managed_services import (
-#    verify_provider_topology,
-#    get_ocs_osd_deployer_version,
-# )
+from ocs_ci.helpers.managed_services import (
+    verify_provider_topology,
+    get_ocs_osd_deployer_version,
+)
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -86,6 +86,40 @@ class StorageCluster(OCP):
         super(StorageCluster, self).__init__(
             resource_name=resource_name, kind="StorageCluster", *args, **kwargs
         )
+
+
+def verify_osd_tree_schema(ct_pod, deviceset_pvcs):
+    """
+    Verify Ceph OSD tree schema
+
+    Args:
+        ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
+        deviceset_pvcs (list): List of strings of deviceset PVC names
+
+    """
+    _deviceset_pvcs = copy.deepcopy(deviceset_pvcs)
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
+    schemas = {
+        "root": constants.OSD_TREE_ROOT,
+        "rack": constants.OSD_TREE_RACK,
+        "host": constants.OSD_TREE_HOST,
+        "osd": constants.OSD_TREE_OSD,
+        "region": constants.OSD_TREE_REGION,
+        "zone": constants.OSD_TREE_ZONE,
+    }
+    schemas["host"]["properties"]["name"] = {"enum": _deviceset_pvcs}
+    for item in osd_tree["nodes"]:
+        validate(instance=item, schema=schemas[item["type"]])
+        if item["type"] == "host":
+            _deviceset_pvcs.remove(item["name"])
+    assert not _deviceset_pvcs, (
+        f"These device set PVCs are not given in ceph osd tree output "
+        f"- {_deviceset_pvcs}"
+    )
+    log.info(
+        "Verified ceph osd tree output. Device set PVC names are given in the "
+        "output."
+    )
 
 
 def ocs_install_verification(
@@ -428,29 +462,12 @@ def ocs_install_verification(
                 ]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
-
-        osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree", format="json")
-        schemas = {
-            "root": constants.OSD_TREE_ROOT,
-            "rack": constants.OSD_TREE_RACK,
-            "host": constants.OSD_TREE_HOST,
-            "osd": constants.OSD_TREE_OSD,
-            "region": constants.OSD_TREE_REGION,
-            "zone": constants.OSD_TREE_ZONE,
-        }
-        schemas["host"]["properties"]["name"] = {"enum": deviceset_pvcs}
-        for item in osd_tree["nodes"]:
-            validate(instance=item, schema=schemas[item["type"]])
-            if item["type"] == "host":
-                deviceset_pvcs.remove(item["name"])
-        assert not deviceset_pvcs, (
-            f"These device set PVCs are not given in ceph osd tree output "
-            f"- {deviceset_pvcs}"
-        )
-        log.info(
-            "Verified ceph osd tree output. Device set PVC names are given in the "
-            "output."
-        )
+        if post_upgrade_verification:
+            retry((ValidationError), tries=3, delay=60)(verify_osd_tree_schema)(
+                ct_pod, deviceset_pvcs
+            )
+        else:
+            verify_osd_tree_schema(ct_pod, deviceset_pvcs)
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
@@ -1355,9 +1372,8 @@ def verify_managed_service_resources():
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         verify_provider_storagecluster(sc_data)
         verify_provider_resources()
-        # TODO: adjust topology check when the final version is known
-        # if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
-        #    verify_provider_topology()
+        if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11"):
+            verify_provider_topology()
     else:
         verify_consumer_storagecluster(sc_data)
         verify_consumer_resources()

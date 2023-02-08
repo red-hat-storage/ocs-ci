@@ -57,5 +57,8 @@ class TestTaintAndTolerations(E2ETest):
         # Respin all pods and check it if is still running
         pod_list = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         for pod in pod_list:
-            pod.delete(wait=False)
+            if "s3cli" in pod.name:
+                continue
+            else:
+                pod.delete(wait=False)
         assert wait_for_pods_to_be_running(timeout=300)
