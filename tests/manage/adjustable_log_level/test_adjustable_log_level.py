@@ -109,17 +109,15 @@ class TestSidecarLoglevel(ManageTest):
         ), "Error: The default value for sidecar log level is not as expected"
 
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["sc_name"],
         argvalues=[
             pytest.param(
-                "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
-                marks=pytest.mark.polarion_id("OCS-4676"),
+                # marks=pytest.mark.polarion_id("OCS-4676"),
             ),
             pytest.param(
-                "ocs-storagecluster-cephblockpool",
                 constants.DEFAULT_STORAGECLASS_RBD,
-                marks=pytest.mark.polarion_id("OCS-4679"),
+                # marks=pytest.mark.polarion_id("OCS-4679"),
             ),
         ],
     )
@@ -131,6 +129,13 @@ class TestSidecarLoglevel(ManageTest):
         2. expansion of a pvc
         3. snapshotting
         4. mount pvc
+
+        5-DEBUG - used for method result output
+        4-LOG - used for class instantiation
+        3-INFO - used for reporting initialization
+        2-WARN - used to log deprecated usage warnings
+        1-ERROR - used for unexpected exceptions
+
         """
         # Create pvc object
         pvc_obj = helpers.create_pvc(
