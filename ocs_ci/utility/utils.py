@@ -619,7 +619,7 @@ def exec_cmd(
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if cluster_ctx and cmd[0] == "oc":
+    if cluster_ctx and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kubepath = cluster_ctx.RUN["kubeconfig"]
         append_str = f"--kubeconfig {kubepath}"
         cmd.append(append_str)

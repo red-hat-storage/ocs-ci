@@ -1127,7 +1127,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
                 mcg=mcg,
                 status_failure=status_failure,
             )
-            for cluster in ocsci_config.clusters()
+            for cluster in ocsci_config.clusters
         ]
 
     for f in as_completed(results):
