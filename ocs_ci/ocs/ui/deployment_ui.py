@@ -401,8 +401,17 @@ class DeploymentUI(PageNavigator):
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
         if self.ocp_version_semantic >= version.VERSION_4_7:
-            logger.info(f"Wait 60 seconds until the {operator} operator installation")
-            time.sleep(60)
+            sample = TimeoutSampler(
+                timeout=100,
+                sleep=10,
+                func=self.check_element_text,
+                expected_text=operator,
+            )
+            if not sample.wait_for_func_status(result=True):
+                logger.error(
+                    f"The {operator} installation did not start after 100 seconds"
+                )
+                self.take_screenshot()
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
