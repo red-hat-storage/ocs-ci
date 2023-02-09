@@ -1,13 +1,12 @@
 import logging
-
 import pytest
+import re
 
 from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources import pod
 
-import re
 
 logger = logging.getLogger(__name__)
 
