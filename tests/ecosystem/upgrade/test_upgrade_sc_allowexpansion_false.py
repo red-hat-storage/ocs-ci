@@ -1,12 +1,11 @@
 import logging
 import pytest
+from ocs_ci.framework import config
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier1,
     bugzilla,
-    skipif_ocs_version,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     pre_ocs_upgrade,
@@ -17,14 +16,22 @@ from ocs_ci.ocs.resources.pod import (
     get_ocs_operator_pod,
     get_pod_logs,
 )
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
+upgrade_ocs_version = config.RUN.get("upgrade_ocs_version")
 
 
-@tier1
 @bugzilla("2125815")
-@skipif_ocs_version("<4.11")
 @pytest.mark.polarion_id("OCS-4689")
+@pytest.mark.skipif(
+    not (
+        upgrade_ocs_version
+        and version.get_semantic_ocs_version_from_config() == version.VERSION_4_11
+        and version.get_semantic_version(upgrade_ocs_version, True)
+        == version.VERSION_4_12
+    )
+)
 class TestUpgrade(ManageTest):
     """
     Tests to check upgrade of OCS when we set without expansion secret and allowExpansion to false
