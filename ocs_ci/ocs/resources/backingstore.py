@@ -113,6 +113,12 @@ class BackingStore:
                         "cannot complete because objects in Backingstore",
                         "are still being deleted, Please try later",
                     ]
+                ) or all(
+                    err in e.args[0]
+                    for err in [
+                        "cannot complete because pool",
+                        'in "CONNECTED_BUCKET_DELETING" state',
+                    ]
                 ):
                     log.error(
                         "Backingstore deletion failed because the objects are still getting deleted; Retrying"
