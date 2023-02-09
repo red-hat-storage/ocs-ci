@@ -94,8 +94,8 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
-            refresh the page once and try click again
-            * don't use when refreshed page expected to be different from initial page, or loose input values
+        refresh the page once and try click again
+        * don't use when refreshed page expected to be different from initial page, or loose input values
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
