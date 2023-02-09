@@ -26,7 +26,7 @@ def verify_provider_topology():
     4. Verify worker node instance type
     5. Verify worker node instance count
     6. Verify OSD count
-    7. Verify OSD cpu
+    7. Verify OSD CPU and memory
 
     """
     # importing here to avoid circular import
@@ -108,11 +108,12 @@ def verify_provider_topology():
     ), f"OSD count is not as expected. Actual:{osd_count}. Expected:{size_map[size]['osd_count']}"
     log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
 
-    # Verify OSD cpu
-    osd_cpu_limit = "1750m"
-    osd_cpu_request = "1750m"
+    # Verify OSD CPU and memory
+    osd_cpu_limit = "1650m"
+    osd_cpu_request = "1650m"
     osd_pods = get_osd_pods()
-    log.info("Verifying OSD cpu")
+    osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
+    log.info("Verifying OSD CPU and memory")
     for osd_pod in osd_pods:
         for container in osd_pod.data["spec"]["containers"]:
             if container["name"] == "osd":
@@ -124,7 +125,13 @@ def verify_provider_topology():
                     f"OSD pod {osd_pod.name} container osd doesn't have cpu request {osd_cpu_request}. "
                     f"Request is {container['resources']['requests']['cpu']}"
                 )
-    log.info("Verified OSD CPU")
+                assert (
+                    container["resources"]["limits"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have memory limit {osd_memory_size}"
+                assert (
+                    container["resources"]["requests"]["memory"] == osd_memory_size
+                ), f"OSD pod {osd_pod.name} container osd doesn't have memory request {osd_memory_size}"
+    log.info("Verified OSD CPU and memory")
 
 
 def get_used_capacity(msg):

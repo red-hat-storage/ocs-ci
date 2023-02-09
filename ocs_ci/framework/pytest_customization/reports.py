@@ -2,7 +2,7 @@ import os
 import pytest
 import logging
 from py.xml import html
-from ocs_ci.utility.utils import email_reports
+from ocs_ci.utility.utils import email_reports, save_reports
 from ocs_ci.framework import config as ocsci_config
 
 
@@ -72,7 +72,9 @@ def pytest_sessionstart(session):
 
 def pytest_sessionfinish(session, exitstatus):
     """
-    send email report
+    save session's report files and send email report
     """
+    if ocsci_config.REPORTING.get("save_mem_report"):
+        save_reports()
     if ocsci_config.RUN["cli_params"].get("email"):
         email_reports(session)

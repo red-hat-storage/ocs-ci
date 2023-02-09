@@ -36,22 +36,25 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    ChannelNotFound,
     CommandFailed,
     PodNotCreated,
     RBDSideCarContainerException,
+    ResourceNameNotSpecifiedException,
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
 )
 from ocs_ci.deployment.zones import create_dummy_zone_labels
-from ocs_ci.deployment.netsplit import setup_netsplit
+from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import verify_all_nodes_created
+from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
@@ -263,12 +266,18 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.do_deploy_ocp(log_cli_level)
-        # Deployment of network split scripts via machineconfig API happens
-        # after OCP deployment.
+
+        # TODO: use temporary directory for all temporary files of
+        # ocs-deployment, not just here in this particular case
+        tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
+        logger.debug("created temporary directory %s", tmp_path)
+
+        # Deployment of network split and or extra latency scripts via
+        # machineconfig API happens after OCP but before OCS deployment.
         if (
             config.DEPLOYMENT.get("network_split_setup")
-            and not config.ENV_DATA["skip_ocp_deployment"]
-        ):
+            or config.DEPLOYMENT.get("network_zone_latency")
+        ) and not config.ENV_DATA["skip_ocp_deployment"]:
             master_zones = config.ENV_DATA.get("master_availability_zones")
             worker_zones = config.ENV_DATA.get("worker_availability_zones")
             # special external zone, which is directly defined by ip addr list,
@@ -283,12 +292,17 @@ class Deployment(object):
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
-            # TODO: use temporary directory for all temporary files of
-            # ocs-deployment, not just here in this particular case
-            tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
-            logger.debug("created temporary directory %s", tmp_path)
-            setup_netsplit(
-                tmp_path, master_zones, worker_zones, x_addr_list, arbiter_zone
+            mc_dict = get_netsplit_mc(
+                tmp_path,
+                master_zones,
+                worker_zones,
+                enable_split=config.DEPLOYMENT.get("network_split_setup"),
+                x_addr_list=x_addr_list,
+                arbiter_zone=arbiter_zone,
+                latency=config.DEPLOYMENT.get("network_zone_latency"),
+            )
+            machineconfig.deploy_machineconfig(
+                tmp_path, "network-split", mc_dict, mcp_num=2
             )
         ocp_version = version.get_semantic_ocp_version_from_config()
         if (
@@ -1033,7 +1047,9 @@ class Deployment(object):
         from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
         from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
-        create_catalog_source()
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if not live_deployment:
+            create_catalog_source()
         setup_ui = login_ui()
         deployment_obj = DeploymentUI(setup_ui)
         deployment_obj.install_ocs_ui()
@@ -1080,8 +1096,8 @@ class Deployment(object):
         self.set_rook_log_level()
 
         # get external cluster details
-        host, user, password = get_external_cluster_client()
-        external_cluster = ExternalCluster(host, user, password)
+        host, user, password, ssh_key = get_external_cluster_client()
+        external_cluster = ExternalCluster(host, user, password, ssh_key)
         external_cluster.get_external_cluster_details()
 
         # get admin keyring
@@ -1768,11 +1784,16 @@ class RBDDRDeployOps(object):
             f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
         )
         timeout = 10
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if ocs_version <= version.get_semantic_version("4.11"):
+            rbd_sidecar_count = constants.RBD_SIDECAR_COUNT
+        else:
+            rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_12
         while timeout:
             out = run_cmd(rbd_pods)
             logger.info(out)
             logger.info(len(out.split(" ")))
-            if constants.RBD_SIDECAR_COUNT != len(out.split(" ")):
+            if rbd_sidecar_count != len(out.split(" ")):
                 time.sleep(2)
             else:
                 break
@@ -1884,16 +1905,27 @@ class MultiClusterDROperatorsDeploy(object):
         """
         Deploy multicluster orchestrator
         """
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        current_csv = None
+
+        if not live_deployment:
+            create_catalog_source()
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
         package_manifest = packagemanifest.PackageManifest(
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
+
+        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=5, delay=10)(
+            package_manifest.get_current_csv
+        )(self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE)
+
         current_csv = package_manifest.get_current_csv(
             channel=self.channel,
             csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
         )
+
         logger.info(f"CurrentCSV={current_csv}")
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
         odf_multicluster_orchestrator_data["spec"]["startingCSV"] = current_csv

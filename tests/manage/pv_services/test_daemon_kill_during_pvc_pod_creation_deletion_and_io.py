@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     polarion_id,
     skipif_managed_service,
+    skipif_external_mode,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4c
 @skipif_managed_service
+@skipif_external_mode
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
     """
     Kill ceph daemon while creation/deletion of PVCs, and pods are progressing

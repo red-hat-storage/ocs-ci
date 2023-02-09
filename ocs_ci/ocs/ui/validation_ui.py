@@ -4,7 +4,7 @@ import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.base_ui import StorageSystemNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-class ValidationUI(PageNavigator):
+class ValidationUI(StorageSystemNavigator):
     """
     User Interface Validation Selenium
 
@@ -434,29 +434,9 @@ class ValidationUI(PageNavigator):
         Function to verify changes and validate elements on ODF Storage Systems tab for ODF 4.9
 
         """
-
         self.odf_console_plugin_check()
-        self.navigate_odf_overview_page()
-        logger.info("Click on 'Storage Systems' tab")
-        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
-        if not config.DEPLOYMENT.get("external_mode"):
-            logger.info(
-                "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
-            )
-            self.do_click(
-                self.validation_loc["ocs-storagecluster-storagesystem"],
-                enable_screenshot=True,
-            )
-        else:
-            logger.info(
-                "Click on 'ocs-external-storagecluster-storagesystem' link "
-                "from Storage Systems page for External Mode Deployment"
-            )
-            self.do_click(
-                self.validation_loc["ocs-external-storagecluster-storagesystem"],
-                enable_screenshot=True,
-            )
+        self.navigate_odf_storagesystems()
+        self.navigate_storagecluster_storagesystem()
         logger.info("Click on Overview tab")
         if (
             self.ocp_version_semantic == version.VERSION_4_11
@@ -490,40 +470,11 @@ class ValidationUI(PageNavigator):
                 self.do_click(
                     self.validation_loc["blockandfile"], enable_screenshot=True
                 )
-        if not config.DEPLOYMENT.get("external_mode"):
-            if not config.ENV_DATA["mcg_only_deployment"]:
-                logger.info("Click on 'BlockPools' tab")
-                if (
-                    self.ocp_version_semantic == version.VERSION_4_11
-                    and self.ocs_version_semantic == version.VERSION_4_10
-                ):
-                    self.do_click(
-                        self.validation_loc["blockpools-odf-4-10"],
-                        enable_screenshot=True,
-                    )
-                else:
-                    self.do_click(
-                        self.validation_loc["blockpools"], enable_screenshot=True
-                    )
-                logger.info(
-                    "Click on 'ocs-storagecluster-cephblockpool' link under BlockPools tab"
-                )
-                self.do_click(
-                    self.validation_loc["ocs-storagecluster-cephblockpool"],
-                    enable_screenshot=True,
-                )
-                self.page_has_loaded(retries=15, sleep_time=2)
-                logger.info(
-                    "Verifying the status of 'ocs-storagecluster-cephblockpool'"
-                )
-                cephblockpool_status = self.get_element_text(
-                    self.validation_loc["ocs-storagecluster-cephblockpool-status"]
-                )
-                assert "Ready" == cephblockpool_status, (
-                    f"cephblockpool status error | expected status:Ready \n "
-                    f"actual status:{cephblockpool_status}"
-                )
-                logger.info("Verification of cephblockpool status is successful!")
+        if not (
+            config.DEPLOYMENT.get("external_mode")
+            or config.ENV_DATA["mcg_only_deployment"]
+        ):
+            self.navigate_cephblockpool_verify_statusready()
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
@@ -587,3 +538,32 @@ class ValidationUI(PageNavigator):
             )
         else:
             raise UnexpectedODFAccessException
+
+    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
+
+        Returns:
+            tuple: String representation of 'Compression status' from StorageSystem details page and
+            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
+
+        """
+        self.navigate_cephblockpool()
+        logger.info(
+            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+        )
+        compression_status_blockpools_tab = self.get_element_text(
+            self.validation_loc["storagesystem-details-compress-state"]
+        )
+        logger.info(
+            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
+        )
+        self.do_click(
+            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
+            enable_screenshot=True,
+        )
+        compression_status_blockpools_details = self.get_element_text(
+            self.validation_loc["storagecluster-blockpool-details-compress-status"]
+        )
+        return compression_status_blockpools_tab, compression_status_blockpools_details

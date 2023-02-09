@@ -14,9 +14,11 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
+    ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterObjectStoreUserCreationFailed,
     ExternalClusterCephfsMissing,
 )
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
@@ -34,21 +36,35 @@ class ExternalCluster(object):
     Helper for External RHCS cluster
     """
 
-    def __init__(self, host, user, password):
+    def __init__(self, host, user, password=None, ssh_key=None):
         """
         Initialize the variables required for external RHCS cluster
 
         Args:
              host (str): Host name with FQDN or IP
              user (str): User name
-             password (password): Password for the Host
+             password (password): Password for the Host (optional if ssh_key provided)
+             ssh_key (str): Path to SSH private key for the host (optional if password provided).
+
+        Raises:
+            ExternalClusterCephSSHAuthDetailsMissing: In case one of SSH key or password
+                is not provided.
 
         """
         self.host = host
         self.user = user
         self.password = password
+        self.ssh_key = ssh_key
+        if not (self.password or self.ssh_key):
+            raise ExternalClusterCephSSHAuthDetailsMissing(
+                "No SSH Auth to connect to external RHCS cluster provided! "
+                "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
+            )
         self.rhcs_conn = Connection(
-            host=self.host, user=self.user, password=self.password
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            private_key=self.ssh_key,
         )
 
     def get_external_cluster_details(self):
@@ -292,6 +308,20 @@ class ExternalCluster(object):
             raise ExternalClusterCephfsMissing
         return ceph_fs_list[0]["name"]
 
+    def remove_rbd_images(self, images, pool):
+        """
+        Removes rbd images from external RHCS cluster
+
+        Args:
+            images (list): List of rbd images to delete
+            pool (str): rbd pool name
+
+        """
+        logger.debug(f"deleting rbd images {images} from external RHCS cluster")
+        for each_image in images:
+            cmd = f"rbd rm {each_image} -p {pool}"
+            self.rhcs_conn.exec_cmd(cmd)
+
 
 def generate_exporter_script():
     """
@@ -369,13 +399,35 @@ def get_external_cluster_client():
     Finding the client role node IP address.
 
     Returns:
-        tuple: IP address, user, password of the client
+        tuple: IP address, user, password of the client, ssh key
+
+    Raises:
+        ExternalClusterCephSSHAuthDetailsMissing: In case one of SSH key or password
+            is not provided.
+
     """
     user = config.EXTERNAL_MODE["login"]["username"]
-    password = config.EXTERNAL_MODE["login"]["password"]
+    password = config.EXTERNAL_MODE["login"].get("password")
+    ssh_key = config.EXTERNAL_MODE["login"].get("ssh_key")
+    if not (password or ssh_key):
+        raise ExternalClusterCephSSHAuthDetailsMissing(
+            "No SSH Auth to connect to external RHCS cluster provided! "
+            "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
+        )
     nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
     for each in nodes.values():
         if "client" in each["role"]:
-            return (each["ip_address"], user, password)
+            return (each["ip_address"], user, password, ssh_key)
     logger.warning("No client role defined, using node1 address!")
-    return (nodes["node1"]["ip_address"], user, password)
+    return (nodes["node1"]["ip_address"], user, password, ssh_key)
+
+
+def remove_csi_users():
+    """
+    Remove csi users from external RHCS cluster
+    """
+    toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
+    toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
