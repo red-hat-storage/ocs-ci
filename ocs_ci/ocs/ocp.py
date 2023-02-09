@@ -120,7 +120,7 @@ class OCP(object):
         timeout=600,
         ignore_error=False,
         silent=False,
-        cluster_ctx=None,
+        cluster_config=None,
         **kwargs,
     ):
         """
@@ -138,7 +138,7 @@ class OCP(object):
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
             silent (bool): If True will silent errors from the server, default false
-            cluster_ctx (MultiClusterConfig): cluster_ctx will be used only in the context of multiclsuter
+            cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
                 executions
 
         Returns:
@@ -148,8 +148,8 @@ class OCP(object):
         """
         oc_cmd = "oc "
         env_kubeconfig = None
-        if not cluster_ctx:
-            cluster_ctx = config
+        if not cluster_config:
+            cluster_config = config
             env_kubeconfig = os.getenv("KUBECONFIG")
         kubeconfig_path = (
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
@@ -157,8 +157,8 @@ class OCP(object):
 
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
-                cluster_ctx.ENV_DATA["cluster_path"],
-                cluster_ctx.RUN.get("kubeconfig_location"),
+                cluster_config.ENV_DATA["cluster_path"],
+                cluster_config.RUN.get("kubeconfig_location"),
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
@@ -174,7 +174,7 @@ class OCP(object):
             ignore_error=ignore_error,
             threading_lock=self.threading_lock,
             silent=silent,
-            cluster_ctx=cluster_ctx,
+            cluster_config=cluster_config,
             **kwargs,
         )
 
@@ -233,7 +233,7 @@ class OCP(object):
         dont_raise=False,
         silent=False,
         field_selector=None,
-        cluster_ctx=None,
+        cluster_config=None,
     ):
         """
         Get command - 'oc get <resource>'
@@ -276,7 +276,9 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command, silent=silent, cluster_ctx=cluster_ctx)
+                return self.exec_oc_cmd(
+                    command, silent=silent, cluster_config=cluster_config
+                )
             except CommandFailed as ex:
                 if not silent:
                     log.warning(

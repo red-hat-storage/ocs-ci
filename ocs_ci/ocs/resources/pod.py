@@ -160,7 +160,7 @@ class Pod(OCS):
         secrets=None,
         timeout=600,
         container_name=None,
-        cluster_ctx=None,
+        cluster_config=None,
         **kwargs,
     ):
         """
@@ -176,7 +176,7 @@ class Pod(OCS):
                 subprocess.run(``**kwargs``)
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
             container_name (str): The container name
-            cluster_ctx (MultiClusterConfig): In case of multicluser scenario, this object will hold
+            cluster_config (MultiClusterConfig): In case of multicluser scenario, this object will hold
                 specific cluster's Config
 
         Returns:
@@ -192,7 +192,7 @@ class Pod(OCS):
             out_yaml_format,
             secrets=secrets,
             timeout=timeout,
-            cluster_ctx=cluster_ctx,
+            cluster_config=cluster_config,
             **kwargs,
         )
 
@@ -1324,14 +1324,14 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
     return used_percentage
 
 
-def get_pods_having_label(label, namespace, cluster_ctx=None):
+def get_pods_having_label(label, namespace, cluster_config=None):
     """
     Fetches pod resources with given label in given namespace
 
     Args:
         label (str): label which pods might have
         namespace (str): Namespace in which to be looked up
-        cluster_ctx (MultiClusterConfig): In case of multicluster, this object will hold
+        cluster_config (MultiClusterConfig): In case of multicluster, this object will hold
             specif cluster config
 
     Return:
@@ -1823,7 +1823,7 @@ def upload(pod_name, localpath, remotepath, namespace=None):
 
 
 def download_file_from_pod(
-    pod_name, remotepath, localpath, namespace=None, cluster_ctx=None
+    pod_name, remotepath, localpath, namespace=None, cluster_config=None
 ):
     """
     Download a file from a pod
@@ -1838,11 +1838,11 @@ def download_file_from_pod(
     namespace = namespace or constants.DEFAULT_NAMESPACE
     kubeconfig = None
     cmd = "oc"
-    if cluster_ctx:
-        kubeconfig = cluster_ctx.RUN.get("kubeconfig")
+    if cluster_config:
+        kubeconfig = cluster_config.RUN.get("kubeconfig")
         cmd = cmd + f" --kubeconfig {kubeconfig}"
     cmd = f"{cmd} -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
-    run_cmd(cmd, cluster_ctx=cluster_ctx)
+    run_cmd(cmd, cluster_config=cluster_config)
 
 
 def wait_for_storage_pods(timeout=200):
