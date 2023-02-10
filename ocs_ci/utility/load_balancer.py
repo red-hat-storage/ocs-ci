@@ -97,6 +97,24 @@ class LoadBalancer(object):
         cmd = f"sudo sed -i '/{bootstrap_ip}/d' {constants.HAPROXY_LOCATION}"
         self.lb.exec_cmd(cmd)
 
+    def remove_compute_node_in_proxy(self):
+        """
+        Removes compute node IP's from haproxy.conf
+        """
+        compute_ips = get_module_ip(self.terraform_state_file, constants.COMPUTE_MODULE)
+        # backup the conf file
+        cmd = (
+            f"sudo cp {constants.HAPROXY_LOCATION}"
+            f" {constants.HAPROXY_LOCATION}_backup"
+        )
+        self.lb.exec_cmd(cmd)
+
+        # remove compute IPs
+        logger.debug(f"removing {compute_ips} from {constants.HAPROXY_LOCATION}")
+        for each_compute_ip in compute_ips:
+            cmd = f"sudo sed -i '/{each_compute_ip}/d' {constants.HAPROXY_LOCATION}"
+            self.lb.exec_cmd(cmd)
+
     def update_haproxy_with_nodes(self, nodes):
         """
         Args:
