@@ -317,7 +317,7 @@ class ROSA(CloudDeploymentBase):
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#
-        machine_cidr = config.ENV_DATA.get("machine-cidr", "10.0.0.0/16")
+        machine_cidr = config.ENV_DATA.get("machine_cidr", "10.0.0.0/16")
         rules = [
             {
                 "FromPort": 6800,
