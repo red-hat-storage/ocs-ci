@@ -731,9 +731,12 @@ acm_configuration_4_12 = {
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
     "select-policy": ('//*[text()="{}"]', By.XPATH),
-    "failover-target-cluster-dropdown": ("//button[@id='pf-dropdown-toggle-id-6445']", By.XPATH),
-    "failover-cluster-name": ('//*[text()="{}"]', By.XPATH),
+    "target-cluster-dropdown": ("//button[@data-test='target-cluster-dropdown-toggle']", By.XPATH),
+    "failover-preferred-cluster-name": ('//*[text()="{}"]', By.XPATH),
     "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
+    "subscription-dropdown": (".pf-c-select__toggle.pf-m-typeahead", By.CSS_SELECTOR),
+    "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
+
 
 
 
