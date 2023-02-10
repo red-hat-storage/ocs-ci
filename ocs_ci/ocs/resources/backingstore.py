@@ -98,17 +98,6 @@ class BackingStore:
                     return True
                 elif all(
                     err in e.args[0]
-                    for err in ["cannot complete because pool", "in", "state"]
-                ):
-                    if retry:
-                        log.warning(
-                            f"Deletion of {self.name} failed due to its state; Retrying"
-                        )
-                        return False
-                    else:
-                        raise
-                elif all(
-                    err in e.args[0]
                     for err in [
                         "cannot complete because objects in Backingstore",
                         "are still being deleted, Please try later",
@@ -124,6 +113,17 @@ class BackingStore:
                         "Backingstore deletion failed because the objects are still getting deleted; Retrying"
                     )
                     raise ObjectsStillBeingDeletedException
+                elif all(
+                    err in e.args[0]
+                    for err in ["cannot complete because pool", "in", "state"]
+                ):
+                    if retry:
+                        log.warning(
+                            f"Deletion of {self.name} failed due to its state; Retrying"
+                        )
+                        return False
+                    else:
+                        raise
                 else:
                     raise
 
