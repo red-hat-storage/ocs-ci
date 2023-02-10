@@ -1091,6 +1091,11 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
 
+            # remove ingress-router for RHCOS compute nodes on load balancer
+            lb = LoadBalancer()
+            lb.remove_compute_node_in_proxy()
+            lb.restart_haproxy()
+
         if config.DEPLOYMENT.get("thick_sc"):
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
             sc_data_yaml = tempfile.NamedTemporaryFile(
