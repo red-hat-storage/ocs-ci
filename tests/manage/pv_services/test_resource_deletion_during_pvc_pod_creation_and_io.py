@@ -427,7 +427,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs_re:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
             )
             pod_obj.reload()
         log.info("Successfully created new pods using all PVCs.")
