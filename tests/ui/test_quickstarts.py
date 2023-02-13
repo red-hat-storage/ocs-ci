@@ -44,3 +44,6 @@ class TestPvcUserInterface(object):
         result = quickstart_ui_obj.check_element_text(element="h3", expected_text=title)
         logger.info(f"Actual result: {result}")
         assert quickstart_ui_obj.check_element_text(element="h3", expected_text=title)
+        assert (
+            quickstart_ui_obj.driver.title == title
+        ), "Title of the page is not as expected"
