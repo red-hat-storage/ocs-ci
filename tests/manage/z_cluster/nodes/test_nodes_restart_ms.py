@@ -32,6 +32,7 @@ from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
     is_ms_consumer_cluster,
+    is_ms_provider_cluster,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -115,12 +116,26 @@ class TestNodesRestartMS(ManageTest):
         assert res, "Not all the node osd pods are in a Terminating state"
 
         wait_for_nodes_status(node_names=[osd_node_name])
-        assert wait_for_osd_ids_come_up_on_node(
-            osd_node_name, old_osd_pod_ids, timeout=300
-        )
-        logger.info(
-            f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
-        )
+
+        if len(get_nodes(constants.WORKER_MACHINE)) <= 3:
+            assert wait_for_osd_ids_come_up_on_node(
+                osd_node_name, old_osd_pod_ids, timeout=300
+            )
+            logger.info(
+                f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
+            )
+        else:
+            new_osd_pods = pod.wait_for_osd_pods_having_ids(osd_ids=old_osd_pod_ids)
+            new_osd_pod_names = [p.name for p in new_osd_pods]
+            logger.info(
+                f"Wait for the new osd pods with the ids {old_osd_pod_ids} to be running"
+            )
+            res = pod.wait_for_pods_to_be_in_statuses(
+                constants.STATUS_RUNNING,
+                new_osd_pod_names,
+                raise_pod_not_found_error=True,
+            )
+            assert res, "Not all the node osd pods are in a Running state"
 
         logger.info("Verify the worker nodes security groups on the provider...")
         assert verify_worker_nodes_security_groups()
@@ -143,10 +158,9 @@ class TestNodesRestartMS(ManageTest):
 
         """
         node_count = len(get_nodes(node_type=node_type))
-        if node_type == constants.WORKER_MACHINE:
-            ocp_nodes = get_nodes(node_type=node_type)
-        else:
-            ocp_nodes = get_nodes(node_type=node_type, num_of_nodes=2)
+        ocp_nodes = get_nodes(node_type=node_type)
+        num_of_nodes = 1 if is_ms_provider_cluster() else 2
+        ocp_nodes = random.choices(ocp_nodes, k=num_of_nodes)
 
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
@@ -168,11 +182,16 @@ class TestNodesRestartMS(ManageTest):
         Test restart nodes one after the other and check health status in between
 
         """
-        ocp_nodes = get_nodes(node_type=node_type)
+        node_count = len(get_nodes(node_type))
+        if is_ms_provider_cluster() and node_type == constants.WORKER_MACHINE:
+            ocp_nodes = generate_nodes_for_provider_worker_node_tests()
+        else:
+            ocp_nodes = get_nodes(node_type=node_type)
+
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             wait_for_node_count_to_reach_status(
-                node_count=len(ocp_nodes), node_type=node_type
+                node_count=node_count, node_type=node_type
             )
             ceph_health_check(tries=40)
 
@@ -294,31 +313,4 @@ class TestNodesRestartMS(ManageTest):
             ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
 
         # Create PVCs and pods
-        self.sanity_helpers.create_resources_on_ms_consumers()
-
-    @tier4b
-    @pytest.mark.polarion_id("OCS-2015")
-    def test_rolling_provider_worker_nodes_restart(self, nodes):
-        """
-        Test restart provider worker nodes one after the other and check health status in between
-        It selects the worker nodes according to the function 'generate_nodes_for_provider_worker_node_tests'.
-
-        """
-        # Switch to provider cluster for the test
-        if is_ms_consumer_cluster():
-            logger.info(
-                "The test is applicable only for an MS provider cluster. "
-                "Switching to the provider cluster..."
-            )
-            config.switch_to_provider()
-
-        node_count = len(get_nodes())
-        ocs_nodes = generate_nodes_for_provider_worker_node_tests()
-        for node in ocs_nodes:
-            nodes.restart_nodes(nodes=[node], wait=False)
-            wait_for_node_count_to_reach_status(
-                node_count=node_count, node_type=constants.WORKER_MACHINE
-            )
-            ceph_health_check(tries=40)
-
         self.sanity_helpers.create_resources_on_ms_consumers()
