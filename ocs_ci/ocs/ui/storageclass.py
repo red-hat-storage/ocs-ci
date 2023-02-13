@@ -34,7 +34,7 @@ class StorageClassUI(PageNavigator):
             sc_name (str): the name of the storageclass created, otherwise return None.
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_name = create_unique_resource_name("test", "storageclass")
@@ -62,7 +62,7 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_existence = self.wait_until_expected_text_is_found(
@@ -82,7 +82,7 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         logger.info(f"sc_name is {sc_name}")

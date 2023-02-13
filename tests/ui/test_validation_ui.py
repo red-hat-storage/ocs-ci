@@ -82,11 +82,18 @@ class TestUserInterfaceValidation(object):
 
         """
 
-        validation_ui_obj = ValidationUI(setup_ui_class)
-        validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
-        compression_statuses = (
-            validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
+        storage_systems_page = (
+            ValidationUI(setup_ui_class).nav_odf_default_page().nav_storage_systems()
         )
+        storage_system_details = (
+            storage_systems_page.nav_storagecluster_storagesystem_details()
+        )
+        storage_system_details.nav_cephblockpool_verify_statusready()
+
+        compression_statuses = (
+            storage_system_details.get_blockpools_compression_status_from_storagesystem()
+        )
+
         compression_status_expected = "Disabled"
         assert all(
             val == compression_status_expected for val in compression_statuses

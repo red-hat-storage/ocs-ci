@@ -529,14 +529,15 @@ class PageNavigator(BaseUI):
 
     """
 
+    ocp_version = get_ocp_version()
+    running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+    ocp_version_full = version.get_semantic_ocp_version_from_config()
+    ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+    ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+
     def __init__(self, driver):
         super().__init__(driver)
-        self.ocp_version = get_ocp_version()
-        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.page_nav = locators[self.ocp_version]["page"]
-        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
         self.operator_name = (
             ODF_OPERATOR
             if self.ocs_version_semantic >= version.VERSION_4_9
@@ -574,26 +575,35 @@ class PageNavigator(BaseUI):
             else:
                 self.storage_class = "standard_csi_sc"
 
-    def navigate_overview_page(self):
+    def navigate_storage(self):
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        return DataFoundationDefaultTab(self.driver)
+
+    def navigate_cluster_overview_page(self):
         """
-        Navigate to Overview Page
+        Navigate to Cluster Overview Page
 
         """
-        logger.info("Navigate to Overview Page")
+        logger.info("Navigate to Cluster Overview Page")
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
-            self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+            self.navigate_storage()
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
-    def navigate_odf_overview_page(self):
+    def nav_odf_default_page(self):
         """
-        Navigate to OpenShift Data Foundation Overview Page
+        Navigate to OpenShift Data Foundation default page
+        If OCP version >= 4.13 Storage / Data foundation opens Topology
+        If OCP version > 4.10 and OCP version < 4.13 Storage / Data foundation opens Overview
+        If OCP version < 4.10 Storage / OpenShift Data Foundation opens Overview
         """
-        logger.info("Navigate to ODF tab under Storage section")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+
         ocs_version = version.get_semantic_ocs_version_from_config()
+
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         if (
             self.ocp_version_full >= version.VERSION_4_10
             and ocs_version >= version.VERSION_4_10
@@ -603,13 +613,23 @@ class PageNavigator(BaseUI):
             self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
+        if (
+            self.ocp_version_full >= version.VERSION_4_13
+            and ocs_version >= version.VERSION_4_13
+        ):
+            default_tab = TopologyTab(self.driver)
+            logger.info(f"Default page is {self.driver.title}")
+        else:
+            default_tab = OverviewTab(self.driver)
+            logger.info(f"Default page is {self.driver.title}")
+        return default_tab
 
     def navigate_quickstarts_page(self):
         """
         Navigate to Quickstarts Page
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         logger.info("Navigate to Quickstarts Page")
         self.scroll_into_view(self.page_nav["quickstarts"])
         self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
@@ -668,6 +688,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.page_has_loaded(retries=25, sleep_time=5)
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
@@ -918,38 +939,84 @@ class PageNavigator(BaseUI):
             return False
 
 
-class StorageSystemNavigator(PageNavigator):
-    """
-    Storage Navigator Class
+class DataFoundationTabBar(PageNavigator):
 
+    validation_loc = locators[PageNavigator.ocp_version]["validation"]
+
+    def __init__(self, driver):
+        super().__init__(driver)
+
+    def nav_storage_systems(self):
+        logger.info("Navigate to Data Foundation - Storage Systems")
+        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        return StorageSystemTab(self.driver)
+
+    def nav_overview_tab(self):
+        logger.info("Navigate to Data Foundation - Overview")
+        # pay attention Overview loc will show twice if Home Page nav extended
+        self.do_click(locator=self.page_nav["overview_page"])
+        return OverviewTab(self.driver)
+
+
+class DataFoundationDefaultTab(DataFoundationTabBar):
+
+    """
+    Default Foundation default Tab: TopologyTab | OverviewTab
+    """
+
+    validation_loc = locators[PageNavigator.ocp_version]["validation"]
+
+    def __init__(self, driver):
+        DataFoundationTabBar.__init__(self, driver)
+
+
+class TopologyTab(DataFoundationDefaultTab):
+    """
+    Topology tab Class
+    Content of Data Foundation/Topology tab (default for ODF 4.13 and above)
     """
 
     def __init__(self, driver):
         super().__init__(driver)
-        self.validation_loc = locators[self.ocp_version]["validation"]
 
-    def navigate_cephblockpool(self):
-        """
-        Initial page OCP Home page
-        Navigate to StorageSystem details / ocs-storagecluster-cephblockpool
 
-        """
-        self.navigate_odf_storagesystems()
-        self.navigate_storagecluster_storagesystem()
-        self.navigate_cephblockpool_verify_statusready()
+class OverviewTab(DataFoundationDefaultTab):
+    """
+    Overiview tab Class
+    Content of Data Foundation/Overview tab (default for ODF bellow 4.12)
+    """
 
-    def navigate_odf_storagesystems(self):
-        """
-        Initial page OCP Home page
-        Navigate to Storage Systems tab
+    def __init__(self, driver):
+        DataFoundationDefaultTab.__init__(self, driver)
 
-        """
-        self.navigate_odf_overview_page()
-        logger.info("Click on 'Storage Systems' tab")
-        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
+    def open_quickstarts_page(self):
+        logger.info("Navigate to Quickstarts Page")
+        self.scroll_into_view(self.page_nav["quickstarts"])
+        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
 
-    def navigate_storagecluster_storagesystem(self):
+    def wait_storagesystem_popup(self) -> bool:
+        logger.info(
+            "Wait and check for Storage System under Status card on Overview page"
+        )
+        return self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-status-card"],
+            timeout=30,
+            expected_text="Storage System",
+        )
+
+
+class StorageSystemTab(DataFoundationTabBar):
+    """
+    Storage System tab Class
+    Content of Data Foundation/Storage Systems tab
+
+    """
+
+    def __init__(self, driver):
+        DataFoundationTabBar.__init__(self, driver)
+
+    def nav_storagecluster_storagesystem_details(self):
         """
         Initial page - Data Foundation / Storage Systems tab
         Navigate to StorageSystem details
@@ -972,8 +1039,58 @@ class StorageSystemNavigator(PageNavigator):
                 self.validation_loc["ocs-external-storagecluster-storagesystem"],
                 enable_screenshot=True,
             )
+        return StorageSystemDetails(self.driver)
 
-    def navigate_cephblockpool_verify_statusready(self):
+
+class StorageSystemDetails(StorageSystemTab):
+    def __init__(self, driver):
+        StorageSystemTab.__init__(self, driver)
+
+    def nav_details_overview(self):
+        logger.info("Click on Overview tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["overview_odf_4_10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["overview"], enable_screenshot=True)
+
+    def nav_details_object(self):
+        """
+        Accessible only at StorageSystems / StorageSystem details / Overview
+        ! At 'StorageSystems / StorageSystem details / BlockPools' Object page is not accessible
+        """
+        logger.info("Click on 'Object' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["object-odf-4-10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["object"], enable_screenshot=True)
+
+    def nav_block_and_file(self):
+        """
+        Accessible only at StorageSystems / StorageSystem details / Overview
+        ! At 'StorageSystems / StorageSystem details / BlockPools' Block and file page is not accessible
+        """
+        logger.info("Click on 'Block and File' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["blockandfile-odf-4-10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
+
+    def nav_cephblockpool_verify_statusready(self):
         """
         Initial page - Data Foundation / Storage Systems tab / StorageSystem details
         Navigate to ocs-storagecluster-cephblockpool
@@ -982,6 +1099,10 @@ class StorageSystemNavigator(PageNavigator):
         Raises:
             CephHealthException if cephblockpool_status != 'Ready'
         """
+        self.nav_ceph_blockpool()
+        self.verify_cephblockpool_status()
+
+    def nav_ceph_blockpool(self):
         logger.info("Click on 'BlockPools' tab")
         if (
             self.ocp_version_semantic == version.VERSION_4_11
@@ -994,15 +1115,62 @@ class StorageSystemNavigator(PageNavigator):
         else:
             self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
+
+    def verify_cephblockpool_status(self, status_exp: str = "Ready"):
+
         logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
         cephblockpool_status = self.get_element_text(
             self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
         )
-        if not "Ready" == cephblockpool_status:
+        if not status_exp == cephblockpool_status:
             raise CephHealthException(
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
+
+    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
+
+        Returns:
+            tuple: String representation of 'Compression status' from StorageSystem details page and
+            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
+
+        """
+
+        logger.info(
+            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+        )
+        compression_status_blockpools_tab = self.get_element_text(
+            self.validation_loc["storagesystem-details-compress-state"]
+        )
+        logger.info(
+            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
+        )
+        self.do_click(
+            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
+            enable_screenshot=True,
+        )
+        compression_status_blockpools_details = self.get_element_text(
+            self.validation_loc["storagecluster-blockpool-details-compress-status"]
+        )
+        return compression_status_blockpools_tab, compression_status_blockpools_details
+
+
+class BackingStoreTab(DataFoundationDefaultTab):
+    def __init__(self, driver):
+        DataFoundationTabBar.__init__(self, driver)
+
+
+class BucketClassTab(DataFoundationDefaultTab):
+    def __init__(self, driver):
+        DataFoundationTabBar.__init__(self, driver)
+
+
+class NameStoreTab(DataFoundationDefaultTab):
+    def __init__(self, driver):
+        DataFoundationTabBar.__init__(self, driver)
 
 
 def screenshot_dom_location(type_loc="screenshot"):
