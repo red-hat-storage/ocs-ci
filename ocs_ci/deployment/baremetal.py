@@ -1,5 +1,6 @@
 import json
 import os
+import pytest
 import logging
 import tempfile
 from datetime import datetime
@@ -63,9 +64,11 @@ class BAREMETALUPI(Deployment):
             # check for BM status
             logger.info("Checking BM Status")
             status = self.check_bm_status_exist()
-            assert (
-                status == constants.BM_STATUS_ABSENT
-            ), f"BM Cluster still present and locked by {self.get_locked_username()}"
+            if status == constants.BM_STATUS_PRESENT:
+                pytest.fail(
+                    f"BM Cluster still present and locked by {self.get_locked_username()}"
+                )
+
             # update BM status
             logger.info("Updating BM Status")
             result = self.update_bm_status(constants.BM_STATUS_PRESENT)
