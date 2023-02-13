@@ -19,8 +19,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
-# Namespace and noobaa storage class
-namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+# Noobaa storage class
 sc_name = constants.DEFAULT_STORAGECLASS_RGW
 # Number of scaled obc count
 scale_obc_count = 100
@@ -30,7 +29,7 @@ num_obc_batch = 50
 num_objs = 150000
 # Scale data file
 log_path = ocsci_log_path()
-obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
+obc_scaled_data_file = f"{log_path}/obc_scale_rgw_data_file.yaml"
 
 
 @pre_upgrade
@@ -48,6 +47,7 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
     """
     # Running hsbench to create buckets with objects before upgrade.
     #  PUT, GET and LIST objects of a bucket.
+    namespace = scale_noobaa_lib.create_namespace()
     scale_noobaa_lib.hsbench_setup()
     scale_noobaa_lib.hsbench_io(
         namespace=namespace,
@@ -180,7 +180,10 @@ def test_scale_obc_rgw_post_upgrade():
     utils.ceph_health_check()
 
     # Clean up all scaled obcs
-    scale_noobaa_lib.cleanup(namespace=namespace)
+    scale_noobaa_lib.cleanup(namespace=namespace, obc_list=obc_scale_list)
 
     # Cleanup hsbench resources
     scale_noobaa_lib.hsbench_cleanup()
+
+    # Delete namespace
+    scale_noobaa_lib.delete_namespace(namespace=namespace)
