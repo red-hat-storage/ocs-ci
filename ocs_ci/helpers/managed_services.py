@@ -134,6 +134,9 @@ def verify_provider_topology():
                 ), f"OSD pod {osd_pod.name} container osd doesn't have memory request {osd_memory_size}"
     log.info("Verified OSD CPU and memory")
 
+    # Verify OSD distribution
+    verify_osd_distribution_on_provider()
+
 
 def get_used_capacity(msg):
     """
@@ -207,7 +210,8 @@ def verify_osd_distribution_on_provider():
         osd_node = get_pod_node(osd_pod).name
         if osd_zone != nodes_zone[osd_node]:
             log.error(
-                f"Zone in OSD label and node's zone are not matching. OSD name:{osd_node.name}, Zone: {osd_zone}. Node name: {osd_node}, Zone: {nodes_zone[osd_node]}"
+                f"Zone in OSD label and node's zone are not matching. OSD name:{osd_node.name}, Zone: {osd_zone}. "
+                f"Node name: {osd_node}, Zone: {nodes_zone[osd_node]}"
             )
         zone_osd_count[osd_zone] = zone_osd_count.get(osd_zone, 0) + 1
 
