@@ -24,8 +24,8 @@ class MCGStoreUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.wait = WebDriverWait(self.driver, 30)
         ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
@@ -102,8 +102,8 @@ class BucketClassUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
         self.bucketclass = locators[ocs_version]["bucketclass"]
@@ -258,8 +258,8 @@ class BucketsUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.ocs_version = str(version.get_ocs_version_from_csv(only_major_minor=True))
         self.obc_loc = locators[self.ocs_version]["obc"]
 
@@ -323,7 +323,8 @@ class ObcUI(BucketsUI):
 
     def __init__(self, driver):
         super().__init__(driver)
-        self.obc_loc = locators[self.ocs_version]["obc"]
+        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+        self.obc_loc = locators[ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -360,6 +361,18 @@ class ObcUI(BucketsUI):
 
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
+
+    def select_openshift_storage_default_project(self):
+        """
+        Helper function to select openshift-storage project
+
+        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
+        """
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(
+            project_name=config.ENV_DATA["cluster_namespace"]
+        )
 
     def delete_obc_ui(self, obc_name, delete_via):
         """

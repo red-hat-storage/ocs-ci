@@ -40,7 +40,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_9:
             validation_ui_obj.odf_overview_ui()
@@ -61,7 +61,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.odf_storagesystems_ui()
 
     @ui
@@ -82,18 +82,17 @@ class TestUserInterfaceValidation(object):
 
         """
 
-        storage_systems_page = (
-            ValidationUI(setup_ui_class).nav_odf_default_page().nav_storage_systems()
-        )
         storage_system_details = (
-            storage_systems_page.nav_storagecluster_storagesystem_details()
+            ValidationUI()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
         )
         storage_system_details.nav_cephblockpool_verify_statusready()
 
         compression_statuses = (
             storage_system_details.get_blockpools_compression_status_from_storagesystem()
         )
-
         compression_status_expected = "Disabled"
         assert all(
             val == compression_status_expected for val in compression_statuses

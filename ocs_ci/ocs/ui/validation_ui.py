@@ -5,9 +5,8 @@ import time
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
@@ -20,12 +19,9 @@ class ValidationUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.dep_loc = locators[self.ocp_version]["deployment"]
-        self.ocp_version = get_ocp_version()
+    def __init__(self):
+        super().__init__()
         self.err_list = list()
-        self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_object_service_page(self):
         """
@@ -432,7 +428,7 @@ class ValidationUI(PageNavigator):
         """
         self.odf_console_plugin_check()
         storage_systems_page = (
-            PageNavigator(self.driver).nav_odf_default_page().nav_storage_systems()
+            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
         )
         storage_system_details = (
             storage_systems_page.nav_storagecluster_storagesystem_details()

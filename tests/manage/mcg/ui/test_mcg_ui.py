@@ -144,7 +144,7 @@ class TestBucketclassUserInterface(object):
             resource_description="ui", resource_type="bucketclass"
         )
 
-        bc_ui_obj = BucketClassUI(setup_ui_class)
+        bc_ui_obj = BucketClassUI()
         bc_ui_obj.create_standard_bucketclass_ui(
             bc_name, policy, [bs.name for bs in test_stores]
         )
@@ -209,7 +209,7 @@ class TestBucketclassUserInterface(object):
             resource_description="ui", resource_type="bucketclass"
         )
 
-        bc_ui_obj = BucketClassUI(setup_ui_class)
+        bc_ui_obj = BucketClassUI()
         bc_ui_obj.create_namespace_bucketclass_ui(bc_name, policy, nss_names, bs_names)
 
         assert bc_ui_obj.verify_current_page_resource_status(
