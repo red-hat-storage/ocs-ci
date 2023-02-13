@@ -207,11 +207,10 @@ def verify_osd_distribution_on_provider():
     for osd_pod in osd_pods:
         osd_zone = osd_pod["metadata"]["labels"]["topology-location-zone"]
         osd_node = get_pod_node(osd_pod).name
-        if osd_zone != nodes_zone[osd_node]:
-            log.error(
-                f"Zone in OSD label and node's zone are not matching. OSD name:{osd_node.name}, Zone: {osd_zone}. "
-                f"Node name: {osd_node}, Zone: {nodes_zone[osd_node]}"
-            )
+        assert osd_zone == nodes_zone[osd_node], (
+            f"Zone in OSD label and node's zone are not matching. OSD name:{osd_node.name}, Zone: {osd_zone}. "
+            f"Node name: {osd_node}, Zone: {nodes_zone[osd_node]}"
+        )
         zone_osd_count[osd_zone] = zone_osd_count.get(osd_zone, 0) + 1
 
     # Verify the number of OSDs per zone
