@@ -211,7 +211,7 @@ def verify_osd_distribution_on_provider():
             )
         zone_osd_count[osd_zone] = zone_osd_count.get(osd_zone, 0) + 1
 
-    # verify the number of OSDs per zone
+    # Verify the number of OSDs per zone
     for zone, osd_count in zone_osd_count.items():
         # 4Ti is the size of OSD
         assert (
