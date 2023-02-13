@@ -3,7 +3,6 @@ Managed Services related functionalities
 """
 import logging
 
-from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -201,10 +200,10 @@ def verify_osd_distribution_on_provider():
     """
     size = config.ENV_DATA.get("size", 4)
     nodes_zone = get_node_zone_dict()
-
     osd_pods = get_osd_pods()
-
     zone_osd_count = {}
+
+    # Get OSd zone and compare with it's node zone
     for osd_pod in osd_pods:
         osd_zone = osd_pod["metadata"]["labels"]["topology-location-zone"]
         osd_node = get_pod_node(osd_pod).name
