@@ -6,9 +6,9 @@ import logging
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
+from ocs_ci.ocs.node import get_worker_nodes, get_node_objs, get_node_zone_dict
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_pod_node
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size
 import ocs_ci.ocs.cluster
@@ -133,6 +133,9 @@ def verify_provider_topology():
                 ), f"OSD pod {osd_pod.name} container osd doesn't have memory request {osd_memory_size}"
     log.info("Verified OSD CPU and memory")
 
+    # Verify OSD distribution
+    verify_osd_distribution_on_provider()
+
 
 def get_used_capacity(msg):
     """
@@ -188,3 +191,31 @@ def get_ocs_osd_deployer_version():
     ), "Couldn't find ocs-osd-deployer CSV"
     deployer_version = deployer_csv["items"][0]["spec"]["version"]
     return get_semantic_version(deployer_version)
+
+
+def verify_osd_distribution_on_provider():
+    """
+    Verify the OSD distribution on the provider cluster
+
+    """
+    size = config.ENV_DATA.get("size", 4)
+    nodes_zone = get_node_zone_dict()
+    osd_pods = get_osd_pods()
+    zone_osd_count = {}
+
+    # Get OSD zone and compare with it's node zone
+    for osd_pod in osd_pods:
+        osd_zone = osd_pod.get()["metadata"]["labels"]["topology-location-zone"]
+        osd_node = get_pod_node(osd_pod).name
+        assert osd_zone == nodes_zone[osd_node], (
+            f"Zone in OSD label and node's zone are not matching. OSD name:{osd_node.name}, Zone: {osd_zone}. "
+            f"Node name: {osd_node}, Zone: {nodes_zone[osd_node]}"
+        )
+        zone_osd_count[osd_zone] = zone_osd_count.get(osd_zone, 0) + 1
+
+    # Verify the number of OSDs per zone
+    for zone, osd_count in zone_osd_count.items():
+        # 4Ti is the size of OSD
+        assert (
+            osd_count == size / 4
+        ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
