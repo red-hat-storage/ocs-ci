@@ -11,12 +11,19 @@ from ocs_ci.framework.testlib import (
     managed_service_required,
     ipi_deployment_required,
 )
+from ocs_ci.ocs.machine import (
+    get_machine_from_node_name,
+    get_machineset_from_machine_name,
+)
 from ocs_ci.ocs.node import (
     get_ocs_nodes,
-    wait_for_node_count_to_reach_status,
     get_node_objs,
     recover_node_to_ready_state,
     consumers_verification_steps_after_provider_node_replacement,
+    generate_nodes_for_provider_worker_node_tests,
+    label_nodes,
+    wait_for_new_worker_node_ipi,
+    get_worker_nodes,
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
@@ -74,17 +81,26 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
 
     def rolling_terminate_and_recovery_of_ocs_worker_nodes(self, nodes):
         # Get OCS worker node objects
-        ocs_node_objs = get_ocs_nodes()
+        if is_ms_provider_cluster():
+            ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
+        else:
+            ocs_node_objs = get_ocs_nodes(num_of_nodes=3)
 
-        # Start rolling shutdown and recovery of OCS worker nodes
+        # Start rolling terminate and recovery of OCS worker nodes
         for node_obj in ocs_node_objs:
+            old_wnodes = get_worker_nodes()
+            log.info(f"Current worker nodes: {old_wnodes}")
+            machine_name = get_machine_from_node_name(node_obj.name)
+            machineset = get_machineset_from_machine_name(machine_name)
+            log.info(f"machineset name: {machineset}")
+
             nodes.terminate_nodes(nodes=[node_obj], wait=True)
             log.info(f"Successfully terminated the node: {node_obj.name}")
 
-            log.info("Waiting for all the worker nodes to be ready...")
-            wait_for_node_count_to_reach_status(
-                node_count=len(ocs_node_objs), timeout=900
-            )
+            new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
+            if not is_managed_service_cluster():
+                label_nodes([new_wnode])
+
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 
