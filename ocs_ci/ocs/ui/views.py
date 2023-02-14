@@ -187,7 +187,8 @@ deployment_4_12 = {
 
 generic_locators = {
     "project_selector": (
-        'button[class="pf-c-dropdown__toggle pf-m-plain"]',
+        'button[class="pf-c-dropdown__toggle pf-m-plain"],'
+        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "select_openshift-storage_project": (
@@ -200,8 +201,19 @@ generic_locators = {
         'a[data-test="dropdown-menu-item-link"]',
         By.CSS_SELECTOR,
     ),
-    "actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
-    "confirm_action": ("confirm-action", By.ID),
+    "second_dropdown_option": (
+        '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
+        By.XPATH,
+    ),
+    "actions": (
+        '//span[@class="pf-c-dropdown__toggle-text" and text()="Actions"]/..',
+        By.XPATH,
+    ),
+    "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
+    "confirm_action": (
+        'button[id="confirm-action"],button[data-test="delete-action"]',
+        By.CSS_SELECTOR,
+    ),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
     "kebab_button": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
@@ -281,14 +293,18 @@ obc = {
     ),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
-        'input[placeholder="Select BucketClass"]',
+        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"]',
         By.CSS_SELECTOR,
+    ),
+    "resource_name": (
+        '//td[@id="name"]//a[@class="co-resource-item__resource-name"]',
+        By.XPATH,
     ),
     "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
     "delete_obc": (
-        'button[data-test-action="Delete Object Bucket Claim"]',
+        'button[data-test-action="Delete Object Bucket Claim"], li[id="Delete"] a[role="menuitem"]',
         By.CSS_SELECTOR,
     ),
 }
@@ -1168,6 +1184,7 @@ locators = {
             **acm_configuration,
             **acm_configuration_4_12,
         },
+        "obc": obc,
     },
     "4.11": {
         "login": {**login, **login_4_11},
