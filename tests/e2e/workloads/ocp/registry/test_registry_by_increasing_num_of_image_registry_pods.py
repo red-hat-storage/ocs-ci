@@ -75,6 +75,20 @@ class TestRegistryByIncreasingNumPods(E2ETest):
 
         # Validate pvc mounted on image registry pod
         validate_pvc_mount_on_registry_pod()
+
+        # Pull and push images to registries
+        log.info("Pull and push images to registries")
+        image_pull_and_push(project_name=self.project_name)
+
+        # Validate image exists in registries path
+        validate_image_exists()
+
+        # Reduce number to 2
+        assert modify_registry_pod_count(count=2)
+
+        # Validate image registry pods
+        validate_registry_pod_status()
+
         # Coverage for Bz 2128263
         log.info(
             f"Verifying whether alert {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP} "
@@ -89,16 +103,3 @@ class TestRegistryByIncreasingNumPods(E2ETest):
             assert (
                 False
             ), f"Failed: There should be no {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP} alert"
-
-        # Pull and push images to registries
-        log.info("Pull and push images to registries")
-        image_pull_and_push(project_name=self.project_name)
-
-        # Validate image exists in registries path
-        validate_image_exists()
-
-        # Reduce number to 2
-        assert modify_registry_pod_count(count=2)
-
-        # Validate image registry pods
-        validate_registry_pod_status()
