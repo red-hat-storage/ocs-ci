@@ -402,15 +402,19 @@ def create_custom_machineset(
                 ] = f"{cls_id}-{role}-{az_zone}"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "image"
-                ][
-                    "resourceID"
-                ] = f"/resourceGroups/{cls_id}-rg/providers/Microsoft.Compute/images/{cls_id}"
+                ]["resourceID"] = (
+                    f"/resourceGroups/{cls_id}-rg/providers/Microsoft.Compute/galleries"
+                    f"/gallery_{cls_id}/images/{cls_id}-gen2/versions/latest"
+                )
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "location"
                 ] = region
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "managedIdentity"
                 ] = f"{cls_id}-identity"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "publicLoadBalancer"
+                ] = f"{cls_id}"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "resourceGroup"
                 ] = f"{cls_id}-rg"
