@@ -22,7 +22,10 @@ def check_setmetadata_availability(pod_obj):
     """
     plugin_provisioner_pod_objs = pod.get_all_pods(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
+        selector=[
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        ],
     )
     log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
     response = retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
@@ -68,21 +71,21 @@ def enable_metadata(
 
     # Enable metadata feature for rook-ceph-operator-config using patch command
     assert config_map_obj.patch(
-        resource_name="rook-ceph-operator-config",
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         params=enable_metadata,
     ), "configmap/rook-ceph-operator-config not patched"
 
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector="app=csi-cephfsplugin-provisioner",
+        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
     )
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector="app=csi-rbdplugin-provisioner",
+        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
     )
@@ -123,21 +126,21 @@ def disable_metadata(
 
     # Disable metadata feature for rook-ceph-operator-config using patch command
     assert config_map_obj.patch(
-        resource_name="rook-ceph-operator-config",
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         params=disable_metadata,
     ), "configmap/rook-ceph-operator-config not patched"
 
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector="app=csi-cephfsplugin",
+        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
     )
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector="app=csi-rbdplugin",
+        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
     )
