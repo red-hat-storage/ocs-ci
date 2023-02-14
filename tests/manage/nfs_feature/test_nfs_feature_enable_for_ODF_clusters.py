@@ -130,16 +130,16 @@ class TestNfsEnable(ManageTest):
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
-        self.nfs_client_ip = config.ENV_DATA["nfs_client_ip"]
+        self.nfs_client_ip = config.ENV_DATA.get("nfs_client_ip")
         log.info(f"nfs_client_ip is: {self.nfs_client_ip}")
 
-        self.nfs_client_user = config.ENV_DATA["nfs_client_user"]
+        self.nfs_client_user = config.ENV_DATA.get("nfs_client_user")
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
-        self.nfs_client_pwd = config.ENV_DATA["nfs_client_pwd"]
+        self.nfs_client_pwd = config.ENV_DATA.get("nfs_client_pwd")
         log.info(f"nfs_client_pwd is: {self.nfs_client_pwd}")
 
-        self.con = ""
+        self.con = None
 
         # Enable nfs feature
         log.info("----Enable nfs----")
@@ -320,11 +320,7 @@ class TestNfsEnable(ManageTest):
         13:- Deletion of Pods and PVCs
 
         """
-        if not self.nfs_client_ip:
-            pytest.skip(
-                "Skipped the test as a valid nfs client ip is required, "
-                " for nfs outcluster export validation. "
-            )
+        nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
@@ -510,11 +506,7 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
-        if not self.nfs_client_ip:
-            pytest.skip(
-                "Skipped the test as a valid nfs client ip is required, "
-                " for nfs outcluster export validation. "
-            )
+        nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
@@ -672,11 +664,7 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
-        if not self.nfs_client_ip:
-            pytest.skip(
-                "Skipped the test as a valid nfs client ip is required, "
-                " for nfs outcluster export validation. "
-            )
+        nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
@@ -831,11 +819,7 @@ class TestNfsEnable(ManageTest):
         11:- Deletion of Pods and PVCs
 
         """
-        if not self.nfs_client_ip:
-            pytest.skip(
-                "Skipped the test as a valid nfs client ip is required, "
-                " for nfs outcluster export validation. "
-            )
+        nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")

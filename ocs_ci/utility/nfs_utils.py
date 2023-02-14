@@ -6,6 +6,7 @@ Module that contains all operations related to nfs feature in a cluster
 import logging
 import yaml
 import time
+import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -168,3 +169,11 @@ def delete_nfs_load_balancer_service(
     # Delete ocs nfs Service
     cmd_delete_nfs_service = "delete service rook-ceph-nfs-my-nfs-load-balancer"
     storage_cluster_obj.exec_oc_cmd(cmd_delete_nfs_service)
+
+
+def skip_test_if_nfs_client_unavailable(nfs_client_ip):
+    if not nfs_client_ip:
+        pytest.skip(
+            "Skipped the test as a valid nfs client ip is required, "
+            " for nfs outcluster export validation. "
+        )
