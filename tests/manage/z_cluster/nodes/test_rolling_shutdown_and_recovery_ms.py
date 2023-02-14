@@ -16,9 +16,10 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     recover_node_to_ready_state,
     consumers_verification_steps_after_provider_node_replacement,
+    generate_nodes_for_provider_worker_node_tests,
 )
 from ocs_ci.ocs.resources.pod import check_pods_after_node_replacement
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import is_ms_consumer_cluster, is_ms_provider_cluster
 
@@ -38,26 +39,13 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
-        Initialize Sanity instance, and create pods and PVCs factory
+        Save the current index and initialize the Sanity instance
 
         """
         self.orig_index = config.cur_index
-        self.sanity_helpers = Sanity()
-        self.create_pods_and_pvcs_factory = (
+        self.sanity_helpers = SanityManagedService(
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
         )
-
-    def create_resources(self):
-        """
-        Create resources on the consumers and run IO
-
-        """
-        if is_ms_consumer_cluster():
-            consumer_indexes = [config.cur_index]
-        else:
-            consumer_indexes = config.get_consumer_indexes_list()
-
-        self.create_pods_and_pvcs_factory(consumer_indexes=consumer_indexes)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -88,7 +76,10 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
 
         """
         # Get OCS worker node objects
-        ocs_node_objs = get_ocs_nodes()
+        if is_ms_provider_cluster():
+            ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
+        else:
+            ocs_node_objs = get_ocs_nodes()
 
         # Start rolling shutdown and recovery of OCS worker nodes
         for node_obj in ocs_node_objs:
@@ -107,5 +98,9 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
                 assert consumers_verification_steps_after_provider_node_replacement()
             self.sanity_helpers.health_check(cluster_check=False, tries=40)
 
+        # When we use the MS consumer cluster, we sometimes need to wait a little more time before
+        # start creating resources
+        assert check_pods_after_node_replacement()
+        tries = 3 if is_ms_consumer_cluster() else 1
         # Check basic cluster functionality by creating some resources
-        self.create_resources()
+        self.sanity_helpers.create_resources_on_ms_consumers(tries=tries)

@@ -2436,6 +2436,9 @@ def check_pods_after_node_replacement():
         bool: True if all the pods are running after a specific time. False otherwise.
 
     """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import is_ms_provider_cluster
+
     are_pods_running = wait_for_pods_to_be_running(timeout=180)
     if are_pods_running:
         return True
@@ -2472,7 +2475,7 @@ def check_pods_after_node_replacement():
             f"One of the '{pod_daemon_type}' pods is not running, "
             f"but all the other pods are running"
         )
-        timeout = 1500
+        timeout = 1800 if is_ms_provider_cluster() else 1500
         logger.info(
             f"waiting another {timeout} seconds for all the pods to be running..."
         )
