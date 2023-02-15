@@ -190,9 +190,6 @@ def check_automated_recovery_from_drain_node(nodes):
     log.info(f"osd pod ids: {old_osd_pod_ids}")
     node_osd_pods = get_osd_pods_having_ids(old_osd_pod_ids)
 
-    osd_labelled_nodes = set(machine.get_labeled_nodes(constants.OSD_NODE_LABEL))
-    osd_running_nodes = set(get_osd_running_nodes())
-
     unschedule_nodes([osd_node_name])
     log.info(f"Successfully unschedule the node: {osd_node_name}")
 
