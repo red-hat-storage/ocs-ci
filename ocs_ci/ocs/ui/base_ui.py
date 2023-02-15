@@ -743,11 +743,21 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        if self.ocp_version_full >= version.VERSION_4_10:
+        if version.VERSION_4_10 <= self.ocp_version_full < version.VERSION_4_12:
             default_projects_is_checked = self.driver.find_element_by_xpath(
                 "//span[@class='pf-c-switch__toggle']"
             )
 
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
+                logger.info("Show default projects")
+                self.do_click(self.page_nav["show-default-projects"])
+        else:
+            default_projects_is_checked = self.driver.find_element_by_css_selector(
+                "input[class='pf-c-switch__input']"
+            )
             if (
                 default_projects_is_checked.get_attribute("data-checked-state")
                 == "false"

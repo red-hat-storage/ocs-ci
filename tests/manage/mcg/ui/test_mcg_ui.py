@@ -240,20 +240,30 @@ class TestObcUserInterface(object):
 
     @ui
     @tier1
-    @skipif_ocs_version("!=4.8")
     @pytest.mark.parametrize(
-        argnames=["storageclass", "bucketclass"],
+        argnames=["storageclass", "bucketclass", "delete_via"],
         argvalues=[
             pytest.param(
                 *[
                     "openshift-storage.noobaa.io",
                     "noobaa-default-bucket-class",
+                    "three_dots",
                 ],
                 marks=pytest.mark.polarion_id("OCS-2542"),
-            )
+            ),
+            pytest.param(
+                *[
+                    "openshift-storage.noobaa.io",
+                    "noobaa-default-bucket-class",
+                    "Actions",
+                ],
+                marks=pytest.mark.polarion_id("OCS-4698"),
+            ),
         ],
     )
-    def test_obc_creation_and_deletion(self, setup_ui_class, storageclass, bucketclass):
+    def test_obc_creation_and_deletion(
+        self, setup_ui_class, storageclass, bucketclass, delete_via
+    ):
         """
         Test creation and deletion of an OBC via the UI
 
@@ -289,6 +299,6 @@ class TestObcUserInterface(object):
         ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
         logger.info(f"Delete {obc_name}")
-        obc_ui_obj.delete_obc_ui(obc_name)
+        obc_ui_obj.delete_obc_ui(obc_name, delete_via)
 
         assert test_obc.check_resource_existence(should_exist=False)
