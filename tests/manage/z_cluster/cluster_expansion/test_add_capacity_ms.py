@@ -57,27 +57,27 @@ class TestAddCapacityMS(ManageTest):
         self.project_obj = project_factory()
 
         logger.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
-        pvc_obj_rbd1 = pvc_factory(
+        pvc_obj_rbd = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.project_obj,
             size=2,
             status=constants.STATUS_BOUND,
         )
-        pod_rbd1_obj = pod_factory(
+        pod_rbd_obj = pod_factory(
             interface=constants.CEPHFILESYSTEM,
-            pvc=pvc_obj_rbd1,
+            pvc=pvc_obj_rbd,
             status=constants.STATUS_RUNNING,
         )
-        pod_rbd1_obj.run_io(
+        pod_rbd_obj.run_io(
             storage_type="fs",
             size="1G",
             io_direction="write",
             runtime=60,
         )
-        pod_rbd1_obj.get_fio_results()
-        logger.info(f"IO finished on pod {pod_rbd1_obj.name}")
+        pod_rbd_obj.get_fio_results()
+        logger.info(f"IO finished on pod {pod_rbd_obj.name}")
         md5_before_add_capacity = cal_md5sum(
-            pod_obj=pod_rbd1_obj,
+            pod_obj=pod_rbd_obj,
             file_name="fio-rand-write",
             block=False,
         )
@@ -109,7 +109,7 @@ class TestAddCapacityMS(ManageTest):
         assert ceph_health_check(delay=120, tries=50), "Ceph health check failed"
 
         md5_after_add_capacity = cal_md5sum(
-            pod_obj=pod_rbd1_obj,
+            pod_obj=pod_rbd_obj,
             file_name="fio-rand-write",
             block=False,
         )
