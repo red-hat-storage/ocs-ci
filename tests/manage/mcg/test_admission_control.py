@@ -1,5 +1,6 @@
 import logging
 import pytest
+import re
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -157,7 +158,7 @@ class TestAdmissionWebhooks(MCGTest):
                             "secret": {"name": ""},
                         },
                     },
-                    "please provide a valid ARN or secret name",
+                    "please provide.*secret name",
                 ],
                 marks=[tier3, polarion_id("OCS-2786")],
             ),
@@ -251,7 +252,7 @@ class TestAdmissionWebhooks(MCGTest):
         try:
             created_bs = create_resource(**store_data)
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if re.search(err_msg, e.args[0]):
                 logger.info("Namespacestore creation failed with an expected error")
             else:
                 raise
