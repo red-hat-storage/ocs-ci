@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -739,7 +738,7 @@ def configure_managed_service_size(size, cluster_name=None):
 
 def get_managed_service_size(cluster_name=None):
     """
-    Configure the number of osds and instances
+    Get cluster size
 
     Args:
         cluster_name (str): The cluster name. The default value is 'config.ENV_DATA["cluster_name"]'
@@ -751,7 +750,6 @@ def get_managed_service_size(cluster_name=None):
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     cmd = "rosa list service"
     cmd_output = utils.run_cmd(cmd)
-    time.sleep(1)
     lines = cmd_output.splitlines()
     for line in lines:
         if cluster_name in line:

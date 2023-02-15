@@ -86,7 +86,7 @@ class TestAddCapacityMS(ManageTest):
 
         current_size = get_managed_service_size(config.ENV_DATA["cluster_name"])
         logger.info(f"The current size is {current_size}")
-        new_size = config.ENV_DATA.get("ms_size", "-1")
+        new_size = config.ENV_DATA.get("upscale_size", "-1")
         configure_managed_service_size(size=new_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         pod.wait_for_resource(

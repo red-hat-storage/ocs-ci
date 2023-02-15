@@ -29,13 +29,13 @@ def verify_provider_topology(size=None):
     7. Verify OSD CPU and memory
 
     Args:
-        size(str): cluster size
+        size(str): cluster size if arg is None, we use "upscale_size" env data.
 
     """
     # importing here to avoid circular import
     from ocs_ci.ocs.resources.storage_cluster import StorageCluster, get_osd_count
 
-    size = size if size is not None else f"{config.ENV_DATA.get('ms_size')}"
+    size = size if size is not None else f"{config.ENV_DATA.get('upscale_size')}"
     replica_count = 3
     osd_size = 4
     instance_type = "m5.2xlarge"
