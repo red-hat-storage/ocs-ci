@@ -283,7 +283,7 @@ class TestNodeReplacement(ManageTest):
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
-@skipif_ms_consumer
+@skipif_managed_service
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
