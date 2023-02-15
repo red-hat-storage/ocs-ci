@@ -1,5 +1,6 @@
 import logging
 import pytest
+import random
 
 
 from ocs_ci.framework.testlib import (
@@ -21,9 +22,9 @@ from ocs_ci.ocs.node import (
     recover_node_to_ready_state,
     consumers_verification_steps_after_provider_node_replacement,
     generate_nodes_for_provider_worker_node_tests,
-    label_nodes,
     wait_for_new_worker_node_ipi,
     get_worker_nodes,
+    add_new_node_and_label_it,
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
@@ -84,7 +85,8 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
         if is_ms_provider_cluster():
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
         else:
-            ocs_node_objs = get_ocs_nodes(num_of_nodes=3)
+            # If it's not a provider cluster, test rolling terminate two ocs worker nodes will suffice
+            ocs_node_objs = random.choices(get_ocs_nodes(), k=2)
 
         # Start rolling terminate and recovery of OCS worker nodes
         for node_obj in ocs_node_objs:
@@ -96,11 +98,13 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
 
             nodes.terminate_nodes(nodes=[node_obj], wait=True)
             log.info(f"Successfully terminated the node: {node_obj.name}")
+            if is_managed_service_cluster():
+                new_ocs_node = wait_for_new_worker_node_ipi(machineset, old_wnodes)
+            else:
+                new_ocs_node_names = add_new_node_and_label_it(machineset)
+                new_ocs_node = get_node_objs(new_ocs_node_names)[0]
 
-            new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
-            if not is_managed_service_cluster():
-                label_nodes([new_wnode])
-
+            log.info(f"The new ocs node is: {new_ocs_node.name}")
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 
