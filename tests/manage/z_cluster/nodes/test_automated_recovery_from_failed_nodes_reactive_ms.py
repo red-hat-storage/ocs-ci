@@ -64,11 +64,10 @@ def get_node_pod_names_expected_to_terminate(node_name):
 def check_automated_recovery_from_stopped_node(nodes):
     """
     1) Stop node.
-    2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) The node should power on automatically, or if removed from the cluster,
+    2) The node should power on automatically, or if removed from the cluster,
        a new node should create automatically.
-    4) The new osd pods with the same ids should start on the stopped node after it powered on,
-       or to start on the new osd node.
+    3) The new osd pods with the same ids should start on the stopped node after it powered on,
+       or to start on the new osd node or another node in the same zone
 
     """
     old_wnodes = get_worker_nodes()
@@ -127,9 +126,9 @@ def check_automated_recovery_from_stopped_node(nodes):
 def check_automated_recovery_from_terminated_node(nodes):
     """
     1) Terminate node.
-    2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) A new node should be created automatically
-    4) The new osd pods with the same ids of the terminated node should start on the new osd node.
+    2) A new node should be created automatically
+    3) The new osd pods with the same ids of the terminated node should start on the new osd node or on another node
+       in the same zone
 
     """
     old_wnodes = get_worker_nodes()
@@ -179,10 +178,9 @@ def check_automated_recovery_from_drain_node(nodes):
     """
     1) Drain one worker node.
     2) Delete the OSD pods associated with the node.
-    3) The new OSD pods with the same ids that come up, should be in a Pending state.
-    4) Schedule the worker node.
-    5) The OSD pods associated with the node, should back into a Running state, and come up
-        on the same node.
+    3) Schedule the worker node.
+    4) The OSD pods associated with the node, should back into a Running state, and come up
+       on the same node or a different node in the same zone.
 
     """
     osd_node_name = random.choice(get_osd_running_nodes())
