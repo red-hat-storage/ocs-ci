@@ -3,6 +3,7 @@ import logging
 from ocs_ci.ocs import constants
 from time import sleep
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility import version
@@ -270,9 +271,7 @@ class ObcUI(PageNavigator):
         """
         self.navigate_object_bucket_claims_page()
 
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.do_click(self.generic_locators["select_openshift-storage_project"])
+        self.select_openshift_storage_default_project()
 
         logger.info("Click on 'Create Object Bucket Claim'")
         self.do_click(self.generic_locators["create_resource_button"])
@@ -282,8 +281,16 @@ class ObcUI(PageNavigator):
 
         logger.info("Select Storage Class")
         self.do_click(self.obc_loc["storageclass_dropdown"])
-        self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
-        self.do_click(self.generic_locators["first_dropdown_option"])
+
+        if self.ocp_version_full <= version.VERSION_4_8:
+            self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
+
+        if self.ocp_version_full <= version.VERSION_4_8 or (
+            self.ocp_version_full > version.VERSION_4_8 and not bucketclass
+        ):
+            self.do_click(self.generic_locators["first_dropdown_option"])
+        else:
+            self.do_click(self.generic_locators["second_dropdown_option"])
 
         if bucketclass:
             logger.info("Select BucketClass")
@@ -294,26 +301,38 @@ class ObcUI(PageNavigator):
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
-    def delete_obc_ui(self, obc_name):
+    def select_openshift_storage_default_project(self):
+        """
+        Helper function to select openshift-storage project
+
+        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
+        """
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(
+            project_name=config.ENV_DATA["cluster_namespace"]
+        )
+
+    def delete_obc_ui(self, obc_name, delete_via):
         """
         Delete an OBC via the UI
 
         obc_name (str): Name of the OBC to be deleted
-
+        delete_via (str): delete via 'OBC/Actions' or via 'three dots'
         """
         self.navigate_object_bucket_claims_page()
 
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.do_click(self.generic_locators["select_openshift-storage_project"])
+        self.select_openshift_storage_default_project()
 
-        self.do_send_keys(self.generic_locators["search_resource_field"], text=obc_name)
+        if delete_via == "Actions":
+            logger.info(f"Go to OBC {obc_name} Page")
+            self.do_click(self.obc_loc["resource_name"])
+            logger.info(f"Click on '{delete_via}'")
 
-        logger.info(f"Go to OBC {obc_name} Page")
-        self.do_click(self.obc_loc["first_obc_link"])
-
-        logger.info("Click on Actions")
-        self.do_click(self.generic_locators["actions"])
+            self.do_click(self.generic_locators["actions"])
+        else:
+            logger.info(f"Click on '{delete_via}'")
+            self.do_click(self.generic_locators["three_dots"])
 
         logger.info("Click on 'Delete OBC'")
         self.do_click(self.obc_loc["delete_obc"])
