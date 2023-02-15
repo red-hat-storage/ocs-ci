@@ -1,6 +1,0 @@
----
-# Use this config for upgrading of OCP 4.8 to 4.9 cluster
-UPGRADE:
-  ocp_upgrade_version: "4.9.0-0.nightly"
-  ocp_upgrade_path: "registry.ci.openshift.org/ocp/release"
-  ocp_channel: "stable-4.9"
