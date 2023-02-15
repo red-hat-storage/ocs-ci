@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.mcg_ui import ObcUi
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -43,6 +44,7 @@ class TestOBCUi(ManageTest):
 
     @ui
     @tier2
+    @skipif_ibm_cloud
     @bugzilla("2031705")
     @polarion_id("OCS-4620")
     def test_create_storageclass_rbd(self, user_factory, login_factory):
@@ -69,6 +71,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
 
     @ui
     @tier1
+    @skipif_ibm_cloud
     @bugzilla("2103975")
     @polarion_id("OCS-4667")
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
