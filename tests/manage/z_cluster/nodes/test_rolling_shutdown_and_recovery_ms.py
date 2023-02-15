@@ -17,6 +17,7 @@ from ocs_ci.ocs.node import (
     recover_node_to_ready_state,
     consumers_verification_steps_after_provider_node_replacement,
     generate_nodes_for_provider_worker_node_tests,
+    get_worker_nodes,
 )
 from ocs_ci.ocs.resources.pod import check_pods_after_node_replacement
 from ocs_ci.helpers.sanity_helpers import SanityManagedService
@@ -75,6 +76,7 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
         be running and Ceph Health OK between the iterations. This test is for the Managed Service
 
         """
+        wnode_count = len(get_worker_nodes())
         # Get OCS worker node objects
         if is_ms_provider_cluster():
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
@@ -87,9 +89,7 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
             # When we use the managed service, the worker node should recover automatically
             # by starting the node, or removing it and creating a new one
             log.info("Waiting for all the worker nodes to be ready...")
-            wait_for_node_count_to_reach_status(
-                node_count=len(ocs_node_objs), timeout=900
-            )
+            wait_for_node_count_to_reach_status(node_count=wnode_count, timeout=900)
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 
