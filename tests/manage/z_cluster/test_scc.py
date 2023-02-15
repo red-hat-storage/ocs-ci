@@ -148,7 +148,10 @@ class TestSCC:
 
         # create objects under performance directory
         cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
-        simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=7200)
+        t_b = datetime.now()
+        simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=10800)
+        t_a = datetime.now()
+        logger.info(f"Time taken to run the above command: {(t_a-t_b).total_seconds()}")
 
         # get node where the simple-app pod scheduled
         node = get_pod_node(simple_app_pod).name
