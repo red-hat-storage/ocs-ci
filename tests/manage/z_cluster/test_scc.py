@@ -147,7 +147,7 @@ class TestSCC:
         simple_app_dc, simple_app_pod, pv = setup
 
         # create objects under performance directory
-        cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=512 count=1;done"
+        cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=100 count=1;done"
         t_b = datetime.now()
         simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=10800)
         t_a = datetime.now()
