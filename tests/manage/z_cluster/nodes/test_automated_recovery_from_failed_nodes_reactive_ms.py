@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.managed_services import verify_osd_distribution_on_provider
 from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.cluster import is_ms_provider_cluster
 from ocs_ci.ocs.resources.pod import (
@@ -17,9 +18,9 @@ from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
     get_osd_pods_having_ids,
     delete_pods,
-    wait_for_osd_pods_having_ids,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.retry import retry
 
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
@@ -31,7 +32,6 @@ from ocs_ci.ocs.node import (
     recover_node_to_ready_state,
     get_node_rook_ceph_pod_names,
     verify_worker_nodes_security_groups,
-    wait_for_osd_ids_come_up_on_node,
     unschedule_nodes,
     schedule_nodes,
     wait_for_new_worker_node_ipi,
@@ -64,11 +64,10 @@ def get_node_pod_names_expected_to_terminate(node_name):
 def check_automated_recovery_from_stopped_node(nodes):
     """
     1) Stop node.
-    2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) The node should power on automatically, or if removed from the cluster,
+    2) The node should power on automatically, or if removed from the cluster,
        a new node should create automatically.
-    4) The new osd pods with the same ids should start on the stopped node after it powered on,
-       or to start on the new osd node.
+    3) The new osd pods with the same ids should start on the stopped node after it powered on,
+       or to start on the new osd node or another node in the same zone
 
     """
     old_wnodes = get_worker_nodes()
@@ -109,18 +108,27 @@ def check_automated_recovery_from_stopped_node(nodes):
         new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
         osd_node_name = new_wnode.name
 
-    assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids, timeout=300)
-    log.info(
-        f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
-    )
+    # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+
+    # Verify that OSD pods are running on the node
+    osd_ids_on_node = get_node_osd_ids(osd_node_name)
+    assert osd_ids_on_node, f"No OSD pod is running on the node {osd_node_name}."
+    log.info(f"OSD {osd_ids_on_node} are running on the node {osd_node_name}.")
+
+    # The OSD IDs that were present on the stopped should be in running state now
+    osds_with_old_id = get_osd_pods_having_ids(old_osd_pod_ids)
+    assert len(set(osds_with_old_id)) == len(
+        set(old_osd_pod_ids)
+    ), f"One or more of the OSD IDs {old_osd_pod_ids} which were running on the stopped node are not present now"
 
 
 def check_automated_recovery_from_terminated_node(nodes):
     """
     1) Terminate node.
-    2) The rook ceph pods associated with the node should change to a Terminating state.
-    3) A new node should be created automatically
-    4) The new osd pods with the same ids of the terminated node should start on the new osd node.
+    2) A new node should be created automatically
+    3) The new osd pods with the same ids of the terminated node should start on the new osd node or on another node
+       in the same zone
 
     """
     old_wnodes = get_worker_nodes()
@@ -151,20 +159,28 @@ def check_automated_recovery_from_terminated_node(nodes):
 
     new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
 
-    wait_for_osd_ids_come_up_on_node(new_wnode.name, old_osd_pod_ids, timeout=300)
-    log.info(
-        f"the osd ids {old_osd_pod_ids} Successfully come up on the node {new_wnode.name}"
-    )
+    # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+
+    # Verify that OSD pods are running on the new node
+    osd_ids_on_node = get_node_osd_ids(new_wnode.name)
+    assert osd_ids_on_node, f"No OSD pod is running on the node {new_wnode.name}."
+    log.info(f"OSD {osd_ids_on_node} are running on the node {new_wnode.name}.")
+
+    # The OSD IDs that were present on the terminated should be in running state now
+    osds_with_old_id = get_osd_pods_having_ids(old_osd_pod_ids)
+    assert len(set(osds_with_old_id)) == len(
+        set(old_osd_pod_ids)
+    ), f"One or more of the OSD IDs {old_osd_pod_ids} which were running on the terminated node are not present now"
 
 
 def check_automated_recovery_from_drain_node(nodes):
     """
     1) Drain one worker node.
     2) Delete the OSD pods associated with the node.
-    3) The new OSD pods with the same ids that come up, should be in a Pending state.
-    4) Schedule the worker node.
-    5) The OSD pods associated with the node, should back into a Running state, and come up
-        on the same node.
+    3) Schedule the worker node.
+    4) The OSD pods associated with the node, should back into a Running state, and come up
+       on the same node or a different node in the same zone.
 
     """
     osd_node_name = random.choice(get_osd_running_nodes())
@@ -172,43 +188,29 @@ def check_automated_recovery_from_drain_node(nodes):
     log.info(f"osd pod ids: {old_osd_pod_ids}")
     node_osd_pods = get_osd_pods_having_ids(old_osd_pod_ids)
 
-    osd_labelled_nodes = set(machine.get_labeled_nodes(constants.OSD_NODE_LABEL))
-    osd_running_nodes = set(get_osd_running_nodes())
-
     unschedule_nodes([osd_node_name])
     log.info(f"Successfully unschedule the node: {osd_node_name}")
 
     log.info("Delete the node osd pods")
     delete_pods(node_osd_pods)
 
-    new_osd_pods = wait_for_osd_pods_having_ids(osd_ids=old_osd_pod_ids)
-    new_osd_pod_names = [p.name for p in new_osd_pods]
-
-    wnodes = get_worker_nodes()
-    if len(wnodes) <= 3 or osd_labelled_nodes == osd_running_nodes:
-        expected_pods_status = constants.STATUS_PENDING
-    else:
-        expected_pods_status = constants.STATUS_RUNNING
-
-    log.info(
-        f"Verify the new osd pods {new_osd_pod_names} go into a {expected_pods_status} state"
-    )
-    res = wait_for_pods_to_be_in_statuses(
-        [expected_pods_status],
-        new_osd_pod_names,
-        raise_pod_not_found_error=True,
-    )
-    assert res, f"Not all the node osd pods are in a {expected_pods_status} state"
-
     log.info(f"Wait for the node: {osd_node_name} to be scheduled")
     schedule_nodes([osd_node_name])
     log.info(f"Successfully scheduled the node {osd_node_name}")
 
-    if len(wnodes) <= 3 or osd_labelled_nodes == osd_running_nodes:
-        assert wait_for_osd_ids_come_up_on_node(osd_node_name, old_osd_pod_ids)
-        log.info(
-            f"the osd ids {old_osd_pod_ids} Successfully come up on the node {osd_node_name}"
-        )
+    # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+
+    # Verify that OSD pods are running on the node
+    osd_ids_on_node = get_node_osd_ids(osd_node_name)
+    assert osd_ids_on_node, f"No OSD pod is running on the node {osd_node_name}."
+    log.info(f"OSD {osd_ids_on_node} are running on the node {osd_node_name}.")
+
+    # The OSD IDs that were present on the node should be in running state now
+    osds_with_old_id = get_osd_pods_having_ids(old_osd_pod_ids)
+    assert len(set(osds_with_old_id)) == len(
+        set(old_osd_pod_ids)
+    ), f"One or more of the OSD IDs {old_osd_pod_ids} which were running on the node are not present now"
 
 
 FAILURE_TYPE_FUNC_CALL_DICT = {
