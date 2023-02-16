@@ -64,7 +64,6 @@ class TestWorkLoadsManagedService(object):
                     ]
                     try:
                         pgsql_obj = pgsql_factory_fixture(
-                            transactions=10,
                             replicas=1,
                             consumer_index=workloads_cluster_index["pgsql"],
                             wait_for_pgbench_to_complete=False,
