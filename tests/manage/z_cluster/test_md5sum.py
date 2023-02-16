@@ -42,7 +42,7 @@ class TestMd5Sum(ManageTest):
         pvc_obj_rbd = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.project_obj,
-            size=2,
+            size=20,
             status=constants.STATUS_BOUND,
         )
         pod_rbd_obj = pod_factory(
@@ -52,9 +52,9 @@ class TestMd5Sum(ManageTest):
         )
         pod_rbd_obj.run_io(
             storage_type="fs",
-            size="1G",
+            size="19G",
             io_direction="write",
-            runtime=60,
+            runtime=600,
         )
         pod_rbd_obj.get_fio_results()
         logger.info(f"IO finished on pod {pod_rbd_obj.name}")
