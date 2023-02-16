@@ -1,4 +1,5 @@
 import logging
+import pytest
 import os
 
 from pkg_resources import parse_version
@@ -27,6 +28,18 @@ from ocs_ci.utility.version import (
 )
 
 logger = logging.getLogger(__name__)
+
+import json
+import time
+
+
+@pytest.fixture(scope="session")
+def pause_file(tmpdir_factory):
+    pause_file = tmpdir_factory.mktemp("pause").join("pause1.json")
+    pause_dict = {"pause": "true"}
+    pause_file.write(json.dumps(pause_dict))
+    logger.warning(str(pause_file))
+    return str(pause_file)
 
 
 @ignore_leftovers
@@ -70,7 +83,7 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
+    def test_upgrade_ocp(self, reduce_and_resume_cluster_load, pause_file):
         """
         Tests OCS stability when upgrading OCP
 
@@ -124,7 +137,16 @@ class TestUpgradeOCP(ManageTest):
 
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
-            ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            # ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            # Update manually and pause till that time
+            result = {"pause": "true"}
+            logger.info("Upgrade pause started")
+            config.RUN["thread_pagerduty_secret_update"] = "required"
+            while result["pause"] == "true":
+                with open(pause_file) as open_file:
+                    result = json.load(open_file)
+                time.sleep(3)
+            logger.info("Upgrade pause ended")
 
             # Wait for upgrade
             for ocp_operator in cluster_operators:
