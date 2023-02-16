@@ -1029,6 +1029,7 @@ def _collect_ocs_logs(
     This function runs in thread
 
     """
+    log.info(f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']}")
     if not (
         cluster_config.RUN.get("kubeconfig", False)
         or os.path.exists(os.path.expanduser("~/.kube/config"))
@@ -1041,12 +1042,14 @@ def _collect_ocs_logs(
         log_dir_path = os.path.join(
             os.path.expanduser(cluster_config.RUN["log_dir"]),
             f"failed_testcase_ocs_logs_{cluster_config.RUN['run_id']}",
+            f"{cluster_config.ENV_DATA['cluster_name']}",
             f"{dir_name}_ocs_logs",
         )
     else:
         log_dir_path = os.path.join(
             os.path.expanduser(cluster_config.RUN["log_dir"]),
             f"{dir_name}_{cluster_config.RUN['run_id']}",
+            f"{cluster_config.ENV_DATA['cluster_name']}",
         )
 
     if ocs:
