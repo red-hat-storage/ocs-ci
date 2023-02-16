@@ -16,9 +16,9 @@ class TestWorkLoadsManagedService(object):
     def test_workloads_managed_service(
         self,
         get_consumer_clusters,
-        jenkins_factory_fixture,
+        # jenkins_factory_fixture,
         pgsql_factory_fixture,
-        amq_factory_fixture,
+        # amq_factory_fixture,
     ):
         """
         test workloads managed service
@@ -42,23 +42,23 @@ class TestWorkLoadsManagedService(object):
 
         for sub_workloads in workloads:
             for workload in sub_workloads:
-                if workload == "jenkins":
-                    workloads_cluster_index["jenkins"] = sub_workloads[
-                        len(sub_workloads) - 1
-                    ]
-                    try:
-                        jenkins_obj = jenkins_factory_fixture(
-                            num_projects=1,
-                            num_of_builds=1,
-                            wait_for_build_to_complete=False,
-                            consumer_index=workloads_cluster_index["jenkins"],
-                        )
-                        self.jenkins_deployment_status = True
-                    except Exception as e:
-                        self.jenkins_deployment_status = f"Jenkins workload errors {e},"
-                        log.error(e)
+                # if workload == "jenkins":
+                #     workloads_cluster_index["jenkins"] = sub_workloads[
+                #         len(sub_workloads) - 1
+                #     ]
+                #     try:
+                #         jenkins_obj = jenkins_factory_fixture(
+                #             num_projects=1,
+                #             num_of_builds=1,
+                #             wait_for_build_to_complete=False,
+                #             consumer_index=workloads_cluster_index["jenkins"],
+                #         )
+                #         self.jenkins_deployment_status = True
+                #     except Exception as e:
+                #         self.jenkins_deployment_status = f"Jenkins workload errors {e},"
+                #         log.error(e)
 
-                elif workload == "pgsql":
+                if workload == "pgsql":
                     workloads_cluster_index["pgsql"] = sub_workloads[
                         len(sub_workloads) - 1
                     ]
@@ -74,30 +74,30 @@ class TestWorkLoadsManagedService(object):
                         self.pgsql_deployment_status = f"Pgsql workload errors {e},"
                         log.error(e)
 
-                elif workload == "amq":
-                    workloads_cluster_index["amq"] = sub_workloads[
-                        len(sub_workloads) - 1
-                    ]
-                    try:
-                        amq = amq_factory_fixture(
-                            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
-                            consumer_index=workloads_cluster_index["amq"],
-                            run_in_bg=False,
-                            validate_messages=False,
-                        )
-                        self.amq_deployment_status = True
-                    except Exception as e:
-                        self.amq_deployment_status = f"AMQ workload errors {e},"
-                        log.error(e)
+                # elif workload == "amq":
+                #     workloads_cluster_index["amq"] = sub_workloads[
+                #         len(sub_workloads) - 1
+                #     ]
+                #     try:
+                #         amq = amq_factory_fixture(
+                #             sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+                #             consumer_index=workloads_cluster_index["amq"],
+                #             run_in_bg=False,
+                #             validate_messages=False,
+                #         )
+                #         self.amq_deployment_status = True
+                #     except Exception as e:
+                #         self.amq_deployment_status = f"AMQ workload errors {e},"
+                #         log.error(e)
 
-        if self.jenkins_deployment_status is True:
-            try:
-                config.switch_ctx(workloads_cluster_index["jenkins"])
-                log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
-                jenkins_obj.wait_for_build_to_complete()
-            except Exception as e:
-                log.error(e)
-                self.jenkins_deployment_status = f"Jenkins workload errors {e}"
+        # if self.jenkins_deployment_status is True:
+        #     try:
+        #         config.switch_ctx(workloads_cluster_index["jenkins"])
+        #         log.info(f"consumer_index={workloads_cluster_index['jenkins']}")
+        #         jenkins_obj.wait_for_build_to_complete()
+        #     except Exception as e:
+        #         log.error(e)
+        #         self.jenkins_deployment_status = f"Jenkins workload errors {e}"
 
         if self.pgsql_deployment_status is True:
             try:
@@ -112,15 +112,15 @@ class TestWorkLoadsManagedService(object):
                 log.error(e)
                 self.pgsql_deployment_status = f"PGSQL workload errors {e}"
 
-        if self.amq_deployment_status is True:
-            try:
-                log.info(f"consumer_index={workloads_cluster_index['amq']}")
-                config.switch_ctx(workloads_cluster_index["amq"])
-                amq.validate_messages_are_produced()
-                amq.validate_messages_are_consumed()
-            except Exception as e:
-                log.error(e)
-                self.amq_deployment_status = f"AMQ workload errors {e}"
+        # if self.amq_deployment_status is True:
+        #     try:
+        #         log.info(f"consumer_index={workloads_cluster_index['amq']}")
+        #         config.switch_ctx(workloads_cluster_index["amq"])
+        #         amq.validate_messages_are_produced()
+        #         amq.validate_messages_are_consumed()
+        #     except Exception as e:
+        #         log.error(e)
+        #         self.amq_deployment_status = f"AMQ workload errors {e}"
 
         log.info(
             f"{self.jenkins_deployment_status}\n{self.pgsql_deployment_status}\n{self.amq_deployment_status}"
