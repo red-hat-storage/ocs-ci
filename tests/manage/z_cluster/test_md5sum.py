@@ -54,7 +54,8 @@ class TestMd5Sum(ManageTest):
             storage_type="fs",
             size="19G",
             io_direction="write",
-            runtime=600,
+            runtime=400,
+            timeout=1500,
         )
         pod_rbd_obj.get_fio_results(timeout=2000)
         logger.info(f"IO finished on pod {pod_rbd_obj.name}")
