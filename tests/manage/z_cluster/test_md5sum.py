@@ -57,7 +57,7 @@ class TestMd5Sum(ManageTest):
             runtime=400,
             timeout=1500,
         )
-        pod_rbd_obj.get_fio_results(timeout=2000)
+        pod_rbd_obj.get_fio_results(timeout=200)
         logger.info(f"IO finished on pod {pod_rbd_obj.name}")
         md5_before_add_capacity = cal_md5sum(
             pod_obj=pod_rbd_obj,
