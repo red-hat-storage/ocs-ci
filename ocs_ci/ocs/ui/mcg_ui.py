@@ -394,8 +394,8 @@ class ObUi(BucketsUi):
         """
         Delete an OBC via the UI
 
-        obc_name (str): Name of the OBC to be deleted
-        delete_via (str): delete via 'OBC/Actions' or via 'three dots'
+        delete_via (str): delete via 'OB/Actions' or via 'three dots'
+        expect_fail (str): verify if OB removal fails with proper PopUp message
         """
         self.navigate_object_buckets_page()
         self.delete_resource(delete_via, "ObjectBucket")
