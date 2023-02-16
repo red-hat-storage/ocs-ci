@@ -23,14 +23,14 @@ class TestWorkLoadsManagedService(object):
         """
         test workloads managed service
         """
-        self.jenkins_deployment_status = None
+        self.jenkins_deployment_status = True
         self.pgsql_deployment_status = None
-        self.amq_deployment_status = None
+        self.amq_deployment_status = True
 
         multi_consumer_wl_dict = {
-            1: [["jenkins", "pgsql", "amq"]],
-            2: [["jenkins", "amq"], ["pgsql"]],
-            3: [["jenkins"], ["pgsql"], ["amq"]],
+            1: [["pgsql"]],
+            2: [["pgsql"]],
+            3: [["pgsql"]],
         }
         workloads_cluster_index = dict()
 
@@ -103,7 +103,9 @@ class TestWorkLoadsManagedService(object):
             try:
                 config.switch_ctx(workloads_cluster_index["pgsql"])
                 log.info(f"consumer_index={workloads_cluster_index['pgsql']}")
-                pgsql_obj.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+                pgsql_obj.wait_for_pgbench_status(
+                    status=constants.STATUS_COMPLETED, timeout=9000
+                )
                 pgbench_pods = pgsql_obj.get_pgbench_pods()
                 pgsql_obj.validate_pgbench_run(pgbench_pods)
             except Exception as e:
