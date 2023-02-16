@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from time import sleep
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -248,7 +248,48 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class ObcUI(PageNavigator):
+class BucketsUi(PageNavigator):
+    """
+    A class representation for abstraction of OBC or OB-related OpenShift UI actions
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+        self.obc_loc = locators[self.ocs_version]["obc"]
+
+    def select_openshift_storage_default_project(self):
+        """
+        Helper function to select openshift-storage project
+
+        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
+        """
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(
+            project_name=config.ENV_DATA["cluster_namespace"]
+        )
+
+    def delete_resource(self, delete_via, resource):
+        if delete_via == "Actions":
+            logger.info(f"Go to {resource} Page")
+            self.do_click(self.obc_loc["resource_name"])
+
+            logger.info(f"Click on '{delete_via}'")
+            self.do_click(self.generic_locators["actions"])
+        else:
+            logger.info(f"Click on '{delete_via}'")
+            self.do_click(self.generic_locators["three_dots"])
+
+        logger.info(f"Click on 'Delete {resource}'")
+        self.do_click(self.obc_loc["delete_obc"])
+
+        logger.info(f"Confirm {resource} Deletion")
+        self.do_click(self.generic_locators["confirm_action"])
+
+
+class ObcUI(BucketsUi):
     """
     A class representation for abstraction of OBC-related OpenShift UI actions
 
@@ -256,8 +297,7 @@ class ObcUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.obc_loc = locators[ocs_version]["obc"]
+        self.obc_loc = locators[self.ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -301,18 +341,6 @@ class ObcUI(PageNavigator):
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
-    def select_openshift_storage_default_project(self):
-        """
-        Helper function to select openshift-storage project
-
-        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
-        """
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(
-            project_name=config.ENV_DATA["cluster_namespace"]
-        )
-
     def delete_obc_ui(self, obc_name, delete_via):
         """
         Delete an OBC via the UI
@@ -324,21 +352,7 @@ class ObcUI(PageNavigator):
 
         self.select_openshift_storage_default_project()
 
-        if delete_via == "Actions":
-            logger.info(f"Go to OBC {obc_name} Page")
-            self.do_click(self.obc_loc["resource_name"])
-            logger.info(f"Click on '{delete_via}'")
-
-            self.do_click(self.generic_locators["actions"])
-        else:
-            logger.info(f"Click on '{delete_via}'")
-            self.do_click(self.generic_locators["three_dots"])
-
-        logger.info("Click on 'Delete OBC'")
-        self.do_click(self.obc_loc["delete_obc"])
-
-        logger.info("Confirm OBC Deletion")
-        self.do_click(self.generic_locators["confirm_action"])
+        self.delete_resource(delete_via, obc_name)
 
 
 class ObcUi(ObcUI):
@@ -370,3 +384,57 @@ class ObcUi(ObcUI):
         namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
         namespaces.append(namespace_obj)
         delete_projects(namespaces)
+
+
+class ObUi(BucketsUi):
+    def __init__(self, driver):
+        super().__init__(driver)
+
+    def delete_ob_ui(self, delete_via, expect_fail):
+        """
+        Delete an OBC via the UI
+
+        obc_name (str): Name of the OBC to be deleted
+        delete_via (str): delete via 'OBC/Actions' or via 'three dots'
+        """
+        self.navigate_object_buckets_page()
+        self.delete_resource(delete_via, "ObjectBucket")
+
+        if expect_fail:
+
+            def _check_three_dots_disabled(text):
+                logger.info(text)
+                # when three_dots element is active attribute 'disabled' does not exist
+                assert (
+                    self.get_element_attribute(
+                        self.generic_locators["three_dots"], "disabled"
+                    )
+                    == "true"
+                ), "Three dots are active after OBC removal and OB removal action. Expected - disabled"
+
+                # PopUp is not reachable via Selenium driver. It does not appear in DOM
+                import requests
+                import json
+
+                URL = f"{get_ocp_url()}/locales/resource.json?lng=en&ns=plugin__odf-console"
+
+                cookies = self.driver.get_cookies()
+                s = requests.Session()
+                for cookie in cookies:
+                    s.cookies.set(cookie["name"], cookie["value"])
+
+                popup_str = "The corresponding ObjectBucketClaim must be deleted first."
+                logger.info(f"Send req to {URL}. Get PopUp with {popup_str}")
+
+                resp = s.get(url=URL, verify=False)
+                json_resp = resp.json()
+
+                assert (
+                    popup_str == json_resp[popup_str]
+                ), f"No expected Popup. See full response: \n {json.dumps(json_resp)}"
+
+            sleep(5)
+            _check_three_dots_disabled("check three dots inactive automatically")
+            self.driver.refresh()
+            self.page_has_loaded(sleep_time=10)
+            _check_three_dots_disabled("check three dots inactive after refresh")
