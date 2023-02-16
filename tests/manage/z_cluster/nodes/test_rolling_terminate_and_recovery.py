@@ -15,6 +15,9 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.machine import (
     get_machine_from_node_name,
     get_machineset_from_machine_name,
+    get_ready_replica_count,
+    wait_for_ready_replica_count_to_reach_expected_value,
+    set_replica_count,
 )
 from ocs_ci.ocs.node import (
     get_ocs_nodes,
@@ -95,12 +98,19 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             machine_name = get_machine_from_node_name(node_obj.name)
             machineset = get_machineset_from_machine_name(machine_name)
             log.info(f"machineset name: {machineset}")
+            old_ready_rc = get_ready_replica_count(machineset)
 
             nodes.terminate_nodes(nodes=[node_obj], wait=True)
             log.info(f"Successfully terminated the node: {node_obj.name}")
             if is_managed_service_cluster():
                 new_ocs_node = wait_for_new_worker_node_ipi(machineset, old_wnodes)
             else:
+                expected_ready_rc = old_ready_rc - 1
+                wait_for_ready_replica_count_to_reach_expected_value(
+                    machineset, expected_ready_rc
+                )
+                # Change the current replica count to the expected ready replica count
+                set_replica_count(machineset, expected_ready_rc)
                 new_ocs_node_names = add_new_node_and_label_it(machineset)
                 new_ocs_node = get_node_objs(new_ocs_node_names)[0]
 
