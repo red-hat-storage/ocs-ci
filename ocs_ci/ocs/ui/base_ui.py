@@ -247,6 +247,16 @@ class BaseUI:
         """
         return self.driver.find_elements(by=locator[1], value=locator[0])
 
+    def get_element_attribute(self, locator, attribute, safe: bool = False):
+        """
+        Get attribute from WebElement
+        """
+        el = self.get_elements(locator)
+        if safe:
+            if not len(el):
+                return
+        return el[0].get_attribute(attribute)
+
     def page_has_loaded(self, retries=5, sleep_time=1):
         """
         Waits for page to completely load by comparing current page hash values.
