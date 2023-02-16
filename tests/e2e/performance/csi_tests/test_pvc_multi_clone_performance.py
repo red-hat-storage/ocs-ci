@@ -62,6 +62,7 @@ class TestPvcMultiClonePerformance(PASTest):
 
         # Getting the total Storage capacity
         self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
+        # Getting the free Storage capacity
         self.ceph_free_capacity = int(self.ceph_cluster.get_ceph_free_capacity())
         # Use 70% of the free storage capacity in the test
         self.capacity_to_use = int(self.ceph_free_capacity * 0.7)
