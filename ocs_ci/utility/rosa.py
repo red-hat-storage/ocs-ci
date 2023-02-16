@@ -7,6 +7,8 @@ import json
 import logging
 import os
 import re
+import yaml
+from datetime import date, datetime, timedelta, timezone
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -15,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
     ResourceWrongStatusException,
+    TimeoutExpiredError,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
@@ -725,3 +728,58 @@ def edit_addon_installation(
     utils.run_cmd(cmd)
     if wait:
         wait_for_addon_to_be_ready(cluster_name, addon_name)
+
+
+def get_ocp_version(cluster):
+    """
+    Get the OCP version of the cluster
+
+    Args:
+        cluster: cluster's ID or cluster name, both will work
+    Returns:
+        str: OCP version
+    """
+    cmd = f"rosa describe cluster --cluster={cluster} -o yaml"
+    cmd_out = utils.run_cmd(cmd)
+    cluster_yaml = yaml.safe_load(cmd_out)
+    ocp_version = cluster_yaml.get("openshift_version")
+    logger.info(f"OCP version of cluster {cluster} is {ocp_version}")
+    return ocp_version
+
+
+def upgrade_ocp(cluster):
+    """
+    Upgrade OCP version to the latest
+
+    Args:
+        cluster: cluster's ID or cluster name, both will work
+    """
+    current_version = get_ocp_version(cluster)
+    latest_version = get_latest_rosa_version("4.10")
+    logger.info(f"The latest version of OCP is {latest_version}")
+    logger.info(f"Current OCP version of {cluster} is {current_version}")
+    if latest_version == current_version:
+        raise ConfigurationError("There are no available upgrades")
+
+    today = date.isoformat(date.today())
+    current_time = datetime.now(timezone.utc)
+    # update time cannot be set to be earlier than after 5 minutes
+    update_time = (current_time + timedelta(minutes=6)).time()
+    update_time_str = update_time.isoformat(timespec="minutes")
+    logger.info(f"Scheduling update in 2 minutes, {today} {update_time_str} UTC")
+    cmd = (
+        f"rosa upgrade cluster --cluster={cluster} --version {latest_version} "
+        f"--yes --mode auto --schedule-date '{today}' "
+        f"--schedule-time {update_time_str}"
+    )
+    utils.run_cmd(cmd, timeout=1200)
+    sample = utils.TimeoutSampler(
+        timeout=7200,
+        sleep=30,
+        func=get_ocp_version,
+        cluster=cluster,
+    )
+    if not sample.wait_for_func_value(latest_version):
+        err_msg = f"Failed to upgrade {cluster}"
+        logger.error(err_msg)
+        raise TimeoutExpiredError(err_msg)
