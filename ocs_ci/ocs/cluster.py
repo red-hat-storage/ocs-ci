@@ -641,6 +641,28 @@ class CephCluster(object):
             # so, return 0 as usable capacity.
             return 0
 
+    def get_ceph_free_capacity(self):
+        """
+        Function to calculate the free capacity of a cluster
+
+        Returns:
+            float: The free capacity of a cluster (in GB)
+
+        """
+        replica = int(self.get_ceph_default_replica())
+        if replica > 0:
+            logger.info(f"Number of replica : {replica}")
+            ct_pod = pod.get_ceph_tools_pod()
+            output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+            total_avail = output.get("stats").get("total_bytes")
+            total_used = output.get("stats").get("total_used_raw_bytes")
+            total_free = total_avail - total_used
+            return total_free / replica / constants.BYTES_IN_GB
+        else:
+            # if the replica number is 0, usable capacity can not be calculate
+            # so, return 0 as usable capacity.
+            return 0
+
     def get_ceph_cluster_iops(self):
         """
         The function gets the IOPS from the ocs cluster
@@ -1575,6 +1597,22 @@ def get_percent_used_capacity():
     total_used = output.get("stats").get("total_used_raw_bytes")
     total_avail = output.get("stats").get("total_bytes")
     return 100.0 * total_used / total_avail
+
+
+# def get_ceph_free_capacity():
+#     """
+#     Function to calculate the free capacity of a cluster
+#
+#     Returns:
+#         float: The free capacity of a cluster (in GB)
+#
+#     """
+#     ct_pod = pod.get_ceph_tools_pod()
+#     output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+#     total_avail = output.get("stats").get("total_bytes")
+#     total_used = output.get("stats").get("total_used_raw_bytes")
+#     total_free = total_avail - total_used
+#     return total_free / constants.BYTES_IN_GB
 
 
 def get_osd_pods_memory_sum():
@@ -2750,7 +2788,6 @@ class LVM(object):
         if type(pvc_obj) is PVC:
             raw_size = pvc_obj.data["spec"]["resources"]["requests"]["storage"]
             if raw_size.isdigit():
-
                 pvc_size = (
                     float(pvc_obj.data["spec"]["resources"]["requests"]["storage"])
                     / 1024
