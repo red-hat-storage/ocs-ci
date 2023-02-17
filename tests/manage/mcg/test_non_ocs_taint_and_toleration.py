@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs import ocp, constants, defaults
 
@@ -70,29 +71,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ocs_nodes = get_worker_nodes()
         taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
 
-        # Respin all the pods under openshift-storage and let it go to pending state
-        pod_list = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            exclude_selector=True,
-        )
-        for pod in pod_list:
-            pod.delete(wait=False)
-
         # Add tolerations to the storagecluster
         storagecluster_obj = ocp.OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.STORAGECLUSTER,
         )
-        tolerations = (
-            '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
-            '"operator": "Equal", "value": "true"}, '
-            '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
-            '"operator": "Equal", "value": "true"}]}'
-        )
         param = (
-            f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
-            f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
+            '{"spec": {"placement": {"noobaa-standalone": {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}}}'
         )
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
@@ -113,7 +101,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             sub_obj.patch(params=param, format_type="merge")
             logger.info(f"Successfully added toleration to {sub}")
 
-        # After edit noticed few pod remain in pending state. Force delete all pods
+        # Wait some time after adding toleration.
+        waiting_time = 60
+        logger.info(f"Waiting {waiting_time} seconds...")
+        time.sleep(waiting_time)
+
+        # After edit noticed few pod remain in pending state.Force delete all pods.
         pod_list = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             exclude_selector=True,
