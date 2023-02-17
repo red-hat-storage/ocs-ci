@@ -506,3 +506,65 @@ class ValidationUI(PageNavigator):
             )
         else:
             raise UnexpectedODFAccessException
+
+    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
+
+        Returns:
+            tuple: String representation of 'Compression status' from StorageSystem details page and
+            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
+
+        """
+        self.navigate_cephblockpool()
+        logger.info(
+            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+        )
+        compression_status_blockpools_tab = self.get_element_text(
+            self.validation_loc["storagesystem-details-compress-state"]
+        )
+        logger.info(
+            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
+        )
+        self.do_click(
+            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
+            enable_screenshot=True,
+        )
+        compression_status_blockpools_details = self.get_element_text(
+            self.validation_loc["storagecluster-blockpool-details-compress-status"]
+        )
+        return compression_status_blockpools_tab, compression_status_blockpools_details
+
+    def verify_odf_operator_in_installed_operator(self) -> bool:
+        """
+        This function checks that post ODF installation only ODF operator is present and not also
+        OCS operator in the Installed Opertor tab.
+        This function is only written for 4.9+ versions
+
+        Returns:
+        True: If only odf operator is present in the UI
+        False: If ocs operator is also present in the UI
+        """
+        if (
+            self.ocp_version_semantic >= version.VERSION_4_9
+            and self.ocs_version_semantic >= version.VERSION_4_9
+        ):
+            logger.info("Navigating to Installed Operator Page")
+            self.navigate_installed_operators_page()
+            logger.info("Searching for Openshift Data Foundation Operator")
+            odf_opeartor_presence = self.wait_until_expected_text_is_found(
+                locator=self.validation_loc["odf-operator"],
+                timeout=1,
+                expected_text="OpenShift Data Foundation",
+            )
+            ocs_opeartor_presence = self.wait_until_expected_text_is_found(
+                locator=self.validation_loc["ocs-operator"],
+                timeout=1,
+                expected_text="OpenShift Container Storage",
+            )
+            if odf_opeartor_presence:
+                if not ocs_opeartor_presence:
+                    return True
+            else:
+                return False
