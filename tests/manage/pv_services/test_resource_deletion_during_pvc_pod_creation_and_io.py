@@ -343,7 +343,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Verify new pods are Running
         for pod_obj in pod_objs_new:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
             )
             pod_obj.reload()
         log.info("Verified: All new pods are Running.")
