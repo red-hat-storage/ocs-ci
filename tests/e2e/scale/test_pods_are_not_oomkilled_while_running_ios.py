@@ -37,7 +37,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(self, interface, pvc_factory, pod_factory):
+    def base_setup(self, teardown_factory, interface, pvc_factory, pod_factory):
         """
         A setup phase for the test:
         get all the ceph pods information,
@@ -88,12 +88,14 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
             storageclass=self.sc,
             size=pvc_size_gb,
         )
+        self.pvc_obj.reload()
+        teardown_factory(self.pvc_obj)
 
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
         log.info(f"Running FIO to fill PVC size: {io_size_gb}G")
         self.pod_obj.run_io(
-            "fs", size=f"{io_size_gb}G", io_direction="write", runtime=480
+            "fs", size=f"{io_size_gb}G", io_direction="write", runtime=600
         )
 
         log.info("Waiting for IO results")
