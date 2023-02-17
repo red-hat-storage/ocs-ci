@@ -8,13 +8,13 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     bugzilla,
-    skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod as res_pod
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,6 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
-    @skipif_ocs_version("<4.12")
     def verify_access_token_notin_odf_pod_logs(self):
         """
         This function will verify logs of kube-rbac-proxy container in odf-operator-controller-manager pod
@@ -101,7 +100,9 @@ class TestPvcAssignPodNode(ManageTest):
         pod_obj.run_io(storage_type="fs", size="512M", runtime=30, invalidate=0)
         pod.get_fio_rw_iops(pod_obj)
 
-        self.verify_access_token_notin_odf_pod_logs()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_12:
+            self.verify_access_token_notin_odf_pod_logs()
 
     @acceptance
     @tier1
@@ -188,4 +189,6 @@ class TestPvcAssignPodNode(ManageTest):
         for pod_obj in pod_list:
             pod.get_fio_rw_iops(pod_obj)
 
-        self.verify_access_token_notin_odf_pod_logs()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_12:
+            self.verify_access_token_notin_odf_pod_logs()
