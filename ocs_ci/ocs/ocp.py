@@ -257,6 +257,8 @@ class OCP(object):
             None: Incase dont_raise is True and get is not found
 
         """
+        if not cluster_config:
+            cluster_config = config
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector

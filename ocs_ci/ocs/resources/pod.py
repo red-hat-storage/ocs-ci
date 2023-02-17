@@ -1339,7 +1339,7 @@ def get_pods_having_label(label, namespace, cluster_config=None):
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-    pods = ocp_pod.get(selector=label).get("items")
+    pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
     return pods
 
 
