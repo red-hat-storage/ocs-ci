@@ -122,6 +122,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 logger = logging.getLogger(__name__)
 
@@ -459,6 +460,8 @@ class Deployment(object):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
             create_dummy_zone_labels()
+        validation_ui_obj = ValidationUI()
+        validation_ui_obj.verify_odf_operator_in_installed_operator()
 
     def label_and_taint_nodes(self):
         """

@@ -102,3 +102,18 @@ class TestUserInterfaceValidation(object):
             f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[1]}\n"
             f"Expected: {compression_status_expected}"
         )
+
+    @ui
+    @pytest.mark.bugzilla("1994584")
+    def test_odf_operator_in_installed_opearator(self, setup_ui_class):
+        """
+        Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
+        are matching
+
+         Args:
+            setup_ui_class: login function on conftest file
+
+        """
+
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        assert validation_ui_obj.verify_odf_operator_in_installed_operator()
