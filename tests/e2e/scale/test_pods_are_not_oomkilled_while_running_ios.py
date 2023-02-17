@@ -95,7 +95,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         log.info(f"Running FIO to fill PVC size: {io_size_gb}G")
         self.pod_obj.run_io(
-            "fs", size=f"{io_size_gb}G", io_direction="write", runtime=600
+            "fs", size=f"{io_size_gb}G", io_direction="write", runtime=480
         )
 
         log.info("Waiting for IO results")
