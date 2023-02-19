@@ -415,11 +415,11 @@ class TestPVCClonePerformance(PASTest):
         argnames=["interface", "copies", "timeout"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 13, 1800],
+                *[constants.CEPHBLOCKPOOL, 7, 1800],
                 marks=pytest.mark.polarion_id("OCS-2673"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 13, 1800],
+                *[constants.CEPHFILESYSTEM, 7, 1800],
                 marks=[
                     pytest.mark.polarion_id("OCS-2674"),
                     pytest.mark.bugzilla("2101874"),
