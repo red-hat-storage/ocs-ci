@@ -128,7 +128,6 @@ ignore_leftover_label = pytest.mark.ignore_leftover_label
 run_this = pytest.mark.run_this
 
 # Skip marks
-skip = pytest.mark.skip
 
 skip_inconsistent = pytest.mark.skip(
     reason="Currently the reduction is too inconsistent leading to inconsistent test results"

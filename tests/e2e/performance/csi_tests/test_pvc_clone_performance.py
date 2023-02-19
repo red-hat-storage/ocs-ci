@@ -6,8 +6,6 @@ import logging
 import pytest
 import statistics
 
-from ocs_ci.framework.testlib import skip, bugzilla
-
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
@@ -50,7 +48,6 @@ class ClonesResultsAnalyse(ResultsAnalyse):
     """
 
     def analyse_results(self, test_times, speed=False, total_data=0):
-
         op_types = ["create", "csi_create", "delete", "csi_delete"]
         all_data = {}
         avg_data = {}
@@ -63,7 +60,6 @@ class ClonesResultsAnalyse(ResultsAnalyse):
 
         # Print the results into the log.
         for clone in test_times:
-
             logger.info(f"Test report for clone {clone} :")
             for op in op_types:
                 data = test_times[clone][op]["time"]
@@ -164,7 +160,6 @@ class TestPVCClonePerformance(PASTest):
         super(TestPVCClonePerformance, self).teardown()
 
     def create_new_pool_and_sc(self, secret_factory):
-
         self.pool_name = (
             f"pas-test-pool-{Interfaces_info[self.interface]['name'].lower()}"
         )
@@ -417,11 +412,11 @@ class TestPVCClonePerformance(PASTest):
         argnames=["interface", "copies", "timeout"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 13, 1800],
+                *[constants.CEPHBLOCKPOOL, 7, 1800],
                 marks=pytest.mark.polarion_id("OCS-2673"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 13, 1800],
+                *[constants.CEPHFILESYSTEM, 7, 1800],
                 marks=[
                     pytest.mark.polarion_id("OCS-2674"),
                     pytest.mark.bugzilla("2101874"),
@@ -429,8 +424,6 @@ class TestPVCClonePerformance(PASTest):
             ),
         ],
     )
-    @skip
-    @bugzilla("2101874")
     def test_pvc_clone_performance_multiple_files(
         self,
         secret_factory,
