@@ -153,7 +153,7 @@ class TestPvcMultiClonePerformance(PASTest):
         else:
             log.info("Deleting the default ceph filesystem")
             self.ceph_cluster.CEPHFS.delete(
-                resource_name="ocs-storagecluster-cephfilesystem", timeout=1200
+                resource_name="ocs-storagecluster-cephfilesystem", timeout=3600
             )
             log.info("Wait until the ceph filesystem re-created")
             time.sleep(60)
