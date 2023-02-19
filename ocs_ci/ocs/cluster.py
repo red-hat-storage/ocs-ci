@@ -623,23 +623,17 @@ class CephCluster(object):
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
-                  if the replica is '0', return 0.
 
         """
         replica = int(self.get_ceph_default_replica())
-        if replica > 0:
-            logger.info(f"Number of replica : {replica}")
-            ceph_pod = pod.get_ceph_tools_pod()
-            ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-            usable_capacity = (
-                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-            )
+        logger.info(f"Number of replica : {replica}")
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = (
+            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+        )
 
-            return usable_capacity
-        else:
-            # if the replica number is 0, usable capacity can not be calculate
-            # so, return 0 as usable capacity.
-            return 0
+        return usable_capacity
 
     def get_ceph_free_capacity(self):
         """
