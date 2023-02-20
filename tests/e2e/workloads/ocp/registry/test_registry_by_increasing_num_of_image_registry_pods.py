@@ -8,9 +8,11 @@ from ocs_ci.ocs.registry import (
     validate_image_exists,
     modify_registry_pod_count,
     validate_pvc_mount_on_registry_pod,
+    get_registry_pod_obj,
 )
 from ocs_ci.framework.testlib import E2ETest, workloads, bugzilla
 from ocs_ci.utility import prometheus
+from ocs_ci.ocs.resources.pod import get_pod_logs
 
 log = logging.getLogger(__name__)
 
@@ -103,3 +105,14 @@ class TestRegistryByIncreasingNumPods(E2ETest):
             assert (
                 False
             ), f"Failed: There should be no {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP} alert"
+
+        registry_pod_objs = get_registry_pod_obj()
+        kubelet_volume_stats = "kubelet_volume_stats_inodes"
+        for pod in registry_pod_objs:
+            pod_log = get_pod_logs(
+                pod_name=pod.name,
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+            )
+        assert not (kubelet_volume_stats in pod_log)
+        f"Logs should not contain '{kubelet_volume_stats}'"
+        log.info(f"Logs did not contain the '{kubelet_volume_stats}'")
