@@ -109,10 +109,10 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         registry_pod_objs = get_registry_pod_obj()
         kubelet_volume_stats = "kubelet_volume_stats_inodes"
         for pod in registry_pod_objs:
-            pod_log = get_pod_logs(
+            pod_logs = get_pod_logs(
                 pod_name=pod.name,
                 namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
             )
-        assert not (kubelet_volume_stats in pod_log)
+        assert not (kubelet_volume_stats in pod_logs)
         f"Logs should not contain '{kubelet_volume_stats}'"
         log.info(f"Logs did not contain the '{kubelet_volume_stats}'")
