@@ -130,13 +130,14 @@ class TestPvcMultiClonePerformance(PASTest):
             log.error(f"Can not delete the test sc : {ex}")
 
         # Delete the test storage pool
-        if self.interface == constants.CEPHBLOCKPOOL:
-            log.info(f"Try to delete the Storage pool {self.pool_name}")
-            try:
-                self.delete_ceph_pool(self.pool_name)
-            except Exception:
-                pass
-            finally:
+
+        log.info(f"Try to delete the Storage pool {self.pool_name}")
+        try:
+            self.delete_ceph_pool(self.pool_name)
+        except Exception:
+            pass
+        finally:
+            if self.interface == constants.CEPHBLOCKPOOL:
                 # Verify deletion by checking the backend CEPH pools using the toolbox
                 results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
                 log.debug(f"Existing pools are : {results}")
@@ -150,17 +151,6 @@ class TestPvcMultiClonePerformance(PASTest):
                     )
                 else:
                     log.info(f"The pool {self.pool_name} was deleted successfully")
-        else:
-            log.info("Deleting the default ceph filesystem")
-            self.ceph_cluster.CEPHFS.delete(
-                resource_name="ocs-storagecluster-cephfilesystem", timeout=3600
-            )
-            log.info("Wait until the ceph filesystem re-created")
-            time.sleep(60)
-            log.info("re-create the ceph filesystem csi subvolumegroup")
-            self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                "ceph fs subvolumegroup create ocs-storagecluster-cephfilesystem csi"
-            )
 
         super(TestPvcMultiClonePerformance, self).teardown()
 
