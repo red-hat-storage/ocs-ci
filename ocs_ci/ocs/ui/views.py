@@ -736,6 +736,11 @@ acm_configuration_4_12 = {
     "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
     "subscription-dropdown": (".pf-c-select__toggle.pf-m-typeahead", By.CSS_SELECTOR),
     "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
+    "close-action-modal": ("#modal-close-action", By.CSS_SELECTOR),
+    "title-alert-after-action": (".pf-c-alert__title", By.CSS_SELECTOR),
+    "data-policy-hyperlink": ("(//button[@type='button'][@data-test='popover-link'])[1]", By.XPATH),
+    "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
+    "action-status": ("")
 
 
 
