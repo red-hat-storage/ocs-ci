@@ -4,7 +4,6 @@ The test is supposed to create the maximum number of clones for one PVC
 """
 
 import logging
-import time
 import statistics
 
 import pytest
