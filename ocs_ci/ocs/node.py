@@ -912,6 +912,7 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    log.info(f"OSD Node Object is {osd_node}")
     az = get_node_az(osd_node)
     from ocs_ci.ocs.platform_nodes import AWSNodes
 
@@ -919,6 +920,9 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     stack_name_of_deleted_node = aws_nodes.get_stack_name_of_node(osd_node_name)
 
     remove_nodes([osd_node])
+
+    log.info(f"Waiting for node {osd_node_name} to be deleted")
+    osd_node.ocp.wait_for_delete(osd_node_name, timeout=600), f"Node {osd_node_name} is not deleted"
 
     log.info(f"name of deleted node = {osd_node_name}")
     log.info(f"availability zone of deleted node = {az}")
@@ -975,9 +979,10 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     remove_nodes([osd_node])
-    node_util.terminate_nodes([osd_node])
-
+    log.info(f"Waiting for node {osd_node_name} to be deleted")
+    osd_node.ocp.wait_for_delete(osd_node_name, timeout=600), f"Node {osd_node_name} is not deleted"
     log.info(f"name of deleted node = {osd_node_name}")
+    node_util.terminate_nodes([osd_node])
 
     if config.ENV_DATA.get("rhel_workers"):
         node_type = constants.RHEL_OS
