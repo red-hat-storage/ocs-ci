@@ -73,10 +73,13 @@ def _rec_memory(proc: Process):
                 ),
             ]
         )
+    # ZombieProcess's, NoSuchProcess's come too often within a test run,
+    # we're polling each process once per 3 sec. ZombieProcess and NoSuchProcess
+    # appear due to concurrency. Failed polls are not valuable
     except ZombieProcess:
-        log.exception("Cannot access ZombieProcess. Recording skipped")
+        pass
     except NoSuchProcess:
-        log.exception("Process is unavailable. Recording skipped")
+        pass
     except ValueError:
         pass
 

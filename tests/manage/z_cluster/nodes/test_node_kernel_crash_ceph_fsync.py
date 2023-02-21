@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +88,7 @@ class TestKernelCrash(E2ETest):
         )
 
         file = constants.FSYNC
-        cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
-        helpers.run_cmd(cmd=cmd)
+        pod_obj.copy_to_pod_cat(file, "/")
         log.info("Files copied successfully ")
 
         command = f"mkdir {self.result_dir}"
