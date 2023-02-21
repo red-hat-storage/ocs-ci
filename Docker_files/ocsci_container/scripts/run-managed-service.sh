@@ -4,16 +4,11 @@ set -e
 PWD=$(pwd)
 source Docker_files/ocsci_container/scripts/common.sh
 
-if [ "$AWS_PATH" == "" ]; then
-   AWS_PATH=~/.aws
-fi
-
-if [ "$OCM_CONFIG" == "" ]; then
-   OCM_CONFIG=~/.config/ocm
-fi
+AWS_PATH_ARG=${AWS_PATH:-"~/.aws"}
+OCM_CONFIG_ARG=${OCM_CONFIG:-"~/.config/ocm"}
 
 #run-ci
-$PLATFORM_CMD run -v $OCM_CONFIG:/root/.config/ocm -v $CLUSTER_PATH:/opt/cluster -v $PWD/data:/opt/ocs-ci/data -v $AWS_PATH:/root/.aws $IMAGE_NAME $RUN_CI
+$PLATFORM_CMD run -v $OCM_CONFIG_ARG:/root/.config/ocm -v $CLUSTER_PATH:/opt/cluster -v $PWD/data:/opt/ocs-ci/data -v $AWS_PATH_ARG:/root/.aws $IMAGE_NAME $RUN_CI
 
 if [ "$PROVIDER_NAME" != "" ]; then
    $PLATFORM_CMD run -v $CLUSTER_PATH:/opt/cluster $IMAGE_NAME python3.8 /opt/edit_yaml.py $PROVIDER_NAME
