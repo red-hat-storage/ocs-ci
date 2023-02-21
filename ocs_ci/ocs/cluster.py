@@ -1961,7 +1961,7 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         ):
             if silence_old_osd_crash_warning:
                 return True
-    except TimeoutError:
+    except TimeoutExpiredError:
         return False
 
 
