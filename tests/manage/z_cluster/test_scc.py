@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
 from ocs_ci.ocs import constants
@@ -12,6 +13,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     wait_for_pods_to_be_running,
     get_pod_node,
+    get_deployments_having_label,
 )
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.framework.pytest_customization.marks import (
@@ -113,20 +115,30 @@ class TestSCC:
         # create service account
         service_account_obj = service_account_factory(project=project)
 
-        # create simple-app DeploymentConfig
-        simple_app_dc = pod_factory(
-            pvc=pvc,
-            deployment_config=True,
-            service_account=service_account_obj,
-            security_context={"fsGroupChangePolicy": "OnRootMismatch"},
-            pod_name="simple-app",
+        # create simple-app deployment
+        simple_app_data = templating.load_yaml(constants.SIMPLE_APP_POD_YAML)
+        simple_app_data["metadata"]["namespace"] = project.namespace
+        simple_app_data["spec"]["template"]["spec"][
+            "serviceAccountName"
+        ] = service_account_obj.name
+        simple_app_data["spec"]["template"]["spec"]["volumes"][0][
+            "persistentVolumeClaim"
+        ]["claimName"] = pvc.name
+        simple_app_dc = helpers.create_resource(**simple_app_data)
+        teardown_factory(simple_app_dc)
+
+        simple_app_dc_obj = Deployment(
+            **get_deployments_having_label(
+                label="app=simple-app", namespace=project.namespace
+            )[0]
         )
-        logger.info(simple_app_dc.get())
-        simple_app_dc_obj = Deployment(**simple_app_dc.get())
         simple_app_pod = Pod(
             **get_pods_having_label(
-                label="name=simple-app", namespace=project.namespace
+                label="app=simple-app", namespace=project.namespace
             )[0]
+        )
+        helpers.wait_for_resource_state(
+            resource=simple_app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
         return simple_app_dc_obj, simple_app_pod, pvc.backed_pv_obj
@@ -140,18 +152,15 @@ class TestSCC:
         To test if any permission change/delay seen reconcile when app pod deployment with huge dumber of
         object files and SCC setting 'fsGroupChangePolicy: OnRootMismatch'  are scaled down/up.
         """
-        permission_map = {"2770": "", "0770": "", "0775": "", "2755": "", "0755": ""}
+        permission_map = {"0770": "", "0775": "", "2755": "", "0755": "", "2770": ""}
         timeout = 300
 
         # run simple-app deployment
         simple_app_dc, simple_app_pod, pv = setup
 
-        # create objects under performance directory
-        cmd = "cd mnt && for i in $(seq 0 1000000);do dd if=/dev/urandom of=object_$i bs=100 count=1;done"
-        t_b = datetime.now()
-        simple_app_pod.exec_sh_cmd_on_pod(command=cmd, timeout=10800)
-        t_a = datetime.now()
-        logger.info(f"Time taken to run the above command: {(t_a-t_b).total_seconds()}")
+        # move objects in /large_objects directory to /mnt
+        cmd = "mv /large_objects/dir_500/ /mnt/"
+        simple_app_pod.exec_cmd_on_pod(command=cmd, timeout=10800)
 
         # get node where the simple-app pod scheduled
         node = get_pod_node(simple_app_pod).name
@@ -207,7 +216,7 @@ class TestSCC:
             ), "Failed to scale up simple-app deployment"
             simple_app_pod = Pod(
                 **get_pods_having_label(
-                    label="name=simple-app", namespace="test-project"
+                    label="app=simple-app", namespace="test-project"
                 )[0]
             )
             try:
@@ -245,11 +254,12 @@ class TestSCC:
             mount_mode = simple_app_pod.exec_cmd_on_pod(command="ls -ld /mnt").split()[
                 0
             ]
+            logger.info(f"Mode before: {mode_before} and Mode after: {mount_mode}")
 
             assert (
                 mode_before == mode_after
             ), "Permissions got changed for the node mount!"
             assert (
                 mode_before == mount_mode
-            ), "Permissions got changed for the mount inside the pod!"
+            ), f"[Error] Permission {mode}: Permissions got changed to {mount_mode} for the mount inside the pod!"
         logger.info(f"Permission and time map: {permission_map}")
