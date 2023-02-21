@@ -3132,7 +3132,11 @@ def verify_pdb_mon(disruptions_allowed, max_unavailable_mon):
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
 def run_cmd_verify_cli_output(
-    cmd=None, expected_output_lst=(), cephtool_cmd=False, debug_node=None
+    cmd=None,
+    expected_output_lst=(),
+    cephtool_cmd=False,
+    ocs_operator_cmd=False,
+    debug_node=None,
 ):
     """
     Run command and verify its output
@@ -3141,6 +3145,7 @@ def run_cmd_verify_cli_output(
         cmd(str): cli command
         expected_output_lst(set): A set of strings that need to be included in the command output.
         cephtool_cmd(bool): command on ceph-tool pod
+        ocs_operator_cmd(bool): command on ocs-operator pod
         debug_node(str): name of node
 
     Returns:
@@ -3157,6 +3162,10 @@ def run_cmd_verify_cli_output(
             "-- chroot /host /bin/bash -c "
         )
         cmd = f'{cmd_start} "{cmd}"'
+    elif ocs_operator_cmd is True:
+        ocs_operator_pod = pod.get_ocs_operator_pod()
+        cmd_start = f"oc rsh -n openshift-storage {ocs_operator_pod.name} "
+        cmd = f"{cmd_start} {cmd}"
 
     out = run_cmd(cmd=cmd)
     logger.info(out)

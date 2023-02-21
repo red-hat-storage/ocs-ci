@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 
 log = logging.getLogger(__name__)
@@ -165,6 +166,16 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
             measure_end_time=measure_stop_ceph_osd.get("stop"),
             time_min=osd_up_wait,
         )
+
+
+@bugzilla("2142763")
+def test_prometheus_file():
+    """ """
+    assert run_cmd_verify_cli_output(
+        ocs_operator_cmd=True,
+        expected_output_lst=["prometheus-ocs-rules.yaml"],
+        cmd="ls /ocs-prometheus-rules/prometheus-ocs-rules.yaml",
+    ), "Prometheus rules file not found"
 
 
 def teardown_module():
