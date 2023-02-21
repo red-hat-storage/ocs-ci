@@ -922,7 +922,9 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     remove_nodes([osd_node])
 
     log.info(f"Waiting for node {osd_node_name} to be deleted")
-    osd_node.ocp.wait_for_delete(osd_node_name, timeout=600), f"Node {osd_node_name} is not deleted"
+    osd_node.ocp.wait_for_delete(
+        osd_node_name, timeout=600
+    ), f"Node {osd_node_name} is not deleted"
 
     log.info(f"name of deleted node = {osd_node_name}")
     log.info(f"availability zone of deleted node = {az}")
@@ -979,8 +981,12 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     remove_nodes([osd_node])
+
     log.info(f"Waiting for node {osd_node_name} to be deleted")
-    osd_node.ocp.wait_for_delete(osd_node_name, timeout=600), f"Node {osd_node_name} is not deleted"
+    osd_node.ocp.wait_for_delete(
+        osd_node_name, timeout=600
+    ), f"Node {osd_node_name} is not deleted"
+
     log.info(f"name of deleted node = {osd_node_name}")
     node_util.terminate_nodes([osd_node])
 
