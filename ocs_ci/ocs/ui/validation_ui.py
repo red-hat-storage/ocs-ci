@@ -538,8 +538,8 @@ class ValidationUI(PageNavigator):
 
     def verify_odf_operator_in_installed_operator(self) -> bool:
         """
-        This function checks that post ODF installation only ODF operator is present and not also
-        OCS operator in the Installed Opertor tab.
+        Function to validate either ODF operator pod is up and running post ODF installation,
+        expectation is only ODF operator should be running in Installed operators tab other operators shouldn't be there
         This function is only written for 4.9+ versions
 
         Returns:
