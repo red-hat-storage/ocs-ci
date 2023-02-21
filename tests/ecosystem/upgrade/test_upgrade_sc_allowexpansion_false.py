@@ -30,7 +30,11 @@ upgrade_ocs_version = config.RUN.get("upgrade_ocs_version")
         and version.get_semantic_ocs_version_from_config() == version.VERSION_4_11
         and version.get_semantic_version(upgrade_ocs_version, True)
         == version.VERSION_4_12
-    )
+    ),
+    reason=(
+        "The fix is present in 4.12. bug related only to upgrade from 4.11 to 4.12."
+        "no need to check for upcoming releases. "
+    ),
 )
 class TestUpgrade(ManageTest):
     """
