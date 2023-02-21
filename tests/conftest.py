@@ -119,7 +119,6 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     skipif_ui_not_support,
     run_cmd,
-    exec_cmd,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
