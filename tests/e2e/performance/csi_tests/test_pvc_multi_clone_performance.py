@@ -233,6 +233,7 @@ class TestPvcMultiClonePerformance(PASTest):
                     "name": Interfaces_info[self.interface]["sc"],
                 },
             )
+            self.pool_name = "ocs-storagecluster-cephfilesystem"
 
         # Create a PVC
         self.create_testing_pvc_and_wait_for_bound()
