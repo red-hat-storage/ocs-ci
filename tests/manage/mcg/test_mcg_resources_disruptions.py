@@ -1,4 +1,6 @@
 import logging
+import time
+
 from ocs_ci.framework import config
 
 import pytest
@@ -21,6 +23,7 @@ from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import version
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -132,19 +135,44 @@ class TestMCGResourcesDisruptions(MCGTest):
         ],
     )
     def test_drain_mcg_pod_node(
-        self, node_drain_teardown, reduce_and_resume_cluster_load, pod_to_drain
+        self,
+        node_drain_teardown,
+        reduce_and_resume_cluster_load,
+        pod_to_drain,
+        timeout=30,
     ):
         """
-        Test drianage of nodes which contain NB resources
+        Test drainage of nodes which contain NB resources
 
         """
-        # Retrieve the relevant pod object
-        pod_obj = pod.Pod(
-            **pod.get_pods_having_label(
-                label=self.labels_map[pod_to_drain],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            )[0]
-        )
+        loop_cnt = 0
+        while True:
+            pod_obj = pod.Pod(
+                **pod.get_pods_having_label(
+                    label=self.labels_map[pod_to_drain],
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                )[0]
+            )
+            if not pod_obj:
+                log.info(
+                    f"No pod object {pod_to_drain} found, retry in {timeout} seconds..."
+                )
+                time.sleep(timeout)
+                pod_obj = pod.Pod(
+                    **pod.get_pods_having_label(
+                        label=self.labels_map[pod_to_drain],
+                        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    )[0]
+                )
+                loop_cnt += 1
+                if loop_cnt >= 10:
+                    raise UnexpectedBehaviour(
+                        f"No pod object {pod_to_drain} in the cluster."
+                    )
+                continue
+            else:
+                break
+
         # Retrieve the node name on which the pod resides
         node_name = pod_obj.get()["spec"]["nodeName"]
         # Drain the node
