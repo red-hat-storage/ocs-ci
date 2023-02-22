@@ -233,7 +233,8 @@ class Pod(OCS):
         self, target_path, src_path, timeout=600, chunk_size=2000
     ):
         """
-        Copies to local path file from the pod using standard output stream via 'oc exec'
+        Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
+        files, not good for large files/binaries with one-line plain string
 
         Args:
             target_path (str): local path
@@ -243,10 +244,10 @@ class Pod(OCS):
                 until size of the local file will not reach the initial file size.
                 2000 lines is a maximum chunk size tested successfully
                 ! Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
+            chunk_size (int): file will be copied by chunks, by number of lines
 
         """
         file_size = int(self.exec_cmd_on_pod(f"stat -c %s {src_path}"))
-        logger.info(f"size of original file = {file_size}")
 
         timestamp_end = datetime.now() + timedelta(seconds=timeout)
 
@@ -260,14 +261,14 @@ class Pod(OCS):
                 use_shell=True,
             )
             x += chunk_size
-            logger.info(f"size of target file = {os.stat(target_path).st_size}")
+            logger.info(f"size of target file = {os.stat(target_path).st_size}b")
             if os.stat(target_path).st_size == file_size:
-                logger.info(f"file {target_path} copied")
+                logger.info(f"file '{target_path}' copied")
                 break
         else:
             raise TimeoutException(
-                f"Failed to copy file from pod {self.name}:{src_path} to local {target_path}, "
-                f"src file size = {file_size}b, target file size = {file_size}b"
+                f"Failed to copy file from pod {self.name}:{src_path} to local path '{target_path}'\n"
+                f"src file size = {src_path}b, target file size = {os.stat(target_path).st_size}b"
             )
 
     def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600):
