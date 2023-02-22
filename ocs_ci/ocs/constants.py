@@ -81,6 +81,10 @@ CHRONY_TEMPLATE = os.path.join(
 )
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
+
+#rdr latency output dir
+RDR_LATENCY_OUPUT_DIR = os.path.join(TOP_DIR, "output")
+
 # Statuses
 STATUS_READY = "Ready"
 STATUS_PENDING = "Pending"

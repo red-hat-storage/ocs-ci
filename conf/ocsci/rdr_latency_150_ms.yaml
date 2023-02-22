@@ -1,0 +1,4 @@
+# Value set here will be roundtrip time
+
+ENV_DATA:
+  rdr_latency: 150

@@ -1,15 +1,17 @@
 import os
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
+from ocs_ci.ocs.acm.acm import get_clusters_env
 from ocs_ci.ocs.exceptions import ACMClusterDeployException, ACMClusterDestroyException
 from ocs_ci.ocs.ui import acm_ui
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.ocs.acm import acm
 from ocs_ci.ocs import constants
-
+from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
 
 logger = logging.getLogger(__name__)
 
@@ -196,3 +198,51 @@ class OCPDeployWithACM(Deployment):
         """
         for cluster in cluster_list:
             cluster.post_destroy_ops()
+
+
+def setup_rdr_latency():
+    """
+    Setup RDR Latency
+
+    """
+    clusters_env = get_clusters_env()
+    kubeconfig_hub = clusters_env.get("kubeconfig_location_c0")
+    kubeconfig_c1 = clusters_env.get("kubeconfig_location_c1")
+    kubeconfig_c2 = clusters_env.get("kubeconfig_location_c2")
+    all_cluster_kubeconfig = [kubeconfig_hub, kubeconfig_c1, kubeconfig_c2]
+    latency = config.ENV_DATA["rdr_latency"]
+
+    logger.info("Setting Up RDR latency")
+    run_cmd(
+        cmd=f"rdr-latency-setup -hkc {kubeconfig_hub} -c1kc {kubeconfig_c1} -c2kc {kubeconfig_c2} -l {latency}"
+    )
+
+    logger.info("Applying RDR latency config for HUB cluster ")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/hub-mc.yaml --kubeconfig {kubeconfig_hub} --dry-run=client")
+
+    logger.info("Applying RDR latency config for C1 cluster ")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c1-mc.yaml --kubeconfig {kubeconfig_c1} --dry-run=client")
+
+    logger.info("Applying RDR latency config for C2 cluster ")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c2-mc.yaml --kubeconfig {kubeconfig_c2} --dry-run=client")
+
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    with ThreadPoolExecutor() as executor:
+        results = [
+            executor.submit(
+                wait_for_machineconfigpool_status,
+                "all",
+                timeout=1800,
+                kubeconfig=kubeconfig
+            )
+            for kubeconfig in all_cluster_kubeconfig
+        ]
+
+    for f in as_completed(results):
+        try:
+            logger.info(f.result())
+        except Exception as e:
+            logger.error("machineconfigpool Failed")
+            logger.error(e)
+            raise
+

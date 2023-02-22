@@ -76,6 +76,7 @@ polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 acm_import = pytest.mark.acm_import
 rdr_test = pytest.mark.rdr_test
+rdr_latency = pytest.mark.rdr_latency
 
 tier_marks = [
     tier1,
