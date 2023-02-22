@@ -218,13 +218,13 @@ def setup_rdr_latency():
     )
 
     logger.info("Applying RDR latency config for HUB cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/hub-mc.yaml --kubeconfig {kubeconfig_hub} --dry-run=client")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/hub-mc.yaml --kubeconfig {kubeconfig_hub}")
 
     logger.info("Applying RDR latency config for C1 cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c1-mc.yaml --kubeconfig {kubeconfig_c1} --dry-run=client")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c1-mc.yaml --kubeconfig {kubeconfig_c1}")
 
     logger.info("Applying RDR latency config for C2 cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c2-mc.yaml --kubeconfig {kubeconfig_c2} --dry-run=client")
+    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c2-mc.yaml --kubeconfig {kubeconfig_c2}")
 
     wait_for_machineconfigpool_status("all", timeout=1800)
     with ThreadPoolExecutor() as executor:
