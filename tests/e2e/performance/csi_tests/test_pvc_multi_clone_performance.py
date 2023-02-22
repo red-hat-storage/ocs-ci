@@ -96,6 +96,10 @@ class TestPvcMultiClonePerformance(PASTest):
         """
         Cleanup the test environment
         """
+
+        # Deleting the namespace used by the test
+        self.delete_test_project()
+
         if not self.teardown_needed:
             return
 
@@ -115,9 +119,6 @@ class TestPvcMultiClonePerformance(PASTest):
 
         # Delete the test PVC
         self.cleanup_testing_pvc()
-
-        # Deleting the namespace used by the test
-        self.delete_test_project()
 
         # Delete the test StorageClass
         try:
