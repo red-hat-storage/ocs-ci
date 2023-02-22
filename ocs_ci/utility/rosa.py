@@ -747,18 +747,21 @@ def get_ocp_version(cluster):
     return ocp_version
 
 
-def upgrade_ocp(cluster):
+def upgrade_ocp(cluster, upgrade_version=None):
     """
     Upgrade OCP version to the latest
 
     Args:
-        cluster: cluster's ID or cluster name, both will work
+        cluster (str): cluster's ID or cluster name, both will work
+        upgrade_version (str): OCP version to upgrade to. If not specified,
+        cluster will be upgraded to the latest version.
     """
     current_version = get_ocp_version(cluster)
-    latest_version = get_latest_rosa_version("4.10")
-    logger.info(f"The latest version of OCP is {latest_version}")
+    if not upgrade_version:
+        upgrade_version = get_latest_rosa_version("4.10")
+    logger.info(f"The latest version of OCP is {upgrade_version}")
     logger.info(f"Current OCP version of {cluster} is {current_version}")
-    if latest_version == current_version:
+    if upgrade_version == current_version:
         raise ConfigurationError("There are no available upgrades")
 
     today = date.isoformat(date.today())
@@ -768,7 +771,7 @@ def upgrade_ocp(cluster):
     update_time_str = update_time.isoformat(timespec="minutes")
     logger.info(f"Scheduling update in 2 minutes, {today} {update_time_str} UTC")
     cmd = (
-        f"rosa upgrade cluster --cluster={cluster} --version {latest_version} "
+        f"rosa upgrade cluster --cluster={cluster} --version {upgrade_version} "
         f"--yes --mode auto --schedule-date '{today}' "
         f"--schedule-time {update_time_str}"
     )
@@ -781,7 +784,7 @@ def upgrade_ocp(cluster):
         func=get_ocp_version,
         cluster=cluster,
     )
-    if not sample.wait_for_func_value(latest_version):
+    if not sample.wait_for_func_value(upgrade_version):
         err_msg = f"Failed to upgrade {cluster}"
         logger.error(err_msg)
         raise TimeoutExpiredError(err_msg)
