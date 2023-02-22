@@ -3626,7 +3626,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=900, kubeconfig=None):
 
     for role in node_types:
         log.info(f"Checking machineconfigpool status for {role} nodes")
-        ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=role, cluster_kubeconfig=kubeconfig)
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL,
+            resource_name=role,
+            cluster_kubeconfig=kubeconfig,
+        )
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(

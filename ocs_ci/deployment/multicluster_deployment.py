@@ -218,13 +218,19 @@ def setup_rdr_latency():
     )
 
     logger.info("Applying RDR latency config for HUB cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/hub-mc.yaml --kubeconfig {kubeconfig_hub}")
+    run_cmd(
+        cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/hub-mc.yaml --kubeconfig {kubeconfig_hub}"
+    )
 
     logger.info("Applying RDR latency config for C1 cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c1-mc.yaml --kubeconfig {kubeconfig_c1}")
+    run_cmd(
+        cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c1-mc.yaml --kubeconfig {kubeconfig_c1}"
+    )
 
     logger.info("Applying RDR latency config for C2 cluster ")
-    run_cmd(cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c2-mc.yaml --kubeconfig {kubeconfig_c2}")
+    run_cmd(
+        cmd=f"oc create -f {constants.RDR_LATENCY_OUPUT_DIR}/c2-mc.yaml --kubeconfig {kubeconfig_c2}"
+    )
 
     wait_for_machineconfigpool_status("all", timeout=1800)
     with ThreadPoolExecutor() as executor:
@@ -233,7 +239,7 @@ def setup_rdr_latency():
                 wait_for_machineconfigpool_status,
                 "all",
                 timeout=1800,
-                kubeconfig=kubeconfig
+                kubeconfig=kubeconfig,
             )
             for kubeconfig in all_cluster_kubeconfig
         ]
@@ -245,4 +251,3 @@ def setup_rdr_latency():
             logger.error("machineconfigpool Failed")
             logger.error(e)
             raise
-
