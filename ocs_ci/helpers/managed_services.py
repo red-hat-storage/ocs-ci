@@ -217,5 +217,5 @@ def verify_osd_distribution_on_provider():
     for zone, osd_count in zone_osd_count.items():
         # 4Ti is the size of OSD
         assert (
-            osd_count == size / 4
+            osd_count == int(size) / 4
         ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
