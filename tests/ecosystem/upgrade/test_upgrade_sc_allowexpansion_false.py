@@ -19,7 +19,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
-upgrade_ocs_version = config.RUN.get("upgrade_ocs_version")
+upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
 
 
 @bugzilla("2125815")
