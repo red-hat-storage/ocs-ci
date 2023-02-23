@@ -50,6 +50,14 @@ class TestUpgrade(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    def storageclass_obj_cleanup(self):
+        """
+        Delete storageclass
+        """
+        log.info("Teardown for custome sc")
+        for instance in self.all_sc_obj:
+            instance.delete(wait=True)
+
     @pre_ocs_upgrade
     def test_ocs_upgrade_with_allowexpansion_false(
         self, project_factory, storageclass_factory, multi_pvc_factory
@@ -72,14 +80,15 @@ class TestUpgrade(ManageTest):
         # Create custom storage class
 
         custom_cephfs_sc = storageclass_factory(
-            interface=constants.CEPHFILESYSTEM, allowvolumeexpansion=False
+            interface=constants.CEPHFILESYSTEM, allow_volume_expansion=False
         )
         custom_rbd_sc = storageclass_factory(
-            interface=constants.CEPHBLOCKPOOL, allowvolumeexpansion=False
+            interface=constants.CEPHBLOCKPOOL, allow_volume_expansion=False
         )
 
         # Appending all the pvc obj to base case param for cleanup and evaluation
-        self.all_sc_obj.extend(custom_cephfs_sc + custom_rbd_sc)
+        self.all_sc_obj.append(custom_cephfs_sc)
+        self.all_sc_obj.append(custom_rbd_sc)
 
         log.info("Create pvcs for custom sc as well as for default sc")
         project_obj = project_factory()
