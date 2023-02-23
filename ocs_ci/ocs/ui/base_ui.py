@@ -6,7 +6,7 @@ import gc
 import time
 import zipfile
 
-from selenium import webdriver
+from selenium import webdrive
 from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
@@ -778,6 +778,7 @@ class PageNavigator(BaseUI):
         """
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
+
 
         if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11):
             default_projects_is_checked = self.driver.find_element_by_xpath(
