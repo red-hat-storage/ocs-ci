@@ -747,7 +747,7 @@ def get_ocp_version(cluster):
     return ocp_version
 
 
-def upgrade_ocp(cluster, upgrade_version=None):
+def rosa_upgrade_ocp(cluster, short_ocp_upgrade_version):
     """
     Upgrade OCP version to the latest
 
@@ -757,8 +757,7 @@ def upgrade_ocp(cluster, upgrade_version=None):
         cluster will be upgraded to the latest version.
     """
     current_version = get_ocp_version(cluster)
-    if not upgrade_version:
-        upgrade_version = get_latest_rosa_version("4.10")
+    upgrade_version = get_latest_rosa_version(short_ocp_upgrade_version)
     logger.info(f"The latest version of OCP is {upgrade_version}")
     logger.info(f"Current OCP version of {cluster} is {current_version}")
     if upgrade_version == current_version:

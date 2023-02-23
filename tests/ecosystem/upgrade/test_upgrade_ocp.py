@@ -25,6 +25,7 @@ from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
 )
+from ocs_ci.utility.rosa import rosa_upgrade_ocp
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +124,19 @@ class TestUpgradeOCP(ManageTest):
                 pause_machinehealthcheck()
 
             # Upgrade OCP
-            logger.info(f"full upgrade path: {image_path}:{target_image}")
-            ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            if (
+                config.ENV_DATA["platform"].lower()
+                not in constants.MANAGED_SERVICE_PLATFORMS
+            ):
+                logger.info(f"full upgrade path: {image_path}:{target_image}")
+                ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            else:
+                cluster_name = config.ENV_DATA["cluster_name"]
+                version = Version.coerce(ocp_upgrade_version)
+                short_ocp_upgrade_version = ".".join(
+                    [str(version.major), str(version.minor)]
+                )
+                rosa_upgrade_ocp(cluster_name, short_ocp_upgrade_version)
 
             # Wait for upgrade
             for ocp_operator in cluster_operators:
