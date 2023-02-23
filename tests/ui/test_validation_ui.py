@@ -105,10 +105,9 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @pytest.mark.bugzilla("1994584")
-    def test_odf_operator_in_installed_opearator(self, setup_ui_class):
+    def test_ocs_operator_is_not_present(self, setup_ui_class):
         """
-        Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
-        are matching
+        Validate odf operator is present in the installed operator tab in ui.
 
          Args:
             setup_ui_class: login function on conftest file

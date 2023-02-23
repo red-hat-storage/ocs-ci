@@ -558,6 +558,7 @@ class ValidationUI(PageNavigator):
                 timeout=1,
                 expected_text="OpenShift Data Foundation",
             )
+            logger.info("Searching for Openshift Container Storage Operator")
             ocs_opeartor_presence = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["ocs-operator"],
                 timeout=1,

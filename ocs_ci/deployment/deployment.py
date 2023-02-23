@@ -122,7 +122,6 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 logger = logging.getLogger(__name__)
 
@@ -460,8 +459,6 @@ class Deployment(object):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
             create_dummy_zone_labels()
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.verify_odf_operator_in_installed_operator()
 
     def label_and_taint_nodes(self):
         """
@@ -1172,7 +1169,18 @@ class Deployment(object):
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
-        close_browser()
+        self.post_ocs_deployment_with_ui()
+        close_browser(setup_ui)
+
+    def post_ocs_deployment_with_ui(self):
+        """
+        Function does post OCS deployment check when its UI deployment.
+        1. checks ODF operator in installed operators.
+        """
+        from ocs_ci.ocs.ui.validation_ui import ValidationUI
+
+        validation_ui_obj = ValidationUI()
+        validation_ui_obj.verify_odf_operator_in_installed_operator()
 
     def deploy_with_external_mode(self):
         """
