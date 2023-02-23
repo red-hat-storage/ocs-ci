@@ -1,6 +1,10 @@
 .PHONY: \
 	build-image \
-	run-ocs-ci \
+	run-odf \
+	run-managed-service \
+	debug-odf \
+
+
 
 build-image:
 	@echo "Build OCS-CI image"
