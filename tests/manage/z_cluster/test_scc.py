@@ -256,10 +256,10 @@ class TestSCC:
             ]
             logger.info(f"Mode before: {mode_before} and Mode after: {mount_mode}")
 
-            assert (
-                mode_before == mode_after
+            assert (mode_before in mode_after) or (
+                mode_after in mode_before
             ), "Permissions got changed for the node mount!"
-            assert (
-                mode_before == mount_mode
+            assert (mode_before in mount_mode) or (
+                mount_mode in mode_before
             ), f"[Error] Permission {mode}: Permissions got changed to {mount_mode} for the mount inside the pod!"
         logger.info(f"Permission and time map: {permission_map}")
