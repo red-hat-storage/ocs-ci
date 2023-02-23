@@ -1013,10 +1013,12 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
         )
     else:
         file_path = file_name
-    md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
-        command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
+
+    md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
+        command=f"exec {pod_obj.name} -- md5sum {file_path}"
     )
     md5sum = md5sum_cmd_out.split()[0]
+
     logger.info(f"md5sum of file {file_name}: {md5sum}")
     return md5sum
 
