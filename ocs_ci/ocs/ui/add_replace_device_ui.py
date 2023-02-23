@@ -14,8 +14,8 @@ class AddReplaceDeviceUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
 
     def add_capacity_ui(self):
         """

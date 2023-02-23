@@ -20,8 +20,8 @@ class MCGStoreUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.wait = WebDriverWait(self.driver, 30)
         ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
@@ -98,8 +98,8 @@ class BucketClassUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.ocs_loc = locators[ocs_version]["ocs_operator"]
         self.bucketclass = locators[ocs_version]["bucketclass"]
@@ -254,8 +254,8 @@ class ObcUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
         self.obc_loc = locators[ocs_version]["obc"]
 
@@ -342,8 +342,8 @@ class ObcUI(PageNavigator):
 
 
 class ObcUi(ObcUI):
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.sc_loc = locators[self.ocp_version]["obc"]
 
     def check_obc_option(self, text="Object Bucket Claims"):

@@ -37,8 +37,8 @@ class AcmAddClusters(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.page_nav = locators[self.ocp_version]["acm_page"]
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):

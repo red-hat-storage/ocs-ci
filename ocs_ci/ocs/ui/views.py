@@ -932,6 +932,10 @@ validation = {
         'a[data-test-id="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
+    "namespacestore_page": (
+        'a[data-test-id="horizontal-link-Namespace Store"]',
+        By.CSS_SELECTOR,
+    ),
     "capacity_breakdown_options": (
         'button[class="pf-c-select__toggle"]',
         By.CSS_SELECTOR,

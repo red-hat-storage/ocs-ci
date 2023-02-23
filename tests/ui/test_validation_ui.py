@@ -38,7 +38,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_9:
             validation_ui_obj.odf_overview_ui()
@@ -59,7 +59,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.odf_storagesystems_ui()
 
     @ui
@@ -81,9 +81,9 @@ class TestUserInterfaceValidation(object):
         """
 
         storage_system_details = (
-            ValidationUI(setup_ui_class)
+            ValidationUI()
             .nav_odf_default_page()
-            .nav_storage_systems()
+            .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
         storage_system_details.nav_cephblockpool_verify_statusready()

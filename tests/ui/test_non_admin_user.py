@@ -77,7 +77,8 @@ class TestUnprivilegedUserODFAccess(E2ETest):
         logger.info(f"user created: {user[0]} password: {user[1]}")
 
         # login with the user created
-        validation_ui_obj = ValidationUI(login_factory(user[0], user[1]))
+        login_factory(user[0], user[1])
+        validation_ui_obj = ValidationUI()
         try:
             validation_ui_obj.validate_unprivileged_access()
         except UnexpectedODFAccessException:

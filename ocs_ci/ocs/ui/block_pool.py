@@ -18,8 +18,8 @@ class BlockPoolUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         ocp_version = get_ocp_version()
         self.bp_loc = locators[ocp_version]["block_pool"]
         self.sc_loc = locators[ocp_version]["storageclass"]
