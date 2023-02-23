@@ -8,7 +8,7 @@ AWS_PATH_ARG=${AWS_PATH:-"~/.aws"}
 OCM_CONFIG_ARG=${OCM_CONFIG:-"~/.config/ocm"}
 
 #run-ci
-$PENGINE_CMD run -v $OCM_CONFIG_ARG:/root/.config/ocm -v $CLUSTER_PATH:/opt/cluster -v $PWD/data:/opt/ocs-ci/data -v $AWS_PATH_ARG:/root/.aws $IMAGE_NAME $RUN_CI
+$ENGINE_CMD run -v $OCM_CONFIG_ARG:/root/.config/ocm -v $CLUSTER_PATH:/opt/cluster -v $PWD/data:/opt/ocs-ci/data -v $AWS_PATH_ARG:/root/.aws $IMAGE_NAME_ARG $RUN_CI
 
 if [ "$PROVIDER_NAME" != "" ]; then
    $ENGINE_CMD run -v $CLUSTER_PATH:/opt/cluster $IMAGE_NAME_ARG python3.8 /opt/edit_yaml.py $PROVIDER_NAME
