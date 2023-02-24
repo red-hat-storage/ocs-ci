@@ -75,9 +75,11 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
-                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=300)
+                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=500)
             except Exception as e:
+                self.take_screenshot()
                 logger.error(f"Refresh pop-up does not exist: {e}")
+                self.refresh_page()
         self.verify_operator_succeeded(operator=self.operator_name)
 
     def refresh_popup(self, timeout=30):
