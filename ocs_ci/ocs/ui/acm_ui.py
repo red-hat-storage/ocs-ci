@@ -13,15 +13,13 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators, acm_ui_specific, generic_locators
+from ocs_ci.ocs.ui.views import locators, acm_ui_specific
 from ocs_ci.utility.utils import (
     get_ocp_version,
     expose_ocp_version,
     run_cmd,
     get_running_acm_version,
 )
-from selenium.common.exceptions import NoSuchElementException
-from ocs_ci.utility import version
 from ocs_ci.ocs.constants import (
     ACM_CLUSTER_DESTROY_TIMEOUT,
     PLATFORM_XPATH_MAP,
@@ -80,7 +78,11 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout, enable_screenshot=True)
+        self.do_click(
+            locator=self.acm_page_nav["Clusters_page"],
+            timeout=timeout,
+            enable_screenshot=True,
+        )
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -113,7 +115,10 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Infrastructure_environments_page"], enable_screenshot=True)
+        self.do_click(
+            locator=self.acm_page_nav["Infrastructure_environments_page"],
+            enable_screenshot=True,
+        )
 
     def navigate_applications_page(self):
         """
@@ -139,27 +144,12 @@ class AcmPageNavigator(BaseUI):
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
 
-    def navigate_from_ocp_to_acm(self):
-        if not self.check_element_presence(self.acm_page_nav["local-cluster"]):
-            log.error("local-cluster is not found, can not switch to ACM console")
-            self.take_screenshot()
-            raise NoSuchElementException
-        self.do_click_by_id(self.acm_page_nav["local-cluster"])
-        self.take_screenshot()
-        if not self.check_element_presence(self.acm_page_nav["all-clusters"]):
-            log.error("All Clusters is not found, can not switch to ACM console")
-            self.take_screenshot()
-            raise NoSuchElementException
-        self.do_click_by_id(self.acm_page_nav["all-clusters"])
-        self.page_has_loaded()
-        self.take_screenshot()
-
     def navigate_data_services(self):
         log.info("Navigate to Data Policies page on ACM console")
-        self.choose_expanded_mode(
-            mode=True, locator=self.acm_page_nav["data-services"]
+        self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["data-services"])
+        self.do_click(
+            locator=self.acm_page_nav["data-policies"], enable_screenshot=True
         )
-        self.do_click(locator=self.acm_page_nav["data-policies"], enable_screenshot=True)
 
     def navigate_from_ocp_to_acm_cluster_page(self):
         """
@@ -190,6 +180,7 @@ class AcmPageNavigator(BaseUI):
             raise NoSuchElementException
         self.do_click(self.acm_page_nav["click-local-cluster"])
         self.page_has_loaded()
+        log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
 

@@ -716,13 +716,17 @@ acm_configuration_4_11 = {
 }
 
 acm_configuration_4_12 = {
-    "local-cluster": ("pf-dropdown-toggle-id-128", By.ID),
+    "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
     "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
+    "local-cluster": ("pf-dropdown-toggle-id-128", By.ID),
     "cluster_status_check": ('//*[text()="{}"]', By.XPATH),
     "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
     "data-services": ("Data Services", By.LINK_TEXT),
     "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
-    "applications-page": (".pf-c-nav__link.pf-m-current[data-test='nav']", By.CSS_SELECTOR),
+    "applications-page": (
+        ".pf-c-nav__link.pf-m-current[data-test='nav']",
+        By.CSS_SELECTOR,
+    ),
     "apply-filter": ("#pf-select-toggle-id-30", By.CSS_SELECTOR),
     "subscription": ("//input[@id='app.k8s.io/Application']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
@@ -731,34 +735,23 @@ acm_configuration_4_12 = {
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
     "select-policy": ('//*[text()="{}"]', By.XPATH),
-    "target-cluster-dropdown": ("//button[@data-test='target-cluster-dropdown-toggle']", By.XPATH),
+    "target-cluster-dropdown": (
+        "//button[@data-test='target-cluster-dropdown-toggle']",
+        By.XPATH,
+    ),
     "failover-preferred-cluster-name": ('//*[text()="{}"]', By.XPATH),
     "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
     "subscription-dropdown": (".pf-c-select__toggle.pf-m-typeahead", By.CSS_SELECTOR),
     "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
     "close-action-modal": ("#modal-close-action", By.CSS_SELECTOR),
     "title-alert-after-action": (".pf-c-alert__title", By.CSS_SELECTOR),
-    "data-policy-hyperlink": ("(//button[@type='button'][@data-test='popover-link'])[1]", By.XPATH),
+    "data-policy-hyperlink": (
+        "(//button[@type='button'][@data-test='popover-link'])[1]",
+        By.XPATH,
+    ),
     "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
-    "action-status": ("")
-
-
-
-
-
-
-
-
-
-
-
-
-}
-
-acm_configuration_4_12 = {
-    **acm_configuration_4_11,
-    "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
-    "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
+    "action-status-failover": ("//*[text()='Failed']", By.XPATH),
+    "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
 }
 
 add_capacity = {
@@ -1238,11 +1231,6 @@ locators = {
             **acm_page_nav,
             **acm_configuration,
             **acm_configuration_4_11,
-            **acm_configuration_4_12,
-        },
-        "acm_page": {
-            **acm_page_nav,
-            **acm_configuration,
             **acm_configuration_4_12,
         },
         "obc": obc,
