@@ -84,6 +84,28 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
         request.addfinalizer(finalizer)
 
     def rolling_terminate_and_recovery_of_ocs_worker_nodes(self, nodes):
+        """
+        Test rolling termination and recovery of the OCS worker node for both MS and non-MS clusters.
+
+        1. Generate the OCS worker nodes for rolling terminate
+        2. Go over the OCS worker node in a loop.
+        3. Get the machine set of every worker node and the ready replica count before terminating it.
+        4. Terminate the worker node.
+        5. If we use an MS cluster, we will wait for the new worker node associated with the old node machine set
+        to come up automatically.
+        If we use a non-MS cluster, the recovery process does not always happen automatically, so we will perform
+        the following steps:
+            5.1. Ensure that the ready replica count of the old machine set is decreased by 1.
+            5.2. Set the current replica count of the old machine set to the new ready replica count(reducing
+            it by one also).
+            5.3. Add a new worker node for the old machine set(which means we increase the
+            current replica count again by 1), and label it with the OCS label.
+        6. Wait for the OCS pods to be running and Ceph health to be OK before the next iteration.
+
+        Args:
+            nodes (NodesBase): Instance of the relevant platform nodes class (e.g. AWSNodes, VMWareNodes)
+
+        """
         # Get OCS worker node objects
         if is_ms_provider_cluster():
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
@@ -91,7 +113,7 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             # If it's not a provider cluster, test rolling terminate two ocs worker nodes will suffice
             ocs_node_objs = random.choices(get_ocs_nodes(), k=2)
 
-        # Start rolling terminate and recovery of OCS worker nodes
+        log.info("Start rolling terminate and recovery of the OCS worker nodes")
         for node_obj in ocs_node_objs:
             old_wnodes = get_worker_nodes()
             log.info(f"Current worker nodes: {old_wnodes}")
@@ -109,7 +131,9 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                 wait_for_ready_replica_count_to_reach_expected_value(
                     machineset, expected_ready_rc
                 )
-                # Change the current replica count to the expected ready replica count
+                log.info(
+                    "Change the current replica count to the expected ready replica count"
+                )
                 set_replica_count(machineset, expected_ready_rc)
                 new_ocs_node_names = add_new_node_and_label_it(machineset)
                 new_ocs_node = get_node_objs(new_ocs_node_names)[0]
