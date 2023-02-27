@@ -14,5 +14,5 @@ if [[ "$@" == *"--debug--"* ]]; then
   exec $CMD > /opt/cluster/logs_ocsci_container/output_$RANDOM.txt
 else
   cd /opt/ocs-ci
-  exec "$@" > /opt/cluster/logs_ocsci_container/output_$RANDOM.txt
+  exec "$@" | tee /opt/cluster/logs_ocsci_container/output_$RANDOM.txt
 fi
