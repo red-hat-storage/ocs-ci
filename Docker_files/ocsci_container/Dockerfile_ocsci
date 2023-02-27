@@ -35,9 +35,9 @@ COPY scripts/build_config.yaml /opt
 ARG BRANCH_ID_ARG
 ENV BRANCH_ID=${BRANCH_ID_ARG}
 
-# Get OCS-CI Branch-id argument
-ARG PROVIDER_NAME_ARG
-ENV PROVIDER_NAME=${PROVIDER_NAME_ARG}
+# Get PIP_INSTALLATION argument
+ARG PIP_INSTALLATION_ARG
+ENV PIP_INSTALLATION=${PIP_INSTALLATION_ARG}
 
 # Install ocs-ci inside the container.
 RUN install-ocs-ci.sh

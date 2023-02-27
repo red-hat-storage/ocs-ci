@@ -10,7 +10,7 @@ git clone "$OCSCI_REPO_URL" "$OCSCI_INSTALL_DIR"
 pushd "$OCSCI_INSTALL_DIR"
 
 # Checkout to relevant branch [the default is stable]
-if [ "$BRANCH_ID" == "" ]
+if [ "$BRANCH_ID" == "stable" ]
 then
       echo checkout to stable branch
       git checkout stable
@@ -24,9 +24,9 @@ else
 fi
 
 #Install dependencies
-pip3.8 install --upgrade pip setuptools
-pip3.8 install setuptools==65.5.0
-pip3.8 install -r requirements.txt
+$PIP_INSTALLATION install --upgrade pip setuptools
+$PIP_INSTALLATION install setuptools==65.5.0
+$PIP_INSTALLATION install -r requirements.txt
 popd
 
 which run-ci
