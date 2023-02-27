@@ -1434,19 +1434,11 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "odf-multicluster-orchestrator",
         "odf-operator",
     ],
-    "4.13": [
-        "cluster-logging",
-        "elasticsearch-operator",
-        # we might need to uncomment next line, if we would like to use it in
-        # disconnected deployment:
-        # "lvms-operator",
-        "mcg-operator",
-        "ocs-operator",
-        "odf-csi-addons-operator",
-        "odf-multicluster-orchestrator",
-        "odf-operator",
-    ],
 }
+# the list of packages for 4.13 seems to be the same as 4.12
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.13"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
 
 # PSI-openstack constants
