@@ -19,13 +19,13 @@ def check_setmetadata_availability(pod_obj):
     """
     Check setmetadata parameter is available or not for cephfs and rbd plugin pods
 
+    Args:
+        pod_obj (obj): pod object
+
     """
     plugin_provisioner_pod_objs = pod.get_all_pods(
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        selector=[
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        ],
+        selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
     )
     log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
     response = retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
@@ -56,6 +56,11 @@ def enable_metadata(
 ):
     """
     Enable CSI_ENABLE_METADATA
+
+    Args:
+        config_map_obj (obj): configmap object
+        pod_obj (obj): pod object
+
     Steps:
     1:- Enable CSI_ENABLE_METADATA flag via patch request
     2:- Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner
@@ -81,14 +86,14 @@ def enable_metadata(
         selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
-    )
+    ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
-    )
+    ), "Pods are not in running status"
 
     # Check 'setmatadata' is set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
     res = check_setmetadata_availability(pod_obj)
@@ -114,6 +119,11 @@ def disable_metadata(
 ):
     """
     Disable CSI_ENABLE_METADATA
+
+    Args:
+        config_map_obj (obj): configmap object
+        pod_obj (obj): pod object
+
     Steps:
     1:- Disable CSI_ENABLE_METADATA flag via patch request
     2:- Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner
@@ -136,14 +146,14 @@ def disable_metadata(
         selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
-    )
+    ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         dont_allow_other_resources=True,
         timeout=60,
-    )
+    ), "Pods are not in running status"
 
     # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
     res = check_setmetadata_availability(pod_obj)
