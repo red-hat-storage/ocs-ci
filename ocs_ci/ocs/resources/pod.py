@@ -235,15 +235,17 @@ class Pod(OCS):
         """
         Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
         files, not good for large files/binaries with one-line plain string
-        * Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
 
         Args:
             target_path (str): local path
             src_path (str): path within pod what you want to copy
             timeout (int): timeout in seconds
+                chunk_size (int): chunk size in lines. The local file will be appended by a number of chunks
                 until size of the local file will not reach the initial file size.
                 2000 lines is a maximum chunk size tested successfully
+                ! Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
             chunk_size (int): file will be copied by chunks, by number of lines
+
         """
         file_size = int(self.exec_cmd_on_pod(f"stat -c %s {src_path}"))
 
