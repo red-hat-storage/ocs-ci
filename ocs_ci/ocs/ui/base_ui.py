@@ -480,7 +480,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to Overview Page")
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
-            self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
@@ -826,6 +826,7 @@ class StorageSystemNavigator(PageNavigator):
     def __init__(self, driver):
         super().__init__(driver)
         self.validation_loc = locators[self.ocp_version]["validation"]
+        self.block_pool = locators[self.ocp_version]["block_pool"]
 
     def navigate_cephblockpool(self):
         """
@@ -902,6 +903,48 @@ class StorageSystemNavigator(PageNavigator):
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
+
+    def cephblockpool_validate_storageclass(self, pool_name, sc_name):
+        """
+        Initial Page - Data foundation / Storage System tabs / StorageCluster option
+        BlockPool Tab .
+        Verify blockpool recoard and it has correctly marked to storagecluster.
+        """
+        self.navigate_odf_storagesystems()
+        self.navigate_storagecluster_storagesystem()
+        self.page_has_loaded(retries=10, sleep_time=4)
+        logger.info("Click on 'BlockPools' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["blockpools-odf-4-10"],
+                enable_screenshot=False,
+            )
+        else:
+            self.do_click(self.validation_loc["blockpools"], enable_screenshot=False)
+
+        self.page_has_loaded(retries=10, sleep_time=4)
+
+        # search pool by name
+        self.do_send_keys(self.block_pool["search_pool"], pool_name)
+
+        logger.info(f"Verifying the storage class has attached to pool '{pool_name}'")
+        sc_exists = self.check_element_presence(
+            (By.XPATH, f"//a[text()='{sc_name}']"),
+        )
+
+        if sc_exists:
+            logger.info(
+                f"StorageClass '{sc_name}' is attached to blockpool '{pool_name}'"
+            )
+        else:
+            logger.info(
+                f"StorageClass '{sc_name}' is not attached to blockpool '{pool_name}'"
+            )
+
+        return sc_exists
 
 
 def screenshot_dom_location(type_loc="screenshot"):

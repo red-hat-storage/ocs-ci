@@ -23,7 +23,14 @@ class StorageClassUI(PageNavigator):
         ocp_version = get_ocp_version()
         self.sc_loc = locators[ocp_version]["storageclass"]
 
-    def create_storageclass(self, pool_name):
+    def create_storageclass(
+        self,
+        pool_name=None,
+        create_new_pool=False,
+        replication=3,
+        compression=False,
+        volume_type="HDD",
+    ):
         """
         Basic function to create RBD based storageclass
 
@@ -36,17 +43,62 @@ class StorageClassUI(PageNavigator):
         """
         self.navigate_overview_page()
         self.navigate_storageclasses_page()
-        self.page_has_loaded()
+        self.page_has_loaded(retries=10, sleep_time=5)
         sc_name = create_unique_resource_name("test", "storageclass")
         self.do_click(self.sc_loc["create_storageclass_button"])
         self.do_send_keys(self.sc_loc["input_storageclass_name"], sc_name)
         self.do_click(self.sc_loc["provisioner_dropdown"])
         self.do_click(self.sc_loc["rbd_provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
-        self.do_click([f"button[data-test={pool_name}", By.CSS_SELECTOR])
+        if create_new_pool:
+            logger.info("Creating New Pool in storageclass creation process.")
+            pool_name = create_unique_resource_name("blockpool", "pool")
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["create_new_pool"])
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["pool_name"])
+            self.do_send_keys(
+                self.sc_loc["block_pool_sc_popup"]["pool_name"], text=pool_name
+            )
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["data_protection_policy"])
+
+            if replication == 2:
+                self.do_click(self.sc_loc["block_pool_sc_popup"]["2-way-replication"])
+            else:
+                self.do_click(self.sc_loc["block_pool_sc_popup"]["3-way-replication"])
+
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["volume_type"])
+
+            if volume_type == "HDD":
+                self.do_click(self.sc_loc["block_pool_sc_popup"]["volume_type_hdd"])
+            if compression:
+                self.do_click(self.sc_loc["block_pool_sc_popup"]["compression"])
+
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["create"])
+            self.page_has_loaded(sleep_time=4)
+
+            # Wait till check icon
+            expected_text = f"Pool {pool_name} was successfully created"
+            locator = (f"//div[text()='{expected_text}']", By.XPATH)
+            if self.wait_until_expected_text_is_found(
+                locator, expected_text, timeout=30
+            ):
+                logger.info(f"Pool {pool_name} was created successfully")
+            else:
+                logger.error(f"Error Creatig Pool {pool_name}.")
+                self.do_click(self.sc_loc["block_pool_sc_popup"]["finish"])
+                return None, None
+
+            self.do_click(self.sc_loc["block_pool_sc_popup"]["finish"])
+        else:
+            self.do_click([f"button[data-test={pool_name}", By.CSS_SELECTOR])
+
         self.do_click(self.sc_loc["save_storageclass"])
+
         if self.verify_storageclass_existence(sc_name):
-            return sc_name
+            logger.info(f"StorageClass {sc_name} Created Successfully.")
+            if create_new_pool:
+                return sc_name, pool_name
+            else:
+                return sc_name
         else:
             return None
 

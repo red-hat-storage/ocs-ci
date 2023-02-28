@@ -802,6 +802,21 @@ block_pool = {
     ),
     "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "search_pool": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+}
+
+block_pool_sc_popup = {
+    "create_new_pool": ('//button[text()="Create New Pool"]', By.XPATH),
+    "pool_name": ('//*[@id="pool-name"]', By.XPATH),
+    "data_protection_policy": ('//*[@id="replica-dropdown"]', By.XPATH),
+    "volume_type": ('//*[@id="toggle-id"]', By.XPATH),
+    "volume_type_hdd": ('//button[text()="HDD"]', By.XPATH),
+    "compression": ("input[name='compression-check']", By.CSS_SELECTOR),
+    "cancle": ('//*[@id="modal-cancel-action"]', By.XPATH),
+    "create": ('//*[@id="confirm-action"]', By.XPATH),
+    "2-way-replication": ('//button[text()="2-way Replication"]', By.XPATH),
+    "3-way-replication": ('//button[text()="3-way Replication"]', By.XPATH),
+    "finish": ('//*[@id="modal-finish-action"]', By.XPATH),
 }
 
 storageclass = {
@@ -888,6 +903,7 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
+    "create_new_pool": ("//button[text()='Create New Pool']", By.XPATH),
 }
 
 storageclass_4_9 = {
@@ -903,6 +919,8 @@ storageclass_4_9 = {
     "new_kms": ("#create-new-kms-connection", By.CSS_SELECTOR),
     "toggle_switch": ("no-label-switch-on-on", By.ID),
 }
+
+storageclass_4_12 = {"block_pool_sc_popup": block_pool_sc_popup}
 
 validation = {
     "object_service_button": ("//button[text()='Object Service']", By.XPATH),
@@ -1185,6 +1203,8 @@ locators = {
             **acm_configuration_4_12,
         },
         "obc": obc,
+        "storageclass": {**storageclass, **storageclass_4_12},
+        "block_pool": block_pool,
     },
     "4.11": {
         "login": {**login, **login_4_11},
