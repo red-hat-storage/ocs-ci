@@ -15,7 +15,7 @@ from ocs_ci.framework.testlib import (
     ui,
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
-from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUi
+from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUI
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -305,7 +305,9 @@ class TestObcUserInterface(object):
         ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
         if verify_ob_removal and obc_ui_obj.ocp_version_semantic > version.VERSION_4_12:
-            ObUi(setup_ui_class).delete_ob_ui(delete_via="three_dots", expect_fail=True)
+            ObUI(setup_ui_class).delete_object_bucket_ui(
+                delete_via="three_dots", expect_fail=True
+            )
 
         logger.info(f"Delete {obc_name}")
         obc_ui_obj.delete_obc_ui(obc_name, delete_via)
