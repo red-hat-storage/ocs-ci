@@ -250,12 +250,20 @@ class BaseUI:
     def get_element_attribute(self, locator, attribute, safe: bool = False):
         """
         Get attribute from WebElement
+
+        Args:
+            locator (set): (GUI element needs to operate on (str), type (By)).
+            attribute (str): the value of this attribute will be extracted from WebElement
+            safe(bool): if True exception will not raise when element not found. Default option - not safe
+
+        Returns:
+            str: value of the attribute of requested and found WebElement
         """
-        el = self.get_elements(locator)
+        web_elements = self.get_elements(locator)
         if safe:
-            if not len(el):
+            if not len(web_elements):
                 return
-        return el[0].get_attribute(attribute)
+        return web_elements[0].get_attribute(attribute)
 
     def page_has_loaded(self, retries=5, sleep_time=1):
         """
