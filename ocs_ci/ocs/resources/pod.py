@@ -636,11 +636,12 @@ def get_ceph_tools_pod(skip_creating_pod=False):
     if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
-        ct_pod_items = ocp_pod_obj = OCP(
+        ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=constants.TOOL_APP_LABEL,
-        ).data["items"]
+        )
+        ct_pod_items = ocp_pod_obj.data["items"]
 
     if not ct_pod_items:
         raise CephToolBoxNotFoundException
