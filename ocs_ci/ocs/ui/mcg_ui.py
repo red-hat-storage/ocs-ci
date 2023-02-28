@@ -248,7 +248,7 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class BucketsUi(PageNavigator):
+class BucketsUI(PageNavigator):
     """
     A class representation for abstraction of OBC or OB-related OpenShift UI actions
 
@@ -289,7 +289,7 @@ class BucketsUi(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class ObcUI(BucketsUi):
+class ObcUI(BucketsUI):
     """
     A class representation for abstraction of OBC-related OpenShift UI actions
 
@@ -386,11 +386,11 @@ class ObcUi(ObcUI):
         delete_projects(namespaces)
 
 
-class ObUi(BucketsUi):
+class ObUI(BucketsUI):
     def __init__(self, driver):
         super().__init__(driver)
 
-    def delete_ob_ui(self, delete_via, expect_fail):
+    def delete_object_bucket_ui(self, delete_via, expect_fail):
         """
         Delete an OBC via the UI
 
