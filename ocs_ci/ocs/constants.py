@@ -559,6 +559,8 @@ SERVICE_ACCOUNT_TOKEN_SECRET = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "serviceaccount_token_secret.yaml"
 )
 
+SIMPLE_APP_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "simple-app.yaml")
+
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
 FEDORA_SERVICE_CA_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedoraServiceCA.yaml")

@@ -226,6 +226,7 @@ def create_pod(
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
+    security_context=None,
     dc_deployment=False,
     raw_block_pv=False,
     raw_block_device=constants.RAW_BLOCK_DEVICE,
@@ -248,6 +249,7 @@ def create_pod(
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
+        security_context (dict): security context in the form of dictionary
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
@@ -344,7 +346,13 @@ def create_pod(
             pod_data["spec"]["containers"][0]["volumeDevices"][0]["name"] = (
                 pod_data.get("spec").get("volumes")[0].get("name")
             )
-
+    if security_context:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0][
+                "securityContext"
+            ] = security_context
+        else:
+            pod_data["spec"]["containers"][0]["securityContext"] = security_context
     if command:
         if dc_deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["command"] = command
@@ -386,8 +394,8 @@ def create_pod(
     update_container_with_proxy_env(pod_data)
 
     if dc_deployment:
-        ocs_obj = create_resource(**pod_data)
-        logger.info(ocs_obj.name)
+        dc_obj = create_resource(**pod_data)
+        logger.info(dc_obj.name)
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=deploy_pod_status,
             resource_name=pod_name + "-1-deploy",
