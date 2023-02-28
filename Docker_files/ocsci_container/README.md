@@ -36,24 +36,24 @@ The containers are expected to run with a service account that has admin credent
   * AWS_PATH - PATH to AWS credintials [e.g = ~/.aws] [optional]
 * Example:
   ```
-    make run-odf CLUSTER_PATH=~/ClusterPath \
-    RUN_CI="run-ci .." \
-    ENGINE=podman \
-    PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    AWS_PATH=~/.aws
+  make run-odf CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci .." \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws
   ```
 
 ### Debug ODF tests
   * In this mode we can develop new tests/code on our local machine and run the local-code via container
-  * In this example we added a new test `test_new_code.py`:
+  * In this example we added a new test in our local machine `test_new_code.py`:
   ```
-    make debug-odf CLUSTER_PATH=~/ClusterPath \
-    RUN_CI="run-ci .. tests/manage/z_cluster/test_new_code.py" \
-    ENGINE=podman \
-    PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    AWS_PATH=~/.aws
+  make debug-odf CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci .. tests/manage/z_cluster/test_new_code.py" \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws
   ```
 
 ### Run Managed Service
@@ -77,17 +77,17 @@ The containers are expected to run with a service account that has admin credent
   * IMAGE_NAME - image name [e.g. quay.io/ocsci/ocs-ci-container:release-4.12]
   * AWS_PATH - PATH to AWS credintials [e.g: ~/.aws]
   * OCM_CONFIG - PATH to ocm configuration file [e.g: ~/.config/ocm]
-  * PROVIDER_NAME - Provider Name [we dont need this param for consumer cluster]
+  * PROVIDER_NAME - Provider Name [we don't need PROVIDER_NAME param for consumer cluster]
 * Example:
   ```
-    make run-managed-service CLUSTER_PATH=~/ClusterPath \
-    RUN_CI="run-ci .." \
-    ENGINE=podman \
-    PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
-    AWS_PATH=~/.aws \
-    OCM_CONFIG= ~/.config/ocm \
-    PROVIDER_NAME = cluster-provider
+  make run-managed-service CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci .." \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws \
+  OCM_CONFIG= ~/.config/ocm \
+  PROVIDER_NAME = cluster-provider
   ```
 
 ### Upload image to quay.io
