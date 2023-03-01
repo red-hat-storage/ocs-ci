@@ -46,6 +46,24 @@ class TestPvcAssignPodNode(ManageTest):
             error_msg in pod_log
         ), f"Logs should not contain the error message '{error_msg}'"
 
+    def verify_access_token_notin_csi_addons_logs(self):
+        """
+        This function will verify logs of kube-rbac-proxy container in csi-addons-controller-manager pod
+        shouldn't contain api access token
+        """
+        csi_addons_pod_objs = res_pod.get_all_pods(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            selector_label="app.kubernetes.io/name",
+            selector=["csi-addons"],
+        )
+        error_msg = "Authorization: Bearer"
+        pod_log = res_pod.get_pod_logs(
+            pod_name=csi_addons_pod_objs[0].name, container="kube-rbac-proxy"
+        )
+        assert not (
+            error_msg in pod_log
+        ), f"Logs should not contain the error message '{error_msg}'"
+
     @acceptance
     @bugzilla("2136852")
     @tier1
@@ -101,8 +119,9 @@ class TestPvcAssignPodNode(ManageTest):
         pod.get_fio_rw_iops(pod_obj)
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_12:
+        if ocs_version >= version.VERSION_4_10:
             self.verify_access_token_notin_odf_pod_logs()
+            self.verify_access_token_notin_csi_addons_logs()
 
     @acceptance
     @tier1
@@ -190,5 +209,6 @@ class TestPvcAssignPodNode(ManageTest):
             pod.get_fio_rw_iops(pod_obj)
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_12:
+        if ocs_version >= version.VERSION_4_10:
             self.verify_access_token_notin_odf_pod_logs()
+            self.verify_access_token_notin_csi_addons_logs()
