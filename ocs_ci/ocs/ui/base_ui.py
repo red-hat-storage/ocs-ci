@@ -97,14 +97,6 @@ class BaseUI:
                 element = wait.until(
                     ec.element_to_be_clickable((locator[1], locator[0]))
                 )
-                screenshot = (
-                    ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-                )
-                if screenshot:
-                    self.take_screenshot()
-                element.click()
-                if copy_dom:
-                    self.copy_dom()
             except TimeoutException as e:
                 self.take_screenshot()
                 self.copy_dom()
@@ -117,6 +109,12 @@ class BaseUI:
                 ec.visibility_of_element_located((locator[1], locator[0]))
             )
             element.click()
+        screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+        if screenshot:
+            self.take_screenshot()
+        element.click()
+        if copy_dom:
+            self.copy_dom()
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
