@@ -10,7 +10,6 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework.testlib import (
     tier2,
-    ignore_leftovers,
     ManageTest,
     bugzilla,
     skipif_external_mode,
@@ -31,7 +30,6 @@ class TestResourceCrashCollector(ManageTest):
     """
 
     @tier2
-    @ignore_leftovers
     @bugzilla("1962751")
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-4835")
