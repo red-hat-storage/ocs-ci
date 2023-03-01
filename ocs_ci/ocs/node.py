@@ -912,7 +912,6 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
     """
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    log.info(f"OSD Node Object is {osd_node}")
     az = get_node_az(osd_node)
     from ocs_ci.ocs.platform_nodes import AWSNodes
 
