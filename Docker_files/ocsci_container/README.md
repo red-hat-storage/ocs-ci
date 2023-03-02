@@ -110,3 +110,10 @@ docker/podman push ocsci-container quay.io/ocsci/ocs-ci-container:<tag_name>
 ```
 docker/podman pull quay.io/ocsci/ocs-ci-container:<tag_name>
 ```
+
+******************************************************************************
+**We can add `--ocsci-conf /opt/cluster/logs.yaml` and we will get logs**
+
+$ cat logs.yaml
+RUN:
+  log_dir: "/opt/cluster"
