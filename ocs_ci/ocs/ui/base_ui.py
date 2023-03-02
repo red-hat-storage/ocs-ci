@@ -30,7 +30,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
     TimeoutExpiredError,
-    PageNotLoaded,
     CephHealthException,
 )
 from ocs_ci.ocs.ui.views import OCS_OPERATOR, ODF_OPERATOR
@@ -88,35 +87,39 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         """
+        self.page_has_loaded()
+        screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+        if screenshot:
+            self.take_screenshot()
+        if copy_dom:
+            self.copy_dom()
+
+        wait = WebDriverWait(self.driver, timeout)
         if (
             version.get_semantic_version(get_ocp_version(), True)
             <= version.VERSION_4_11
         ):
             try:
-                wait = WebDriverWait(self.driver, timeout)
                 element = wait.until(
                     ec.element_to_be_clickable((locator[1], locator[0]))
                 )
-                screenshot = (
-                    ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-                )
-                if screenshot:
-                    self.take_screenshot()
                 element.click()
-                if copy_dom:
-                    self.copy_dom()
             except TimeoutException as e:
                 self.take_screenshot()
                 self.copy_dom()
                 logger.error(e)
                 raise TimeoutException
         else:
-            self.page_has_loaded()
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(
-                ec.visibility_of_element_located((locator[1], locator[0]))
-            )
-            element.click()
+            try:
+                element = wait.until(
+                    ec.visibility_of_element_located((locator[1], locator[0]))
+                )
+                element.click()
+            except TimeoutException as e:
+                self.take_screenshot()
+                self.copy_dom()
+                logger.error(e)
+                raise TimeoutException
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -130,12 +133,13 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
+        self.page_has_loaded()
+        wait = WebDriverWait(self.driver, timeout)
         if (
             version.get_semantic_version(get_ocp_version(), True)
             <= version.VERSION_4_11
         ):
             try:
-                wait = WebDriverWait(self.driver, timeout)
                 element = wait.until(
                     ec.presence_of_element_located((locator[1], locator[0]))
                 )
@@ -145,12 +149,15 @@ class BaseUI:
                 logger.error(e)
                 raise TimeoutException
         else:
-            self.page_has_loaded()
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(
-                ec.visibility_of_element_located((locator[1], locator[0]))
-            )
-            element.send_keys(text)
+            try:
+                element = wait.until(
+                    ec.visibility_of_element_located((locator[1], locator[0]))
+                )
+                element.send_keys(text)
+            except TimeoutException as e:
+                self.take_screenshot()
+                logger.error(e)
+                raise TimeoutException
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -282,9 +289,11 @@ class BaseUI:
             time.sleep(sleep_time)
             page_hash_new = get_page_hash()
             if retry_counter == retries:
-                raise PageNotLoaded(
+                logger.error(
                     f"Current URL did not finish loading in {retries * sleep_time}"
                 )
+                self.take_screenshot()
+                return
         logger.info(f"page loaded: {self.driver.current_url}")
 
     def refresh_page(self):
