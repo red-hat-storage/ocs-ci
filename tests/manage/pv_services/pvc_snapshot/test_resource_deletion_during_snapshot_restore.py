@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -56,9 +57,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
             "cephfsplugin_provisioner",
             "cephfsplugin",
             "rbdplugin",
-            "osd",
-            "mgr",
         ]
+        if not config.DEPLOYMENT["external_mode"]:
+            pods_to_delete.extend(["osd", "mgr"])
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs) + len(pods_to_delete))
         disruption_ops = [disruption_helpers.Disruptions() for _ in pods_to_delete]
         file_name = "file_snap"
