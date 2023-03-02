@@ -42,6 +42,14 @@ class HsBench(object):
         self.result = self.hsbench_cr["output_file"]
         self.hsbench_dir = mkdtemp(prefix="hsbench-")
 
+    def _get_bucket_name(self, bucket_num):
+        # bucket_str = "00000000000"
+        # bucket_name = self.bucket_prefix + bucket_str + str(bucket_num)
+        bucket_postfix = str("{:d}".format(bucket_num).zfill(12))
+        log.info(f"===bucket_postfix=== {bucket_postfix}")
+        bucket_name = self.bucket_prefix + bucket_postfix
+        return bucket_name
+
     def create_resource_hsbench(self):
         """
         Create resource for hsbench mark test:
@@ -209,7 +217,7 @@ class HsBench(object):
 
         """
         for i in range(self.num_bucket):
-            bucket_name = self.bucket_prefix + "00000000000" + str(i)
+            bucket_name = self._get_bucket_name(i)
             num_objects = self.toolbox.exec_sh_cmd_on_pod(
                 f"radosgw-admin bucket stats --bucket={bucket_name} | grep num_objects"
             )
@@ -358,7 +366,7 @@ class HsBench(object):
             CommandFailed: If reshard process fails
 
         """
-        bucket_name = self.bucket_prefix + "000000000000"
+        bucket_name = self._get_bucket_name(bucket_num=0)
         log.info("Starting checking bucket limit and start reshard process")
         try:
             self.toolbox.exec_cmd_on_pod(
