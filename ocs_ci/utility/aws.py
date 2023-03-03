@@ -1734,8 +1734,8 @@ def get_data_volumes(deviceset_pvs):
         "vol-"
         + pv.get()
         .get("spec")
-        .get("awsElasticBlockStore")
-        .get("volumeID")
+        .get("csi")
+        .get("volumeHandle")
         .partition("vol-")[-1]
         for pv in deviceset_pvs
     ]
