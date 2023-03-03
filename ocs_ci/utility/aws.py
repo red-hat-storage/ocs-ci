@@ -1732,11 +1732,7 @@ def get_data_volumes(deviceset_pvs):
 
     volume_ids = [
         "vol-"
-        + pv.get()
-        .get("spec")
-        .get("csi")
-        .get("volumeHandle")
-        .partition("vol-")[-1]
+        + pv.get().get("spec").get("csi").get("volumeHandle").partition("vol-")[-1]
         for pv in deviceset_pvs
     ]
     return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
