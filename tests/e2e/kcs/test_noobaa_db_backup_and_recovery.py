@@ -76,3 +76,8 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
+
+    def test_noobaa_db_backup_recovery_locally(
+        self, bucket_factory, noobaa_db_backup_and_recovery_locally
+    ):
+        noobaa_db_backup_and_recovery_locally()
