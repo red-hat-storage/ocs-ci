@@ -45,6 +45,7 @@ class HsBench(object):
     def _get_bucket_name(self, bucket_num):
         """
         Get bucket name from bucket number.
+
         Args:
             bucket_num (int): Number of bucket
         Returns:
