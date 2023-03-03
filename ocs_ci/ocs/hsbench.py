@@ -49,7 +49,7 @@ class HsBench(object):
         Args:
             bucket_num (int): Number of bucket
         Returns:
-            bucket_name (str): Name of bucket
+            str : Name of bucket
 
         """
 
