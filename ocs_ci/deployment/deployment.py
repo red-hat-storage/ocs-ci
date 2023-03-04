@@ -1014,8 +1014,12 @@ class Deployment(object):
 
         # Enable in-transit encryption.
         if config.DEPLOYMENT.get("in_transit_encryption"):
+            if "network" not in cluster_data["spec"]:
+                cluster_data["spec"]["network"] = {}
+
             if "connections" not in cluster_data["spec"]["network"]:
                 cluster_data["spec"]["network"]["connections"] = {}
+
             cluster_data["spec"]["network"]["connections"] = {
                 "encryption": {"enabled": True}
             }
