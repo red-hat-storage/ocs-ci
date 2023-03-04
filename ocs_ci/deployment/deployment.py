@@ -1014,7 +1014,11 @@ class Deployment(object):
 
         # Enable in-transit encryption.
         if config.DEPLOYMENT.get("in_transit_encryption"):
-            cluster_data["spec"]["network"] = {"encryption": {"enabled": True}}
+            if "connections" not in cluster_data["spec"]["network"]:
+                cluster_data["spec"]["network"]["connections"] = {}
+            cluster_data["spec"]["network"]["connections"] = {
+                "encryption": {"enabled": True}
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
