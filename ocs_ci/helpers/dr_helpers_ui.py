@@ -203,15 +203,17 @@ def failover_relocate_ui(
             assert acm_obj.wait_until_expected_text_is_found(
                 locator=acm_loc["operation-readiness"], expected_text="Ready"
             ), "Failover Operation readiness check failed"
-        assert acm_obj.wait_until_expected_text_is_found(
-            locator=acm_loc["operation-readiness"], expected_text="Ready"
-        ), "Relocate Operation readiness check failed"
+        else:
+            assert acm_obj.wait_until_expected_text_is_found(
+                locator=acm_loc["operation-readiness"], expected_text="Ready"
+            ), "Relocate Operation readiness check failed"
         acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
         log.info("Click on Initiate button to failover/relocate")
         acm_obj.do_click(acm_loc["initiate-action"], enable_screenshot=True)
         if action == constants.ACTION_FAILOVER:
             log.info("Failover trigerred")
-        log.info("Relocate trigerred")
+        else:
+            log.info("Relocate trigerred")
         title_alert_after_action = acm_obj.get_element_text(
             acm_loc["title-alert-after-action"]
         )
@@ -219,9 +221,10 @@ def failover_relocate_ui(
             assert (
                 title_alert_after_action == "Failover initiated"
             ), "Issue initiating Failover"
-        assert (
-            title_alert_after_action == "Relocate initiated"
-        ), "Issue initiating Relocate"
+        else:
+            assert (
+                title_alert_after_action == "Relocate initiated"
+            ), "Issue initiating Relocate"
         log.info("Close the action modal")
         acm_obj.do_click(acm_loc["close-action-modal"], enable_screenshot=True)
         return True
@@ -262,7 +265,10 @@ def verify_failover_relocate_status_ui(
             timeout=timeout,
         )
         assert action_status, "Failover verification from UI failed"
-    action_status = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["action-status-relocate"], expected_text="Relocated", timeout=timeout
-    )
-    assert action_status, "Relocate verification from UI failed"
+    else:
+        action_status = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["action-status-relocate"],
+            expected_text="Relocated",
+            timeout=timeout,
+        )
+        assert action_status, "Relocate verification from UI failed"
