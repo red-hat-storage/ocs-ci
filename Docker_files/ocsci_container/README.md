@@ -37,7 +37,7 @@ The containers are expected to run with a service account that has admin credent
 * Example:
   ```
   make run-odf CLUSTER_PATH=~/ClusterPath \
-  RUN_CI="run-ci .." \
+  RUN_CI="run-ci ..." \
   ENGINE=podman \
   PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
   IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
@@ -49,7 +49,7 @@ The containers are expected to run with a service account that has admin credent
   * In this example we added a new test in our local machine `test_new_code.py`:
   ```
   make debug-odf CLUSTER_PATH=~/ClusterPath \
-  RUN_CI="run-ci .. tests/manage/z_cluster/test_new_code.py" \
+  RUN_CI="run-ci ... tests/manage/z_cluster/test_new_code.py" \
   ENGINE=podman \
   PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
   IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
@@ -81,7 +81,7 @@ The containers are expected to run with a service account that has admin credent
 * Example:
   ```
   make run-managed-service CLUSTER_PATH=~/ClusterPath \
-  RUN_CI="run-ci .." \
+  RUN_CI="run-ci ..." \
   ENGINE=podman \
   PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
   IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \

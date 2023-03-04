@@ -12,7 +12,7 @@ def send_cmd(cmd=None):
     return subprocess.check_output(cmd, shell=True, universal_newlines=True)
 
 
-def yaml_to_dict(path=None):
+def yaml_to_dict(path):
     """
     Convert Yaml File to Dictionary
 
@@ -61,6 +61,7 @@ endpoint_out = send_cmd(
     "oc get --kubeconfig /opt/cluster/p1/auth/kubeconfig storagecluster -o yaml"
     " -n openshift-storage|grep -i endpo"
 )
+# yaml.safe_load(endpoint_out)
 endpoint_ls = endpoint_out.split(" ")
 endpoint = endpoint_ls[5].replace("\n", "")
 
