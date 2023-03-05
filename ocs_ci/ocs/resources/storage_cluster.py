@@ -861,7 +861,9 @@ def in_transit_encryption_verification():
     toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
     output = toolbox.exec_ceph_cmd("ceph config dump")
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
-    keys_found = [key for key in keys_to_match if key in output]
+    keys_found = [
+        record["name"] for record in output if record["name"] in keys_to_match
+    ]
 
     if len(keys_to_match) != len(keys_found):
         log.error(
