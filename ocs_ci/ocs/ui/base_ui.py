@@ -95,31 +95,24 @@ class BaseUI:
             self.copy_dom()
 
         wait = WebDriverWait(self.driver, timeout)
-        if (
-            version.get_semantic_version(get_ocp_version(), True)
-            <= version.VERSION_4_11
-        ):
-            try:
+        try:
+            if (
+                version.get_semantic_version(get_ocp_version(), True)
+                <= version.VERSION_4_11
+            ):
                 element = wait.until(
                     ec.element_to_be_clickable((locator[1], locator[0]))
                 )
-                element.click()
-            except TimeoutException as e:
-                self.take_screenshot()
-                self.copy_dom()
-                logger.error(e)
-                raise TimeoutException
-        else:
-            try:
+            else:
                 element = wait.until(
                     ec.visibility_of_element_located((locator[1], locator[0]))
                 )
-                element.click()
-            except TimeoutException as e:
-                self.take_screenshot()
-                self.copy_dom()
-                logger.error(e)
-                raise TimeoutException
+            element.click()
+        except TimeoutException as e:
+            self.take_screenshot()
+            self.copy_dom()
+            logger.error(e)
+            raise TimeoutException
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
