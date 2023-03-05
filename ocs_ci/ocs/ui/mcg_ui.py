@@ -256,7 +256,7 @@ class BucketsUI(PageNavigator):
 
     def __init__(self, driver):
         super().__init__(driver)
-        self.ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+        self.ocs_version = str(version.get_ocs_version_from_csv(only_major_minor=True))
         self.obc_loc = locators[self.ocs_version]["obc"]
 
     def select_openshift_storage_default_project(self):
@@ -392,7 +392,7 @@ class ObUI(BucketsUI):
 
     def delete_object_bucket_ui(self, delete_via, expect_fail):
         """
-        Delete an OBC via the UI
+        Delete an Object Bucket via the UI
 
         delete_via (str): delete via 'OB/Actions' or via 'three dots'
         expect_fail (str): verify if OB removal fails with proper PopUp message
@@ -419,14 +419,14 @@ class ObUI(BucketsUI):
                 URL = f"{get_ocp_url()}/locales/resource.json?lng=en&ns=plugin__odf-console"
 
                 cookies = self.driver.get_cookies()
-                s = requests.Session()
+                session = requests.Session()
                 for cookie in cookies:
-                    s.cookies.set(cookie["name"], cookie["value"])
+                    session.cookies.set(cookie["name"], cookie["value"])
 
                 popup_str = "The corresponding ObjectBucketClaim must be deleted first."
                 logger.info(f"Send req to {URL}. Get PopUp with {popup_str}")
 
-                resp = s.get(url=URL, verify=False)
+                resp = session.get(url=URL, verify=False)
                 json_resp = resp.json()
 
                 assert (

@@ -304,7 +304,7 @@ class TestObcUserInterface(object):
             obc_bucketclass == bucketclass
         ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
-        if verify_ob_removal and obc_ui_obj.ocp_version_semantic > version.VERSION_4_12:
+        if verify_ob_removal and obc_ui_obj.ocp_version_semantic > version.VERSION_4_11:
             ObUI(setup_ui_class).delete_object_bucket_ui(
                 delete_via="three_dots", expect_fail=True
             )
