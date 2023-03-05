@@ -2688,7 +2688,7 @@ def delete_all_osd_removal_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 def get_crashcollector_pods(
     crashcollector_label=constants.CRASHCOLLECTOR_APP_LABEL,
     namespace=None,
-    nodes: set = None,
+    nodes: list = None,
 ):
     """
     Fetches info about crashcollector pods in the cluster
@@ -2698,7 +2698,7 @@ def get_crashcollector_pods(
             (default: defaults.CRASHCOLLECTOR_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
             (default: defaults.ROOK_CLUSTER_NAMESPACE)
-        nodes (set): filter result by node names
+        nodes (list): filter result by the node names
 
     Returns:
         list : of crashcollector pod objects

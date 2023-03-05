@@ -41,16 +41,20 @@ class TestAddNode(ManageTest):
         ), "Data re-balance failed to complete"
 
         worker_nodes_after_add = get_worker_nodes()
-        new_nodes = set(worker_nodes_before_add) - set(worker_nodes_after_add)
+        new_nodes = [
+            node
+            for node in worker_nodes_after_add
+            if node not in worker_nodes_before_add
+        ]
 
-        # to avoid newly created nodes produce crashcollectors in middle of next test, failing leftovers check,
-        # wait until all the new nodes produce crashcollectors in the current test
-        logger.info("verify all new nodes have crashcollectors")
+        # to avoid newly created nodes produce crashcollectors in the middle of the next test, failing leftovers check,
+        # do wait until all the new nodes produce crashcollectors in the current test
+        logger.info(f"verify all the new nodes {new_nodes} have crashcollectors")
         for sample in TimeoutSampler(
             timeout=60 * 5,
             sleep=5,
             func=get_crashcollector_pods,
-            func_kwargs={"nodes": new_nodes},
+            nodes=new_nodes,
         ):
             if len(sample) == nodes_added_num:
                 break
