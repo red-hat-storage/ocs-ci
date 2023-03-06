@@ -46,6 +46,7 @@ deployment = {
     ),
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
+    "thin-csi_sc": ("//span[text()='(default) | csi.vsphere.vmware.com']", By.XPATH),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "standard_csi_sc": ('a[id="standard-csi-link"]', By.CSS_SELECTOR),
@@ -1158,6 +1159,19 @@ validation_4_11 = {
 
 
 locators = {
+    "4.13": {
+        "login": {**login, **login_4_11},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+        },
+    },
     "4.12": {
         "login": {**login, **login_4_11},
         "page": {**page_nav, **page_nav_4_10},
