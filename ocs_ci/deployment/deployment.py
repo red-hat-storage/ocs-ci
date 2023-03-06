@@ -1013,7 +1013,7 @@ class Deployment(object):
             }
 
         # Enable in-transit encryption.
-        if config.DEPLOYMENT.get("in_transit_encryption"):
+        if config.ENV_DATA.get("in_transit_encryption"):
             if "network" not in cluster_data["spec"]:
                 cluster_data["spec"]["network"] = {}
 
@@ -1265,7 +1265,7 @@ class Deployment(object):
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
         # Verify in-transit encryption is enabled.
-        if config.DEPLOYMENT.get("in_transit_encryption"):
+        if config.ENV_DATA.get("in_transit_encryption"):
             if in_transit_encryption_verification():
                 logger.info("IN-transit encryption is enabled.")
             else:
