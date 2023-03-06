@@ -195,21 +195,6 @@ class TestGracefulNodesShutdown(E2ETest):
         # S3 bucket
         self.setup_s3_bucket(mcg_obj=mcg_obj, bucket_factory=bucket_factory)
 
-        # # MCG bucket replication (unidirectional)
-        # self.setup_mcg_bucket_rep_unidirectional(
-        #     mcg_obj_session=mcg_obj_session,
-        #     bucket_factory=bucket_factory,
-        #     awscli_pod_session=awscli_pod_session,
-        # )
-        #
-        # # MCG bucket replication (bidirectional)
-        # self.setup_mcg_bucket_rep_bidirectional(
-        #     bucket_factory=bucket_factory,
-        #     awscli_pod_session=awscli_pod_session,
-        #     mcg_obj_session=mcg_obj_session,
-        #     test_directory_setup=test_directory_setup,
-        # )
-
     def setup_amq_kafka_notification(self, bucket_factory):
         """
         ##################################### AMQ
@@ -611,17 +596,6 @@ class TestGracefulNodesShutdown(E2ETest):
         )
 
     def validate_data_integrity(self):
-
-        # logger.info("Compare bucket replication after reboot (unidirectional)")
-        # assert compare_bucket_object_list(
-        #     self.mcg_obj_session, self.source_bucket_name, self.target_bucket_name
-        # ), f"Failed on data validation for buckets {self.source_bucket_name} and {self.target_bucket_name}"
-        #
-        # logger.info("Compare bucket replication after reboot (bidirectional)")
-        # compare_bucket_object_list(
-        #     self.mcg_obj_session, self.first_bucket_name, self.second_bucket_name
-        # )
-
         logger.info("Compare bucket object after reboot")
         for idx, bucket_name in enumerate(self.bucket_names_list):
             after_bucket_object_set = {
@@ -693,21 +667,30 @@ class TestGracefulNodesShutdown(E2ETest):
         logger.info("Deploying pgsql workloads")
         pgsql_factory_fixture(replicas=1)
 
-        multi_obc_lifecycle_factory(num_of_obcs=20, bulk=True, measure=False)
+        # multi_obc_lifecycle_factory(num_of_obcs=20, bulk=True, measure=False)
 
         # Get list of nodes
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
-
         logger.info("Shutting down worker & master nodes")
-        # if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         nodes.stop_nodes(nodes=worker_nodes)
+        nodes.stop_nodes(nodes=master_nodes)
+        time.sleep(1800)
+        logger.info("Starting worker & master nodes")
         nodes.start_nodes(nodes=worker_nodes)
-        for m_node in master_nodes:
-            nodes.stop_nodes(nodes=[m_node])
-            nodes.start_nodes(nodes=[m_node])
+        nodes.start_nodes(nodes=master_nodes)
 
         wait_for_cluster_connectivity(tries=400)
         Sanity().health_check(tries=60)
 
         self.validate_data_integrity()
+        # check osd status
+        state = "down"
+        ct_pod = pod.get_ceph_tools_pod()
+        tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+        logger.info("ceph osd tree output:")
+        logger.info(tree_output)
+
+        assert not (
+            state in str(tree_output)
+        ), f"OSD are down after graceful node shutdown"

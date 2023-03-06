@@ -790,7 +790,7 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource(self, resource_name, column, retry=0, wait=3, selector=None):
+    def get_resource(self, resource_name, column, retry=15, wait=3, selector=None):
         """
         Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
@@ -806,6 +806,7 @@ class OCP(object):
             str: The output returned by 'oc get' command not in the 'yaml'
                 format
         """
+        log.info("Inside get resource")
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         # Get the resource in str format
