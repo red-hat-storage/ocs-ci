@@ -955,7 +955,7 @@ class PASTest(BaseTest):
             raise PVCNotCreated("PVC did not reach BOUND state.")
         # Wait for the PVC to be Bound
         performance_lib.wait_for_resource_bulk_status(
-            "pvc", 1, self.namespace, constants.STATUS_BOUND, 120, 5
+            "pvc", 1, self.namespace, constants.STATUS_BOUND, 600, 5
         )
         log.info(f"The PVC {self.pvc_obj.name} was created and in Bound state.")
 
