@@ -100,7 +100,9 @@ class BaseUI:
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
             self.page_has_loaded()
-            screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+            screenshot = (
+                ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+            )
             if screenshot:
                 self.take_screenshot()
             if _copy_dom:
@@ -127,6 +129,7 @@ class BaseUI:
                 raise TimeoutException(
                     f"Failed to find the element ({locator[1]},{locator[0]})"
                 )
+
         try:
             _do_click(locator, timeout, enable_screenshot, copy_dom)
         except StaleElementReferenceException:
