@@ -6,6 +6,7 @@ import re
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -51,6 +52,7 @@ class TestLogsRotate(ManageTest):
             time.sleep(30)
             log.info("Verify storagecluster on Ready state")
             verify_storage_cluster()
+            ceph_health_check()
 
         request.addfinalizer(finalizer)
 
