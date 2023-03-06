@@ -1218,6 +1218,13 @@ locators = {
             **deployment_4_11,
             **deployment_4_12,
         },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+        },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
         "acm_page": {
