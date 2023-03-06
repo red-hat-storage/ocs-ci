@@ -165,10 +165,20 @@ def get_logfile_names(interface, provisioning=True):
     """
     log_names = []
 
-    pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
+    num_of_tries = (
+        5  # to overcome network glitches try a few times if the command fails
+    )
+    for i in range(num_of_tries):
+        pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
 
-    if "Error in command" in pods:
-        raise Exception("Cannot get csi controller pod")
+        if "Error in command" in pods or "Unable to connect" in pods:
+            if i == num_of_tries - 1:
+                raise Exception("Cannot get csi controller pod")
+            else:
+                time.sleep(3)
+                continue
+
+        break  # if we are here, no errors in command, exit the loop
 
     provisioning_name = interface_data[interface]["prov"]
     csi_name = interface_data[interface]["csi_cnt"]

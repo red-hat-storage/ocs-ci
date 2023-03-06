@@ -342,7 +342,9 @@ class OCP(object):
         log.debug(f"{yaml.dump(output)}")
         return output
 
-    def delete(self, yaml_file=None, resource_name="", wait=True, force=False):
+    def delete(
+        self, yaml_file=None, resource_name="", wait=True, force=False, timeout=600
+    ):
         """
         Deletes a resource
 
@@ -354,6 +356,7 @@ class OCP(object):
                 completion
             force (bool): True for force deletion with --grace-period=0,
                 False otherwise
+            timeout (int): timeout for the oc_cmd, defaults to 600 seconds
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -376,7 +379,7 @@ class OCP(object):
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
-        return self.exec_oc_cmd(command)
+        return self.exec_oc_cmd(command, timeout=timeout)
 
     def apply(self, yaml_file):
         """
@@ -619,7 +622,6 @@ class OCP(object):
             for sample in TimeoutSampler(
                 timeout, sleep, self.get, resource_name, True, selector
             ):
-
                 # Only 1 resource expected to be returned
                 if resource_name:
                     retry = int(timeout / sleep if sleep else timeout / 1)
