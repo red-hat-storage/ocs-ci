@@ -17,13 +17,14 @@ class Terraform(object):
     Wrapper for terraform
     """
 
-    def __init__(self, path, bin_path=None):
+    def __init__(self, path, bin_path=None, state_file_path=None):
         """
         Initialize required variables needed for terraform
 
         Args:
             path (str): Path to the vSphere modules
             bin_path (str): Path to terraform binary installer
+            state_file_path (str): Path to terraform tfstate file
 
         """
         self.path = path
@@ -31,17 +32,42 @@ class Terraform(object):
             config.ENV_DATA["terraform_installer"]
         )
         self.is_directory_path_supported = False
-        self.terraform_version = config.DEPLOYMENT["terraform_version"]
-        config.ENV_DATA["terraform_state_file"] = os.path.join(
-            self.path, "terraform.tfstate"
-        )
+        self.terraform_version = Terraform.get_terraform_version()
+        if state_file_path:
+            self.state_file_path = state_file_path
+        else:
+            self.state_file_path = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
+        self.state_file_param = ""
+        config.ENV_DATA["terraform_state_file"] = self.state_file_path
         if version.get_semantic_version(
             self.terraform_version
         ) <= version.get_semantic_version("0.15"):
             self.is_directory_path_supported = True
-            config.ENV_DATA["terraform_state_file"] = os.path.join(
-                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
-            )
+        else:
+            self.state_file_param = f"-state={self.state_file_path}"
+
+    @staticmethod
+    def get_terraform_version():
+        terraform_log_path = os.path.join(
+            config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
+        )
+        terraform_version = config.DEPLOYMENT["terraform_version"]
+        try:
+            with open(terraform_log_path, "r") as fd:
+                logger.debug(f"Reading terraform version from {terraform_log_path}")
+                for each_line in fd:
+                    if "Terraform version:" in each_line:
+                        terraform_version = each_line.split()[-1]
+                        logger.debug(
+                            f"Terraform version which will be use: {terraform_version}"
+                        )
+                        return terraform_version
+        except FileNotFoundError:
+            logger.debug(f"{terraform_log_path} file not found")
+        finally:
+            return terraform_version
 
     def initialize(self, upgrade=False):
         """
@@ -86,7 +112,8 @@ class Terraform(object):
             chdir_param = f"-chdir={self.path}"
             dir_path = ""
         cmd = (
-            f"{self.terraform_installer} {chdir_param} apply {module_param} {refresh_param} '-var-file={tfvars}'"
+            f"{self.terraform_installer} {chdir_param} apply {module_param} {refresh_param}"
+            f" {self.state_file_param} '-var-file={tfvars}'"
             f" -auto-approve {bootstrap_complete_param} {dir_path}"
         )
 
@@ -110,7 +137,7 @@ class Terraform(object):
             dir_path = ""
         cmd = (
             f"{self.terraform_installer} {chdir_param} destroy {refresh_param}"
-            f" '-var-file={tfvars}' -auto-approve {dir_path}"
+            f" {self.state_file_param} '-var-file={tfvars}' -auto-approve {dir_path}"
         )
         run_cmd(cmd, timeout=1200)
 
@@ -152,7 +179,10 @@ class Terraform(object):
         else:
             chdir_param = f"-chdir={self.path}"
             dir_path = ""
-        cmd = f"terraform {chdir_param} destroy -auto-approve -target={module} '-var-file={tfvars}' {dir_path}"
+        cmd = (
+            f"{self.terraform_installer} {chdir_param} destroy -auto-approve "
+            f" -target={module} {self.state_file_param} '-var-file={tfvars}' {dir_path}"
+        )
         run_cmd(cmd, timeout=1200)
 
     def change_statefile(self, module, resource_type, resource_name, instance):
@@ -183,5 +213,8 @@ class Terraform(object):
 
         """
         logger.info("Modifying terraform state file")
-        cmd = f"terraform state rm 'module.{module}.{resource_type}.{resource_name}[\"{instance}\"]'"
+        cmd = (
+            f"{self.terraform_installer} state rm {self.state_file_param} "
+            f"'module.{module}.{resource_type}.{resource_name}[\"{instance}\"]'"
+        )
         run_cmd(cmd)

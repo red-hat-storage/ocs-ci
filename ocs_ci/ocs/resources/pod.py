@@ -212,7 +212,7 @@ class Pod(OCS):
             cmd = cmd + f" -c {container}"
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
-    def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600):
+    def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600, **kwargs):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
@@ -225,7 +225,9 @@ class Pod(OCS):
             str: stdout of the command
         """
         cmd = f'exec {self.name} -- {sh} -c "{command}"'
-        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False, timeout=timeout)
+        return self.ocp.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=timeout, **kwargs
+        )
 
     def get_labels(self):
         """
@@ -634,11 +636,12 @@ def get_ceph_tools_pod(skip_creating_pod=False):
     if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
-        ct_pod_items = ocp_pod_obj = OCP(
+        ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=constants.TOOL_APP_LABEL,
-        ).data["items"]
+        )
+        ct_pod_items = ocp_pod_obj.data["items"]
 
     if not ct_pod_items:
         raise CephToolBoxNotFoundException
@@ -1013,10 +1016,12 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
         )
     else:
         file_path = file_name
-    md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
-        command=f'bash -c "md5sum {file_path}"', out_yaml_format=False
+
+    md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
+        command=f"exec {pod_obj.name} -- md5sum {file_path}"
     )
     md5sum = md5sum_cmd_out.split()[0]
+
     logger.info(f"md5sum of file {file_name}: {md5sum}")
     return md5sum
 

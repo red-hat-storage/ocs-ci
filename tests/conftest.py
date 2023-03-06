@@ -1022,7 +1022,9 @@ def pod_factory_fixture(request, pvc_factory):
         raw_block_pv=False,
         deployment_config=False,
         service_account=None,
+        security_context=None,
         replica_count=1,
+        pod_name=None,
         command=None,
         command_args=None,
         subpath=None,
@@ -1046,7 +1048,9 @@ def pod_factory_fixture(request, pvc_factory):
                 False otherwise
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
+            security_context (dict): security context in the form of dictionary
             replica_count (int): The replica count for deployment config
+            pod_name (str): Name of the pod
             command (list): The command to be executed on the pod
             command_args (list): The arguments to be sent to the command running
                 on the pod
@@ -1071,6 +1075,8 @@ def pod_factory_fixture(request, pvc_factory):
                 dc_deployment=deployment_config,
                 sa_name=sa_name,
                 replica_count=replica_count,
+                pod_name=pod_name,
+                security_context=security_context,
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
@@ -4200,6 +4206,7 @@ def pvc_clone_factory_fixture(request):
         size=None,
         access_mode=None,
         volume_mode=None,
+        timeout=120,
     ):
         """
         Args:
@@ -4214,6 +4221,7 @@ def pvc_clone_factory_fixture(request):
                 the cloned PVC. eg: ReadWriteOnce, ReadOnlyMany, ReadWriteMany
             volume_mode (str): Volume mode for PVC. This should match the
                 volume mode of parent PVC
+            timeout (int): Time in seconds to wait for the PVC to reach the desired status.
 
         Returns:
             PVC: PVC instance
@@ -4259,7 +4267,7 @@ def pvc_clone_factory_fixture(request):
         if not no_interface:
             clone_pvc_obj.interface = interface
         if status:
-            helpers.wait_for_resource_state(clone_pvc_obj, status, timeout=120)
+            helpers.wait_for_resource_state(clone_pvc_obj, status, timeout=timeout)
         return clone_pvc_obj
 
     def finalizer():

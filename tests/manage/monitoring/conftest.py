@@ -20,6 +20,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -736,13 +737,9 @@ def workload_idle(measurement_dir):
     """
 
     def count_ceph_components():
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_osd_ls_list = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd ls")
-        logger.debug(f"ceph osd ls output: {ceph_osd_ls_list}")
-        # the "+ 1" is a WORKAROUND for a bug in exec_ceph_cmd()
-        # https://github.com/red-hat-storage/ocs-ci/issues/1152
-        osd_num = len(ceph_osd_ls_list) + 1
-        mon_num = len(ct_pod.exec_ceph_cmd(ceph_cmd="ceph mon metadata"))
+        ceph_osd_ls_list = get_osd_pods()
+        osd_num = len(ceph_osd_ls_list)
+        mon_num = len(get_mon_pods())
         logger.info(f"There are {osd_num} OSDs, {mon_num} MONs")
         return osd_num, mon_num
 

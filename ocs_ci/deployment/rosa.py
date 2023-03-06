@@ -117,24 +117,34 @@ class ROSAOCP(BaseOCPDeployment):
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
-        cluster_details = ocm.get_cluster_details(self.cluster_name)
-        cluster_id = cluster_details.get("id")
-        delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
-        if not delete_status:
-            ocm.destroy_cluster(self.cluster_name)
-        logger.info("Waiting for ROSA cluster to be uninstalled")
-        sample = TimeoutSampler(
-            timeout=7200,
-            sleep=30,
-            func=self.cluster_present,
-            cluster_name=self.cluster_name,
-        )
-        if not sample.wait_for_func_status(result=False):
-            err_msg = f"Failed to delete {self.cluster_name}"
-            logger.error(err_msg)
-            raise TimeoutExpiredError(err_msg)
-        rosa.delete_operator_roles(cluster_id)
-        rosa.delete_oidc_provider(cluster_id)
+        try:
+            cluster_details = ocm.get_cluster_details(self.cluster_name)
+            cluster_id = cluster_details.get("id")
+            delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
+            if not delete_status:
+                ocm.destroy_cluster(self.cluster_name)
+            logger.info("Waiting for ROSA cluster to be uninstalled")
+            sample = TimeoutSampler(
+                timeout=7200,
+                sleep=30,
+                func=self.cluster_present,
+                cluster_name=self.cluster_name,
+            )
+            if not sample.wait_for_func_status(result=False):
+                err_msg = f"Failed to delete {self.cluster_name}"
+                logger.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
+            rosa.delete_operator_roles(cluster_id)
+            rosa.delete_oidc_provider(cluster_id)
+        except CommandFailed as err:
+            if "There are no subscriptions or clusters with identifier or name" in str(
+                err
+            ):
+                logger.info(
+                    f"Cluster {self.cluster_name} doesn't exists, no other action is required."
+                )
+            else:
+                raise
 
     def cluster_present(self, cluster_name):
         """

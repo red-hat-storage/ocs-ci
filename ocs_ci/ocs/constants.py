@@ -559,6 +559,8 @@ SERVICE_ACCOUNT_TOKEN_SECRET = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "serviceaccount_token_secret.yaml"
 )
 
+SIMPLE_APP_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "simple-app.yaml")
+
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
 FEDORA_SERVICE_CA_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedoraServiceCA.yaml")
@@ -841,6 +843,7 @@ ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
 ALERT_KUBEHPAREPLICASMISMATCH = "KubeHpaReplicasMismatch"
+ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP = "KubePersistentVolumeInodesFillingUp"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1435,6 +1438,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "odf-operator",
     ],
 }
+# the list of packages for 4.13 seems to be the same as 4.12
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.13"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
 
 # PSI-openstack constants
