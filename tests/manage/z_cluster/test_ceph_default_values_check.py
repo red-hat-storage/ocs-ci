@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_external_mode,
+    skipif_mcg_only,
     post_ocs_upgrade,
     skipif_managed_service,
     runs_on_provider,
@@ -138,6 +139,7 @@ class TestCephDefaultValuesCheck(ManageTest):
 
     @post_ocs_upgrade
     @skipif_external_mode
+    @skipif_mcg_only
     @bugzilla("1951348")
     @bugzilla("1944148")
     @pytest.mark.polarion_id("OCS-2554")
