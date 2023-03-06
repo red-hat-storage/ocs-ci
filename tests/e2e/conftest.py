@@ -1,3 +1,5 @@
+import os
+import time
 import logging
 import pytest
 
@@ -10,6 +12,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     wait_for_cache,
     write_random_test_objects_to_bucket,
+    s3_list_objects_v1,
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
@@ -166,7 +169,22 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Restarted noobaa-db pod!")
 
         # Make sure the testloss bucket doesn't exists and test bucket consists all the data
+        time.sleep(10)
+        try:
+            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=testloss_bucket.name)
+        except Exception as e:
+            logger.info(e)
 
+        logger.info(
+            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=test_bucket.name)
+        )
+
+    def finalizer():
+        # remove the local copy of ./mcg.bck
+        os.remove("mcg.bck")
+        logger.info("Removed the local copy of mcg.bck")
+
+    request.addfinalizer(finalizer)
     return factory
 
 
