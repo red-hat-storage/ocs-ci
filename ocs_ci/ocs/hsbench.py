@@ -42,6 +42,21 @@ class HsBench(object):
         self.result = self.hsbench_cr["output_file"]
         self.hsbench_dir = mkdtemp(prefix="hsbench-")
 
+    def _get_bucket_name(self, bucket_num):
+        """
+        Get bucket name from bucket number.
+
+        Args:
+            bucket_num (int): Number of bucket
+        Returns:
+            str : Name of bucket
+
+        """
+
+        bucket_postfix = str("{:d}".format(bucket_num).zfill(12))
+        bucket_name = self.bucket_prefix + bucket_postfix
+        return bucket_name
+
     def create_resource_hsbench(self):
         """
         Create resource for hsbench mark test:
@@ -179,7 +194,7 @@ class HsBench(object):
         """
         Validate if workload was running on the app-pod
 
-        Raise:
+        Raises:
             UnexpectedBehaviour: if result.csv file doesn't contain output data.
 
         """
@@ -202,14 +217,14 @@ class HsBench(object):
         Validate S3 objects using 'radosgw-admin' on single bucket
         Validate objects in buckets after completed upgrade
 
-        Agr:
+        Args:
             upgrade (str): Upgrade status
-        Raise:
+        Raises:
             UnexpectedBehaviour: If objects pre-upgrade and post-upgrade are not identical.
 
         """
         for i in range(self.num_bucket):
-            bucket_name = self.bucket_prefix + "00000000000" + str(i)
+            bucket_name = self._get_bucket_name(i)
             num_objects = self.toolbox.exec_sh_cmd_on_pod(
                 f"radosgw-admin bucket stats --bucket={bucket_name} | grep num_objects"
             )
@@ -255,7 +270,7 @@ class HsBench(object):
         """
         Validate PUT, GET, LIST objects from previous hsbench operation
 
-        Agr:
+        Args:
             result (str): Result file name
             num_objs (str): Number of objects to validate
             put (Boolean): Validate PUT operation
@@ -306,7 +321,7 @@ class HsBench(object):
         """
         Delete objects in a bucket
 
-        Agr:
+        Args:
             bucket_name (str): Name of bucket
 
         """
@@ -329,7 +344,7 @@ class HsBench(object):
         """
         Delete bucket
 
-        Agr:
+        Args:
             bucket_name (str): Name of bucket
 
         """
@@ -358,7 +373,7 @@ class HsBench(object):
             CommandFailed: If reshard process fails
 
         """
-        bucket_name = self.bucket_prefix + "000000000000"
+        bucket_name = self._get_bucket_name(bucket_num=0)
         log.info("Starting checking bucket limit and start reshard process")
         try:
             self.toolbox.exec_cmd_on_pod(
