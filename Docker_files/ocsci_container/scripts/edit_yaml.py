@@ -8,8 +8,12 @@ from pathlib import Path
 cli_args = sys.argv[1:]
 
 
-def send_cmd(cmd=None):
-    return subprocess.check_output(cmd, shell=True, universal_newlines=True)
+def send_cmd(cmd=None, out_yaml_format=False):
+    output = subprocess.check_output(cmd, shell=True, universal_newlines=True)
+    if out_yaml_format:
+        return yaml.safe_load(output)
+    else:
+        return output
 
 
 def yaml_to_dict(path):
@@ -58,15 +62,14 @@ ceph_key_ls = ceph_key_out.split(" ")
 ceph_key = ceph_key_ls[2].replace("\n", "")
 
 endpoint_out = send_cmd(
-    "oc get --kubeconfig /opt/cluster/p1/auth/kubeconfig storagecluster -o yaml"
-    " -n openshift-storage|grep -i endpo"
+    cmd="oc get --kubeconfig /opt/cluster/p1/auth/kubeconfig storagecluster -o yaml -n openshift-storage",
+    out_yaml_format=True,
 )
-# yaml.safe_load(endpoint_out)
-endpoint_ls = endpoint_out.split(" ")
-endpoint = endpoint_ls[5].replace("\n", "")
+endpoint = endpoint_out["items"][0]["status"]["storageProviderEndpoint"]
 
 build_config = yaml_to_dict("build_config.yaml")
 build_config["AUTH"]["external"]["ceph_admin_key"] = ceph_key
 build_config["DEPLOYMENT"]["storage_provider_endpoint"] = endpoint
 build_config["ENV_DATA"]["provider_name"] = cli_args[0]
-dict_to_yaml(path="/opt/cluster", data=build_config)
+# dict_to_yaml(path="/opt/cluster", data=build_config)
+dict_to_yaml(path="/home/odedviner/ClusterPath", data=build_config)
