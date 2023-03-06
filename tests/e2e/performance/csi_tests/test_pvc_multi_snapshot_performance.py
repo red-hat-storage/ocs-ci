@@ -128,7 +128,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             try:
                 self.pod_obj.delete()
                 log.info("Wait until the pod is deleted.")
-                self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
+                self.pod_obj.ocp.wait_for_delete(
+                    resource_name=self.pod_obj.name, timeout=180
+                )
             except Exception as ex:
                 log.error(f"Cannot delete the test pod : {ex}")
 
