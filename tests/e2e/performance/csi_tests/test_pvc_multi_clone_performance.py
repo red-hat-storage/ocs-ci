@@ -4,7 +4,6 @@ The test is supposed to create the maximum number of clones for one PVC
 """
 
 import logging
-import time
 import statistics
 
 import pytest
@@ -62,8 +61,10 @@ class TestPvcMultiClonePerformance(PASTest):
 
         # Getting the total Storage capacity
         self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
-        # Use 70% of the storage capacity in the test
-        self.capacity_to_use = int(self.ceph_capacity * 0.7)
+        # Getting the free Storage capacity
+        self.ceph_free_capacity = int(self.ceph_cluster.get_ceph_free_capacity())
+        # Use 70% of the free storage capacity in the test
+        self.capacity_to_use = int(self.ceph_free_capacity * 0.7)
 
         # since we do not want to use more then 65%, we add 35% to the needed
         # capacity, and minimum PVC size is 1 GiB
@@ -71,8 +72,9 @@ class TestPvcMultiClonePerformance(PASTest):
         # Test will run only on system with enough capacity
         if self.capacity_to_use < self.need_capacity:
             err_msg = (
-                f"The system have only {self.ceph_capacity} GiB, "
-                f"we want to use only {self.capacity_to_use} GiB, "
+                f"The system has only {self.ceph_capacity} GiB, "
+                f"Of which {self.ceph_free_capacity} GiB is free, "
+                f"we want to use  {self.capacity_to_use} GiB, "
                 f"and we need {self.need_capacity} GiB to run the test"
             )
             log.error(err_msg)
@@ -94,6 +96,13 @@ class TestPvcMultiClonePerformance(PASTest):
         """
         Cleanup the test environment
         """
+
+        # Deleting the namespace used by the test
+        self.delete_test_project()
+
+        if not self.teardown_needed:
+            return
+
         log.info("Starting the test cleanup")
 
         # Delete The test POD
@@ -106,13 +115,10 @@ class TestPvcMultiClonePerformance(PASTest):
                     cmd=f"delete pvc {clone}", namespace=self.namespace
                 )
         except Exception:
-            log.warning("Clones didn't deleted")
+            log.warning("Clones were not deleted")
 
         # Delete the test PVC
         self.cleanup_testing_pvc()
-
-        # Deleting the namespace used by the test
-        self.delete_test_project()
 
         # Delete the test StorageClass
         try:
@@ -124,13 +130,14 @@ class TestPvcMultiClonePerformance(PASTest):
             log.error(f"Can not delete the test sc : {ex}")
 
         # Delete the test storage pool
-        if self.interface == constants.CEPHBLOCKPOOL:
-            log.info(f"Try to delete the Storage pool {self.pool_name}")
-            try:
-                self.delete_ceph_pool(self.pool_name)
-            except Exception:
-                pass
-            finally:
+
+        log.info(f"Try to delete the Storage pool {self.pool_name}")
+        try:
+            self.delete_ceph_pool(self.pool_name)
+        except Exception:
+            pass
+        finally:
+            if self.interface == constants.CEPHBLOCKPOOL:
                 # Verify deletion by checking the backend CEPH pools using the toolbox
                 results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
                 log.debug(f"Existing pools are : {results}")
@@ -144,22 +151,10 @@ class TestPvcMultiClonePerformance(PASTest):
                     )
                 else:
                     log.info(f"The pool {self.pool_name} was deleted successfully")
-        else:
-            log.info("Deleting the default ceph filesystem")
-            self.ceph_cluster.CEPHFS.delete(
-                resource_name="ocs-storagecluster-cephfilesystem"
-            )
-            log.info("Wait until the ceph filesystem re-created")
-            time.sleep(60)
-            log.info("re-create the ceph filesystem csi subvolumegroup")
-            self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                "ceph fs subvolumegroup create ocs-storagecluster-cephfilesystem csi"
-            )
 
         super(TestPvcMultiClonePerformance, self).teardown()
 
     def create_new_pool_and_sc(self, secret_factory):
-
         self.pool_name = (
             f"pas-test-pool-{Interfaces_info[self.interface]['name'].lower()}"
         )
@@ -215,8 +210,10 @@ class TestPvcMultiClonePerformance(PASTest):
 
         """
 
+        self.teardown_needed = True
         log.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
+            f"Free capacity size is : {self.ceph_free_capacity} GiB, "
             f"Going to use {self.need_capacity} GiB, "
             f"With {self.num_of_clones} clones to {self.pvc_size} GiB PVC. "
             f"File size to be written is : {self.file_size} "
@@ -237,6 +234,7 @@ class TestPvcMultiClonePerformance(PASTest):
                     "name": Interfaces_info[self.interface]["sc"],
                 },
             )
+            self.pool_name = "ocs-storagecluster-cephfilesystem"
 
         # Create a PVC
         self.create_testing_pvc_and_wait_for_bound()
@@ -358,6 +356,7 @@ class TestPvcMultiClonePerformance(PASTest):
         This is not a test - it is only check that previous tests ran and finished as expected
         and reporting the full results (links in the ES) of previous tests (2)
         """
+        self.teardown_needed = False
 
         self.add_test_to_results_check(
             test="test_pvc_multiple_clone_performance",
