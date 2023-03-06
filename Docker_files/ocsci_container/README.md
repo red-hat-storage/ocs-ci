@@ -2,54 +2,120 @@
 
 This project builds containers for [ocs-ci].
 The primary purpose for doing so was to be able to run [ocs-ci] tests with container
-
 The containers are expected to run with a service account that has admin credentials.
 
 ### Build Image
+* Build Image on your local machine
+* PARAMS:
+  * BRANCH - branch name [e.g: release-4.12]
+  * IMAGE_NAME - image name [e.g. quay.io/ocsci/ocs-ci-container:release-4.12]
+  * ENGINE - engine name [podman/docker]
+* Example:
+  ```
+  make build-image \
+  BRANCH=release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  ENGINE=podman
+  ```
 
-**Change directory to Docker_files/ocsci_container [$ cd Docker_files/ocsci_container]**
+### Running ODF tests
+* Running ODF tests
+* PARAMS:
+  * CLUSTER_PATH - path to kubeconfig on your local machine [e.g: ~/cluster_path]
+  * RUN_CI - run-ci cmd for more info https://github.com/red-hat-storage/ocs-ci/tree/master/docs
+    ```
+    run-ci --cluster-path /opt/cluster \
+    --ocp-version 4.12 \
+    --ocs-version 4.12 \
+    --cluster-name cluster-name \
+     tests/manage/z_cluster/test_osd_heap_profile.py
+    ```
+  * ENGINE - engine name [podman/docker] [optional, by default docker]
+  * PULL_IMAGE - there is option to pull the image from `quay.io/ocsci/ocs-ci-container`
+  * IMAGE_NAME - image name [e.g. quay.io/ocsci/ocs-ci-container:release-4.12]
+  * AWS_PATH - PATH to AWS credintials [e.g = ~/.aws] [optional]
+* Example:
+  ```
+  make run-odf CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci ..." \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws
+  ```
 
-**docker/podman build -t <image-name> -f Dockerfile_ocsci . --build-arg BRANCH_ID_ARG=<branch-id/master/stable>**
+### Debug ODF tests
+  * In this mode we can develop new tests/code on our local machine and run the local-code via container
+  * In this example we added a new test in our local machine `test_new_code.py`:
+  ```
+  make debug-odf CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci ... tests/manage/z_cluster/test_new_code.py" \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws
+  ```
 
-BRANCH_ID_ARG:
-There are 3 options:
-1. BRANCH_ID_ARG is empty -> checkout to stable branch
-2. BRANCH_ID_ARG=master -> checkout to master branch
-3. BRANCH_ID_ARG=PR-ID [1234] -> checkout to relevant branch based on pr-id
-
-### Run Container
-```commandline
-docker/podman run -v <kubeconfig-path>:/opt/cluster <image-name> --ocp-version <ocp-version>
---ocs-version <ocs-version> --cluster-name <cluster-name> <test-path>
-```
-*Add Params:
-```
-kubeconfig-path: Path to kubeconfig on your local machine
-image-name: Image name
-run-ci params: without "--cluster-path"
-**Don't need to add "run-ci" string to docker/podman run cmd
-
-```
-
-Example:
-
-```commandline
-docker run -v ~/ClusterPath:/opt/cluster ocsci_image --ocp-version 4.12 --ocs-version 4.12
---cluster-name cluster-name tests/manage/z_cluster/test_must_gather.py
-```
+### Run Managed Service
+* Running Managed Service deployment/tests
+* PARAMS:
+  * CLUSTER_PATH - path to kubeconfig on your local machine [e.g: ~/cluster_path]
+  * RUN_CI - run-ci cmd for more info https://github.com/red-hat-storage/ocs-ci/tree/master/docs
+    ```
+    run-ci --color=yes ./tests/ \
+    -m deployment \
+    --ocs-version 4.10 \
+    --ocp-version 4.10 \
+    --ocsci-conf=conf/deployment/rosa/managed_3az_provider_qe_3m_3w_m54x.yaml \
+    --ocsci-conf=/opt/cluster/ocm-credentials-stage \
+    --cluster-name cluster-provider \
+    --cluster-path /opt/cluster/p1 \
+    --deploy
+    ```
+  * ENGINE - engine name [podman/docker] [optional, by default docker]
+  * PULL_IMAGE - there is option to pull the image from `quay.io/ocsci/ocs-ci-container`
+  * IMAGE_NAME - image name [e.g. quay.io/ocsci/ocs-ci-container:release-4.12]
+  * AWS_PATH - PATH to AWS credintials [e.g: ~/.aws]
+  * OCM_CONFIG - PATH to ocm configuration file [e.g: ~/.config/ocm]
+  * PROVIDER_NAME - Provider Name [we don't need PROVIDER_NAME param for consumer cluster]
+* Example:
+  ```
+  make run-managed-service CLUSTER_PATH=~/ClusterPath \
+  RUN_CI="run-ci ..." \
+  ENGINE=podman \
+  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  AWS_PATH=~/.aws \
+  OCM_CONFIG= ~/.config/ocm \
+  PROVIDER_NAME = cluster-provider
+  ```
 
 ### Upload image to quay.io
 **Login to quay.io**
+```
 docker/podman login -u <user-name> quay.io
+```
 
 **Tag Image**
-
-docker/podman image tag ocsci-container quay.io/ocsci/ocs-ci-container:stable
+```
+docker/podman image tag <IMAGE_NAME> quay.io/ocsci/ocs-ci-container:<tag_name>
+```
 
 **Push Image to quay registry**
+```
+docker/podman push ocsci-container quay.io/ocsci/ocs-ci-container:<tag_name>
+```
 
-podman push ocsci-container quay.io/ocsci/ocs-ci-container:stable
+**Pull Image from quay registry**
+```
+docker/podman pull quay.io/ocsci/ocs-ci-container:<tag_name>
+```
 
-### Download image from quay.io
+******************************************************************************
+**We can add `--ocsci-conf /opt/cluster/logs.yaml` and we will get logs**
 
-**docker/podman pull quay.io/ocsci/ocs-ci-container:stable**
+* $ cat logs.yaml
+```
+RUN:
+  log_dir: "/opt/cluster"
+```
