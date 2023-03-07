@@ -175,14 +175,11 @@ def get_clusters(
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
-                    try:
-                        logger.info(
-                            f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
-                            f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                            f" running time for it is {allowed_running_time/3600} hours"
-                        )
-                    except TypeError as e:
-                        logger.info(e)
+                    logger.info(
+                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                        f" running time for it is {allowed_running_time/3600} hours"
+                    )
                     if running_time.total_seconds() > allowed_running_time:
                         return True
         return False
@@ -280,11 +277,17 @@ def get_clusters(
             )
             continue
         cluster_name = cluster_io_tag[0].replace("kubernetes.io/cluster/", "")
-        if determine_cluster_deletion(ec2_instances, cluster_name):
-            cf_clusters_to_delete.append(cluster_name)
+        logger.info(f"cluster_name={cluster_name}")
+        if cluster_pattern is not None:
+            if cluster_pattern in cluster_name:
+                cf_clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
-            remaining_clusters.append(cluster_name)
-
+            if determine_cluster_deletion(ec2_instances, cluster_name):
+                cf_clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
     return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
 
 
