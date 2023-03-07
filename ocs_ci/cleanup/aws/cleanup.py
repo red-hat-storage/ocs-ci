@@ -175,11 +175,14 @@ def get_clusters(
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
-                    logger.info(
-                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
-                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time/3600} hours"
-                    )
+                    try:
+                        logger.info(
+                            f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                            f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                            f" running time for it is {allowed_running_time/3600} hours"
+                        )
+                    except TypeError as e:
+                        logger.info(e)
                     if running_time.total_seconds() > allowed_running_time:
                         return True
         return False
