@@ -118,8 +118,6 @@ class TestCloneWhenFull(ManageTest):
                     relevant_pod_logs = pod_log
                     log.info(f"Found '{func_calls}' call in logs on pod {pod_obj.name}")
                     break
-
-            assert relevant_pod_logs, f"{func_calls} were not found on any pod logs"
             assert (
                 error_msg in relevant_pod_logs
             ), f"Logs should contain the error message '{error_msg}'"
