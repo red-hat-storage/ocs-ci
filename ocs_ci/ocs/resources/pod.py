@@ -249,16 +249,16 @@ class Pod(OCS):
 
         timestamp_end = datetime.now() + timedelta(seconds=timeout)
 
-        x = 1
+        start_line = 1
         cmd = f"oc exec -i {self.name} -n {self.namespace} -- bash -c "
         while os.path.exists(target_path) and datetime.now() <= timestamp_end:
             exec_cmd(
                 cmd
-                + f"\"tail -n '+{x}' {src_path}| head -n '{chunk_size}'\" >> {target_path}",
+                + f"\"tail -n '+{start_line}' {src_path}| head -n '{chunk_size}'\" >> {target_path}",
                 timeout=timeout,
                 use_shell=True,
             )
-            x += chunk_size
+            start_line += chunk_size
             logger.info(f"size of target file = {os.stat(target_path).st_size}b")
             if os.stat(target_path).st_size == file_size:
                 logger.info(f"file '{target_path}' copied")
