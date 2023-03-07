@@ -18,6 +18,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
     ignore_leftovers,
+    config,
 )
 
 log = logging.getLogger(__name__)
@@ -125,11 +126,12 @@ class TestLogsRotate(ManageTest):
             pod.get_ceph_daemon_id(pod.get_mon_pods()[0]),
             "ceph-mon.",
         ]
-        self.podtype_id["rgw"] = [
-            pod.get_rgw_pods,
-            pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
-            "ceph-client.rgw.ocs.storagecluster.cephobjectstore.a",
-        ]
+        if config.ENV_DATA["platform"].lower() != constants.AWS_PLATFORM:
+            self.podtype_id["rgw"] = [
+                pod.get_rgw_pods,
+                pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
+                "ceph-client.rgw.ocs.storagecluster.cephobjectstore.a",
+            ]
         self.podtype_id["mds"] = [
             pod.get_mds_pods,
             pod.get_ceph_daemon_id(pod.get_mds_pods()[0]),
