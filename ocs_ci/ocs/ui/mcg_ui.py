@@ -1,7 +1,10 @@
 import logging
 
+from selenium.webdriver.common.by import By
 from ocs_ci.ocs import constants
 from time import sleep
+import requests
+import json
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
@@ -259,33 +262,55 @@ class BucketsUI(PageNavigator):
         self.ocs_version = str(version.get_ocs_version_from_csv(only_major_minor=True))
         self.obc_loc = locators[self.ocs_version]["obc"]
 
-    def select_openshift_storage_default_project(self):
+    def select_openshift_storage_project(self, cluster_namespace):
         """
         Helper function to select openshift-storage project
+
+        Args:
+            cluster_namespace (str): project name will be selected from the list
 
         Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
         """
         logger.info("Select openshift-storage project")
         self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(
-            project_name=config.ENV_DATA["cluster_namespace"]
-        )
+        self.wait_for_namespace_selection(project_name=cluster_namespace)
 
     def delete_resource(self, delete_via, resource):
+        """
+        Delete Object Bucket or Object bucket claim
+
+        Args:
+            delete_via (str): delete using 'three dots' icon, from the Object Bucket page/Object Bucket Claims page
+                or click on specific Object Bucket/Object Bucket Claim and delete it using 'Actions' dropdown list
+            resource (str): resource name to delete. It may be Object Bucket Claim name both for OBC or OB,
+                and it may be Object Bucket Name. Object Bucket name consists from Object Bucket Claim and prefix
+        """
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
-            self.do_click(self.obc_loc["resource_name"])
+            # delete specific resource by its dynamic name. Works both for OBC and OB
+            self.do_click(
+                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH)
+            )
 
             logger.info(f"Click on '{delete_via}'")
             self.do_click(self.generic_locators["actions"])
         else:
             logger.info(f"Click on '{delete_via}'")
-            self.do_click(self.generic_locators["three_dots"])
+            # delete specific resource by its dynamic name. Works both for OBC and OB
+            self.do_click(
+                (
+                    f"//td[@id='name']//a[contains(text(), '{resource}')]"
+                    "/../../..//button[@aria-label='Actions']",
+                    By.XPATH,
+                )
+            )
 
         logger.info(f"Click on 'Delete {resource}'")
-        self.do_click(self.obc_loc["delete_obc"])
+        # works both for OBC and OB, both from three_dots icon and Actions dropdown list
+        self.do_click(self.obc_loc["delete_resource"])
 
         logger.info(f"Confirm {resource} Deletion")
+        # same PopUp both for OBC and OB
         self.do_click(self.generic_locators["confirm_action"])
 
 
@@ -311,7 +336,7 @@ class ObcUI(BucketsUI):
         """
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_default_project()
+        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
 
         logger.info("Click on 'Create Object Bucket Claim'")
         self.do_click(self.generic_locators["create_resource_button"])
@@ -350,7 +375,7 @@ class ObcUI(BucketsUI):
         """
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_default_project()
+        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
 
         self.delete_resource(delete_via, obc_name)
 
@@ -390,32 +415,37 @@ class ObUI(BucketsUI):
     def __init__(self, driver):
         super().__init__(driver)
 
-    def delete_object_bucket_ui(self, delete_via, expect_fail):
+    def delete_object_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
         Delete an Object Bucket via the UI
 
         delete_via (str): delete via 'OB/Actions' or via 'three dots'
         expect_fail (str): verify if OB removal fails with proper PopUp message
+        resource_name (str): Object Bucket Claim's name. The resource with its suffix will be deleted
         """
         self.navigate_object_buckets_page()
-        self.delete_resource(delete_via, "ObjectBucket")
+        self.delete_resource(delete_via, resource_name)
 
         if expect_fail:
 
             def _check_three_dots_disabled(text):
                 logger.info(text)
+                # locator of three_dots btn aligned with the specific resource name
+                locator = (
+                    f"//td[@id='name']//a[contains(text(), '{resource_name}')]"
+                    "/../../..//button[@aria-label='Actions']",
+                    By.XPATH,
+                )
                 # when three_dots element is active attribute 'disabled' does not exist
-                assert (
-                    self.get_element_attribute(
-                        self.generic_locators["three_dots"], "disabled"
-                    )
-                    == "true"
-                ), "Three dots are active after OBC removal and OB removal action. Expected - disabled"
+                self.wait_for_element_attribute(
+                    locator,
+                    attribute="disabled",
+                    attribute_value="true",
+                    timeout=5,
+                    sleep=1,
+                )
 
                 # PopUp is not reachable via Selenium driver. It does not appear in DOM
-                import requests
-                import json
-
                 URL = f"{get_ocp_url()}/locales/resource.json?lng=en&ns=plugin__odf-console"
 
                 cookies = self.driver.get_cookies()
@@ -433,7 +463,6 @@ class ObUI(BucketsUI):
                     popup_str == json_resp[popup_str]
                 ), f"No expected Popup. See full response: \n {json.dumps(json_resp)}"
 
-            sleep(5)
             _check_three_dots_disabled("check three dots inactive automatically")
             self.driver.refresh()
             self.page_has_loaded(sleep_time=10)

@@ -82,7 +82,7 @@ class BaseUI:
         """
         Click on Button/link on OpenShift Console
 
-        locator (set): (GUI element needs to operate on (str), type (By))
+        locator (tuple): (GUI element needs to operate on (str), type (By))
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
@@ -124,7 +124,7 @@ class BaseUI:
         """
         Send text to element on OpenShift Console
 
-        locator (set): (GUI element needs to operate on (str), type (By))
+        locator (tuple): (GUI element needs to operate on (str), type (By))
         text (str): Send text to element
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
@@ -156,7 +156,7 @@ class BaseUI:
         Check whether an element is in an expanded or collapsed state
 
         Args:
-            locator (set): (GUI element needs to operate on (str), type (By))
+            locator (tuple): (GUI element needs to operate on (str), type (By))
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         return:
@@ -172,7 +172,7 @@ class BaseUI:
         Select the element mode (expanded or collapsed)
 
         mode (bool): True if element expended, False otherwise
-        locator (set): (GUI element needs to operate on (str), type (By))
+        locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
         current_mode = self.is_expanded(locator=locator, timeout=100)
@@ -184,7 +184,7 @@ class BaseUI:
         Checkbox Status
 
         Args:
-            locator (set): (GUI element needs to operate on (str), type (By))
+            locator (tuple): (GUI element needs to operate on (str), type (By))
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         return:
@@ -200,7 +200,7 @@ class BaseUI:
         Select checkbox status (enable or disable)
 
         status (bool): True if checkbox enable, False otherwise
-        locator (set): (GUI element needs to operate on (str), type (By))
+        locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
         current_status = self.get_checkbox_status(locator=locator)
@@ -228,7 +228,7 @@ class BaseUI:
         Get the inner text of an element in locator.
 
         Args:
-            locator (set): (GUI element needs to operate on (str), type (By)).
+            locator (tuple): (GUI element needs to operate on (str), type (By)).
 
         Return:
             str: The text captured.
@@ -240,19 +240,31 @@ class BaseUI:
         Get an elements list. Useful to count number of elements presented on page, etc.
 
         Args:
-            locator (set): (GUI element needs to operate on (str), type (By)).
+            locator (tuple): (GUI element needs to operate on (str), type (By)).
 
         Return:
             list: The list of WebElements
         """
         return self.driver.find_elements(by=locator[1], value=locator[0])
 
+    def wait_for_element_to_be_visible(self, locator, timeout):
+        """
+        Wait for element to be visible. Use when Web element is not have to be clickable (icons, disabled btns, etc.)
+        Method does not fail when Web element not found
+
+        Args:
+             locator (tuple): (GUI element needs to operate on (str), type (By)).
+             timeout (int): Looks for a web element until timeout (sec) occurs
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        return wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
+
     def get_element_attribute(self, locator, attribute, safe: bool = False):
         """
         Get attribute from WebElement
 
         Args:
-            locator (set): (GUI element needs to operate on (str), type (By)).
+            locator (tuple): (GUI element needs to operate on (str), type (By)).
             attribute (str): the value of this attribute will be extracted from WebElement
             safe(bool): if True exception will not raise when element not found. Default option - not safe
 
@@ -264,6 +276,29 @@ class BaseUI:
             if not len(web_elements):
                 return
         return web_elements[0].get_attribute(attribute)
+
+    def wait_for_element_attribute(
+        self, locator, attribute, attribute_value, timeout, sleep
+    ):
+        """
+        Method to wait attribute have specific value. Fails the test if attribure value not equal to expected
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By)).
+            attribute (str): the value of this attribute will be extracted from WebElement
+            attribute_value (str): the value attribute (can be None as well)
+            timeout (int): timeout in seconds
+            sleep (int): sleep interval in seconds
+        """
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self.get_element_attribute,
+            locator=locator,
+            attribute=attribute,
+            safe=True,
+        ):
+            if sample == attribute_value:
+                break
 
     def page_has_loaded(self, retries=5, sleep_time=1):
         """
