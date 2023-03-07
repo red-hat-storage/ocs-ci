@@ -97,13 +97,17 @@ class TestCloneWhenFull(ManageTest):
 
         # Bug 2042318
         for clone_pvc in cloned_pvcs:
-            pv = clone_pvc.get().get("spec").get("volumeName")
-            func_calls = "failed"
-            error_msg = f"{pv} failed to create clone from subvolume"
-            csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                selector=["csi-cephfsplugin-provisioner"],
-            )
+            if (
+                clone_pvc.get().get("spec").get("storageClassName")
+                == "ocs-storagecluster-cephfs"
+            ):
+                pv = clone_pvc.get().get("spec").get("volumeName")
+                func_calls = "failed"
+                error_msg = f"{pv} failed to create clone from subvolume"
+                csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    selector=["csi-cephfsplugin-provisioner"],
+                )
             relevant_pod_logs = None
             for pod_obj in csi_cephfsplugin_pod_objs:
                 pod_log = res_pod.get_pod_logs(
