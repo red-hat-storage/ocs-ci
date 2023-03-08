@@ -2316,7 +2316,7 @@ def javasdk_pod_fixture(request, scope_name):
     # push java code to the pod created
     java_src_code_path = constants.JAVA_SRC_CODE_PATH
     target_path = "/app/"
-    assert javas3_pod_obj.copy_to_pod(
+    assert javas3_pod_obj.copy_to_pod_rsync(
         src_path=java_src_code_path, target_path=target_path
     ), "Failed to copy java source code!!"
 
