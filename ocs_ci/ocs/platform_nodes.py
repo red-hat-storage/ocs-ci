@@ -1892,7 +1892,7 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all BMs are up by the end of the test
 
