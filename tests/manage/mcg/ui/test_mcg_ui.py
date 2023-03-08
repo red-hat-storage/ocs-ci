@@ -1,4 +1,6 @@
 import logging
+
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
@@ -13,7 +15,8 @@ from ocs_ci.framework.testlib import (
     ui,
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
-from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI
+from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUI
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -240,20 +243,33 @@ class TestObcUserInterface(object):
 
     @ui
     @tier1
-    @skipif_ocs_version("!=4.8")
+    @bugzilla("2097772")
     @pytest.mark.parametrize(
-        argnames=["storageclass", "bucketclass"],
+        argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
         argvalues=[
             pytest.param(
                 *[
                     "openshift-storage.noobaa.io",
                     "noobaa-default-bucket-class",
+                    "three_dots",
+                    True,
                 ],
                 marks=pytest.mark.polarion_id("OCS-2542"),
-            )
+            ),
+            pytest.param(
+                *[
+                    "openshift-storage.noobaa.io",
+                    "noobaa-default-bucket-class",
+                    "Actions",
+                    True,
+                ],
+                marks=pytest.mark.polarion_id("OCS-4698"),
+            ),
         ],
     )
-    def test_obc_creation_and_deletion(self, setup_ui_class, storageclass, bucketclass):
+    def test_obc_creation_and_deletion(
+        self, setup_ui_class, storageclass, bucketclass, delete_via, verify_ob_removal
+    ):
         """
         Test creation and deletion of an OBC via the UI
 
@@ -288,7 +304,13 @@ class TestObcUserInterface(object):
             obc_bucketclass == bucketclass
         ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
+        # covers BZ 2097772
+        if verify_ob_removal and obc_ui_obj.ocp_version_semantic > version.VERSION_4_11:
+            ObUI(setup_ui_class).delete_object_bucket_ui(
+                delete_via="three_dots", expect_fail=True, resource_name=obc_name
+            )
+
         logger.info(f"Delete {obc_name}")
-        obc_ui_obj.delete_obc_ui(obc_name)
+        obc_ui_obj.delete_obc_ui(obc_name, delete_via)
 
         assert test_obc.check_resource_existence(should_exist=False)
