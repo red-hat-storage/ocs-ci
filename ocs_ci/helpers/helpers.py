@@ -25,7 +25,7 @@ from ocs_ci.helpers.proxy import (
     update_container_with_proxy_env,
 )
 from ocs_ci.ocs.utils import mirror_image
-from ocs_ci.ocs import constants, defaults, node, ocp
+from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
@@ -1095,6 +1095,7 @@ def get_cephfs_name():
     return result[0]["name"]
 
 
+@retry(exceptions.CommandFailed, tries=5, delay=10, backoff=1)
 def pull_images(image_name):
     """
     Function to pull images on all nodes
