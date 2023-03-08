@@ -2,7 +2,12 @@ import logging
 import time
 
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.framework.testlib import tier2, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    tier2,
+    skipif_ocs_version,
+    skipif_disconnected_cluster,
+    skipif_external_mode,
+)
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.helpers import helpers
@@ -46,6 +51,8 @@ def check_health_status():
 
 
 @tier2
+@skipif_external_mode
+@skipif_disconnected_cluster
 @skipif_ocs_version("<4.12")
 class TestCephCapacityRecovery(PASTest):
     def setup(self):
@@ -210,7 +217,7 @@ class TestCephCapacityRecovery(PASTest):
         get_used_capacity("Before PVCs deletion")
         check_health_status()
 
-        for (pod_obj, pvc_obj) in zip(pod_list, pvc_list):
+        for pod_obj, pvc_obj in zip(pod_list, pvc_list):
             log.info(f"Deleting the test POD : {pod_obj.name}")
             try:
                 pod_obj.delete()
