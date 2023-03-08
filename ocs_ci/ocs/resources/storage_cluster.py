@@ -858,6 +858,7 @@ def in_transit_encryption_verification():
     """
     Verify in-transit encryption is enabled.
     """
+    log.info("in-transit encryption is about to be validated.")
     toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
     output = toolbox.exec_ceph_cmd("ceph config dump")
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
@@ -871,6 +872,12 @@ def in_transit_encryption_verification():
                 are not found in 'ceph config dump' output."
         )
         return False
+
+    log.info(
+        "in-transit encryption is configured,"
+        "'ceph config dump' output has"
+        f" {','.join(keys_found)} keys configured."
+    )
 
     return True
 
