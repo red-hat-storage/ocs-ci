@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import warp
 from ocs_ci.framework.testlib import (
@@ -87,7 +86,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
     def warps3(self, request):
 
         warps3 = warp.Warp()
-        warps3.create_resource_warp()
+        warps3.create_resource_warp(replicas=4, multi_client=True)
 
         def teardown():
             warps3.cleanup()
@@ -104,8 +103,8 @@ class TestNoobaaBackupAndRecovery(E2ETest):
     ):
         bucket_name = bucket_factory()[0].name
 
-        noobaa_db_backup_and_recovery_locally()
-        time.sleep(10)
+        # noobaa_db_backup_and_recovery_locally()
+        # time.sleep(10)
         warps3.run_benchmark(
             bucket_name=bucket_name,
             access_key=mcg_obj_session.access_key_id,
@@ -116,7 +115,13 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             obj_size="1MiB",
             validate=True,
             timeout=4000,
+            multi_client=True,
+            tls=True,
+            debug=True,
+            insecure=True,
         )
+        log.info(mcg_obj_session.access_key_id)
+        log.info(mcg_obj_session.access_key)
 
         search_string = (
             "AssertionError [ERR_ASSERTION]: _id must be unique. "

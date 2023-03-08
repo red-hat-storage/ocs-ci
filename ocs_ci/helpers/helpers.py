@@ -235,6 +235,7 @@ def create_pod(
     node_selector=None,
     command=None,
     command_args=None,
+    ports=None,
     deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
 ):
@@ -260,6 +261,7 @@ def create_pod(
         command (list): The command to be executed on the pod
         command_args (list): The arguments to be sent to the command running
             on the pod
+        ports (dict): Service ports
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
@@ -301,6 +303,11 @@ def create_pod(
             pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
+    if ports:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0]["ports"] = ports
+        else:
+            pod_data["spec"]["containers"][0]["ports"][0] = ports
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
         if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
