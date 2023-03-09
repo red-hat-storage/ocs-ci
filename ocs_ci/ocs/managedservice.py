@@ -7,6 +7,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.constants import MS_CONSUMER_TYPE, MS_PROVIDER_TYPE, NON_MS_CLUSTER_TYPE
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label, Pod
 from ocs_ci.utility import templating
@@ -360,3 +361,48 @@ def is_rados_connect_error_in_ex(ex):
     """
     rados_errors = ("RADOS permission error", "RADOS I/O error")
     return any([rados_error in str(ex) for rados_error in rados_errors])
+
+
+def check_switch_to_correct_cluster_at_setup(cluster_type=None):
+    """
+    Check that we switch to the correct cluster type at setup according to the 'cluster_type'
+    parameter provided
+
+    Args:
+        cluster_type (str): The cluster type
+
+    Raises:
+        AssertionError: In case of switching to the wrong cluster type.
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.cluster import (
+        is_ms_consumer_cluster,
+        is_ms_provider_cluster,
+        is_managed_service_cluster,
+    )
+
+    logger.info(f"The cluster type is: {cluster_type}")
+    if not cluster_type:
+        assert check_default_cluster_context_index_equal_to_current_index(), (
+            "The default cluster ctx index should be equal to the current index in case the cluster type "
+            "param is not provider"
+        )
+        return
+
+    valid_cluster_types = [MS_CONSUMER_TYPE, MS_PROVIDER_TYPE, NON_MS_CLUSTER_TYPE]
+    assert (
+        cluster_type in valid_cluster_types
+    ), f"The cluster type {cluster_type} does not appear in the correct cluster types {valid_cluster_types}"
+
+    if cluster_type == MS_CONSUMER_TYPE:
+        assert is_ms_consumer_cluster(), "The cluster is not an MS consumer cluster"
+        logger.info("The cluster is an MS consumer cluster as expected")
+    elif cluster_type == MS_PROVIDER_TYPE:
+        assert is_ms_provider_cluster(), "The cluster is not an MS provider cluster"
+        logger.info("The cluster is an MS provider cluster as expected")
+    elif cluster_type == NON_MS_CLUSTER_TYPE:
+        assert (
+            not is_managed_service_cluster()
+        ), "The cluster is a Managed Service cluster"
+        logger.info("The cluster is not a Managed Service cluster as expected")
