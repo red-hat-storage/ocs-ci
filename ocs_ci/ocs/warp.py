@@ -81,6 +81,21 @@ class Warp(object):
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
         )
+
+        # create warp clients
+        helpers.create_pod(
+            constants.CEPHBLOCKPOOL,
+            namespace=self.namespace,
+            pod_name="warp-pod-clients",
+            pvc_name=self.pvc_obj.name,
+            sa_name=self.sa_name,
+            pod_dict_path=self.pod_dic_path,
+            dc_deployment=True,
+            deploy_pod_status=constants.STATUS_COMPLETED,
+            replica_count=replicas,
+            ports=self.ports,
+        )
+
         self.pod_obj = helpers.create_pod(
             constants.CEPHBLOCKPOOL,
             namespace=self.namespace,
@@ -90,10 +105,7 @@ class Warp(object):
             pod_dict_path=self.pod_dic_path,
             dc_deployment=True,
             deploy_pod_status=constants.STATUS_COMPLETED,
-            replica_count=replicas,
-            ports=self.ports,
         )
-        log.info(self.pod_obj.name)
 
         if multi_client:
             self.client_pods = [
@@ -144,7 +156,8 @@ class Warp(object):
         if multi_client:
             thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
             for p in self.client_pods:
-                command = f"{self.warp_bin_dir} client {self.client_ips[p.name]}:7761"
+                command = f"{self.warp_bin_dir} client"
+                # f"{self.client_ips[p.name]}:7761"
                 thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
 
         time.sleep(10)
@@ -230,6 +243,7 @@ class Warp(object):
 
         """
         log.info("Deleting pods and deployment config")
+        pod.delete_deploymentconfig_pods(self.client_pods[0])
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
         log.info(self.service_obj)
