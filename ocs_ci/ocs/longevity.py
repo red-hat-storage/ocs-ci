@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedWorkloadError
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.scale_noobaa_lib import (
@@ -28,6 +29,7 @@ from ocs_ci.helpers.helpers import (
     get_mon_db_size_in_kb,
     get_noobaa_db_used_space,
     get_current_test_name,
+    create_project,
 )
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, delete_pvcs
@@ -721,7 +723,7 @@ class Longevity(object):
                     f.write(f"{key2} : {value}\n\n")
 
     def stage_0(
-        self, project_factory, num_of_pvc, num_of_obc, pvc_size, ignore_teardown=True
+        self, num_of_pvc, num_of_obc, pvc_size, namespace=None, ignore_teardown=True
     ):
         """
         This function creates the initial soft configuration required to start
@@ -733,32 +735,36 @@ class Longevity(object):
             namespace (str): Namespace where the Kube job/PVCs/PODsOBCs are to be created
             pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
             If None, random size pvc will be created
+            ignore_teardown (bool): Set it to True to skip deleting the created resources
 
         Returns:
              kube_job_file_list (list): List of all PVC, POD, OBC yaml dicts
 
         """
-        namespace = project_factory(project_name=STAGE_0_NAMESPACE)
-
+        namespace = namespace if namespace else STAGE_0_NAMESPACE
+        proj_obj = create_project(project_name=namespace)
         # Create bulk PVCs of all types
-        _, pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
-            num_of_pvc=num_of_pvc, namespace=namespace, pvc_size=pvc_size
+        pvc_job_file_list = self.create_stagebuilder_all_pvc_types(
+            num_of_pvc=num_of_pvc, namespace=proj_obj.namespace, pvc_size=pvc_size
         )
         # Create bulk PVCs of all types and attach each PVC to a Pod
         pod_pvc_job_file_list = self.create_stagebuilder_pods_with_all_pvc_types(
-            num_of_pvc=num_of_pvc, namespace=namespace, pvc_size=pvc_size
+            num_of_pvc=num_of_pvc, namespace=proj_obj.namespace, pvc_size=pvc_size
         )
         # Create bulk OBCs
         obc_job_file = self.create_stagebuilder_obc(
-            namespace=namespace, num_of_obcs=num_of_obc
+            namespace=proj_obj.namespace, num_of_obcs=num_of_obc
         )
         kube_job_file_list = pvc_job_file_list + pod_pvc_job_file_list + obc_job_file
         # For longevity Stage-0 we would want these resources to be keep running forever
         # Hence, ignore deletion of created resources
-        if ignore_teardown:
+        if not ignore_teardown:
             self.delete_stage_builder_kube_job(
-                kube_job_obj_list=kube_job_file_list, namespace=namespace
+                kube_job_obj_list=kube_job_file_list, namespace=proj_obj.namespace
             )
+            switch_to_default_rook_cluster_project()
+            proj_obj.delete(resource_name=proj_obj.namespace)
+            proj_obj.wait_for_delete(proj_obj.namespace, timeout=600)
 
         return kube_job_file_list
 
