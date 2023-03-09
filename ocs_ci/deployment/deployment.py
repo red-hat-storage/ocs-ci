@@ -1266,10 +1266,7 @@ class Deployment(object):
 
         # Verify in-transit encryption is enabled.
         if config.ENV_DATA.get("in_transit_encryption"):
-            if in_transit_encryption_verification():
-                logger.info("IN-transit encryption is enabled.")
-            else:
-                logger.error("In-transit encryption is not enabled.")
+            in_transit_encryption_verification()
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
