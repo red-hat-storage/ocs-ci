@@ -62,6 +62,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
@@ -851,6 +852,32 @@ def osd_encryption_verification():
             log.error(failure_message)
             raise ValueError("Luks header label is not found")
         log.info("Luks header info found for all the encrypted osds")
+
+
+def in_transit_encryption_verification():
+    """
+    Verify in-transit encryption is enabled.
+    """
+    log.info("in-transit encryption is about to be validated.")
+    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
+    output = toolbox.exec_ceph_cmd("ceph config dump")
+    keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
+    keys_found = [
+        record["name"] for record in output if record["name"] in keys_to_match
+    ]
+
+    if len(keys_to_match) != len(keys_found):
+        log.error("in-transit encryption is not configured.")
+        raise ValueError(
+            f"in-transit encryption keys {','.join(list(set(keys_to_match) - set(keys_found)))} \
+                are not found in 'ceph config dump' output."
+        )
+
+    log.info(
+        "in-transit encryption is configured,"
+        "'ceph config dump' output has"
+        f" {','.join(keys_found)} keys configured."
+    )
 
 
 def verify_kms_ca_only():
