@@ -4099,5 +4099,7 @@ def verify_quota_resource_exist(quota_name):
 
 def check_cluster_is_compact():
     existing_num_nodes = len(node.get_all_nodes())
-    if existing_num_nodes == 3:
+    worker_n = node.get_worker_nodes()
+    master_n = node.get_master_nodes()
+    if (existing_num_nodes == 3) and (worker_n.sort() == master_n.sort()):
         return True
