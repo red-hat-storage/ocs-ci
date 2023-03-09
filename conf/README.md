@@ -124,6 +124,7 @@ anywhere else.
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
+* `in_transit_encryption` - Enable in-transit encryption.
 
 #### REPORTING
 
