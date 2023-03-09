@@ -321,10 +321,9 @@ class ObcUI(BucketsUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.obc_loc = locators[ocs_version]["obc"]
+    def __init__(self):
+        super().__init__()
+        self.obc_loc = locators[self.ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -389,8 +388,8 @@ class ObcUI(BucketsUI):
 
 
 class ObcUi(ObcUI):
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.sc_loc = locators[self.ocp_version]["obc"]
 
     def check_obc_option(self, text="Object Bucket Claims"):
@@ -420,8 +419,8 @@ class ObcUi(ObcUI):
 
 
 class ObUI(BucketsUI):
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
 
     def delete_object_bucket_ui(self, delete_via, expect_fail, resource_name):
         """

@@ -207,6 +207,7 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
+
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -333,7 +334,7 @@ def login_to_acm():
         url = get_acm_url()
     log.info(f"URL: {url}")
     driver = login_ui(url)
-    page_nav = AcmPageNavigator(driver)
+    page_nav = AcmPageNavigator()
     if not compare_versions(cmp_str):
         page_nav.navigate_from_ocp_to_acm_cluster_page()
 
@@ -427,8 +428,8 @@ def import_clusters_with_acm():
     cluster_name_a = clusters_env.get("cluster_name_1")
     cluster_name_b = clusters_env.get("cluster_name_2")
     verify_running_acm()
-    driver = login_to_acm()
-    acm_nav = AcmAddClusters(driver)
+    login_to_acm()
+    acm_nav = AcmAddClusters()
     acm_nav.import_cluster(
         cluster_name=cluster_name_a,
         kubeconfig_location=kubeconfig_a,

@@ -4335,7 +4335,7 @@ def login_factory_fixture(request):
 
     def finalizer():
         for driver in drivers:
-            close_browser(driver)
+            close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4569,7 +4569,7 @@ def setup_ui_fixture(request):
     driver = login_ui()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4585,7 +4585,7 @@ def setup_acm_ui_fixture(request):
     driver = login_to_acm()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 

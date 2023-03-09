@@ -1438,7 +1438,7 @@ def login_ui(console_url=None, username=None, password=None):
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
-    proceed_to_login_console(driver)
+    proceed_to_login_console()
     try:
         if username is not None:
             element = wait.until(
@@ -1489,35 +1489,30 @@ def login_ui(console_url=None, username=None, password=None):
     return driver
 
 
-def close_browser(driver):
+def close_browser():
     """
     Close Selenium WebDriver
-
-    Args:
-        driver (Selenium WebDriver)
 
     """
     logger.info("Close browser")
     take_screenshot()
     copy_dom()
-    driver.quit()
+    SeleniumDriver().quit()
     time.sleep(10)
     garbage_collector_webdriver()
 
 
-def proceed_to_login_console(driver: WebDriver):
+def proceed_to_login_console():
     """
     Proceed to the login console, if needed to confirm this action in a page that appears before.
     This is required to be as a solo function, because the driver initializes in the login_ui function.
     Function needs to be called just before login
 
-    Args:
-        driver (Selenium WebDriver)
-
     Returns:
         None
 
     """
+    driver = SeleniumDriver()
     login_loc = locators[get_ocp_version()]["login"]
     if driver.title == login_loc["pre_login_page_title"]:
         proceed_btn = driver.find_element(

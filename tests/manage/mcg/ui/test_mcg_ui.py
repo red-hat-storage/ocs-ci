@@ -72,7 +72,7 @@ class TestStoreUserInterface(object):
             resource_description="ui", resource_type=kind
         )
 
-        store_ui_obj = MCGStoreUI(setup_ui_class)
+        store_ui_obj = MCGStoreUI()
         store_ui_obj.create_store_ui(
             kind, store_name, cld_mgr.aws_client.secret.name, uls_name
         )
@@ -291,7 +291,7 @@ class TestObcUserInterface(object):
             resource_description="ui", resource_type="obc"
         )
 
-        obc_ui_obj = ObcUI(setup_ui_class)
+        obc_ui_obj = ObcUI()
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 
         assert obc_ui_obj.verify_current_page_resource_status(
@@ -322,7 +322,7 @@ class TestObcUserInterface(object):
 
         # covers BZ 2097772
         if verify_ob_removal:
-            ObUI(setup_ui_class).delete_object_bucket_ui(
+            ObUI().delete_object_bucket_ui(
                 delete_via="three_dots", expect_fail=True, resource_name=obc_name
             )
 

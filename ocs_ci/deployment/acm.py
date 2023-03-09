@@ -90,8 +90,8 @@ class Submariner(object):
         # Using import here, to avoid partly circular import
         from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
 
-        get_driver = login_to_acm()
-        acm_obj = AcmAddClusters(get_driver)
+        login_to_acm()
+        acm_obj = AcmAddClusters()
         acm_obj.install_submariner_ui()
         acm_obj.submariner_validation_ui()
 
