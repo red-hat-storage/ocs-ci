@@ -62,7 +62,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
@@ -859,7 +859,7 @@ def in_transit_encryption_verification():
     Verify in-transit encryption is enabled.
     """
     log.info("in-transit encryption is about to be validated.")
-    toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
     output = toolbox.exec_ceph_cmd("ceph config dump")
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
     keys_found = [
