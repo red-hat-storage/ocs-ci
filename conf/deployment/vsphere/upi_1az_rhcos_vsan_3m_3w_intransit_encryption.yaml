@@ -1,0 +1,4 @@
+---
+# This config is suppose to work on most of DCs we have.
+ENV_DATA:
+  in_transit_encryption: true
