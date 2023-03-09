@@ -304,8 +304,8 @@ obc = {
     "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
-    "delete_obc": (
-        'button[data-test-action="Delete Object Bucket Claim"], li[id="Delete"] a[role="menuitem"]',
+    "delete_resource": (
+        'li[id="Delete"] a[role="menuitem"]',
         By.CSS_SELECTOR,
     ),
 }
