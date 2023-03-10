@@ -104,6 +104,8 @@ def wait_for_resource_state(resource, state, timeout=60):
             reached the desired state
 
     """
+    if check_cluster_is_compact():
+        timeout = 180
     if (
         resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
         or resource.name == constants.DEFAULT_STORAGECLASS_RBD
@@ -4103,3 +4105,11 @@ def verify_quota_resource_exist(quota_name):
     return quota_name in [
         quota_resource.get("metadata").get("name") for quota_resource in quota_resources
     ]
+
+
+def check_cluster_is_compact():
+    existing_num_nodes = len(node.get_all_nodes())
+    worker_n = node.get_worker_nodes()
+    master_n = node.get_master_nodes()
+    if (existing_num_nodes == 3) and (worker_n.sort() == master_n.sort()):
+        return True
