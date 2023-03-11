@@ -11,6 +11,8 @@ PIP_VERSION_ARG="${PIP_VERSION:-"pip3.8"}"
 
 BRANCH_ARG="${BRANCH:-"stable"}"
 
+DEBUG_NEW_REQUIRES_ARG="${DEBUG_NEW_REQUIRES:-""}"
+
 if [ "$PULL_IMAGE" != "" ]
 then
       $ENGINE_ARG image pull $PULL_IMAGE

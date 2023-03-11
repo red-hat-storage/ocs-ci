@@ -46,6 +46,7 @@ The containers are expected to run with a service account that has admin credent
 
 ### Debug ODF tests
   * In this mode we can develop new tests/code on our local machine and run the local-code via container
+  * DEBUG_NEW_REQUIRES : there is option to reinstall python requirements [by default is False]
   * In this example we added a new test in our local machine `test_new_code.py`:
   ```
   make debug-odf CLUSTER_PATH=~/ClusterPath \
@@ -53,7 +54,8 @@ The containers are expected to run with a service account that has admin credent
   ENGINE=podman \
   PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
   IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
-  AWS_PATH=~/.aws
+  AWS_PATH=~/.aws \
+  DEBUG_NEW_REQUIRES = True
   ```
 
 ### Run Managed Service
@@ -94,6 +96,11 @@ The containers are expected to run with a service account that has admin credent
 **Login to quay.io**
 ```
 docker/podman login -u <user-name> quay.io
+```
+
+**Login to registry.redhat.io**
+```
+docker/podman login registry.redhat.io
 ```
 
 **Tag Image**
