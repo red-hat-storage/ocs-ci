@@ -1739,7 +1739,8 @@ def verify_provider_storagecluster(sc_data):
     operator: Exists
     key: node-role.kubernetes.io/infra
     operator: DoesNotExist
-    4. storageProviderEndpoint: IP:31659
+    4. If ODF version >= 4.11 then storageProviderEndpoint: EXTERNAL-IP:50051,
+    else storageProviderEndpoint: IP:31659
     5. annotations:
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
@@ -1761,10 +1762,11 @@ def verify_provider_storagecluster(sc_data):
         else:
             assert item["operator"] == "DoesNotExist"
     log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
-    assert re.match(
-        "(\\d+(\\.\\d+){3}|[\\w-]+(\\.[\\w-]+)+):\\d{5}",
-        sc_data["status"]["storageProviderEndpoint"],
-    )
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+        reg = "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051"
+    else:
+        reg = "(\\d+(\\.\\d+){3}|[\\w-]+(\\.[\\w-]+)+):\\d{5}"
+    assert re.match(reg, sc_data["status"]["storageProviderEndpoint"])
     annotations = sc_data["metadata"]["annotations"]
     log.info(f"Annotations: {annotations}")
     assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
@@ -1775,7 +1777,8 @@ def verify_consumer_storagecluster(sc_data):
     """
     Verify that Storagecluster is has:
     1. externalStorage: enable: true
-    2. storageProviderEndpoint: IP:31659
+    2. If ODF version >= 4.11 then storageProviderEndpoint: EXTERNAL-IP:50051,
+    else storageProviderEndpoint: IP:31659
     3. onboardingTicket is present
     4. catsrc existence
     5. requested capacity matches granted capacity
@@ -1789,10 +1792,11 @@ def verify_consumer_storagecluster(sc_data):
     log.info(
         f"storageProviderEndpoint: {sc_data['spec']['externalStorage']['storageProviderEndpoint']}"
     )
-    assert re.match(
-        "\\d+(\\.\\d+){3}:31659",
-        sc_data["spec"]["externalStorage"]["storageProviderEndpoint"],
-    )
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+        reg = "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051"
+    else:
+        reg = "\\d+(\\.\\d+){3}:31659"
+    assert re.match(reg, sc_data["spec"]["externalStorage"]["storageProviderEndpoint"])
     ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
     log.info(
         f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
