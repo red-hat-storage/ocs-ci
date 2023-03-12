@@ -569,7 +569,6 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
-    use_shell=False,
     **kwargs,
 ):
     """
@@ -589,7 +588,6 @@ def exec_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
-        use_shell (bool): If True will pass the cmd without splitting
     Raises:
         CommandFailed: In case the command execution fails
 
@@ -604,7 +602,7 @@ def exec_cmd(
     """
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
-    if isinstance(cmd, str) and not use_shell:
+    if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
@@ -614,7 +612,6 @@ def exec_cmd(
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
         timeout=timeout,
-        shell=use_shell,
         **kwargs,
     )
     if threading_lock and cmd[0] == "oc":
