@@ -183,6 +183,17 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.create_storage_cluster()
 
+    def configure_in_transit_encryption(self):
+        """
+        Configure in_transit_encryption
+
+        """
+        if config.ENV_DATA.get("in_transit_encryption"):
+            logger.info("Enable in-transit encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_in_transit_encryption"]
+            )
+
     def install_lso_cluster(self):
         """
         Install LSO cluster via UI
@@ -293,6 +304,7 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.configure_in_transit_encryption()
             self.configure_encryption()
 
         self.create_storage_cluster()

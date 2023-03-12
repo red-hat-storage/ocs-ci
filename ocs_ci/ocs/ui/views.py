@@ -88,6 +88,11 @@ deployment = {
         'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
+    "enable_in_transit_encryption": (
+        'input[data-test="in-transit-encryption-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
 }
 
 deployment_4_6 = {
