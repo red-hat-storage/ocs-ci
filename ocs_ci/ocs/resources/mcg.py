@@ -868,7 +868,7 @@ class MCG:
         if use_yes:
             result = exec_cmd(
                 [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
-                shell=True,
+                use_shell=True,
                 **kwargs,
             )
         else:
