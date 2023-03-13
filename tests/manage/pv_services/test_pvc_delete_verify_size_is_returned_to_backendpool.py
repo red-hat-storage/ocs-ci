@@ -65,8 +65,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
         cbp_name = helpers.default_ceph_block_pool()
 
-        cbp_data = helpers.get_pool_cr(cbp_name)
-        replica_size = int(cbp_data["spec"]["replicated"]["size"])
+        tools_pod = pod.get_ceph_tools_pod()
+        cmd = f"ceph osd pool get {cbp_name} size"
+        size_info = tools_pod.exec_ceph_cmd(ceph_cmd=cmd)
+        replica_size = size_info("size")
 
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL, size=10, status=constants.STATUS_BOUND
