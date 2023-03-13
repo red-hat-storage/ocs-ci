@@ -880,6 +880,52 @@ def in_transit_encryption_verification():
     )
 
 
+def disable_in_transit_encryption():
+    """
+    Disable in_transit encryption.
+    """
+    ocp_obj = StorageCluster(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+
+    patch_cmd = '[{ "op": "replace", "path": "/spec/network/connections/encryption/enabled", "value": false }]'
+    log.info("patching storageclass to disable in-transit encryption.")
+    ocp_obj.patch(params=patch_cmd, format_type="json")
+    ocp_obj.wait_for_phase("Progressing", timeout=60)
+    verify_storage_cluster()
+    return True
+
+
+def enable_in_transit_encryption():
+    """
+    Enable in-transit encryption
+    """
+    ocp_obj = StorageCluster(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+
+    patch_cmd = '[{ "op": "replace", "path": "/spec/network/connections/encryption/enabled", "value": true }]'
+    log.info("patching storageclass to enable in-transit encryption.")
+    ocp_obj.patch(params=patch_cmd, format_type="json")
+    ocp_obj.wait_for_phase("Progressing", timeout=60)
+    verify_storage_cluster()
+    return True
+
+
+def verify_in_transit_encryption_keys_exists():
+    """
+    verify that "ms_client_mode", "ms_cluster_mode", "ms_service_mode" keys are exists
+    in 'ceph config dump output'.
+    """
+    try:
+        in_transit_encryption_verification()
+    except Exception:
+        return False
+    return True
+
+
 def verify_kms_ca_only():
     """
     Verify KMS deployment with only CA Certificate
