@@ -24,7 +24,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import login_ui
+from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
@@ -304,15 +304,13 @@ def get_acm_url():
     return f"https://{url}"
 
 
-def validate_page_title(driver, title):
+def validate_page_title(title):
     """
     Validates Page HTML Title
     Args:
-        driver: driver (Selenium WebDriver)
         title (str): required title
-
     """
-    WebDriverWait(driver, 60).until(ec.title_is(title))
+    WebDriverWait(SeleniumDriver(), 60).until(ec.title_is(title))
     log.info(f"page title: {title}")
 
 

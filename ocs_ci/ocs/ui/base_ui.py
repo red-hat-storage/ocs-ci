@@ -1277,9 +1277,6 @@ def take_screenshot():
     """
     Take screenshot using python code
 
-    Args:
-        driver (Selenium WebDriver)
-
     """
     screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
@@ -1303,7 +1300,11 @@ def garbage_collector_webdriver():
     for obj in collected_objs:
         if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
+                logger.debug(
+                    f"garbage collector to quit webdriver session id {obj.session_id}"
+                )
                 obj.quit()
+                SeleniumDriver.remove_instance()
             except WebDriverException as e:
                 logger.error(e)
 
@@ -1400,6 +1401,13 @@ class SeleniumDriver(WebDriver):
         else:
             raise ValueError(f"No Support on {browser}")
         return driver
+
+    @classmethod
+    def remove_instance(cls):
+        if hasattr(cls, "instance"):
+            delattr(cls, "instance")
+        else:
+            logger.info("SeleniumDriver instance attr not found")
 
 
 @retry(
@@ -1498,6 +1506,7 @@ def close_browser():
     take_screenshot()
     copy_dom()
     SeleniumDriver().quit()
+    SeleniumDriver.remove_instance()
     time.sleep(10)
     garbage_collector_webdriver()
 

@@ -37,7 +37,7 @@ class TestPvcUserInterface(object):
         Check that the quickstart with the given title is present in the UI
 
         """
-        quickstart_ui_obj = PageNavigator(setup_ui_class)
+        quickstart_ui_obj = PageNavigator()
         quickstart_ui_obj.navigate_quickstarts_page()
         quickstart_ui_obj.take_screenshot()
         logger.info(f"Expected quickstart title: {title}")
