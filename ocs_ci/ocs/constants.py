@@ -25,6 +25,7 @@ TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
+TEMPLATE_AWS_KMS_DIR = os.path.join(TEMPLATE_DIR, "aws-kms")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
@@ -725,6 +726,11 @@ KMIP_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 )
 KMIP_OCS_KMS_SECRET = os.path.join(KMIP_KMS_TEMPLATES, "thales-kmip-ocs-secret.yaml")
 KMIP_CSI_KMS_SECRET = os.path.join(TEMPLATE_CSI_RBD_DIR, "thales-kmip-csi-secret.yaml")
+
+# AWS KMS resource paths
+AWS_KMS_ROLE = os.path.join(TEMPLATE_AWS_KMS_DIR, "role.json.j2")
+AWS_KMS_KEY_POLICY = os.path.join(TEMPLATE_AWS_KMS_DIR, "key-policy.json.j2")
+AWS_KMS_SECRET_YAML = os.path.join(TEMPLATE_AWS_KMS_DIR, "tenant-aws-secret.yaml")
 
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(

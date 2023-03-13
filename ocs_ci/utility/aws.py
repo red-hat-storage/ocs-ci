@@ -41,6 +41,9 @@ class AWS(object):
     _s3_client = None
     _route53_client = None
     _elb_client = None
+    _iam_client = None
+    _kms_client = None
+    _kms_resources_dir = None
 
     def __init__(self, region_name=None):
         """
@@ -126,6 +129,51 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._elb_client
+
+    @property
+    def iam_client(self):
+        """
+        Property for iam client
+
+        Returns:
+            boto3.client: instance of iam client
+
+        """
+        if not self._iam_client:
+            self._iam_client = boto3.client(
+                "iam",
+                region_name=self._region_name,
+            )
+        return self._iam_client
+
+    @property
+    def kms_client(self):
+        """
+        Property for kms client
+
+        Returns:
+            boto3.client: instance of iam client
+
+        """
+        if not self._kms_client:
+            self._kms_client = boto3.client(
+                "kms",
+                region_name=self._region_name,
+            )
+        return self._kms_client
+
+    @property
+    def kms_resources_dir(self):
+        """
+        Path to KMS specification files that were used for AWS KMS setup.
+
+        Returns:
+            str: absolute pathname of the new directory
+
+        """
+        if not self._kms_resources_dir:
+            self._kms_resources_dir = tempfile.mkdtemp(prefix="kms_resources")
+        return self._kms_resources_dir
 
     def get_ec2_instance(self, instance_id):
         """
@@ -1692,6 +1740,81 @@ class AWS(object):
 
         """
         return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
+
+    def create_kms_role(self, cluster_name, role_name="aws-sts-kms"):
+        """
+        Add role.json to aws kms resources dir and create a role with it in AWS.
+
+        Args:
+            cluster_name (str): Provider cluster name
+            role_name (str): Name of the role to be made
+
+        Returns:
+            dict: Contains the response to a CreateRole request. For more info:
+                https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/iam/client/create_role.html
+
+        """
+        _templating = templating.Templating()
+        role_data = dict()
+        role_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
+        cluster_details = get_cluster_details(cluster_name)
+        open_id_providers = self.iam_client.list_open_id_connect_providers()
+        oidc_provider_arn = None
+        for id_provider in open_id_providers["OpenIDConnectProviderList"]:
+            if id_provider["Arn"].endswith(cluster_details["id"]):
+                oidc_provider_arn = id_provider["Arn"]
+                break
+        if not oidc_provider_arn:
+            logger.info("OpenIDConnectProviderList: {open_id_providers}")
+            logger.info('cluster id: {cluster_details["id"]}')
+            raise TypeError(
+                "oidc_provider_arn was not found in OpenIDConnectProviderList"
+            )
+        oidc_provider_aud = oidc_provider_arn.split("/", 1)[1] + ":aud"
+        role_data["oidc_provider_arn"] = oidc_provider_arn
+        role_data["oidc_provider_aud"] = oidc_provider_aud
+        template = _templating.render_template(
+            constants.AWS_KMS_ROLE,
+            role_data,
+        )
+        logger.debug("AWS KMS role:%s", template)
+        role_file = os.path.join(self.kms_resources_dir, "role.json")
+        with open(role_file, "w") as temp:
+            temp.write(template)
+        return self.iam_client.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=role_file,
+        )
+
+    def create_kms_key_policy(self, key, policy_name="kms-acess"):
+        """
+        Add key-policy.json to aws kms resources dir and create a policy with it in AWS.
+
+        Args:
+            key (str): AWS KMS key
+            policy_name (str): Name of the policy to be made
+
+        Returns:
+            dict: Contains the response to a CreatePolicy request. For more info:
+                https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/iam/client/create_policy.html
+
+        """
+        _templating = templating.Templating()
+        policy_data = dict()
+        policy_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
+        policy_data["key"] = key
+        template = _templating.render_template(
+            constants.AWS_KMS_KEY_POLICY,
+            policy_data,
+        )
+        logger.debug("AWS KMS key policy:%s", template)
+        policy_file = os.path.join(self.kms_resources_dir, "key_policy.json")
+        with open(policy_data, "w") as temp:
+            temp.write(template)
+        return self.iam_client.create_policy(
+            PolicyName=policy_name,
+            PolicyDocument=policy_file,
+        )
 
 
 def get_instances_ids_and_names(instances):

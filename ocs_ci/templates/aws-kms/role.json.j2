@@ -1,0 +1,17 @@
+{
+    "Version": "{{date}}",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "{{oidc_provider_arn}}"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "{{oidc_provider_aud}}": "ceph-csi-kms"
+                }
+            }
+        }
+    ]
+}

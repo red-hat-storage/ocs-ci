@@ -1,0 +1,14 @@
+{
+  "Version": "{{date}}",
+  "Statement": [
+    {
+      "Sid": "key",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+      ],
+      "Resource": "{{key}}"
+    }
+  ]
+}

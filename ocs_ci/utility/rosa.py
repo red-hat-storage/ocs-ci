@@ -143,6 +143,22 @@ def create_cluster(cluster_name, version, region):
         json.dump(cluster_info, f)
 
 
+def get_cluster_details(name):
+    """
+    Returns cluster information from 'rosa describe cluster' command.
+
+    Args:
+        cluster_name (str): Cluster name
+
+    Returns:
+        dict: Cluster details
+
+    """
+    cmd = f"rosa describe cluster -c {name} -o json"
+    details = utils.run_cmd(cmd, timeout=1200)
+    return json.loads(details)
+
+
 def appliance_mode_cluster(cluster_name):
     """
     Create appliance mode provider cluster

@@ -4848,6 +4848,140 @@ def pv_encryption_hpcs_setup_factory(request):
     return factory
 
 
+@pytest.fixture(scope="session")
+def aws_kms_key():
+    """
+    Key generated for AWS KMS setup.
+
+    Returns:
+        dict: response from CreateKey call. For more information:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/kms/client/create_key.html
+
+    """
+    aws_obj = aws.AWS()
+    key_response = aws.obj.kms_client.create_key()
+
+    def finalizer():
+        """
+        Schedule the created key for deletion in 7 days. This operation disables the key.
+
+        """
+        aws_obj.kms_client.schedule_key_deletion(
+            KeyId=key_response["KeyMetadata"]["KeyId"], PendingWindowInDays=7
+        )
+
+    request.addfinalizer(finalizer)
+    return key_response
+
+
+@pytest.fixture(scope="session")
+def aws_kms_setup(aws_kms_key):
+    """
+    Prepare AWS KMS setup for a new AWS KMS key.
+
+    Returns:
+        list: CreateKey call response, CreateRole call response, CreatePolicy call response
+
+    """
+    aws_obj = aws.AWS()
+    log.info("Creating AWS KMS role")
+    provider_name = config.ENV_DATA.get("provider_name")
+    role_name = f"{provider_name}-aws-sts-kms"
+    role_response = aws_obj.create_kms_role(
+        cluster_name=provider_name, role_name=role_name
+    )
+    log.debug(f"Role: {role_response}")
+    log.info("Creating AWS KMS key policy")
+    policy_response = aws_obj.create_kms_key_policy(
+        key=aws_kms_key["KeyMetadata"]["KeyId"],
+        policy_name=f"{provider_name}-kms-acess",
+    )
+    log.debug(f"Key Policy: {policy_response}")
+    policy_arn = policy_response["Policy"]["Arn"]
+    log.info(f"Attaching policy {policy_arn} to role {role_name}")
+    attach_response = aws_obj.iam_client.attach_role_policy(
+        RoleName=role_name, PolicyArn=policy_arn
+    )
+    log.debug(f"Role attachment response: {attach_response}")
+
+    def finalizer():
+        """
+        Delete created aws resources.
+
+        """
+        log.info(f"Detaching policy {policy_arn} from role {role_name}")
+        detach_response = aws_obj.iam_client.detach_role_policy(
+            RoleName=role_name, PolicyArn=policy_arn
+        )
+        log.debug(f"Role detachment response: {detach_response}")
+        log.info(f"Deleting policy {policy_arn}")
+        policy_response = aws_obj.iam_client.delete_policy(PolicyArn=policy_arn)
+        log.debug(f"Key Policy deletion: {policy_response}")
+        log.info(f"Deleting role {role_name}")
+        role_response = aws_obj.iam_client.delete_role(RoleName=role_name)
+        log.debug(f"Role: {role_response}")
+
+    request.addfinalizer(finalizer)
+    return aws_kms_key, role_response, policy_response
+
+
+@pytest.fixture
+def aws_kms_secret_factory(aws_kms_setup):
+    """
+    Create a secret yaml file inside the namespace where the workloads are
+    running to make sure that the right credential have the permission to
+    access the encrypted PVs.
+
+    Params:
+        name (str): Secret name
+        namespace (str): Secret and workload namespace
+        aws_role_arn (str):
+        aws_cmk_arn (str)
+        aws_region (str): AWS region
+
+    Returns:
+
+
+    """
+    instances = []
+    aws_kms_key, role, _ = aws_kms_setup
+
+    def factory(namespace, secret_name="tenant-aws-secret", region=None):
+        """
+        Args:
+            namespace (str): Name of the namespace
+            secret_name (str): Name of the secret
+            region (str): AWS region. If None provided then the value in config is used.
+
+        Returns:
+            object: ocs_ci.ocs.resources.ocs instance of 'Secret' kind
+
+        """
+        secret_data = templating.load_yaml(constants.AWS_KMS_SECRET_YAML)
+        secret_data["metadata"]["name"] = secret_name
+        secret_data["metadata"]["namespace"] = namespace
+        secret_data["stringData"]["awsRoleARN"] = role["Role"]["Arn"]
+        secret_data["stringData"]["awsCMKARN"] = aws_kms_key["KeyMetadata"]["Arn"]
+        secret_data["stringData"]["awsRegion"] = region or config.ENV_DATA["region"]
+        secret_obj = helpers.create_resource(**secret_data)
+        secret_obj.reload()
+        instances.append(secret_obj)
+        return secret_obj
+
+    def finalizer():
+        """
+        Delete created secrets.
+
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 @pytest.fixture(scope="class")
 def cephblockpool_factory_ui_class(request, setup_ui_class):
     return cephblockpool_factory_ui_fixture(request, setup_ui_class)
