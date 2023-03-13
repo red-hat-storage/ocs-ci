@@ -32,15 +32,17 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
         def teardown():
 
-            # Delete created postgres and pgbench pods
-            log.info("Deleting postgres pods which are attached to restored PVCs")
-            for pgsql_obj in self.sset_list:
-                pgsql_obj.delete()
+            # Delete postgres pvcs
             pvcs_obj = get_all_pvc_objs(namespace=BMO_NAME)
             for pvc in pvcs_obj:
                 pvc.delete()
                 pvc.ocp.wait_for_delete(pvc.name)
                 validate_pv_delete(pvc.backed_pv)
+
+            # Delete created postgres and pgbench pods
+            log.info("Deleting postgres pods which are attached to restored PVCs")
+            for pgsql_obj in self.sset_list:
+                pgsql_obj.delete()
 
         request.addfinalizer(teardown)
 
