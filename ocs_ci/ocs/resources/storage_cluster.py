@@ -1761,12 +1761,10 @@ def verify_provider_storagecluster(sc_data):
             assert item["operator"] == "Exists"
         else:
             assert item["operator"] == "DoesNotExist"
-    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
-        reg = "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051"
-    else:
-        reg = "(\\d+(\\.\\d+){3}|[\\w-]+(\\.[\\w-]+)+):\\d{5}"
-    assert re.match(reg, sc_data["status"]["storageProviderEndpoint"])
+
+    assert check_storage_provider_endpoint_regex(
+        sc_data["status"]["storageProviderEndpoint"]
+    )
     annotations = sc_data["metadata"]["annotations"]
     log.info(f"Annotations: {annotations}")
     assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
@@ -1789,14 +1787,9 @@ def verify_consumer_storagecluster(sc_data):
     """
     log.info(f"externalStorage: enable: {sc_data['spec']['externalStorage']['enable']}")
     assert sc_data["spec"]["externalStorage"]["enable"]
-    log.info(
-        f"storageProviderEndpoint: {sc_data['spec']['externalStorage']['storageProviderEndpoint']}"
+    assert check_storage_provider_endpoint_regex(
+        sc_data["spec"]["externalStorage"]["storageProviderEndpoint"]
     )
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
-        reg = "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051"
-    else:
-        reg = "\\d+(\\.\\d+){3}:31659"
-    assert re.match(reg, sc_data["spec"]["externalStorage"]["storageProviderEndpoint"])
     ticket = sc_data["spec"]["externalStorage"]["onboardingTicket"]
     log.info(
         f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
@@ -2015,3 +2008,22 @@ def wait_for_consumer_storage_provider_endpoint_in_provider_wnodes(
         func=check_consumer_storage_provider_endpoint_in_provider_wnodes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def check_storage_provider_endpoint_regex(storage_provider_endpoint):
+    """
+    Check that the storage provider endpoint regex is correct
+
+    Args:
+        storage_provider_endpoint (str): The storage provider endpoint value
+
+    Returns:
+        bool: Return True, if the storage provider endpoint regex is correct. False, otherwise
+
+    """
+    log.info(f"storageProviderEndpoint: {storage_provider_endpoint}")
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+        reg = "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051"
+    else:
+        reg = "\\d+(\\.\\d+){3}:31659"
+    return re.match(reg, storage_provider_endpoint) is not None
