@@ -1460,7 +1460,6 @@ def verify_consumer_resources():
             kind=constants.STORAGECLASSCLAIM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-        log.info(f"Waiting for the default storageclassclaims to be Ready")
         for sc_claim in [
             f"{storage_cluster_name}-ceph-rbd",
             f"{storage_cluster_name}-cephfs",
