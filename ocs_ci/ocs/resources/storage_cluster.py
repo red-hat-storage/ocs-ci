@@ -1467,9 +1467,7 @@ def verify_consumer_resources():
             sc_claim_phase = storage_class_claim.get_resource(
                 resource_name=sc_claim, column="PHASE"
             )
-            assert (
-                sc_claim_phase == constants.STATUS_READY
-            ), (
+            assert sc_claim_phase == constants.STATUS_READY, (
                 f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
                 f"Expected phase is '{constants.STATUS_READY}'"
             )
