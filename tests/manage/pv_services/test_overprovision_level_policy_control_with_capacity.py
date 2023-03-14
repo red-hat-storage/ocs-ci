@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_external_mode,
 )
-
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -20,10 +20,12 @@ def setup_sc(storageclass_factory_class):
     sc_blk_obj = storageclass_factory_class(
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
-    return {
+    yield {
         constants.CEPHBLOCKPOOL_SC: None,
         "sc-test-blk": sc_blk_obj,
     }
+
+    sc_blk_obj.delete()
 
 
 @tier1
@@ -64,6 +66,11 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         policy_labels = {"storagequota": "storagequota"}
         quota_capacity = "100Gi"
 
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
+            overprovision_resourse_name = f"ocs-{constants.CEPHBLOCKPOOL_SC}"
+        else:
+            overprovision_resourse_name = constants.CEPHBLOCKPOOL_SC
+
         clear_overprovision_spec(ignore_errors=True)
         set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
         log.info("Verify storagecluster on Ready state")
@@ -93,7 +100,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
 
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=constants.CEPHBLOCKPOOL_SC
+            resource_name=overprovision_resourse_name
         )
 
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
