@@ -102,6 +102,7 @@ from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.rosa import get_cluster_details
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -4887,8 +4888,9 @@ def aws_kms_setup(request, aws_kms_key):
     log.info("Creating AWS KMS role")
     provider_name = config.ENV_DATA.get("provider_name")
     role_name = f"{provider_name}-aws-sts-kms"
+    cluster_details = get_cluster_details(provider_name)
     role_response = aws_obj.create_kms_role(
-        cluster_name=provider_name, role_name=role_name
+        cluster_id=cluster_details["id"], role_name=role_name
     )
     log.debug(f"Role: {role_response}")
     log.info("Creating AWS KMS key policy")

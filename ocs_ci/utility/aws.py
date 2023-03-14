@@ -10,7 +10,6 @@ import re
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.rosa import get_cluster_details
 from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, exceptions
@@ -1743,12 +1742,12 @@ class AWS(object):
         """
         return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
 
-    def create_kms_role(self, cluster_name, role_name="aws-sts-kms"):
+    def create_kms_role(self, cluster_id, role_name="aws-sts-kms"):
         """
         Add role.json to aws kms resources dir and create a role with it in AWS.
 
         Args:
-            cluster_name (str): Provider cluster name
+            cluster_id (str): Provider cluster ID
             role_name (str): Name of the role to be made
 
         Returns:
@@ -1759,16 +1758,15 @@ class AWS(object):
         _templating = Templating()
         role_data = dict()
         role_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
-        cluster_details = get_cluster_details(cluster_name)
         open_id_providers = self.iam_client.list_open_id_connect_providers()
         oidc_provider_arn = None
         for id_provider in open_id_providers["OpenIDConnectProviderList"]:
-            if id_provider["Arn"].endswith(cluster_details["id"]):
+            if id_provider["Arn"].endswith(cluster_id):
                 oidc_provider_arn = id_provider["Arn"]
                 break
         if not oidc_provider_arn:
             logger.info("OpenIDConnectProviderList: {open_id_providers}")
-            logger.info('cluster id: {cluster_details["id"]}')
+            logger.info("cluster id: {cluster_id}")
             raise TypeError(
                 "oidc_provider_arn was not found in OpenIDConnectProviderList"
             )
