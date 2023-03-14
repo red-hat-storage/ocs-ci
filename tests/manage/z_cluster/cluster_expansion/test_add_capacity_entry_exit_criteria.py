@@ -6,7 +6,14 @@ from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.framework.testlib import tier2, ignore_leftovers, ManageTest
+from ocs_ci.framework.testlib import (
+    tier2,
+    ignore_leftovers,
+    ManageTest,
+    skipif_bm,
+    skipif_external_mode,
+    skipif_managed_service,
+)
 from ocs_ci.helpers import cluster_exp_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
@@ -16,6 +23,7 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
 from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +39,18 @@ logger = logging.getLogger(__name__)
 )
 @ignore_leftovers
 @tier2
+@skipif_bm
+@skipif_external_mode
+@skipif_managed_service
 class TestAddCapacity(ManageTest):
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """
+        Init the sanity class
+
+        """
+        self.sanity_helpers = Sanity()
+
     def test_add_capacity(
         self,
         add_capacity_setup,
@@ -43,6 +62,8 @@ class TestAddCapacity(ManageTest):
         awscli_pod,
         bucket_factory,
         percent_to_fill,
+        pvc_factory,
+        rgw_bucket_factory,
     ):
 
         #####################################
@@ -294,54 +315,66 @@ class TestAddCapacity(ManageTest):
 
         logger.info("Exit criteria verification Success: osd tree verification success")
 
-        # Make sure new pvcs and pods can be created and IOs can be run from
-        # the pods
-        num_of_pvcs = 1
-        rwo_rbd_pods = multi_dc_pod(
-            num_of_pvcs=num_of_pvcs,
-            pvc_size=5,
-            project=project,
-            access_mode="RWO",
-            pool_type="rbd",
-        )
-        rwo_cephfs_pods = multi_dc_pod(
-            num_of_pvcs=num_of_pvcs,
-            pvc_size=5,
-            project=project,
-            access_mode="RWO",
-            pool_type="cephfs",
-        )
-        rwx_cephfs_pods = multi_dc_pod(
-            num_of_pvcs=num_of_pvcs,
-            pvc_size=5,
-            project=project,
-            access_mode="RWX",
-            pool_type="cephfs",
-        )
-        # Create rwx-rbd pods
-        pods_ios_rwx_rbd = multi_dc_pod(
-            num_of_pvcs=num_of_pvcs,
-            pvc_size=5,
-            project=project,
-            access_mode="RWX-BLK",
-            pool_type="rbd",
-        )
-        cluster_io_pods = (
-            rwo_rbd_pods + rwo_cephfs_pods + rwx_cephfs_pods + pods_ios_rwx_rbd
-        )
+        # Make sure new pvcs and pods can be created and IOs can be run from the pods
+        logger.info("Start creating new PVCs and pods, and run IO from the pods")
+        if config.ENV_DATA["platform"].lower() in [
+            constants.VSPHERE_PLATFORM,
+            constants.IBMCLOUD_PLATFORM,
+        ]:
+            # Change the method of creating resources when we use vSphere and IBM Cloud platforms
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
+        else:
+            num_of_pvcs = 1
+            rwo_rbd_pods = multi_dc_pod(
+                num_of_pvcs=num_of_pvcs,
+                pvc_size=5,
+                project=project,
+                access_mode="RWO",
+                pool_type="rbd",
+            )
+            rwo_cephfs_pods = multi_dc_pod(
+                num_of_pvcs=num_of_pvcs,
+                pvc_size=5,
+                project=project,
+                access_mode="RWO",
+                pool_type="cephfs",
+            )
+            rwx_cephfs_pods = multi_dc_pod(
+                num_of_pvcs=num_of_pvcs,
+                pvc_size=5,
+                project=project,
+                access_mode="RWX",
+                pool_type="cephfs",
+            )
+            # Create rwx-rbd pods
+            pods_ios_rwx_rbd = multi_dc_pod(
+                num_of_pvcs=num_of_pvcs,
+                pvc_size=5,
+                project=project,
+                access_mode="RWX-BLK",
+                pool_type="rbd",
+            )
+            cluster_io_pods = (
+                rwo_rbd_pods + rwo_cephfs_pods + rwx_cephfs_pods + pods_ios_rwx_rbd
+            )
 
-        with ThreadPoolExecutor() as pod_ios_executor:
-            for p in cluster_io_pods:
-                if p.pod_type == "rbd_block_rwx":
-                    logger.info(f"Calling block fio on pod {p.name}")
-                    pod_ios_executor.submit(cluster_exp_helpers.raw_block_io, p, "100M")
-                else:
-                    logger.info(f"calling file fio on pod {p.name}")
-                    pod_ios_executor.submit(p.run_io, "fs", "100M")
+            with ThreadPoolExecutor() as pod_ios_executor:
+                for p in cluster_io_pods:
+                    if p.pod_type == "rbd_block_rwx":
+                        logger.info(f"Calling block fio on pod {p.name}")
+                        pod_ios_executor.submit(
+                            cluster_exp_helpers.raw_block_io, p, "100M"
+                        )
+                    else:
+                        logger.info(f"calling file fio on pod {p.name}")
+                        pod_ios_executor.submit(p.run_io, "fs", "100M")
 
-        for pod_io in cluster_io_pods:
-            pod_helpers.get_fio_rw_iops(pod_io)
+            for pod_io in cluster_io_pods:
+                pod_helpers.get_fio_rw_iops(pod_io)
 
+        logger.info("Done creating PVCs and pods, and run IO from the pods")
         # Verify OSDs are encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
