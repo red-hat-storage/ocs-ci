@@ -2,10 +2,11 @@
 StorageCluster related functionalities
 """
 import copy
+import ipaddress
 import logging
 import re
 import tempfile
-import yaml
+import json
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -40,6 +41,8 @@ from ocs_ci.ocs.resources.pod import (
     get_plugin_pods,
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
+    get_ceph_tools_pod,
+    get_osd_pod_id,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -71,7 +74,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
@@ -1450,39 +1452,86 @@ def verify_multus_network():
     """
     Verify Multus network(s) created successfully and are present on relevant pods.
     """
-    with open(constants.MULTUS_YAML, mode="r") as f:
-        multus_public_data = yaml.load(f, Loader=yaml.FullLoader)
-        multus_namespace = multus_public_data["metadata"]["namespace"]
-        multus_name = multus_public_data["metadata"]["name"]
-        multus_public_network_name = f"{multus_namespace}/{multus_name}"
+
+    public_net_name = config.ENV_DATA["multus_public_net_name"]
+    public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
+    public_net_full_name = f"{public_net_namespace}/{public_net_name}"
+
+    cluster_net_name = config.ENV_DATA["multus_cluster_net_name"]
+    cluster_net_namespace = config.ENV_DATA["multus_cluster_net_namespace"]
+    cluster_net_full_name = f"{cluster_net_namespace}/{cluster_net_name}"
 
     log.info("Verifying multus NetworkAttachmentDefinitions")
     ocp.OCP(
-        resource_name=multus_public_network_name,
+        resource_name=public_net_full_name,
         kind="network-attachment-definitions",
-        namespace=config.ENV_DATA["cluster_namespace"],
+        namespace=public_net_namespace,
     )
-    # TODO: also check if private NAD exists
+    ocp.OCP(
+        resource_name=cluster_net_full_name,
+        kind="network-attachment-definitions",
+        namespace=cluster_net_namespace,
+    )
+
+    log.info("Verifying multus public network exists on OSD pods")
+    osd_pods = get_osd_pods()
+    osd_addresses = dict()
+    for _pod in osd_pods:
+        pod_networks = _pod.data["metadata"]["annotations"][
+            "k8s.v1.cni.cncf.io/networks"
+        ]
+        assert (
+            public_net_full_name in pod_networks
+        ), f"{public_net_full_name} not in {pod_networks}"
+
+        osd_id = get_osd_pod_id(_pod)
+        log.info(
+            "Verify %s and %s ip addresses exists on osd %s.",
+            cluster_net_name,
+            public_net_name,
+            osd_id,
+        )
+        osd_addresses[osd_id] = dict()
+        networks = json.loads(
+            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/network-status"]
+        )
+        for network in networks:
+            if network["name"] == public_net_full_name:
+                for network_ip in network["ips"]:
+                    osd_addresses[osd_id]["public_address"] = network_ip
+            if network["name"] == cluster_net_full_name:
+                for network_ip in network["ips"]:
+                    osd_addresses[osd_id]["internal_address"] = network_ip
+
+    log.info("Verifying ceph OSD dump")
+    osd_dump_dict = get_ceph_tools_pod().exec_ceph_cmd("ceph osd dump --format json")
+    osds_data = osd_dump_dict["osds"]
+    for osd_data in osds_data:
+        expected_addresses = osd_addresses[str(osd_data["osd"])]
+        assert expected_addresses["public_address"] in str(osd_data["public_addr"]), (
+            f"\nExpected public ip address: {expected_addresses['public_address']}"
+            f"\nActual public ip address: {osd_data['public_addr']}"
+        )
+        assert expected_addresses["internal_address"] in str(
+            osd_data["cluster_addrs"]
+        ), (
+            f"\nExpected internal ip address: {expected_addresses['cluster_addrs']}"
+            f"\nActual internal ip address: {osd_data['internal_address']}"
+        )
 
     log.info("Verifying multus public network exists on ceph pods")
-    osd_pods = get_osd_pods()
-    for _pod in osd_pods:
-        assert (
-            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
-            == multus_public_network_name
-        )
-    # TODO: also check private network if it exists on OSD pods
-
     mon_pods = get_mon_pods()
     mds_pods = get_mds_pods()
     mgr_pods = get_mgr_pods()
     rgw_pods = get_rgw_pods()
     ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
     for _pod in ceph_pods:
+        pod_networks = _pod.data["metadata"]["annotations"][
+            "k8s.v1.cni.cncf.io/networks"
+        ]
         assert (
-            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
-            == multus_public_network_name
-        )
+            public_net_full_name in pod_networks
+        ), f"{public_net_full_name} not in {pod_networks}"
 
     log.info("Verifying multus public network exists on CSI pods")
     csi_pods = []
@@ -1498,10 +1547,12 @@ def verify_multus_network():
     csi_pods += rbd_provisioner_pods
 
     for _pod in csi_pods:
+        pod_networks = _pod.data["metadata"]["annotations"][
+            "k8s.v1.cni.cncf.io/networks"
+        ]
         assert (
-            _pod.data["metadata"]["annotations"]["k8s.v1.cni.cncf.io/networks"]
-            == multus_public_network_name
-        )
+            public_net_full_name in pod_networks
+        ), f"{public_net_full_name} not in {pod_networks}"
 
     log.info("Verifying StorageCluster multus network data")
     sc = get_storage_cluster()
@@ -1509,8 +1560,20 @@ def verify_multus_network():
     network_data = sc_data["spec"]["network"]
     assert network_data["provider"] == "multus"
     selectors = network_data["selectors"]
-    assert selectors["public"] == f"{config.ENV_DATA['cluster_namespace']}/ocs-public"
-    # TODO: also check private network if it exists
+    assert selectors["public"] == (
+        f"{config.ENV_DATA['multus_public_net_namespace']}/{config.ENV_DATA['multus_public_net_name']}"
+    )
+    assert selectors["cluster"] == (
+        f"{config.ENV_DATA['multus_cluster_net_namespace']}/{config.ENV_DATA['multus_cluster_net_name']}"
+    )
+
+    log.info("Verifying MDS Map IPs are in the multus public network range")
+    ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd("ceph fs dump --format json")
+    mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
+    for _, gid_data in mds_map["info"].items():
+        ip = gid_data["addr"].split(":")[0]
+        range = config.ENV_DATA["multus_public_net_range"]
+        assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
 
 def verify_managed_service_resources():

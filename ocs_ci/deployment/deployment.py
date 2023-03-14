@@ -55,7 +55,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import verify_all_nodes_created
+from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
@@ -785,22 +785,74 @@ class Deployment(object):
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
-        # create multus network
+        # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
-            logger.info("Creating multus network")
-            multus_data = templating.load_yaml(constants.MULTUS_YAML)
-            multus_config_str = multus_data["spec"]["config"]
-            multus_config_dct = json.loads(multus_config_str)
-            if config.ENV_DATA.get("multus_public_network_interface"):
-                multus_config_dct["master"] = config.ENV_DATA.get(
-                    "multus_public_network_interface"
-                )
-            multus_data["spec"]["config"] = json.dumps(multus_config_dct)
-            multus_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="multus", delete=False
+            interfaces = {
+                config.ENV_DATA["multus_public_net_interface"],
+                config.ENV_DATA["multus_cluster_net_interface"],
+            }
+            worker_nodes = get_worker_nodes()
+            node_obj = ocp.OCP(kind="node")
+            for node in worker_nodes:
+                for interface in interfaces:
+                    ip_link_cmd = f"ip link set promisc on {interface}"
+                    node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+
+            logger.info("Creating Multus public network")
+            public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+            public_net_data["metadata"]["name"] = config.ENV_DATA.get(
+                "multus_public_net_name"
             )
-            templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
-            run_cmd(f"oc create -f {multus_data_yaml.name}")
+            public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+                "multus_public_net_namespace"
+            )
+            public_net_config_str = public_net_data["spec"]["config"]
+            public_net_config_dict = json.loads(public_net_config_str)
+            public_net_config_dict["master"] = config.ENV_DATA.get(
+                "multus_public_net_interface"
+            )
+            public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_public_net_range"
+            )
+            public_net_config_dict["type"] = config.ENV_DATA.get(
+                "multus_public_net_type"
+            )
+            public_net_config_dict["mode"] = config.ENV_DATA.get(
+                "multus_public_net_mode"
+            )
+            public_net_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="multus_public", delete=False
+            )
+            templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+            run_cmd(f"oc create -f {public_net_yaml.name}")
+
+            logger.info("Creating Multus cluster network")
+            cluster_net_data = templating.load_yaml(constants.MULTUS_CLUSTER_NET_YAML)
+            cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
+                "multus_cluster_net_name"
+            )
+            cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+                "multus_cluster_net_namespace"
+            )
+            cluster_net_config_str = cluster_net_data["spec"]["config"]
+            cluster_net_config_dict = json.loads(cluster_net_config_str)
+            cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                "multus_cluster_net_interface"
+            )
+            cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_cluster_net_range"
+            )
+            cluster_net_config_dict["type"] = config.ENV_DATA.get(
+                "multus_cluster_net_type"
+            )
+            cluster_net_config_dict["mode"] = config.ENV_DATA.get(
+                "multus_cluster_net_mode"
+            )
+            cluster_net_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="multus_public", delete=False
+            )
+            templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
+            run_cmd(f"oc create -f {cluster_net_yaml.name}")
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud = (
@@ -1138,10 +1190,15 @@ class Deployment(object):
                 "cephConfig": {"reconcileStrategy": "ignore"}
             }
         if config.ENV_DATA.get("is_multus_enabled"):
+            public_net_name = config.ENV_DATA["multus_public_net_name"]
+            public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
+            cluster_net_name = config.ENV_DATA["multus_cluster_net_name"]
+            cluster_net_namespace = config.ENV_DATA["multus_cluster_net_namespace"]
             cluster_data["spec"]["network"] = {
                 "provider": "multus",
                 "selectors": {
-                    "public": f"{config.ENV_DATA['cluster_namespace']}/ocs-public"
+                    "public": f"{public_net_namespace}/{public_net_name}",
+                    "cluster": f"{cluster_net_namespace}/{cluster_net_name}",
                 },
             }
 

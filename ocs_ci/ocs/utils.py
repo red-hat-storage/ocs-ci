@@ -823,8 +823,10 @@ def setup_ceph_toolbox(force_setup=False):
                 toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
                 toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
 
+            public_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
+            public_net_namespace = ocsci_config.ENV_DATA["multus_public_net_namespace"]
             toolbox["spec"]["template"]["metadata"]["annotations"] = {
-                "k8s.v1.cni.cncf.io/networks": "openshift-storage/ocs-public"
+                "k8s.v1.cni.cncf.io/networks": f"{public_net_namespace}/{public_net_name}"
             }
             toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
             rook_toolbox = OCS(**toolbox)
