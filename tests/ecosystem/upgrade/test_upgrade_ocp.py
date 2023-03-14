@@ -138,6 +138,7 @@ class TestUpgradeOCP(ManageTest):
                 pause_machinehealthcheck()
 
             # Before upgrading OCP, login to the OCP console and look for any pop-up so as to refresh the console
+            # for console changes to take place
             version_post_upgrade = version.get_semantic_version(
                 ocp_upgrade_version, True
             )
