@@ -4849,7 +4849,7 @@ def pv_encryption_hpcs_setup_factory(request):
 
 
 @pytest.fixture(scope="session")
-def aws_kms_key():
+def aws_kms_key(request):
     """
     Key generated for AWS KMS setup.
 
@@ -4875,7 +4875,7 @@ def aws_kms_key():
 
 
 @pytest.fixture(scope="session")
-def aws_kms_setup(aws_kms_key):
+def aws_kms_setup(request, aws_kms_key):
     """
     Prepare AWS KMS setup for a new AWS KMS key.
 
@@ -4926,7 +4926,7 @@ def aws_kms_setup(aws_kms_key):
 
 
 @pytest.fixture
-def aws_kms_secret_factory(aws_kms_setup):
+def aws_kms_secret_factory(request, aws_kms_setup):
     """
     Create a secret yaml file inside the namespace where the workloads are
     running to make sure that the right credential have the permission to

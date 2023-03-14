@@ -1,5 +1,6 @@
 import os
 import logging
+import tempfile
 import time
 import boto3
 import random
@@ -9,11 +10,12 @@ import re
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.rosa import get_cluster_details
 from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.templating import load_yaml
+from ocs_ci.utility.templating import load_yaml, Templating
 from tempfile import NamedTemporaryFile
 
 logger = logging.getLogger(name=__file__)
@@ -1754,7 +1756,7 @@ class AWS(object):
                 https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/iam/client/create_role.html
 
         """
-        _templating = templating.Templating()
+        _templating = Templating()
         role_data = dict()
         role_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
         cluster_details = get_cluster_details(cluster_name)
@@ -1799,7 +1801,7 @@ class AWS(object):
                 https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/iam/client/create_policy.html
 
         """
-        _templating = templating.Templating()
+        _templating = Templating()
         policy_data = dict()
         policy_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
         policy_data["key"] = key
