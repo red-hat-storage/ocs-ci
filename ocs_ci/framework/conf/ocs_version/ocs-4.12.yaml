@@ -9,3 +9,4 @@ ENV_DATA:
 REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.12'
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
