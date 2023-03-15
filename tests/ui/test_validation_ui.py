@@ -146,7 +146,7 @@ class TestUserInterfaceValidation(object):
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
-    def test_check_odf_catalog_source_health(self, setup_ui_class):
+    def test_check_upgrade_status_and_odf_catalog_source_health(self, setup_ui_class):
         """
         Check the health of ODF Catalog Source on UI
 
