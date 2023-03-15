@@ -998,7 +998,7 @@ def delete_must_gather_leftovers():
     for namespace in namespaces:
         pods = get_all_pods(namespace=namespace)
         for pod in pods:
-            logging.info(f"Delete the mg pod {pod.name} from namespace {namespace}")
+            logging.info(f"Delete the ocp-mg pod {pod.name} from namespace {namespace}")
             pod.delete(force=True)
         ocp_obj = OCP(kind="namespace")
         logging.info(f"Delete must-gather namespace {namespace}")
