@@ -51,6 +51,7 @@ def create_storageclassclaim(
     interface_type,
     storage_class_claim_name=None,
     namespace=None,
+    encryption_method=None,
 ):
     """
     Create a storageclassclaim
@@ -59,7 +60,9 @@ def create_storageclassclaim(
         interface_type (str): The type of the interface
             (e.g. CephBlockPool, CephFileSystem)
         storage_class_claim_name (str): The name of storageclassclaim to create
-        namespace(str): The namespace in which the storageclassclaim should be created
+        namespace (str): The namespace in which the storageclassclaim should be created
+        encryption_method (str): Encryption method used for storageclasclaim
+            as described in csi-kms-connection-details configmap
 
     Returns:
         OCS: An OCS instance for the storageclassclaim
@@ -84,6 +87,8 @@ def create_storageclassclaim(
     )
     if namespace:
         sc_claim_data["metadata"]["namespace"] = namespace
+    if encryption_method:
+        sc_claim_data["spec"]["encryptionMethod"] = encryption_method
 
     sc_claim_obj = StorageClassClaim(**sc_claim_data)
     sc_claim_obj.create(do_reload=True)
