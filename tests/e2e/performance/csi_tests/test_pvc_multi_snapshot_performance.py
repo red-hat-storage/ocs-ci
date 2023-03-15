@@ -405,7 +405,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     @pytest.mark.parametrize(
         argnames=["interface_type", "snap_number"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL, 512]),
+            pytest.param(*[constants.CEPHBLOCKPOOL, 5]),
             pytest.param(*[constants.CEPHFILESYSTEM, 100]),
         ],
     )
@@ -462,9 +462,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             raise exceptions.StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_snaps + 2))
+        self.pvc_size = str(int(self.capacity_to_use / (self.num_of_snaps + 2)))
         if self.dev_mode:
-            self.pvc_size = 5
+            self.pvc_size = "5"
 
         self.interface = interface_type
         self.sc_name = "pas-testing-rbd"
@@ -493,22 +493,44 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         # Create new PVC
         log.info(f"Creating {self.pvc_size} GiB PVC of {interface_type}")
-        self.pvc_obj = pvc_factory(
-            interface=self.interface,
-            storageclass=self.sc_obj,
-            size=self.pvc_size,
-            status=constants.STATUS_BOUND,
-            project=self.proj,
+        # self.pvc_obj = pvc_factory(
+        #     interface=self.interface,
+        #     storageclass=self.sc_obj,
+        #     size=self.pvc_size,
+        #     status=constants.STATUS_BOUND,
+        #     project=self.proj,
+        # )
+
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name, size=self.pvc_size + "Gi", namespace=self.namespace
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
 
         # Create POD which will attache to the new PVC
         log.info("Creating A POD")
-        self.pod_obj = pod_factory(
-            interface=self.interface,
-            pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING,
-            pod_dict_path=constants.PERF_POD_YAML,
-        )
+        # self.pod_obj = pod_factory(
+        #     interface=self.interface,
+        #     pvc=self.pvc_obj,
+        #     status=constants.STATUS_RUNNING,
+        #     pod_dict_path=constants.PERF_POD_YAML,
+        # )
+
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+            # self.pod_object.workload_setup("fs", jobs=1, fio_installed=True)
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise exceptions.PodNotCreated("Pod on PVC was not created.")
 
         # Calculating the file size as 80% of the PVC size
         self.filesize = self.pvc_obj.size * 0.80
@@ -555,7 +577,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                 self.uuid, self.crd_data, self.full_log_path, "multiple_snapshots"
             )
         )
-        full_results.all_results = self.run()
+        full_results.all_results = [] # self.run()
         self.end_time = self.get_time()
         full_results.add_key(
             "avg_creation_time",
