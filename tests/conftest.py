@@ -4860,7 +4860,7 @@ def aws_kms_key(request):
 
     """
     aws_obj = aws.AWS()
-    key_response = aws.obj.kms_client.create_key()
+    key_response = aws_obj.kms_client.create_key()
 
     def finalizer():
         """
