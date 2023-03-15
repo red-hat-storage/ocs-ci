@@ -940,6 +940,10 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         timeout = 600
     must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
 
+    timeout = 900
+    must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
+
+
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
