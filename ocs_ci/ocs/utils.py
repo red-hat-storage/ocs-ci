@@ -991,17 +991,17 @@ def delete_must_gather_leftovers():
         helper_pod_obj = get_pod_obj(
             helper_pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        logging.info(f"Delete must-gather-helper pod {helper_pod_obj.name}")
+        log.info(f"Delete must-gather-helper pod {helper_pod_obj.name}")
         helper_pod_obj.delete(force=True)
 
     namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
     for namespace in namespaces:
         pods = get_all_pods(namespace=namespace)
         for pod in pods:
-            logging.info(f"Delete the ocp-mg pod {pod.name} from namespace {namespace}")
+            log.info(f"Delete the ocp-mg pod {pod.name} from namespace {namespace}")
             pod.delete(force=True)
         ocp_obj = OCP(kind="namespace")
-        logging.info(f"Delete must-gather namespace {namespace}")
+        log.info(f"Delete must-gather namespace {namespace}")
         ocp_obj.delete(resource_name=namespace, force=True)
 
 
