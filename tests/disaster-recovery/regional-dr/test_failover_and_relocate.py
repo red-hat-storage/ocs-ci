@@ -4,14 +4,15 @@ import pytest
 from time import sleep
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import rdr_test
+from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 
 logger = logging.getLogger(__name__)
 
 
-@rdr_test
+@acceptance
+@tier1
 class TestFailoverAndRelocate:
     """
     Test Failover and Relocate actions
