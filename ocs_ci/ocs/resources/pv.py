@@ -144,6 +144,33 @@ def delete_released_pvs_in_sc(sc_name):
     return num_of_deleted_pvs
 
 
+def delete_released_pvs(status):
+    """
+    Delete the all released PVs
+
+    Args:
+        status (str): PV status
+
+    Returns:
+        int: The number of PVs that have been deleted successfully.
+
+    """
+    num_of_deleted_pvs = 0
+    pv_objs = get_all_pvs()["items"]
+    released_pvs = [pv for pv in pv_objs if pv.get("status").get("phase") == status]
+    for pv in released_pvs:
+        pv_name = get_pv_name(pv)
+        timeout = 60
+        try:
+            ocp.OCP().exec_oc_cmd(f"delete pv {pv_name}", timeout=timeout)
+            logger.info(f"Successfully deleted pv {pv_name}")
+            num_of_deleted_pvs += 1
+        except TimeoutExpired:
+            logger.info(f"Failed to delete pv {pv_name} after {timeout} seconds")
+
+    return num_of_deleted_pvs
+
+
 def get_pv_size(pv_obj):
     """
     Get the size of a pv object

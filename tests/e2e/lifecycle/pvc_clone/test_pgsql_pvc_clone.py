@@ -14,8 +14,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import kms
-from ocs_ci.helpers.helpers import validate_pv_delete
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pv import delete_released_pvs
 
 log = logging.getLogger(__name__)
 
@@ -32,17 +31,14 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
         def teardown():
 
-            # Delete postgres pvcs
-            pvcs_obj = get_all_pvc_objs(namespace=BMO_NAME)
-            for pvc in pvcs_obj:
-                pvc.delete()
-                pvc.ocp.wait_for_delete(pvc.name)
-                validate_pv_delete(pvc.backed_pv)
-
             # Delete created postgres and pgbench pods
             log.info("Deleting postgres pods which are attached to restored PVCs")
             for pgsql_obj in self.sset_list:
                 pgsql_obj.delete()
+
+            # Delete released pvs
+            log.info("Deleting released pvs")
+            delete_released_pvs("Released")
 
         request.addfinalizer(teardown)
 
