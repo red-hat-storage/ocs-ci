@@ -1,6 +1,5 @@
 import logging
 import warnings
-import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
@@ -9,6 +8,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
@@ -197,6 +197,44 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
+        self.navigate_to_odf_operator_page()
+        logger.info(
+            "Check if 'Plugin available' option is available on the Installed Operators page"
+        )
+        plugin_availability_check = self.wait_until_expected_text_is_found(
+            locator=self.dep_loc["plugin-available"],
+            expected_text="Plugin available",
+            timeout=10,
+        )
+        if plugin_availability_check:
+            logger.info(
+                "Storage plugin is disabled, navigate to Operator details page further confirmation"
+            )
+            self.do_click(self.validation_loc["odf-operator"])
+            self.page_has_loaded(retries=15, sleep_time=5)
+            console_plugin_status = self.get_element_text(
+                self.validation_loc["console_plugin_option"]
+            )
+            if console_plugin_status == "Disabled":
+                logger.info(
+                    "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+                )
+                self.do_click(self.validation_loc["console_plugin_option"])
+                self.do_click(self.dep_loc["enable_console_plugin"])
+                self.do_click(self.validation_loc["save_console_plugin_settings"])
+                logger.info("Waiting for warning alert to refresh the web console")
+                refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                    locator=self.validation_loc["warning-alert"],
+                    expected_text="Refresh web console",
+                )
+                if refresh_web_console_popup:
+                    logger.info(
+                        "Refresh web console option is now available, click on it to see the changes"
+                    )
+                    self.do_click(
+                        self.validation_loc["refresh-web-console"],
+                        enable_screenshot=True,
+                    )
         if (
             self.ocp_version_semantic >= version.VERSION_4_9
             and self.ocs_version_semantic >= version.VERSION_4_9
@@ -613,3 +651,38 @@ class ValidationUI(PageNavigator):
             expected_text="OpenShift Container Storage",
         )
         return odf_operator_presence and not ocs_operator_presence
+
+    def check_upgrade_status_and_odf_catalog_source_health(self):
+        """
+        Check the ODF upgrade status is up to date and the ODF Catalog Source is Healthy on UI
+
+        """
+        self.navigate_to_odf_operator_page()
+        logger.info("Click on ODF operator")
+        self.do_click(self.validation_loc["odf-operator"], enable_screenshot=True)
+        logger.info("Click on Subscription tab under ODF operator")
+        self.do_click(self.validation_loc["subscription"], enable_screenshot=True)
+        catalog_source = CatalogSource(
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+
+        logger.info("Wait for catalog source to report ready on CLI")
+        catalog_source.wait_for_state("READY")
+
+        logger.info("Check upgrade status on UI")
+        check_upgrade_status = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["upgrade-status"],
+            expected_text="Up to date",
+            timeout=120,
+        )
+        assert (
+            check_upgrade_status
+        ), "ODF operator upgrade status is not Up to date on UI"
+        logger.info("Check ODF Catalog Source health on UI")
+        check_upgrade_status = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["catalog-source-health"],
+            expected_text="Healthy",
+            timeout=120,
+        )
+        assert check_upgrade_status, "ODF Catalog Source is not Healthy on UI"

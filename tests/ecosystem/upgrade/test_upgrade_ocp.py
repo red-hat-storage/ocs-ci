@@ -25,6 +25,7 @@ from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
 )
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
 )
@@ -74,7 +75,7 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
+    def test_upgrade_ocp(self, setup_ui_class, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
@@ -196,3 +197,9 @@ class TestUpgradeOCP(ManageTest):
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
             new_ceph_cluster.wait_for_rebalance(timeout=3000)
             ceph_health_check(tries=160, delay=30)
+
+        logger.info(
+            "Post OCP upgrade validation to check ODF upgrade status and catalog source health on UI"
+        )
+        ui_val_obj = ValidationUI(setup_ui_class)
+        ui_val_obj.check_upgrade_status_and_odf_catalog_source_health()

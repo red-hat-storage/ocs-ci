@@ -141,6 +141,23 @@ class TestUserInterfaceValidation(object):
         )
 
     @ui
+    @tier1
+    @black_squad
+    @polarion_id("OCS-4642")
+    @skipif_ocs_version("<4.9")
+    @skipif_ui_not_support("validation")
+    def test_check_odf_catalog_source_health(self, setup_ui_class):
+        """
+        Check the health of ODF Catalog Source on UI
+
+        Args:
+            setup_ui_class: login function on conftest file
+
+        """
+        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj.check_upgrade_status_and_odf_catalog_source_health()
+
+    @ui
     @pytest.mark.bugzilla("1994584")
     def test_ocs_operator_is_not_present(self, setup_ui_class):
         """

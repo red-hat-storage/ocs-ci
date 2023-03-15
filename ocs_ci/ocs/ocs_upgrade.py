@@ -543,6 +543,9 @@ class OCSUpgrade(object):
 
 
 def run_ocs_upgrade(
+    setup_ui_class, operation=None, *operation_args, **operation_kwargs
+):
+def run_ocs_upgrade(
     operation=None,
     *operation_args,
     **operation_kwargs,
@@ -551,6 +554,7 @@ def run_ocs_upgrade(
     Run upgrade procedure of OCS cluster
 
     Args:
+        setup_ui_class: login function on conftest file
         operation: (function): Function to run
         operation_args: (iterable): Function's arguments
         operation_kwargs: (map): Function's keyword arguments
@@ -751,6 +755,12 @@ def run_ocs_upgrade(
             post_upgrade_verification=True,
             version_before_upgrade=upgrade_ocs.version_before_upgrade,
         )
+
+    log.info(
+        "Post ODF upgrade validation to check ODF upgrade status and catalog source health on UI"
+    )
+    ui_val_obj = ValidationUI(setup_ui_class)
+    ui_val_obj.check_upgrade_status_and_odf_catalog_source_health()
 
 
 def ocs_odf_upgrade_ui():
