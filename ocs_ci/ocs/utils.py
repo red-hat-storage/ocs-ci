@@ -724,6 +724,37 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_namespce_name_by_pattern(
+    pattern="client",
+    filter=None,
+):
+    """
+    Find namespace names that match the given pattern
+
+    Args:
+        pattern (str): name of the namespace with given pattern
+        filter (str): namespace name to filter from the list
+
+    Returns:
+        namespace_list (list): List of namespace names matching the pattern
+
+    """
+    ocp_obj = OCP(kind="namespace")
+    namespace_names = ocp_obj.exec_oc_cmd(
+        "get namespace -o name", out_yaml_format=False
+    )
+    namespace_names = namespace_names.split("\n")
+    namespace_list = []
+    for namespace_name in namespace_names:
+        if filter is not None and re.search(filter, namespace_name):
+            log.info(f"Pod name filtered {namespace_name}")
+        elif re.search(pattern, namespace_name):
+            (_, name) = namespace_name.split("/")
+            log.info(f"pod name match found appending {namespace_name}")
+            namespace_list.append(name)
+    return namespace_list
+
+
 def get_rook_version():
     """
     Get the rook image information from rook-ceph-operator pod
@@ -918,6 +949,8 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
+        delete_must_gather_leftovers()
+
         mg_output = occli.exec_oc_cmd(
             cmd,
             out_yaml_format=False,
@@ -930,6 +963,8 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
+        delete_must_gather_leftovers()
+
     except TimeoutExpired as ex:
         log.error(get_helper_pods_output())
         log.error(
@@ -938,6 +973,32 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             f"Must-Gather Output: {mg_output}"
         )
     return mg_output
+
+
+def delete_must_gather_leftovers():
+    """
+    Delete Must Gather Leftovers
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj, get_all_pods
+
+    helper_pod_names = get_pod_name_by_pattern(pattern="helper")
+    for helper_pod_name in helper_pod_names:
+        helper_pod_obj = get_pod_obj(
+            helper_pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logging.info(f"Delete must-gather-helper pod {helper_pod_obj.name}")
+        helper_pod_obj.delete(force=True)
+
+    namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
+    for namespace in namespaces:
+        pods = get_all_pods(namespace=namespace)
+        for pod in pods:
+            logging.info(f"Delete the mg pod {pod.name} from namespace {namespace}")
+            pod.delete(force=True)
+        ocp_obj = OCP(kind="namespace")
+        logging.info(f"Delete must-gather namespace {namespace}")
+        ocp_obj.delete(resource_name=namespace, force=True)
 
 
 def get_helper_pods_output():
