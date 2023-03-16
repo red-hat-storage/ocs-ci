@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs import warp
 from ocs_ci.framework.testlib import (
@@ -102,13 +103,13 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         mcg_obj_session,
     ):
         bucket_name = bucket_factory()[0].name
-        # noobaa_db_backup_and_recovery_locally()
-        # time.sleep(10)
+        noobaa_db_backup_and_recovery_locally()
+        time.sleep(10)
         warps3.run_benchmark(
             bucket_name=bucket_name,
             access_key=mcg_obj_session.access_key_id,
             secret_key=mcg_obj_session.access_key,
-            duration="5m",
+            duration="10m",
             concurrent=10,
             objects=100,
             obj_size="1MiB",
@@ -134,9 +135,3 @@ class TestNoobaaBackupAndRecovery(E2ETest):
                     search_string not in line
                 ), f"[Error] {search_string} found in the noobaa pod logs"
         log.info(f"No {search_string} errors are found in the noobaa pod logs")
-
-    def test_sample(self, bucket_factory, mcg_obj_session):
-        bucket_name = bucket_factory()[0].name
-        log.info(bucket_name)
-        log.info(mcg_obj_session.access_key_id)
-        log.info(mcg_obj_session.access_key)

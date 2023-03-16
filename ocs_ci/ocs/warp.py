@@ -96,17 +96,6 @@ class Warp(object):
             ports=self.ports,
         )
 
-        # self.pod_obj = helpers.create_pod(
-        #     constants.CEPHBLOCKPOOL,
-        #     namespace=self.namespace,
-        #     pod_name=self.pod_name,
-        #     pvc_name=self.pvc_obj.name,
-        #     sa_name=self.sa_name,
-        #     pod_dict_path=self.pod_dic_path,
-        #     dc_deployment=True,
-        #     deploy_pod_status=constants.STATUS_COMPLETED,
-        # )
-
         if multi_client:
             self.client_pods = [
                 Pod(**pod_info)
@@ -244,8 +233,9 @@ class Warp(object):
         Clean up deployment config, pvc, pod and test user
 
         """
+        if self.service_obj:
+            log.info(f"Deleting the service {self.service_obj.name}")
+            self.service_obj.delete()
         log.info("Deleting pods and deployment config")
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
-        log.info(self.service_obj)
-        self.service_obj.delete()
