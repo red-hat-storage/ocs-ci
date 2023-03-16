@@ -138,14 +138,15 @@ class BackingStore:
             "cli": _cli_deletion_flow,
         }
 
-        try:
-            cmdMap[self.method]()
-        except ObjectsStillBeingDeletedException:
-            timeout = 19800
-        except CommandFailed:
-            timeout = 120
-
         if retry:
+            # The first attempt to delete will determine if we need to increase the timeout
+            try:
+                cmdMap[self.method]()
+            except ObjectsStillBeingDeletedException:
+                timeout = 19800
+            except CommandFailed:
+                pass
+
             sample = TimeoutSampler(
                 timeout=timeout,
                 sleep=20,
@@ -155,6 +156,8 @@ class BackingStore:
                 err_msg = f"Failed to delete {self.name}"
                 log.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
+        else:
+            cmdMap[self.method]()
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")
