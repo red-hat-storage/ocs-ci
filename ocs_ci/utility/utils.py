@@ -4167,7 +4167,7 @@ def switch_to_correct_cluster_at_setup(request):
 
     # If the cluster is an MS cluster
     if not config.is_cluster_type_exist(cluster_type):
-        pytest.skip(f"The cluster type '{cluster_type}' is not exist in the run")
+        pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
 
     # Switch to the correct cluster type
     log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
