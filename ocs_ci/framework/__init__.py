@@ -366,28 +366,28 @@ class MultiClusterConfig:
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
         return cluster_type in cluster_types
 
-    def get_cluster_type_indexes_list(self, cluster_type):
+    def get_cluster_type_indices_list(self, cluster_type):
         """
-        Get the cluster type indexes
+        Get the cluster type indices
 
         Returns:
-            list: the cluster type indexes
+            list: the cluster type indices
 
         Raises:
             ClusterNotFoundException: In case it didn't find any cluster with the cluster type
 
         """
-        cluster_type_indexes_list = []
+        cluster_type_indices_list = []
         for i, cluster in enumerate(self.clusters):
             if cluster.ENV_DATA["cluster_type"] == cluster_type:
-                cluster_type_indexes_list.append(i)
+                cluster_type_indices_list.append(i)
 
-        if not cluster_type_indexes_list:
+        if not cluster_type_indices_list:
             raise ClusterNotFoundException(
                 f"Didn't find any cluster with the cluster type '{cluster_type}'"
             )
 
-        return cluster_type_indexes_list
+        return cluster_type_indices_list
 
     def switch_to_cluster_by_cluster_type(self, cluster_type, num_of_cluster=0):
         """
@@ -403,7 +403,7 @@ class MultiClusterConfig:
 
         """
         self.switch_ctx(
-            self.get_cluster_type_indexes_list(cluster_type)[num_of_cluster]
+            self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
 
 

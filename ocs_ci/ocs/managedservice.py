@@ -385,8 +385,8 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
     logger.info(f"The cluster type is: {cluster_type}")
     if not cluster_type:
         assert check_default_cluster_context_index_equal_to_current_index(), (
-            "The default cluster ctx index should be equal to the current index in case the cluster type "
-            "param is not provider"
+            "The default cluster ctx index should be equal to the current index, if we don't pass "
+            "the cluster type param "
         )
         return
 
