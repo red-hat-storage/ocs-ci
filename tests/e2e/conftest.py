@@ -55,7 +55,24 @@ def noobaa_db_backup_and_recovery_locally(
     request, bucket_factory, awscli_pod_session, mcg_obj_session
 ):
     """
-    noobaa db backup and recovery locally
+    Test to verify Backup and Restore for Multicloud Object Gateway database locally
+    Backup procedure:
+        * Create a test bucket and write some data
+        * Backup noobaa secrets to local folder OR store it in secret objects
+        * Backup the PostgreSQL database and save it to a local folder
+        * For testing, write new data to show a little data loss between backup and restore
+    Restore procedure:
+        * Stop MCG reconciliation
+        * Stop the NooBaa Service before restoring the NooBaa DB.
+          There will be no object service after this point
+        * Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+        * Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+        * Restore DB from a local folder
+        * Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+        * Restore MCG reconciliation
+        * Start the NooBaa service
+        * Restart the NooBaa DB pod
+        * Check that the old data exists, but not s3://testloss/
 
     """
     # OCS storagecluster object
@@ -151,7 +168,6 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Stopped MCG reconcilation!")
 
         # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
-
         nb_operator_dc.scale(replicas=0)
         nb_endpoint_dc.scale(replicas=0)
         modify_statefulset_replica_count(
@@ -224,6 +240,7 @@ def noobaa_db_backup_and_recovery_locally(
                 secret.create()
             else:
                 logger.info(f"{secret.name} is not deleted!")
+
         # restore MCG reconcilation if not restored already
         if (
             ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[

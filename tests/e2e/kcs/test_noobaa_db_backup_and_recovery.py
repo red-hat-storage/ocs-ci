@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.ocs import warp
 from ocs_ci.framework.testlib import (
@@ -23,9 +22,6 @@ log = logging.getLogger(__name__)
 
 @tier3
 @ignore_leftovers
-@pytest.mark.polarion_id("OCS-2605")
-@pytest.mark.bugzilla("1924047")
-@skipif_ocs_version("<4.6")
 @skipif_managed_service
 @skipif_external_mode
 class TestNoobaaBackupAndRecovery(E2ETest):
@@ -42,6 +38,9 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
+    @pytest.mark.polarion_id("OCS-2605")
+    @pytest.mark.bugzilla("1924047")
+    @skipif_ocs_version("<4.6")
     def test_noobaa_db_backup_and_recovery(
         self,
         pvc_factory,
@@ -102,9 +101,36 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         warps3,
         mcg_obj_session,
     ):
+        """
+        Test to verify Backup and Restore for Multicloud Object Gateway database locally
+        Backup procedure:
+            * Create a test bucket and write some data
+            * Backup noobaa secrets to local folder OR store it in secret objects
+            * Backup the PostgreSQL database and save it to a local folder
+            * For testing, write new data to show a little data loss between backup and restore
+        Restore procedure:
+            * Stop MCG reconciliation
+            * Stop the NooBaa Service before restoring the NooBaa DB.
+              There will be no object service after this point
+            * Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+            * Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+            * Restore DB from a local folder
+            * Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+            * Restore MCG reconciliation
+            * Start the NooBaa service
+            * Restart the NooBaa DB pod
+            * Check that the old data exists, but not s3://testloss/
+        Run multi client warp benchamrking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
+
+        """
+
+        # create a bucket for warp benchmarking
         bucket_name = bucket_factory()[0].name
+
+        # Backup and restore noobaa db using fixture
         noobaa_db_backup_and_recovery_locally()
-        time.sleep(10)
+
+        # Run multi client warp benchmarking
         warps3.run_benchmark(
             bucket_name=bucket_name,
             access_key=mcg_obj_session.access_key_id,
@@ -120,9 +146,8 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             debug=True,
             insecure=True,
         )
-        log.info(mcg_obj_session.access_key_id)
-        log.info(mcg_obj_session.access_key)
 
+        # make sure no errors in the noobaa pod logs
         search_string = (
             "AssertionError [ERR_ASSERTION]: _id must be unique. "
             "found 2 rows with _id=undefined in table bucketstats"
