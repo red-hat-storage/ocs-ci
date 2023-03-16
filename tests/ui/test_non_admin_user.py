@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud_managed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ibm_cloud_managed,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.mcg_ui import ObcUi
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -74,6 +77,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     @skipif_ibm_cloud_managed
     @bugzilla("2103975")
     @polarion_id("OCS-4667")
+    @skipif_ocs_version("<4.9")
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role
         user = user_factory()
