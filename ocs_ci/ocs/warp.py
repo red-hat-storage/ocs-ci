@@ -74,7 +74,7 @@ class Warp(object):
         # Create test pvc+pod
         log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
-        self.pod_name = "warp-pod"
+        self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
             namespace=self.namespace,
@@ -82,20 +82,7 @@ class Warp(object):
             access_mode=constants.ACCESS_MODE_RWX,
         )
 
-        # create warp clients
-        helpers.create_pod(
-            constants.CEPHBLOCKPOOL,
-            namespace=self.namespace,
-            pod_name="warp-pod-clients",
-            pvc_name=self.pvc_obj.name,
-            sa_name=self.sa_name,
-            pod_dict_path=self.pod_dic_path,
-            dc_deployment=True,
-            deploy_pod_status=constants.STATUS_COMPLETED,
-            replica_count=replicas,
-            ports=self.ports,
-        )
-
+        # create warp pods
         self.pod_obj = helpers.create_pod(
             constants.CEPHBLOCKPOOL,
             namespace=self.namespace,
@@ -105,7 +92,20 @@ class Warp(object):
             pod_dict_path=self.pod_dic_path,
             dc_deployment=True,
             deploy_pod_status=constants.STATUS_COMPLETED,
+            replica_count=replicas,
+            ports=self.ports,
         )
+
+        # self.pod_obj = helpers.create_pod(
+        #     constants.CEPHBLOCKPOOL,
+        #     namespace=self.namespace,
+        #     pod_name=self.pod_name,
+        #     pvc_name=self.pvc_obj.name,
+        #     sa_name=self.sa_name,
+        #     pod_dict_path=self.pod_dic_path,
+        #     dc_deployment=True,
+        #     deploy_pod_status=constants.STATUS_COMPLETED,
+        # )
 
         if multi_client:
             self.client_pods = [
@@ -174,6 +174,7 @@ class Warp(object):
         self.client_str = ""
         for client in self.client_ips:
             self.client_str += f"{self.client_ips[client]}:7761,"
+        self.client_str = self.client_str.rstrip(",")
         if multi_client:
             self.pod_obj.exec_cmd_on_pod(
                 f"{self.warp_bin_dir} mixed "
@@ -186,7 +187,8 @@ class Warp(object):
                 f"--secret-key={self.secret_key} "
                 f"--obj.size={self.obj_size} "
                 f"--bucket={self.bucket_name} "
-                f"--warp-client={self.client_str}",
+                f"--warp-client={self.client_str} "
+                f"--analyze.out={self.output_file}",
                 out_yaml_format=False,
                 timeout=timeout,
             )
@@ -243,7 +245,6 @@ class Warp(object):
 
         """
         log.info("Deleting pods and deployment config")
-        pod.delete_deploymentconfig_pods(self.client_pods[0])
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
         log.info(self.service_obj)

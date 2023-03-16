@@ -10,4 +10,4 @@ spec:
     - port: 7761
       name: warp
   selector:
-    app: warp-pod-clients
+    app: warppod

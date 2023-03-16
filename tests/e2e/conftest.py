@@ -55,7 +55,7 @@ def noobaa_db_backup_and_recovery_locally(
             mcg_obj=mcg_obj_session,
         )
 
-        # Backup secrets to local folders
+        # Backup secrets
         ocp_secret_obj = OCP(
             kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
@@ -77,7 +77,7 @@ def noobaa_db_backup_and_recovery_locally(
         # Backup the PostgreSQL database and save it to a local folder
         noobaa_db_pod = Pod(
             **get_pods_having_label(
-                label="noobaa-db=postgres",
+                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             )[0]
         )
@@ -101,24 +101,27 @@ def noobaa_db_backup_and_recovery_locally(
 
         # Stop MCG reconcilation
         ocp_storagecluster_obj = OCP(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, kind="storagecluster"
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            kind=constants.STORAGECLUSTER,
         )
         params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
         ocp_storagecluster_obj.patch(
-            resource_name="ocs-storagecluster", params=params, format_type="merge"
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=params,
+            format_type="merge",
         )
         logger.info("Stopped MCG reconcilation!")
 
         # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
         ocp_deployment_obj = OCP(
-            kind="deployment", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         nb_operator_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name="noobaa-operator")
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
         )
         nb_operator_dc.scale(replicas=0)
         nb_endpoint_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name="noobaa-endpoint")
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
         )
         nb_endpoint_dc.scale(replicas=0)
         modify_statefulset_replica_count(
@@ -152,7 +155,9 @@ def noobaa_db_backup_and_recovery_locally(
         # Restore MCG reconciliation
         params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "manage"}}}'
         ocp_storagecluster_obj.patch(
-            resource_name="ocs-storagecluster", params=params, format_type="merge"
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=params,
+            format_type="merge",
         )
         logger.info("Restored MCG reconcilation!")
 

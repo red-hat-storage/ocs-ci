@@ -86,7 +86,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
     def warps3(self, request):
 
         warps3 = warp.Warp()
-        warps3.create_resource_warp(replicas=3, multi_client=True)
+        warps3.create_resource_warp(replicas=4, multi_client=True)
 
         def teardown():
             warps3.cleanup()
@@ -102,14 +102,13 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         mcg_obj_session,
     ):
         bucket_name = bucket_factory()[0].name
-
         # noobaa_db_backup_and_recovery_locally()
         # time.sleep(10)
         warps3.run_benchmark(
             bucket_name=bucket_name,
             access_key=mcg_obj_session.access_key_id,
             secret_key=mcg_obj_session.access_key,
-            duration="10m",
+            duration="5m",
             concurrent=10,
             objects=100,
             obj_size="1MiB",
@@ -135,3 +134,9 @@ class TestNoobaaBackupAndRecovery(E2ETest):
                     search_string not in line
                 ), f"[Error] {search_string} found in the noobaa pod logs"
         log.info(f"No {search_string} errors are found in the noobaa pod logs")
+
+    def test_sample(self, bucket_factory, mcg_obj_session):
+        bucket_name = bucket_factory()[0].name
+        log.info(bucket_name)
+        log.info(mcg_obj_session.access_key_id)
+        log.info(mcg_obj_session.access_key)
