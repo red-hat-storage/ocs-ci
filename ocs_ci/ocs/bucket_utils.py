@@ -767,8 +767,9 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
         namespace=namespace,
     )
     if not sample.wait_for_func_status(result=True):
-        logger.error(f"Backing Store {backingstore_name} never reached OPTIMAL state")
-        raise TimeoutExpiredError
+        raise TimeoutExpiredError(
+            f"Backing Store {backingstore_name} never reached OPTIMAL state"
+        )
     else:
         logger.info(f"Backing Store {backingstore_name} created successfully")
 
