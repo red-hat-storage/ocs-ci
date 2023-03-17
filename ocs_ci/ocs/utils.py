@@ -1116,7 +1116,7 @@ def _collect_ocs_logs(
                 os.path.expanduser(cluster_config.RUN["log_dir"]),
                 f"{dir_name}_{cluster_config.RUN['run_id']}",
             )
-            csv_cmd = f"oc get csv -l {constants.ACM_CSV_LABEL} -o json"
+            csv_cmd = f"oc get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
             jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
             json_out = subprocess.Popen(shlex.split(csv_cmd), stdout=subprocess.PIPE)
             out = subprocess.Popen(

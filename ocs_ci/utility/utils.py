@@ -4156,7 +4156,6 @@ def string_chunkify(cstring, csize):
     yield cstring[i:]
 
 
-<<<<<<< HEAD
 def get_pytest_fixture_value(request, fixture_name):
     """
     Get the value of a fixture name from the request
@@ -4212,7 +4211,8 @@ def switch_to_correct_cluster_at_setup(request):
     # Switch to the correct cluster type
     log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
     config.switch_to_cluster_by_cluster_type(cluster_type)
-=======
+
+
 def list_insert_at_position(lst, index, element):
     """
     Insert an element into the list at a specific index
@@ -4220,4 +4220,3 @@ def list_insert_at_position(lst, index, element):
 
     """
     return lst[:index] + element + lst[index:]
->>>>>>> e487f492 (Rename cluster_ctx variable to cluster_config for more readability)
