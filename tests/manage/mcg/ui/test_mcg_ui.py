@@ -1,5 +1,4 @@
 import logging
-
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
