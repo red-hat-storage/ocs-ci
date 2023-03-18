@@ -290,7 +290,10 @@ class BucketsUI(PageNavigator):
             logger.info(f"Go to {resource} Page")
             # delete specific resource by its dynamic name. Works both for OBC and OB
             self.do_click(
-                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH)
+                (
+                    f"//*[@title='ObjectBucketClaim']/following-sibling::a[contains(@data-test-id, '{resource}')]",
+                    By.XPATH,
+                )
             )
 
             logger.info(f"Click on '{delete_via}'")
@@ -300,8 +303,7 @@ class BucketsUI(PageNavigator):
             # delete specific resource by its dynamic name. Works both for OBC and OB
             self.do_click(
                 (
-                    f"//td[@id='name']//a[contains(text(), '{resource}')]"
-                    "/../../..//button[@aria-label='Actions']",
+                    f"//*[contains(@data-test-id, '{resource}')]/../../..//button[@aria-label='Actions']",
                     By.XPATH,
                 )
             )
@@ -356,11 +358,11 @@ class ObcUI(BucketsUI):
             logger.info("Select BucketClass")
             self.do_click(self.obc_loc["bucketclass_dropdown"])
 
-            if not len(self.get_elements(self.obc_loc["bucket_class_search_bar"])):
+            if not len(self.get_elements(self.obc_loc["bucketclass_text_field"])):
                 logger.info("repetitive click on bucketclass dropdown")
                 self.do_click(self.obc_loc["bucketclass_dropdown"])
 
-            self.do_send_keys(self.obc_loc["bucket_class_search_bar"], bucketclass)
+            self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
             self.do_click(self.generic_locators["first_dropdown_option"])
 
         logger.info("Create OBC")

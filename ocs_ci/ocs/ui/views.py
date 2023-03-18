@@ -304,10 +304,9 @@ obc = {
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
     "delete_resource": (
-        'li[id="Delete"]',
-        By.CSS_SELECTOR,
+        "//*[contains(@data-test-action, 'Delete')]",
+        By.XPATH,
     ),
-    "bucket_class_search_bar": ("search-bar", By.ID),
 }
 
 pvc = {
@@ -1234,6 +1233,7 @@ locators = {
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "acm_page": {**acm_page_nav, **acm_configuration},
+        "obc": obc,
     },
     "4.9": {
         "login": login,
