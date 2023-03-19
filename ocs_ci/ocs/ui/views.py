@@ -1245,6 +1245,7 @@ locators = {
         "add_capacity": add_capacity,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "storageclass": {**storageclass, **storageclass_4_9},
+        "obc": obc,
     },
     "4.8": {
         "login": login,
