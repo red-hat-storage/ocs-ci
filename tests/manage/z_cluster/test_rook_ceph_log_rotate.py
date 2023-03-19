@@ -30,9 +30,9 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-4684")
-class TestLogsRotate(ManageTest):
+class TestRookCephLogRotate(ManageTest):
     """
-    Test Logs Rotate
+    Test Rook Ceph Log Rotate
 
     """
 
@@ -65,7 +65,7 @@ class TestLogsRotate(ManageTest):
             pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
-            POD Obj:
+            POD Obj: pod obj based pod_type
         """
         pod_objs = self.podtype_id[pod_type][0]()
         for pod_obj in pod_objs:
@@ -100,7 +100,7 @@ class TestLogsRotate(ManageTest):
             return False
         return True
 
-    def test_logs_rotate(self):
+    def test_rook_ceph_log_rotate(self):
         """
         Test Process:
             1.Verify the number of MGR,MDS,OSD,MON,RGW logs
@@ -126,7 +126,7 @@ class TestLogsRotate(ManageTest):
             pod.get_ceph_daemon_id(pod.get_mon_pods()[0]),
             "ceph-mon.",
         ]
-        if config.ENV_DATA["platform"].lower() != constants.AWS_PLATFORM:
+        if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
             self.podtype_id["rgw"] = [
                 pod.get_rgw_pods,
                 pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
@@ -154,6 +154,9 @@ class TestLogsRotate(ManageTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.STORAGECLUSTER,
         )
+        log.info(
+            "Add logCollector section on storagecluster, maxLogSize=500M periodicity=hourly"
+        )
         params = '{"spec": {"logCollector": {"enabled": true,"maxLogSize":"500M", "periodicity": "hourly"}}}'
         storagecluster_obj.patch(
             params=params,
@@ -164,6 +167,7 @@ class TestLogsRotate(ManageTest):
         log.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
+        log.info("Copy data to /var/log/ceph/<ceph>.log file")
         for pod_type in self.podtype_id:
             pod_obj = self.get_pod_obj_based_on_id(pod_type)
             expected_string = (
