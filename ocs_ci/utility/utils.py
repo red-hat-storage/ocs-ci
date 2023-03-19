@@ -23,6 +23,7 @@ import pandas as pd
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 import pexpect
+import pytest
 
 import hcl2
 import requests
@@ -4101,3 +4102,60 @@ def string_chunkify(cstring, csize):
         yield cstring[i : i + csize]
         i += csize
     yield cstring[i:]
+
+
+def get_pytest_fixture_value(request, fixture_name):
+    """
+    Get the value of a fixture name from the request
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+        fixture_name: Fixture for which this request is being performed
+
+    Returns:
+        Any: The fixture value
+
+    """
+    if fixture_name not in request.fixturenames:
+        return None
+
+    return request.getfixturevalue(fixture_name)
+
+
+def switch_to_correct_cluster_at_setup(request):
+    """
+    Switch to the correct cluster index at setup, according to the 'cluster_type' fixture parameter
+    provided in the test.
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+
+    """
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+
+    cluster_type = get_pytest_fixture_value(request, "cluster_type")
+    if not cluster_type:
+        log.info(
+            "The cluster type is not provided in the request params. "
+            "Continue the test with the current cluster"
+        )
+        return
+
+    if not is_managed_service_cluster():
+        if cluster_type == constants.NON_MS_CLUSTER_TYPE:
+            log.info(
+                "The cluster is a non-MS cluster. Continue the test with the current cluster"
+            )
+            return
+        else:
+            pytest.skip(
+                f"The test will not run on a non-MS cluster with the cluster type '{cluster_type}'"
+            )
+
+    # If the cluster is an MS cluster
+    if not config.is_cluster_type_exist(cluster_type):
+        pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
+
+    # Switch to the correct cluster type
+    log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
+    config.switch_to_cluster_by_cluster_type(cluster_type)
