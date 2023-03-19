@@ -5317,6 +5317,13 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         acc_secret_dict = OCP(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         ).get(f"noobaa-account-{name}")
+
+        endpoint = (
+            mcg_obj_session.s3_internal_endpoint
+            if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy")
+            else mcg_obj_session.s3_endpoint
+        )
+
         return {
             "access_key_id": base64.b64decode(
                 acc_secret_dict.get("data").get("AWS_ACCESS_KEY_ID")
@@ -5324,7 +5331,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             "access_key": base64.b64decode(
                 acc_secret_dict.get("data").get("AWS_SECRET_ACCESS_KEY")
             ).decode("utf-8"),
-            "endpoint": mcg_obj_session.s3_endpoint,
+            "endpoint": endpoint,
             "ssl": ssl,
         }
 
