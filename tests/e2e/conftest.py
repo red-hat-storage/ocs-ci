@@ -158,7 +158,6 @@ def noobaa_db_backup_and_recovery_locally(
         )
 
         # Stop MCG reconcilation
-        logger.info(f"storagecluster: {ocs_storagecluster_obj.get()}")
         params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
         ocs_storagecluster_obj.patch(
             resource_name=constants.DEFAULT_CLUSTERNAME,
@@ -173,7 +172,9 @@ def noobaa_db_backup_and_recovery_locally(
         modify_statefulset_replica_count(
             statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
         )
-        logger.info("Stopped the noobaa service!")
+        logger.info(
+            "Stopped the noobaa service: Noobaa endpoint, Noobaa core, Noobaa operator pods!!"
+        )
 
         # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
         query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
@@ -193,10 +194,10 @@ def noobaa_db_backup_and_recovery_locally(
         # Please note that verify that there are no errors before you proceed to the next steps.
         for secret in secrets_obj:
             secret.delete()
-        logger.info("Deleted current secrets!")
+        logger.info(f"Deleted current Noobaa secrets: {secrets}!")
         for secret in secrets_obj:
             secret.create()
-        logger.info("Restored old secrets!")
+        logger.info(f"Restored old Noobaa secrets: {secrets}")
 
         # Restore MCG reconciliation
         restore_mcg_reconcilation(ocs_storagecluster_obj)
@@ -208,7 +209,9 @@ def noobaa_db_backup_and_recovery_locally(
         modify_statefulset_replica_count(
             statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
         )
-        logger.info("Started noobaa services!")
+        logger.info(
+            "Started noobaa services: Noobaa endpoint, Noobaa core, Noobaa operator pods!"
+        )
 
         # Restart the NooBaa DB pod
         noobaa_db_pod.delete()

@@ -94,6 +94,9 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         request.addfinalizer(teardown)
         return warps3
 
+    @pytest.mark.polarion_id("OCS-4842")
+    @pytest.mark.bugzilla("214035")
+    @skipif_ocs_version("<4.8")
     def test_noobaa_db_backup_recovery_locally(
         self,
         bucket_factory,

@@ -139,17 +139,13 @@ class Warp(object):
             obj_size (int): size of object
             timeout (int): timeout in seconds
             validate (Boolean): Validates whether running workload is completed.
+            multi_client (Boolean): If True, then run multi client benchmarking
+            tls (Boolean): Use TLS (HTTPS) for transport
+            insecure (Boolean): disable TLS certification verification
+            debug (Boolean): Enable debug output
 
         """
-        # Setup warp clients on warp client pods
-        if multi_client:
-            thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
-            for p in self.client_pods:
-                command = f"{self.warp_bin_dir} client"
-                # f"{self.client_ips[p.name]}:7761"
-                thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
 
-        time.sleep(10)
         # Running warp S3 benchmark
         log.info("Running Minio Warp S3 benchmark")
         timeout = timeout if timeout else 3600
@@ -160,46 +156,78 @@ class Warp(object):
         self.concurrent = concurrent if concurrent else self.concurrent["concurrent"]
         self.objects = objects if objects else self.objects["objects"]
         self.obj_size = obj_size if obj_size else self.obj_size["obj.size"]
+        base_options = "".join(
+            f"--duration={self.duration} "
+            f"--host={self.host} "
+            f"--insecure={insecure} "
+            f"--tls={tls} "
+            f"--debug={debug} "
+            f"--access-key={self.access_key} "
+            f"--secret-key={self.secret_key} "
+            f"--noclear --noprefix --concurrent={self.concurrent} "
+            f"--objects={self.objects} "
+            f"--obj.size={self.obj_size} "
+            f"--get-distrib={self.get_distrib} "
+            f"--put-distrib={self.put_distrib} "
+            f"--delete-distrib={self.delete_distrib} "
+            f"--stat-distrib={self.stat_distrib} "
+            f"--bucket={self.bucket_name} "
+            f"--analyze.out={self.output_file} "
+        )
+
+        # Setup warp clients on warp client pods
         self.client_str = ""
-        for client in self.client_ips:
-            self.client_str += f"{self.client_ips[client]}:7761,"
-        self.client_str = self.client_str.rstrip(",")
+        multi_client_options = ""
         if multi_client:
-            self.pod_obj.exec_cmd_on_pod(
-                f"{self.warp_bin_dir} mixed "
-                f"--duration={self.duration} "
-                f"--host={self.host} "
-                f"--insecure={insecure} "
-                f"--tls={tls} "
-                f"--debug={debug} "
-                f"--access-key={self.access_key} "
-                f"--secret-key={self.secret_key} "
-                f"--obj.size={self.obj_size} "
-                f"--bucket={self.bucket_name} "
-                f"--warp-client={self.client_str} "
-                f"--analyze.out={self.output_file}",
-                out_yaml_format=False,
-                timeout=timeout,
-            )
-        else:
-            self.pod_obj.exec_cmd_on_pod(
-                f"{self.warp_bin_dir} mixed "
-                f"--duration={self.duration} "
-                f"--host={self.host} "
-                f"--access-key={self.access_key} "
-                f"--secret-key={self.secret_key} "
-                f"--noclear --noprefix --concurrent={self.concurrent} "
-                f"--objects={self.objects} "
-                f"--obj.size={self.obj_size} "
-                f"--get-distrib={self.get_distrib} "
-                f"--put-distrib={self.put_distrib} "
-                f"--delete-distrib={self.delete_distrib} "
-                f"--stat-distrib={self.stat_distrib} "
-                f"--bucket={self.bucket_name} "
-                f"--analyze.out={self.output_file}",
-                out_yaml_format=False,
-                timeout=timeout,
-            )
+            thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
+            for p in self.client_pods:
+                command = f"{self.warp_bin_dir} client"
+                thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
+            time.sleep(10)
+            for client in self.client_ips:
+                self.client_str += f"{self.client_ips[client]}:7761,"
+            self.client_str = self.client_str.rstrip(",")
+            multi_client_options = "".join(f"--warp-client={self.client_str} ")
+
+        cmd = f"{self.warp_bin_dir} mixed " + base_options + multi_client_options
+        self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
+
+        # if multi_client:
+        #     self.pod_obj.exec_cmd_on_pod(
+        #         f"{self.warp_bin_dir} mixed "
+        #         f"--duration={self.duration} "
+        #         f"--host={self.host} "
+        #         f"--insecure={insecure} "
+        #         f"--tls={tls} "
+        #         f"--debug={debug} "
+        #         f"--access-key={self.access_key} "
+        #         f"--secret-key={self.secret_key} "
+        #         f"--obj.size={self.obj_size} "
+        #         f"--bucket={self.bucket_name} "
+        #         f"--warp-client={self.client_str} "
+        #         f"--analyze.out={self.output_file}",
+        #         out_yaml_format=False,
+        #         timeout=timeout,
+        #     )
+        # else:
+        #     self.pod_obj.exec_cmd_on_pod(
+        #         f"{self.warp_bin_dir} mixed "
+        #         f"--duration={self.duration} "
+        #         f"--host={self.host} "
+        #         f"--access-key={self.access_key} "
+        #         f"--secret-key={self.secret_key} "
+        #         f"--noclear --noprefix --concurrent={self.concurrent} "
+        #         f"--objects={self.objects} "
+        #         f"--obj.size={self.obj_size} "
+        #         f"--get-distrib={self.get_distrib} "
+        #         f"--put-distrib={self.put_distrib} "
+        #         f"--delete-distrib={self.delete_distrib} "
+        #         f"--stat-distrib={self.stat_distrib} "
+        #         f"--bucket={self.bucket_name} "
+        #         f"--analyze.out={self.output_file}",
+        #         out_yaml_format=False,
+        #         timeout=timeout,
+        #     )
         if validate:
             self.validate_warp_workload()
 
