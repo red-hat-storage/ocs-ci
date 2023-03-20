@@ -2237,7 +2237,11 @@ def mcg_obj_fixture(request, *args, **kwargs):
 
 @pytest.fixture(scope="session")
 def awscli_pod_session(request):
-    return awscli_pod_fixture(request, scope_name="session")
+    awscli_pods = get_pods_having_label(
+        constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
+    )
+    existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
+    return existing_pod or awscli_pod_fixture(request, scope_name="session")
 
 
 @pytest.fixture(scope="session")
