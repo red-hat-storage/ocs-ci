@@ -192,42 +192,6 @@ class Warp(object):
         cmd = f"{self.warp_bin_dir} mixed " + base_options + multi_client_options
         self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
 
-        # if multi_client:
-        #     self.pod_obj.exec_cmd_on_pod(
-        #         f"{self.warp_bin_dir} mixed "
-        #         f"--duration={self.duration} "
-        #         f"--host={self.host} "
-        #         f"--insecure={insecure} "
-        #         f"--tls={tls} "
-        #         f"--debug={debug} "
-        #         f"--access-key={self.access_key} "
-        #         f"--secret-key={self.secret_key} "
-        #         f"--obj.size={self.obj_size} "
-        #         f"--bucket={self.bucket_name} "
-        #         f"--warp-client={self.client_str} "
-        #         f"--analyze.out={self.output_file}",
-        #         out_yaml_format=False,
-        #         timeout=timeout,
-        #     )
-        # else:
-        #     self.pod_obj.exec_cmd_on_pod(
-        #         f"{self.warp_bin_dir} mixed "
-        #         f"--duration={self.duration} "
-        #         f"--host={self.host} "
-        #         f"--access-key={self.access_key} "
-        #         f"--secret-key={self.secret_key} "
-        #         f"--noclear --noprefix --concurrent={self.concurrent} "
-        #         f"--objects={self.objects} "
-        #         f"--obj.size={self.obj_size} "
-        #         f"--get-distrib={self.get_distrib} "
-        #         f"--put-distrib={self.put_distrib} "
-        #         f"--delete-distrib={self.delete_distrib} "
-        #         f"--stat-distrib={self.stat_distrib} "
-        #         f"--bucket={self.bucket_name} "
-        #         f"--analyze.out={self.output_file}",
-        #         out_yaml_format=False,
-        #         timeout=timeout,
-        #     )
         if validate:
             self.validate_warp_workload()
 
