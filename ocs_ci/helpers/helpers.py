@@ -2577,19 +2577,26 @@ def wait_for_ct_pod_recovery():
     """
     try:
         _ = get_admin_key()
-    except CommandFailed as ex:
-        logger.info(str(ex))
-        if "connection timed out" in str(ex):
+    except (CommandFailed, AssertionError) as ex:
+        error_msg = str(ex)
+        logger.info(error_msg)
+        if (
+            "connection timed out" in error_msg
+            or "No running Ceph tools pod found" in error_msg
+        ):
             logger.info(
                 "Ceph tools box was running on the node that had a failure. "
                 "Hence, waiting for a new Ceph tools box pod to spin up"
             )
-            wait_for_resource_count_change(
-                func_to_use=pod.get_all_pods,
-                previous_num=1,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                timeout=120,
+            pod_obj = ocp.OCP(
+                kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )
+            pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
                 selector=constants.TOOL_APP_LABEL,
+                resource_count=1,
+                timeout=120,
+                sleep=10,
             )
             return True
         else:
