@@ -1778,12 +1778,9 @@ class AWS(object):
             role_data,
         )
         logger.debug("AWS KMS role:%s", template)
-        role_file = os.path.join(self.kms_resources_dir, "role.json")
-        with open(role_file, "w") as temp:
-            temp.write(template)
         return self.iam_client.create_role(
             RoleName=role_name,
-            AssumeRolePolicyDocument=role_file,
+            AssumeRolePolicyDocument=template,
         )
 
     def create_kms_key_policy(self, key, policy_name="kms-acess"):
@@ -1808,12 +1805,9 @@ class AWS(object):
             policy_data,
         )
         logger.debug("AWS KMS key policy:%s", template)
-        policy_file = os.path.join(self.kms_resources_dir, "key_policy.json")
-        with open(policy_data, "w") as temp:
-            temp.write(template)
         return self.iam_client.create_policy(
             PolicyName=policy_name,
-            PolicyDocument=policy_file,
+            PolicyDocument=template,
         )
 
 
