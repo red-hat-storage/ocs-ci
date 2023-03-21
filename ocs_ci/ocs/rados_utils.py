@@ -343,7 +343,7 @@ def inject_corrupted_dups_into_pg_via_cot(
     # Create a text.json file with dup entries in it
     txt = (
         '[{"reqid": "client.4177.0:0", "version": "111\'999999999", "user_version": "0", '
-        '"generate": "4000", "return_code": "0"},]'
+        '"generate": "7000", "return_code": "0"},]'
     )
     tmpfile = tempfile.NamedTemporaryFile(
         prefix=f"{injected_dups_file_name_prefix}", suffix=".json", delete=False
