@@ -103,6 +103,9 @@ DEPLOYMENT:
   install_lvmo: False
   # Cloud Credential Operator Utility
   ccoctl_version: "4.11.0"
+  # AWS profile ( profile must exist in ~/.aws/credentials )
+  aws_profile: "ocs-ci"
+  aws_cred_path: "~/.aws/credentials"
 
 
 # Section for reporting configuration
