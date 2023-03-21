@@ -1757,7 +1757,6 @@ class AWS(object):
         """
         _templating = Templating()
         role_data = dict()
-        role_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
         open_id_providers = self.iam_client.list_open_id_connect_providers()
         oidc_provider_arn = None
         for id_provider in open_id_providers["OpenIDConnectProviderList"]:
@@ -1798,7 +1797,6 @@ class AWS(object):
         """
         _templating = Templating()
         policy_data = dict()
-        policy_data["date"] = time.strftime("%Y-%m-%d", time.localtime())
         policy_data["key"] = key
         template = _templating.render_template(
             constants.AWS_KMS_KEY_POLICY,
