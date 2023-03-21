@@ -4895,7 +4895,7 @@ def aws_kms_setup(request, aws_kms_key):
     log.debug(f"Role: {role_response}")
     log.info("Creating AWS KMS key policy")
     policy_response = aws_obj.create_kms_key_policy(
-        key=aws_kms_key["KeyMetadata"]["KeyId"],
+        key=aws_kms_key["KeyMetadata"]["Arn"],
         policy_name=f"{provider_name}-kms-acess",
     )
     log.debug(f"Key Policy: {policy_response}")
