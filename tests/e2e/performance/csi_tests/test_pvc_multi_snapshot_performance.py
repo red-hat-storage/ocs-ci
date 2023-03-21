@@ -124,12 +124,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                     log.error(f"Cannot delete {snap_name} : {err}")
 
             # Deleting the pod which wrote data to the pvc
-            log.info(f"Deleting the test POD : {self.pod_obj.name}")
+            log.info(f"Deleting the test POD : {self.pod_object.name}")
             try:
-                self.pod_obj.delete()
+                self.pod_object.delete()
                 log.info("Wait until the pod is deleted.")
-                self.pod_obj.ocp.wait_for_delete(
-                    resource_name=self.pod_obj.name, timeout=180
+                self.pod_object.ocp.wait_for_delete(
+                    resource_name=self.pod_object.name, timeout=180
                 )
             except Exception as ex:
                 log.error(f"Cannot delete the test pod : {ex}")
@@ -236,7 +236,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         # Find the path that the PVC is mounted within the POD
         path = (
-            self.pod_obj.get("spec")
+            self.pod_object.get("spec")
             .get("spec")
             .get("containers")[0]
             .get("volumeMounts")[0]
@@ -378,7 +378,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info(f"Starting test number {test_num}")
 
             # Running IO on the POD - (re)-write data on the PVC
-            self.pod_obj.exec_cmd_on_pod(
+            self.pod_object.exec_cmd_on_pod(
                 self.fio_cmd, out_yaml_format=False, timeout=3600
             )
 
@@ -405,14 +405,13 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     @pytest.mark.parametrize(
         argnames=["interface_type", "snap_number"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL, 5]),
+            pytest.param(*[constants.CEPHBLOCKPOOL, 512]),
             pytest.param(*[constants.CEPHFILESYSTEM, 100]),
         ],
     )
     def test_pvc_multiple_snapshot_performance(
         self,
-        pvc_factory,
-        pod_factory,
+        teardown_factory,
         secret_factory,
         interface_type,
         snap_number,
@@ -493,28 +492,18 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         # Create new PVC
         log.info(f"Creating {self.pvc_size} GiB PVC of {interface_type}")
-        # self.pvc_obj = pvc_factory(
-        #     interface=self.interface,
-        #     storageclass=self.sc_obj,
-        #     size=self.pvc_size,
-        #     status=constants.STATUS_BOUND,
-        #     project=self.proj,
-        # )
 
         self.pvc_obj = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size=self.pvc_size + "Gi", namespace=self.namespace
+            sc_name=self.sc_obj.name,
+            size=self.pvc_size + "Gi",
+            namespace=self.namespace,
         )
         helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
         self.pvc_obj.reload()
+        teardown_factory(self.pvc_obj)
 
         # Create POD which will attache to the new PVC
-        log.info("Creating A POD")
-        # self.pod_obj = pod_factory(
-        #     interface=self.interface,
-        #     pvc=self.pvc_obj,
-        #     status=constants.STATUS_RUNNING,
-        #     pod_dict_path=constants.PERF_POD_YAML,
-        # )
+        log.info("Creating a Pod")
 
         try:
             self.pod_object = helpers.create_pod(
@@ -536,7 +525,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.filesize = self.pvc_obj.size * 0.80
         # Change the file size to MB for the FIO function
         self.file_size = f"{int(self.filesize * constants.GB2MB)}M"
-        self.file_name = self.pod_obj.name
+        self.file_name = self.pod_object.name
 
         log.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
@@ -577,7 +566,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                 self.uuid, self.crd_data, self.full_log_path, "multiple_snapshots"
             )
         )
-        full_results.all_results = [] # self.run()
+        full_results.all_results = self.run()
         self.end_time = self.get_time()
         full_results.add_key(
             "avg_creation_time",
