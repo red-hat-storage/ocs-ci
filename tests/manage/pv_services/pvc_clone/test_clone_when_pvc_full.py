@@ -102,8 +102,8 @@ class TestCloneWhenFull(ManageTest):
                 == "ocs-storagecluster-cephfs"
             ):
                 pv = clone_pvc.get().get("spec").get("volumeName")
-                func_calls = "clone"
                 error_msg = f"{pv} failed to create clone from subvolume"
+                pend_msg = "clone from snapshot is pending"
                 csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
                     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                     selector=["csi-cephfsplugin-provisioner"],
@@ -114,14 +114,17 @@ class TestCloneWhenFull(ManageTest):
                     pod_name=pod_obj.name, container="csi-cephfsplugin"
                 )
 
-                if func_calls in pod_log:
+                if pv in pod_log:
                     relevant_pod_logs = pod_log
-                    log.info(f"Found '{func_calls}' call in logs on pod {pod_obj.name}")
+                    log.info(f"Found '{pv}' logs on pod {pod_obj.name}")
                     break
             assert (
                 error_msg in relevant_pod_logs
             ), f"Logs should contain the error message '{error_msg}'"
-            log.info(f"Logs contain the error message '{error_msg}'")
+            assert (
+                pend_msg in relevant_pod_logs
+            ), f"Logs should contain the pending message'{pend_msg}'"
+            log.info(f"Logs contain the messages '{error_msg}' and '{pend_msg}'")
 
         # Attach the cloned PVCs to pods
         log.info("Attach the cloned PVCs to pods")
