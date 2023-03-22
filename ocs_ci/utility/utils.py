@@ -2642,13 +2642,14 @@ def dump_config_to_file(file_path):
         yaml.safe_dump(config_copy, fs)
 
 
-def create_rhelpod(namespace, pod_name, timeout=300):
+def create_rhelpod(namespace, pod_name, rhel_version=8, timeout=300):
     """
     Creates the RHEL pod
 
     Args:
         namespace (str): Namespace to create RHEL pod
         pod_name (str): Pod name
+        rhel_version (int): RHEL version to be used for ansible
         timeout (int): wait time for RHEL pod to be in Running state
 
     Returns:
@@ -2661,11 +2662,15 @@ def create_rhelpod(namespace, pod_name, timeout=300):
 
     label_pod_security_admission(namespace=namespace)
 
-    # TODO: This method should be updated to add argument to change RHEL version
+    if rhel_version >= 8:
+        RHEL_POD_YAML = constants.RHEL_8_7_POD_YAML
+    else:
+        RHEL_POD_YAML = constants.RHEL_7_7_POD_YAML
+
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
-        pod_dict_path=constants.RHEL_8_7_POD_YAML,
+        pod_dict_path=RHEL_POD_YAML,
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING, timeout)
     return rhelpod_obj
