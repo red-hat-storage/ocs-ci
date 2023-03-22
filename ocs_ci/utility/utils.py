@@ -2663,14 +2663,14 @@ def create_rhelpod(namespace, pod_name, rhel_version=8, timeout=300):
     label_pod_security_admission(namespace=namespace)
 
     if rhel_version >= 8:
-        RHEL_POD_YAML = constants.RHEL_8_7_POD_YAML
+        rhel_pod_yaml = constants.RHEL_8_7_POD_YAML
     else:
-        RHEL_POD_YAML = constants.RHEL_7_7_POD_YAML
+        rhel_pod_yaml = constants.RHEL_7_7_POD_YAML
 
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
-        pod_dict_path=RHEL_POD_YAML,
+        pod_dict_path=rhel_pod_yaml,
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING, timeout)
     return rhelpod_obj
