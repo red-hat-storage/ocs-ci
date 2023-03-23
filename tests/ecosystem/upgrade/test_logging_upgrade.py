@@ -146,6 +146,9 @@ def upgrade_info(channel):
     )
 
 
+@pytest.mark.skip(
+    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/6610"
+)
 @post_ocp_upgrade
 @magenta_squad
 @pytest.mark.usefixtures(install_logging.__name__)
