@@ -222,6 +222,12 @@ RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 
+# ODF monitoring tool
+ODF_MONITORING_TOOL_REPO = "https://github.com/red-hat-storage/odf-monitoring-tools.git"
+
+OCS_OPERATOR_REPO = "https://github.com/red-hat-storage/ocs-operator.git"
+CEPH_UPSTREAM_REPO = "https://github.com/ceph/ceph.git"
+
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = "ocs-storagecluster"
