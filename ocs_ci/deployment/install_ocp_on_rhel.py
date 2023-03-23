@@ -65,7 +65,9 @@ class OCPINSTALLRHEL(object):
             constants.POD_UPLOADPATH,
             config.RUN.get("kubeconfig_location").split("/")[-1],
         )
-        self.rhelpod = create_rhelpod(constants.DEFAULT_NAMESPACE, self.pod_name, 600)
+        self.rhelpod = create_rhelpod(
+            constants.DEFAULT_NAMESPACE, self.pod_name, timeout=600
+        )
 
         self.ocp_repo = get_ocp_repo()
 

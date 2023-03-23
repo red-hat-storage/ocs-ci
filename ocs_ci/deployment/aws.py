@@ -546,10 +546,13 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
-        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
-        # different version of RHEL for running openshift ansible playbook, we need
-        # to update this method!
-        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name)
+        if Version.coerce(get_ocp_version()) >= Version.coerce("4.13"):
+            rhel_version_for_ansible = 8
+        else:
+            rhel_version_for_ansible = 7
+        rhel_pod_obj = create_rhelpod(
+            constants.DEFAULT_NAMESPACE, rhel_pod_name, rhel_version_for_ansible
+        )
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -558,11 +561,9 @@ class AWSUPI(AWSBase):
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = constants.YUM_REPOS_PATH
         # Ansible playbook and dependency is described in the documentation to run
-        # on RHEL7 node
+        # on RHEL node
         # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
-        repo_rhel_ansible = get_ocp_repo(
-            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
-        )
+        repo_rhel_ansible = get_ocp_repo(rhel_major_version=rhel_version_for_ansible)
         repo = get_ocp_repo()
         diff_rhel = repo != repo_rhel_ansible
         pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
