@@ -576,6 +576,7 @@ FEDORA_WITH_LINUXTAR_FILES_YAML = os.path.join(
 )
 
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
+RHEL_8_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-8_7.yaml")
 
 GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
