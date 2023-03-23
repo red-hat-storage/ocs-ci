@@ -31,5 +31,5 @@ class TestVerifyDeprecatedApi(ManageTest):
         log.info(f"Output:{command}")
         ocp_obj = OCP(namespace=cluster_namespace)
         output = ocp_obj.exec_oc_cmd(command)
-        assert "v1beta1" not in output, "Deprecated API's in use"
+        assert "v1beta1" not in output, "Deprecated v1beta1 API in use"
         log.info("No depractaed API's are in use")
