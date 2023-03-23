@@ -411,7 +411,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     )
     def test_pvc_multiple_snapshot_performance(
         self,
-        teardown_factory,
         secret_factory,
         interface_type,
         snap_number,
@@ -500,7 +499,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         )
         helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
         self.pvc_obj.reload()
-        teardown_factory(self.pvc_obj)
 
         # Create POD which will attache to the new PVC
         log.info("Creating a Pod")
