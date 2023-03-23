@@ -1,9 +1,13 @@
 import logging
 import os
+import time
 
+import concurrent.futures as futures
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
@@ -45,7 +49,7 @@ class Warp(object):
         self.output_file = "output.csv"
         self.warp_dir = mkdtemp(prefix="warp-")
 
-    def create_resource_warp(self):
+    def create_resource_warp(self, multi_client=False, replicas=1):
         """
         Create resource for Warp S3 benchmark:
             * Create service account
@@ -53,6 +57,14 @@ class Warp(object):
             * Create warp pod for running workload
 
         """
+
+        # create Warp service if multi client benchmarking
+        self.ports = None
+        if multi_client:
+            service_data = templating.load_yaml(constants.WARP_SERVICE_YAML)
+            self.service_obj = OCS(**service_data)
+            self.service_obj.create()
+            self.ports = [{"name": "http", "containerPort": constants.WARP_CLIENT_PORT}]
 
         # Create service account
         self.sa_name = helpers.create_serviceaccount(self.namespace)
@@ -62,12 +74,15 @@ class Warp(object):
         # Create test pvc+pod
         log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
-        self.pod_name = "warp-pod"
+        self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
             namespace=self.namespace,
             size=pvc_size,
+            access_mode=constants.ACCESS_MODE_RWX,
         )
+
+        # create warp pods
         self.pod_obj = helpers.create_pod(
             constants.CEPHBLOCKPOOL,
             namespace=self.namespace,
@@ -77,7 +92,22 @@ class Warp(object):
             pod_dict_path=self.pod_dic_path,
             dc_deployment=True,
             deploy_pod_status=constants.STATUS_COMPLETED,
+            replica_count=replicas,
+            ports=self.ports,
         )
+
+        if multi_client:
+            self.client_pods = [
+                Pod(**pod_info)
+                for pod_info in get_pods_having_label(
+                    label="app=warppod", namespace=self.pod_obj.namespace
+                )
+                if pod_info.get("metadata").get("name") != self.pod_obj.name
+            ]
+            self.client_ips = {}
+            for p in self.client_pods:
+                ip = p.exec_cmd_on_pod(command="hostname -i")
+                self.client_ips[p.name] = ip
 
     def run_benchmark(
         self,
@@ -90,6 +120,10 @@ class Warp(object):
         obj_size=None,
         timeout=None,
         validate=True,
+        multi_client=True,
+        tls=False,
+        insecure=False,
+        debug=False,
     ):
         """
          Running Warp S3 benchmark
@@ -105,6 +139,10 @@ class Warp(object):
             obj_size (int): size of object
             timeout (int): timeout in seconds
             validate (Boolean): Validates whether running workload is completed.
+            multi_client (Boolean): If True, then run multi client benchmarking
+            tls (Boolean): Use TLS (HTTPS) for transport
+            insecure (Boolean): disable TLS certification verification
+            debug (Boolean): Enable debug output
 
         """
 
@@ -118,10 +156,12 @@ class Warp(object):
         self.concurrent = concurrent if concurrent else self.concurrent["concurrent"]
         self.objects = objects if objects else self.objects["objects"]
         self.obj_size = obj_size if obj_size else self.obj_size["obj.size"]
-        self.pod_obj.exec_cmd_on_pod(
-            f"{self.warp_bin_dir} mixed "
+        base_options = "".join(
             f"--duration={self.duration} "
             f"--host={self.host} "
+            f"--insecure={insecure} "
+            f"--tls={tls} "
+            f"--debug={debug} "
             f"--access-key={self.access_key} "
             f"--secret-key={self.secret_key} "
             f"--noclear --noprefix --concurrent={self.concurrent} "
@@ -132,10 +172,29 @@ class Warp(object):
             f"--delete-distrib={self.delete_distrib} "
             f"--stat-distrib={self.stat_distrib} "
             f"--bucket={self.bucket_name} "
-            f"--analyze.out={self.output_file}",
-            out_yaml_format=False,
-            timeout=timeout,
+            f"--analyze.out={self.output_file} "
         )
+
+        # Setup warp clients on warp client pods
+        self.client_str = ""
+        multi_client_options = ""
+        if multi_client:
+            thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
+            for p in self.client_pods:
+                command = f"{self.warp_bin_dir} client"
+                thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
+            log.info("Wait for 5 seconds after the clients are started listening!")
+            time.sleep(5)
+            for client in self.client_ips:
+                self.client_str += (
+                    f"{self.client_ips[client]}:{constants.WARP_CLIENT_PORT},"
+                )
+            self.client_str = self.client_str.rstrip(",")
+            multi_client_options = "".join(f"--warp-client={self.client_str} ")
+
+        cmd = f"{self.warp_bin_dir} mixed " + base_options + multi_client_options
+        self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
+
         if validate:
             self.validate_warp_workload()
 
@@ -169,6 +228,9 @@ class Warp(object):
         Clean up deployment config, pvc, pod and test user
 
         """
+        if self.service_obj:
+            log.info(f"Deleting the service {self.service_obj.name}")
+            self.service_obj.delete()
         log.info("Deleting pods and deployment config")
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()

@@ -1,3 +1,5 @@
+import os
+import time
 import logging
 import pytest
 
@@ -10,11 +12,15 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     wait_for_cache,
     write_random_test_objects_to_bucket,
+    s3_list_objects_v1,
 )
+
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -23,6 +29,245 @@ from ocs_ci.helpers.helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def restore_mcg_reconcilation(ocs_storagecluster_obj):
+    params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "manage"}}}'
+    ocs_storagecluster_obj.patch(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        params=params,
+        format_type="merge",
+    )
+
+
+def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
+    if noobaa_endpoint_dc.get()["spec"]["replicas"] == 0:
+        noobaa_endpoint_dc.scale(replicas=1)
+    if noobaa_operator_dc.get()["spec"]["replicas"] == 0:
+        noobaa_operator_dc.scale(replicas=1)
+    modify_statefulset_replica_count(
+        statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
+    )
+
+
+@pytest.fixture()
+def noobaa_db_backup_and_recovery_locally(
+    request, bucket_factory, awscli_pod_session, mcg_obj_session
+):
+    """
+    Test to verify Backup and Restore for Multicloud Object Gateway database locally
+    Backup procedure:
+        * Create a test bucket and write some data
+        * Backup noobaa secrets to local folder OR store it in secret objects
+        * Backup the PostgreSQL database and save it to a local folder
+        * For testing, write new data to show a little data loss between backup and restore
+    Restore procedure:
+        * Stop MCG reconciliation
+        * Stop the NooBaa Service before restoring the NooBaa DB.
+          There will be no object service after this point
+        * Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+        * Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+        * Restore DB from a local folder
+        * Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+        * Restore MCG reconciliation
+        * Start the NooBaa service
+        * Restart the NooBaa DB pod
+        * Check that the old data exists, but not s3://testloss/
+
+    """
+    # OCS storagecluster object
+    ocs_storagecluster_obj = OCP(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        kind=constants.STORAGECLUSTER,
+    )
+
+    # OCP object for kind deployment
+    ocp_deployment_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+
+    # Noobaa operator & noobaa endpoint deployments objects
+    nb_operator_dc = Deployment(
+        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+    )
+    nb_endpoint_dc = Deployment(
+        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+    )
+
+    secrets_obj = []
+
+    def factory(
+        bucket_factory=bucket_factory,
+        awscli_pod_session=awscli_pod_session,
+        mcg_obj_session=mcg_obj_session,
+    ):
+        global secrets_obj
+
+        # create bucket and write some objects to it
+        test_bucket = bucket_factory()[0]
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            file_dir="test_dir",
+            pattern="test-object",
+            bucket_to_write=test_bucket.name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        # Backup secrets
+        ocp_secret_obj = OCP(
+            kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        secrets = [
+            "noobaa-root-master-key",
+            "noobaa-admin",
+            "noobaa-operator",
+            "noobaa-db",
+            "noobaa-server",
+            "noobaa-endpoints",
+        ]
+        secrets_yaml = [
+            ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
+        ]
+        secrets_obj = [OCS(**secret_yaml) for secret_yaml in secrets_yaml]
+        logger.info("Backed up secrets as secret objects!")
+
+        # Backup the PostgreSQL database and save it to a local folder
+        noobaa_db_pod = Pod(
+            **get_pods_having_label(
+                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )[0]
+        )
+        noobaa_db_pod.exec_cmd_on_pod(
+            command="pg_dump nbcore -f /tmp/test.db -F custom"
+        )
+        OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).exec_oc_cmd(
+            command=f"cp --retries=-1 {noobaa_db_pod.name}:/tmp/test.db ./mcg.bck",
+            out_yaml_format=False,
+        )
+        logger.info("Backed up PostgreSQL and stored it in local folder!")
+
+        # For testing, write new data to show a little data loss between backup and restore
+        testloss_bucket = bucket_factory()[0]
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            file_dir="testloss_dir",
+            pattern="testloss-object",
+            bucket_to_write=testloss_bucket.name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        # Stop MCG reconcilation
+        params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
+        ocs_storagecluster_obj.patch(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=params,
+            format_type="merge",
+        )
+        logger.info("Stopped MCG reconcilation!")
+
+        # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
+        nb_operator_dc.scale(replicas=0)
+        nb_endpoint_dc.scale(replicas=0)
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
+        )
+        logger.info(
+            "Stopped the noobaa service: Noobaa endpoint, Noobaa core, Noobaa operator pods!!"
+        )
+
+        # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+        query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
+        noobaa_db_pod.exec_cmd_on_pod(
+            command=f'psql -h 127.0.0.1 -p 5432 -U postgres -c "{query}"'
+        )
+        logger.info("Cleaned up potential database clients to nbcore!")
+
+        # Restore DB from a local folder
+        OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).exec_oc_cmd(
+            command=f"cp ./mcg.bck {noobaa_db_pod.name}:/tmp/test.db"
+        )
+        noobaa_db_pod.exec_cmd_on_pod(command="pg_restore -d nbcore /tmp/test.db -c")
+        logger.info("Restored DB from the local folder!")
+
+        # Delete secrets and restore them from a local folder.
+        # Please note that verify that there are no errors before you proceed to the next steps.
+        for secret in secrets_obj:
+            secret.delete()
+        logger.info(f"Deleted current Noobaa secrets: {secrets}!")
+        for secret in secrets_obj:
+            secret.create()
+        logger.info(f"Restored old Noobaa secrets: {secrets}")
+
+        # Restore MCG reconciliation
+        restore_mcg_reconcilation(ocs_storagecluster_obj)
+        logger.info("Restored MCG reconcilation!")
+
+        # Start the NooBaa service
+        nb_operator_dc.scale(replicas=1)
+        nb_endpoint_dc.scale(replicas=1)
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
+        )
+        logger.info(
+            "Started noobaa services: Noobaa endpoint, Noobaa core, Noobaa operator pods!"
+        )
+
+        # Restart the NooBaa DB pod
+        noobaa_db_pod.delete()
+        logger.info("Restarted noobaa-db pod!")
+
+        # Make sure the testloss bucket doesn't exists and test bucket consists all the data
+        time.sleep(10)
+        try:
+            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=testloss_bucket.name)
+        except Exception as e:
+            logger.info(e)
+
+        logger.info(
+            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=test_bucket.name)
+        )
+
+    def finalizer():
+
+        global secrets_obj
+
+        # remove the local copy of ./mcg.bck
+        if os.path.exists("./mcg.bck"):
+            os.remove("mcg.bck")
+            logger.info("Removed the local copy of mcg.bck")
+
+        # create the secrets if they're deleted
+        for secret in secrets_obj:
+            if secret.is_deleted:
+                secret.create()
+            else:
+                logger.info(f"{secret.name} is not deleted!")
+
+        # restore MCG reconcilation if not restored already
+        if (
+            ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[
+                "spec"
+            ]["multiCloudGateway"]["reconcileStrategy"]
+            != "manage"
+        ):
+            restore_mcg_reconcilation(ocs_storagecluster_obj)
+            logger.info("MCG reconcilation restored!")
+
+        # start noobaa services if its down
+        ocp_deployment_obj = OCP(
+            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        nb_operator_dc = Deployment(
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+        )
+        nb_endpoint_dc = Deployment(
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        )
+        start_noobaa_services(nb_endpoint_dc, nb_operator_dc)
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture()
