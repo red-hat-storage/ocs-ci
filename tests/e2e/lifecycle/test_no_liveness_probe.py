@@ -17,6 +17,16 @@ LIVENESS_CONTAINER = "liveness-prometheus"
 
 
 def get_containers_names_by_pod(pod: OCP) -> set:
+    """
+    Gets the names of all containers in given pod or pods
+
+    Args:
+        pod (OCP): instance of OCP object that represents a pod (kind=POD)
+
+    Returns:
+        set: hash set of names of all containers in given pod or pods
+
+    """
     items = pod.data.get("items")
     if not isinstance(items, list):
         items = [items]
@@ -26,10 +36,17 @@ def get_containers_names_by_pod(pod: OCP) -> set:
         containers = item.get("spec").get("containers")
         container_names += [c.get("name") for c in containers]
 
+    log.debug(f"Containers: {container_names}")
+
     return set(container_names)
 
 
 def test_no_liveness_container():
+    """
+    Automated test for BZ #2142901
+    Checks if "liveness-prometheus" container is running on CSI pods
+
+    """
     csi_pod = OCP(
         kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=CSI_CEPHFSPLUGIN_LABEL
     )
