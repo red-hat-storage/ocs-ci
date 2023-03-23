@@ -663,7 +663,7 @@ LABEL pxeboot
     MENU LABEL PXE Boot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
-    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:none rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
+    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:none rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 \
 coreos.inst.install_dev=/dev/sda {bm_metal_loc} coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
