@@ -150,8 +150,8 @@ log = logging.getLogger(__name__)
 class OCSLogFormatter(logging.Formatter):
     def __init__(self):
         fmt = (
-            "%(asctime)s - %(threadName)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
-            "- %(message)s"
+            "%(asctime)s - %(threadName)s - %(levelname)s -"
+            " %(name)s.%(funcName)s.%(lineno)d - %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
 
@@ -256,7 +256,7 @@ def pytest_collection_modifyitems(session, items):
                     if not is_kms_enabled(dont_raise=True):
                         log.debug(
                             f"Test: {item} it will be skipped because the OCS cluster"
-                            f" has not configured cluster-wide encryption with KMS"
+                            " has not configured cluster-wide encryption with KMS"
                         )
                         items.remove(item)
                 except KeyError:
@@ -267,7 +267,8 @@ def pytest_collection_modifyitems(session, items):
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
                     log.debug(
-                        f"Test: {item} will be skipped due to UI test {skip_condition.args} is not available"
+                        f"Test: {item} will be skipped due to UI test"
+                        f" {skip_condition.args} is not available"
                     )
                     items.remove(item)
                     continue
@@ -307,7 +308,7 @@ def supported_configuration():
     log.info("Checking if system meets minimal requirements")
     if not check_nodes_specs(min_memory=min_memory, min_cpu=min_cpu):
         err_msg = (
-            f"At least one of the worker nodes doesn't meet the "
+            "At least one of the worker nodes doesn't meet the "
             f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
         )
         pytest.xfail(err_msg)
@@ -501,8 +502,7 @@ def pagerduty_integration(request, pagerduty_service):
     for integration in pagerduty_service.get("integrations"):
         if integration["summary"] == "Prometheus":
             log.info(
-                "Prometheus integration already exists. "
-                "Skipping creation of new one."
+                "Prometheus integration already exists. Skipping creation of new one."
             )
             integration_key = integration["integration_key"]
             break
@@ -656,6 +656,7 @@ def storageclass_factory_fixture(
         encrypted=False,
         encryption_kms_id=None,
         volume_binding_mode="Immediate",
+        allow_volume_expansion=True,
     ):
         """
         Args:
@@ -679,6 +680,7 @@ def storageclass_factory_fixture(
                     csi-kms-connection-details configmap
             volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
                 till pod attachment.
+            allow_volume_expansion (bool)= True to Allows volume expansion
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -714,6 +716,7 @@ def storageclass_factory_fixture(
                 encrypted=encrypted,
                 encryption_kms_id=encryption_kms_id,
                 volume_binding_mode=volume_binding_mode,
+                allow_volume_expansion=allow_volume_expansion,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -835,11 +838,9 @@ def delete_projects(instances):
                 if event["type"] == "Warning":
                     warn_event_count += 1
             log.info(
-                (
-                    "There were %d events in %s namespace before it's"
-                    " removal (out of which %d were of type Warning)."
-                    " For a full dump of this event list, see DEBUG logs."
-                ),
+                "There were %d events in %s namespace before it's"
+                " removal (out of which %d were of type Warning)."
+                " For a full dump of this event list, see DEBUG logs.",
                 event_count,
                 instance.namespace,
                 warn_event_count,
@@ -1165,7 +1166,7 @@ def teardown_factory_fixture(request):
                         helpers.validate_pv_delete(instance.backed_pv)
                 except CommandFailed as ex:
                     log.warning(
-                        f"Resource is already in deleted state, skipping this step"
+                        "Resource is already in deleted state, skipping this step"
                         f"Error: {ex}"
                     )
 
@@ -1702,7 +1703,8 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
                     # Wait for 45 seconds for cluster load to pause/reduce effectively
                     wait_time = 45
                     log.info(
-                        f"Waiting for {wait_time} seconds for cluster load to pause/reduce..."
+                        f"Waiting for {wait_time} seconds for cluster load to"
+                        " pause/reduce..."
                     )
                     time.sleep(wait_time)
                     break
@@ -1988,8 +1990,9 @@ def memory_leak_function(request):
             for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = (
-                    f"debug nodes/{worker} --to-namespaces={constants.OPENSHIFT_STORAGE_NAMESPACE} "
-                    "-- chroot /host top -n 2 b"
+                    "debug"
+                    f" nodes/{worker} --to-namespaces={constants.OPENSHIFT_STORAGE_NAMESPACE} --"
+                    " chroot /host top -n 2 b"
                 )
                 with open("/tmp/file.txt", "w+") as temp:
                     temp.write(
@@ -2144,7 +2147,8 @@ def rgw_deployments(request):
         # https://github.com/red-hat-storage/ocs-ci/issues/3863
         if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
             pytest.skip(
-                "RGW deployments were found, but test will be skipped because of BZ1926831"
+                "RGW deployments were found, but test will be skipped because of"
+                " BZ1926831"
             )
         return rgw_deployments
     else:
@@ -3194,7 +3198,8 @@ def amq_factory_fixture(request):
         """
         if run_in_bg and not validate_messages:
             raise Exception(
-                "run_in_bg is not allowed to call when validate_messages is set to False"
+                "run_in_bg is not allowed to call when validate_messages is set to"
+                " False"
             )
         # Setup kafka cluster
         amq.setup_amq_cluster(
@@ -3437,7 +3442,8 @@ def log_alerts(request, threading_lock):
                 return alerts
             else:
                 log.warning(
-                    f"There was a problem with collecting alerts for analysis: {alerts_response.text}"
+                    "There was a problem with collecting alerts for analysis:"
+                    f" {alerts_response.text}"
                 )
                 return False
         except Exception:
@@ -3546,7 +3552,8 @@ def node_restart_teardown(request, nodes_multicluster):
                 ]
                 if not_ready_nodes:
                     log.info(
-                        f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+                        "Nodes in NotReady status found:"
+                        f" {[n.name for n in not_ready_nodes]}"
                     )
                     nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                     node.wait_for_nodes_status(status=constants.NODE_READY)
@@ -4099,17 +4106,19 @@ def nb_ensure_endpoint_count(request):
             ):
                 if min_ep_count <= ready_nb_ep_count <= max_ep_count:
                     log.info(
-                        f"NooBaa endpoints stabilized. Ready endpoints: {ready_nb_ep_count}"
+                        "NooBaa endpoints stabilized. Ready endpoints:"
+                        f" {ready_nb_ep_count}"
                     )
                     break
                 log.info(
-                    f"Waiting for the NooBaa endpoints to stabilize. "
+                    "Waiting for the NooBaa endpoints to stabilize. "
                     f"Current ready count: {ready_nb_ep_count}"
                 )
         except TimeoutExpiredError:
             raise TimeoutExpiredError(
-                "NooBaa endpoints did not stabilize in time.\n"
-                f"Min count: {min_ep_count}, max count: {max_ep_count}, ready count: {ready_nb_ep_count}"
+                "NooBaa endpoints did not stabilize in time.\nMin count:"
+                f" {min_ep_count}, max count: {max_ep_count}, ready count:"
+                f" {ready_nb_ep_count}"
             )
 
 
@@ -4703,7 +4712,8 @@ def pv_encryption_kmip_setup_factory(request):
             KMS.remove_kmsid(kmip.kmsid)
         if kmip.kmip_secret_name:
             run_cmd(
-                f"oc delete secret {kmip.kmip_secret_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f"oc delete secret {kmip.kmip_secret_name} -n"
+                f" {constants.OPENSHIFT_STORAGE_NAMESPACE}"
             )
         if kmip.kmip_key_identifier:
             kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
@@ -4822,8 +4832,8 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
         )
         if pool_status:
             log.info(
-                f"Pool {pool_name} with replica {replica} and compression {compression} was created and "
-                f"is in ready state"
+                f"Pool {pool_name} with replica {replica} and compression"
+                f" {compression} was created and is in ready state"
             )
             ocs_blockpool_obj = create_ocs_object_from_kind_and_name(
                 kind=constants.CEPHBLOCKPOOL,
@@ -4841,7 +4851,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
                 )
             raise PoolDidNotReachReadyState(
                 f"Pool {pool_name} with replica {replica} and compression {compression}"
-                f" did not reach ready state"
+                " did not reach ready state"
             )
 
     def finalizer():
@@ -4860,7 +4870,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
                     f"Could not delete block pool {instances.name} from UI."
-                    f" Deleted from CLI"
+                    " Deleted from CLI"
                 )
 
     request.addfinalizer(finalizer)
@@ -4975,7 +4985,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
                     f"Could not delete storageclass {instances.name} from UI."
-                    f"Deleted from CLI"
+                    "Deleted from CLI"
                 )
 
     request.addfinalizer(finalizer)
@@ -5229,7 +5239,8 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         cli_cmd = "".join(
             (
                 f"account create {name}",
-                f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
+                " --allowed_buckets"
+                f" {','.join([bucketname for bucketname in allowed_buckets])}"
                 if type(allowed_buckets) in (list, tuple)
                 and version.get_semantic_ocs_version_from_config()
                 < version.VERSION_4_12
@@ -5254,9 +5265,10 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         created_accounts.append(name)
 
         # Verify that the account was created successfuly and that the response contains the needed data
-        assert (
-            "access_key" in str(acc_creation_process_output).lower()
-        ), f"Did not find access_key in account creation response. Response: {str(acc_creation_process_output)}"
+        assert "access_key" in str(acc_creation_process_output).lower(), (
+            "Did not find access_key in account creation response. Response:"
+            f" {str(acc_creation_process_output)}"
+        )
 
         acc_secret_dict = OCP(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
@@ -5383,7 +5395,8 @@ def nsfs_bucket_factory_fixture(
             )
             new_dir_path = f"/{nsfs_obj.bucket_name}"
             nsfs_interface_pod.exec_cmd_on_pod(
-                f"mkdir -m {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
+                "mkdir -m"
+                f" {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
             )
             rpc_bucket_creation_response = mcg_obj_session.send_rpc_query(
                 "bucket_api",
@@ -5477,8 +5490,9 @@ def patch_consumer_toolbox_with_secret():
                 break
         if not provider_cluster:
             log.warning(
-                "Provider cluster not found to patch rook-ceph-tools deployment on consumers with ceph.admin key. "
-                "Assuming the toolbox on consumers are already fixed to run ceph commands."
+                "Provider cluster not found to patch rook-ceph-tools deployment on"
+                " consumers with ceph.admin key. Assuming the toolbox on consumers are"
+                " already fixed to run ceph commands."
             )
             return
 
@@ -5515,8 +5529,8 @@ def patch_consumer_toolbox_with_secret():
                 resource_name="rook-ceph-tools",
             )
             patch_value = (
-                f'[{{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
-                f'"value":[{{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}}, '
+                '[{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
+                '"value":[{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}, '
                 f'{{"name": "ROOK_CEPH_SECRET", "value": "{ceph_admin_key}"}}]}}]'
             )
             assert consumer_tools_deployment.patch(
@@ -5863,7 +5877,8 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
 
         log.info(
-            f"kube pod list = {kube_pod_obj_list_names}, kube pvc list = {kube_pvc_obj_list_names}"
+            f"kube pod list = {kube_pod_obj_list_names}, kube pvc list ="
+            f" {kube_pvc_obj_list_names}"
         )
 
         return fio_scale
@@ -5944,7 +5959,8 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
             kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
 
             log.info(
-                f"kube pod list = {kube_pod_obj_list_names}, kube pvc list = {kube_pvc_obj_list_names}"
+                f"kube pod list = {kube_pod_obj_list_names}, kube pvc list ="
+                f" {kube_pvc_obj_list_names}"
             )
 
             consumer_index_per_fio_scale_dict[consumer_i] = fio_scale
