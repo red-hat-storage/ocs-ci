@@ -1,15 +1,15 @@
+import os
 import json
 import random
 import shutil
 import pytest
 import yaml
 import filecmp
-from ocs_ci.framework.pytest_customization.marks import tier1, polarion_id, blue_squad
 import logging
+from ocs_ci.framework.pytest_customization.marks import polarion_id, blue_squad, tier2
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.utility.utils import clone_repo, exec_cmd, check_if_executable_in_path
 from ocs_ci.ocs import constants
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def comparetool_deviation_check(first_file, second_file, deviation_list):
     ), f"compare tool did not find all occurancies from {deviation_list}:\n{compare_res}"
 
 
-@tier1
+@tier2
 @blue_squad
 @polarion_id("OCS-4844")
 class TestMonitoringTool(BaseTest):
@@ -121,7 +121,21 @@ class TestMonitoringTool(BaseTest):
         clone_ocs_operator,
         clone_upstream_ceph,
     ):
+        """The comparealert tool is the utility to compare Ceph-based rules in OCS in accordance with the ones found
+        upstream addressing the changes to dependent repositories making sure they stay updated. Utility will not be
+        used by a customer.
+        Test to verify ODF monitoring comparealert tool works properly.
 
+        Steps:
+            1. clone ODF monitoring tool from https://url.corp.redhat.com/odf-monitoring-tools
+            2. clone upstream and downstream versions of prometheus rules files
+            3. run 'comparealerts' against downstream and upstream prometheus rules YAML files
+            4. run 'comparealerts' against two identical prometheus rules YAML files, check no "No diffs found"
+            5. replace alert name in one of identical prometheus rules YAML file, run 'comparealerts' and verify
+            deviations found
+            6. convert two prometheus rules files with deviation to JSON and verify deviations found
+            7. run 'comparealerts' against two identical prometheus rules JSON files, check "No diffs found"
+        """
         check_go_version()
 
         os.chdir(clone_odf_monitoring_compare_tool / "comparealerts")
