@@ -64,7 +64,7 @@ class Warp(object):
             service_data = templating.load_yaml(constants.WARP_SERVICE_YAML)
             self.service_obj = OCS(**service_data)
             self.service_obj.create()
-            self.ports = [{"name": "http", "containerPort": 7761}]
+            self.ports = [{"name": "http", "containerPort": constants.WARP_CLIENT_PORT}]
 
         # Create service account
         self.sa_name = helpers.create_serviceaccount(self.namespace)
@@ -183,9 +183,12 @@ class Warp(object):
             for p in self.client_pods:
                 command = f"{self.warp_bin_dir} client"
                 thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
-            time.sleep(10)
+            log.info("Wait for 5 seconds after the clients are started listening!")
+            time.sleep(5)
             for client in self.client_ips:
-                self.client_str += f"{self.client_ips[client]}:7761,"
+                self.client_str += (
+                    f"{self.client_ips[client]}:{constants.WARP_CLIENT_PORT},"
+                )
             self.client_str = self.client_str.rstrip(",")
             multi_client_options = "".join(f"--warp-client={self.client_str} ")
 
