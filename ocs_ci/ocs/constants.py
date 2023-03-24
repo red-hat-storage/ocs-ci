@@ -204,6 +204,10 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+# cluster types
+MS_CONSUMER_TYPE = "consumer"
+MS_PROVIDER_TYPE = "provider"
+NON_MS_CLUSTER_TYPE = "non_ms"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
@@ -519,6 +523,8 @@ HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 WARP_OBJ_YAML = os.path.join(TEMPLATE_WARP_DIR, "warp_obj.yaml")
 
+WARP_SERVICE_YAML = os.path.join(TEMPLATE_WARP_DIR, "warp_service.yaml")
+
 IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
 
 TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
@@ -570,6 +576,7 @@ FEDORA_WITH_LINUXTAR_FILES_YAML = os.path.join(
 )
 
 RHEL_7_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml")
+RHEL_8_7_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "rhel-8_7.yaml")
 
 GOLANG_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "golang.yaml")
 
@@ -1318,7 +1325,7 @@ RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel{version}_workers.
 # Users
 NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
 NOOBAA_SERVICE_ACCOUNT_NAME = "noobaa"
-NOOBAA_DB_SERVICE_ACCOUNT_NAME = "noobaa-endpoint"
+NOOBAA_DB_SERVICE_ACCOUNT_NAME = "noobaa-db"
 NOOBAA_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(NOOBAA_SERVICE_ACCOUNT_NAME)
 NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
     NOOBAA_DB_SERVICE_ACCOUNT_NAME
@@ -1346,6 +1353,12 @@ JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
+TEST_NET_1_BLOCK = "192.0.2.0/24"
+TEST_NET_2_BLOCK = "198.51.100.0/24"
+TEST_NET_3_BLOCK = "203.0.113.0/24"
+TEST_NET_MCAST_BLOCK = "233.252.0.0/24"
+TEST_NET_BLOCK_SET_1 = {TEST_NET_1_BLOCK, TEST_NET_2_BLOCK}
+TEST_NET_BLOCK_SET_2 = {TEST_NET_3_BLOCK, TEST_NET_MCAST_BLOCK}
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -1990,3 +2003,6 @@ TOPOLVM_ALERTS = {
     "metadata_75_precent": "ThinPoolMetaDataUsageAtThresholdNearFull",
     "metadata_85_precent": "ThinPoolMetaDataUsageAtThresholdCritical",
 }
+
+
+WARP_CLIENT_PORT = 7761

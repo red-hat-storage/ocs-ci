@@ -25,7 +25,7 @@ from ocs_ci.helpers.proxy import (
     update_container_with_proxy_env,
 )
 from ocs_ci.ocs.utils import mirror_image
-from ocs_ci.ocs import constants, defaults, node, ocp
+from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
@@ -104,6 +104,8 @@ def wait_for_resource_state(resource, state, timeout=60):
             reached the desired state
 
     """
+    if check_cluster_is_compact():
+        timeout = 180
     if (
         resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
         or resource.name == constants.DEFAULT_STORAGECLASS_RBD
@@ -235,6 +237,7 @@ def create_pod(
     node_selector=None,
     command=None,
     command_args=None,
+    ports=None,
     deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
 ):
@@ -260,6 +263,7 @@ def create_pod(
         command (list): The command to be executed on the pod
         command_args (list): The arguments to be sent to the command running
             on the pod
+        ports (dict): Service ports
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
@@ -301,6 +305,11 @@ def create_pod(
             pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
+    if ports:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0]["ports"] = ports
+        else:
+            pod_data["spec"]["containers"][0]["ports"][0] = ports
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
         if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
@@ -629,6 +638,7 @@ def create_storage_class(
     encryption_kms_id=None,
     fs_name=None,
     volume_binding_mode="Immediate",
+    allow_volume_expansion=True,
 ):
     """
     Create a storage class
@@ -650,7 +660,7 @@ def create_storage_class(
         fs_name (str): the name of the filesystem for CephFS StorageClass
         volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
             pod attachment.
-
+        allow_volume_expansion(bool): True to create sc with volume expansion
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -700,6 +710,7 @@ def create_storage_class(
     sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data["reclaimPolicy"] = reclaim_policy
     sc_data["volumeBindingMode"] = volume_binding_mode
+    sc_data["allowVolumeExpansion"] = allow_volume_expansion
 
     try:
         del sc_data["parameters"]["userid"]
@@ -1095,6 +1106,7 @@ def get_cephfs_name():
     return result[0]["name"]
 
 
+@retry(exceptions.CommandFailed, tries=5, delay=10, backoff=1)
 def pull_images(image_name):
     """
     Function to pull images on all nodes
@@ -2574,19 +2586,26 @@ def wait_for_ct_pod_recovery():
     """
     try:
         _ = get_admin_key()
-    except CommandFailed as ex:
-        logger.info(str(ex))
-        if "connection timed out" in str(ex):
+    except (CommandFailed, AssertionError) as ex:
+        error_msg = str(ex)
+        logger.info(error_msg)
+        if (
+            "connection timed out" in error_msg
+            or "No running Ceph tools pod found" in error_msg
+        ):
             logger.info(
                 "Ceph tools box was running on the node that had a failure. "
                 "Hence, waiting for a new Ceph tools box pod to spin up"
             )
-            wait_for_resource_count_change(
-                func_to_use=pod.get_all_pods,
-                previous_num=1,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                timeout=120,
+            pod_obj = ocp.OCP(
+                kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )
+            pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
                 selector=constants.TOOL_APP_LABEL,
+                resource_count=1,
+                timeout=120,
+                sleep=10,
             )
             return True
         else:
@@ -4102,3 +4121,11 @@ def verify_quota_resource_exist(quota_name):
     return quota_name in [
         quota_resource.get("metadata").get("name") for quota_resource in quota_resources
     ]
+
+
+def check_cluster_is_compact():
+    existing_num_nodes = len(node.get_all_nodes())
+    worker_n = node.get_worker_nodes()
+    master_n = node.get_master_nodes()
+    if (existing_num_nodes == 3) and (worker_n.sort() == master_n.sort()):
+        return True

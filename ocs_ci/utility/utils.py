@@ -23,6 +23,7 @@ import pandas as pd
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 import pexpect
+import pytest
 
 import hcl2
 import requests
@@ -569,7 +570,6 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
-    use_shell=False,
     **kwargs,
 ):
     """
@@ -589,7 +589,6 @@ def exec_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
-        use_shell (bool): If True will pass the cmd without splitting
     Raises:
         CommandFailed: In case the command execution fails
 
@@ -604,7 +603,7 @@ def exec_cmd(
     """
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
-    if isinstance(cmd, str) and not use_shell:
+    if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
@@ -614,7 +613,6 @@ def exec_cmd(
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
         timeout=timeout,
-        shell=use_shell,
         **kwargs,
     )
     if threading_lock and cmd[0] == "oc":
@@ -2644,13 +2642,14 @@ def dump_config_to_file(file_path):
         yaml.safe_dump(config_copy, fs)
 
 
-def create_rhelpod(namespace, pod_name, timeout=300):
+def create_rhelpod(namespace, pod_name, rhel_version=8, timeout=300):
     """
     Creates the RHEL pod
 
     Args:
         namespace (str): Namespace to create RHEL pod
         pod_name (str): Pod name
+        rhel_version (int): RHEL version to be used for ansible
         timeout (int): wait time for RHEL pod to be in Running state
 
     Returns:
@@ -2663,11 +2662,15 @@ def create_rhelpod(namespace, pod_name, timeout=300):
 
     label_pod_security_admission(namespace=namespace)
 
-    # TODO: This method should be updated to add argument to change RHEL version
+    if rhel_version >= 8:
+        rhel_pod_yaml = constants.RHEL_8_7_POD_YAML
+    else:
+        rhel_pod_yaml = constants.RHEL_7_7_POD_YAML
+
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
-        pod_dict_path=constants.RHEL_7_7_POD_YAML,
+        pod_dict_path=rhel_pod_yaml,
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING, timeout)
     return rhelpod_obj
@@ -4104,3 +4107,60 @@ def string_chunkify(cstring, csize):
         yield cstring[i : i + csize]
         i += csize
     yield cstring[i:]
+
+
+def get_pytest_fixture_value(request, fixture_name):
+    """
+    Get the value of a fixture name from the request
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+        fixture_name: Fixture for which this request is being performed
+
+    Returns:
+        Any: The fixture value
+
+    """
+    if fixture_name not in request.fixturenames:
+        return None
+
+    return request.getfixturevalue(fixture_name)
+
+
+def switch_to_correct_cluster_at_setup(request):
+    """
+    Switch to the correct cluster index at setup, according to the 'cluster_type' fixture parameter
+    provided in the test.
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+
+    """
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+
+    cluster_type = get_pytest_fixture_value(request, "cluster_type")
+    if not cluster_type:
+        log.info(
+            "The cluster type is not provided in the request params. "
+            "Continue the test with the current cluster"
+        )
+        return
+
+    if not is_managed_service_cluster():
+        if cluster_type == constants.NON_MS_CLUSTER_TYPE:
+            log.info(
+                "The cluster is a non-MS cluster. Continue the test with the current cluster"
+            )
+            return
+        else:
+            pytest.skip(
+                f"The test will not run on a non-MS cluster with the cluster type '{cluster_type}'"
+            )
+
+    # If the cluster is an MS cluster
+    if not config.is_cluster_type_exist(cluster_type):
+        pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
+
+    # Switch to the correct cluster type
+    log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
+    config.switch_to_cluster_by_cluster_type(cluster_type)

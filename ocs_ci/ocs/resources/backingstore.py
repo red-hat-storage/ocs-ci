@@ -98,6 +98,23 @@ class BackingStore:
                     return True
                 elif all(
                     err in e.args[0]
+                    for err in [
+                        "cannot complete because objects in Backingstore",
+                        "are still being deleted, Please try later",
+                    ]
+                ) or all(
+                    err in e.args[0]
+                    for err in [
+                        "cannot complete because pool",
+                        'in "CONNECTED_BUCKET_DELETING" state',
+                    ]
+                ):
+                    log.error(
+                        "Backingstore deletion failed because the objects are still getting deleted; Retrying"
+                    )
+                    raise ObjectsStillBeingDeletedException
+                elif all(
+                    err in e.args[0]
                     for err in ["cannot complete because pool", "in", "state"]
                 ):
                     if retry:
@@ -107,17 +124,6 @@ class BackingStore:
                         return False
                     else:
                         raise
-                elif all(
-                    err in e.args[0]
-                    for err in [
-                        "cannot complete because objects in Backingstore",
-                        "are still being deleted, Please try later",
-                    ]
-                ):
-                    log.error(
-                        "Backingstore deletion failed because the objects are still getting deleted; Retrying"
-                    )
-                    raise ObjectsStillBeingDeletedException
                 else:
                     raise
 
@@ -138,14 +144,15 @@ class BackingStore:
             "cli": _cli_deletion_flow,
         }
 
-        try:
-            cmdMap[self.method]()
-        except ObjectsStillBeingDeletedException:
-            timeout = 19800
-        except CommandFailed:
-            timeout = 120
-
         if retry:
+            # The first attempt to delete will determine if we need to increase the timeout
+            try:
+                cmdMap[self.method]()
+            except ObjectsStillBeingDeletedException:
+                timeout = 19800
+            except CommandFailed:
+                pass
+
             sample = TimeoutSampler(
                 timeout=timeout,
                 sleep=20,
@@ -155,6 +162,8 @@ class BackingStore:
                 err_msg = f"Failed to delete {self.name}"
                 log.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
+        else:
+            cmdMap[self.method]()
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")

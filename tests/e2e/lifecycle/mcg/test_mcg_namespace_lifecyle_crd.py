@@ -415,11 +415,11 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             in bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]
         ):
             obj_list = list(
-                cld_mgr.rgw_client.client.Bucket(target_bucket).objects.all()
+                cld_mgr.rgw_client.s3_resource.Bucket(target_bucket).objects.all()
             )
         else:
             obj_list = list(
-                cld_mgr.aws_client.client.Bucket(target_bucket).objects.all()
+                cld_mgr.aws_client.s3_resource.Bucket(target_bucket).objects.all()
             )
         if object_key in obj_list:
             raise UnexpectedBehaviour("Object was not deleted from cache properly")

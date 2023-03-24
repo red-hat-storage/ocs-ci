@@ -343,7 +343,7 @@ def inject_corrupted_dups_into_pg_via_cot(
     # Create a text.json file with dup entries in it
     txt = (
         '[{"reqid": "client.4177.0:0", "version": "111\'999999999", "user_version": "0", '
-        '"generate": "4000", "return_code": "0"},]'
+        '"generate": "7000", "return_code": "0"},]'
     )
     tmpfile = tempfile.NamedTemporaryFile(
         prefix=f"{injected_dups_file_name_prefix}", suffix=".json", delete=False
@@ -362,7 +362,8 @@ def inject_corrupted_dups_into_pg_via_cot(
         osd_pod.exec_sh_cmd_on_pod(
             f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {target_path}"
+            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {target_path}",
+            shell=True,
         )
 
 
@@ -401,7 +402,7 @@ def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
         )
         res = exec_cmd(
             f"cat {temp_file.name} | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'",
-            use_shell=True,
+            shell=True,
         )
         total_dups = int(res.stdout.decode("utf-8").split("\n")[1])
         osd_pg_log_dups.append(total_dups)

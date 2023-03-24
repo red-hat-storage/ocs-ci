@@ -968,7 +968,9 @@ class AWSNodes(NodesBase):
         # TODO: This method is creating only RHEL 7 pod. Once we would like to use
         # different version of RHEL for running openshift ansible playbook, we need
         # to update this method!
-        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name, 600)
+        rhel_pod_obj = create_rhelpod(
+            constants.DEFAULT_NAMESPACE, rhel_pod_name, timeout=600
+        )
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -1892,7 +1894,7 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all BMs are up by the end of the test
 

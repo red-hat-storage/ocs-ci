@@ -75,6 +75,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
+    in_transit_encryption_verification,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -1011,6 +1012,18 @@ class Deployment(object):
                 },
             }
 
+        # Enable in-transit encryption.
+        if config.ENV_DATA.get("in_transit_encryption"):
+            if "network" not in cluster_data["spec"]:
+                cluster_data["spec"]["network"] = {}
+
+            if "connections" not in cluster_data["spec"]["network"]:
+                cluster_data["spec"]["network"]["connections"] = {}
+
+            cluster_data["spec"]["network"]["connections"] = {
+                "encryption": {"enabled": True}
+            }
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
         )
@@ -1250,6 +1263,10 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # Verify in-transit encryption is enabled.
+        if config.ENV_DATA.get("in_transit_encryption"):
+            in_transit_encryption_verification()
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
