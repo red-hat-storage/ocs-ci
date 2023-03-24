@@ -765,6 +765,10 @@ acm_configuration_4_12 = {
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
 }
 
+acm_configuration_4_13 = {
+    **acm_configuration_4_12,
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1221,6 +1225,7 @@ locators = {
             **acm_configuration,
             **acm_configuration_4_11,
             **acm_configuration_4_12,
+            **acm_configuration_4_13,
         },
     },
     "4.12": {

@@ -82,6 +82,7 @@ class AcmPageNavigator(BaseUI):
             ),
             timeout=timeout,
         )
+        self.page_has_loaded()
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
