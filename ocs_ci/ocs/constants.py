@@ -938,11 +938,15 @@ TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
+# importing here due to circular dependency
+from ocs_ci.utility.utils import get_ocp_version
+
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
-VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
-VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+VSPHERE_CLUSTER_LAUNCHER = (
+    VSPHERE_SCALEUP_REPO
+) = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -957,7 +961,8 @@ TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
 SCALEUP_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR, "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
+    EXTERNAL_DIR,
+    f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
 )
 SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
 SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")

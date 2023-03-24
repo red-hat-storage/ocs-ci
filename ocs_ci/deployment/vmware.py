@@ -214,14 +214,17 @@ class VSPHEREBASE(Deployment):
             rhel_module = "RHEL_WORKER_LIST"
 
         # Add nodes using terraform
-        scaleup_terraform = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scaleup_terraform_data_dir, "terraform.tfstate"
+        )
+        scaleup_terraform = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         previous_dir = os.getcwd()
         os.chdir(scaleup_terraform_data_dir)
         scaleup_terraform.initialize()
         scaleup_terraform.apply(self.scale_up_terraform_var)
-        scaleup_terraform_tfstate = os.path.join(
-            scaleup_terraform_data_dir, "terraform.tfstate"
-        )
+
         out = scaleup_terraform.output(scaleup_terraform_tfstate, rhel_module)
         if config.ENV_DATA["folder_structure"]:
             rhel_worker_nodes = out.strip().replace('"', "").split(",")
@@ -1085,6 +1088,10 @@ class VSPHEREUPI(VSPHEREBASE):
             remove_nodes(rhcos_nodes)
 
             # remove ingress-router for RHCOS compute nodes on load balancer
+            # set the tfstate file
+            config.ENV_DATA["terraform_state_file"] = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
             lb = LoadBalancer()
             lb.remove_compute_node_in_proxy()
             lb.restart_haproxy()
