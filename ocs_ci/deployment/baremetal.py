@@ -328,7 +328,7 @@ class BAREMETALUPI(Deployment):
                     pxe_file_path = self.create_pxe_files(
                         ocp_version=ocp_version,
                         role=self.mgmt_details[machine].get("role"),
-                        disk_path=self.mgmt_details[machine].get("root_disk_id")
+                        disk_path=self.mgmt_details[machine].get("root_disk_id"),
                     )
                     upload_file(
                         server=self.host,
@@ -664,8 +664,9 @@ LABEL pxeboot
     MENU LABEL PXE Boot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
-    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:none rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 \
-coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
+    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:none rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 \
+    console=tty0 coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} \ 
+    coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
   MENU LABEL Boot disk (0x80)
@@ -712,6 +713,7 @@ LABEL disk0
             run_cmd(cmd=cmd, secrets=secrets)
 
 
+@retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
 def clean_disk():
     """
     Perform disk cleanup
