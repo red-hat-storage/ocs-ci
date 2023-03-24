@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     skipif_external_mode,
+    ignore_leftovers,
 )
 
 log = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class TestResourceCrashCollector(ManageTest):
     @tier2
     @bugzilla("1962751")
     @skipif_external_mode
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-4835")
     @pytest.mark.parametrize(
         argnames=["limit_cpu", "request_cpu", "limit_memory", "request_memory"],
