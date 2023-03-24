@@ -1096,6 +1096,9 @@ class VSPHEREUPI(VSPHEREBASE):
             lb.remove_compute_node_in_proxy()
             lb.restart_haproxy()
 
+            # sleep for few seconds after restarting haproxy
+            time.sleep(self.wait_time)
+
         if config.DEPLOYMENT.get("thick_sc"):
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
             sc_data_yaml = tempfile.NamedTemporaryFile(
