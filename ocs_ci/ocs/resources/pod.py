@@ -3115,7 +3115,7 @@ def get_containers_names_by_pod(pod: OCP) -> set:
     return set(container_names)
 
 
-def get_ceph_daemon_id(pod_obj=None):
+def get_ceph_daemon_id(pod_obj):
     """
     Get Ceph Daemon ID of osd, mds, mon, rgw, mgr
 
