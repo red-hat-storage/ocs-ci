@@ -59,7 +59,7 @@ class TestRookCephLogRotate(ManageTest):
 
     def get_pod_obj_based_on_id(self, pod_type):
         """
-        Get Pod Obj based on id
+        Get Pod Obj based on id.
 
         Args:
             pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
