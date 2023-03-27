@@ -30,7 +30,7 @@ class AddReplaceDeviceUI(PageNavigator):
         else:
             self.do_click(self.add_capacity_ui["ocs_operator"])
             self.do_click(self.add_capacity_ui["storage_cluster_tab"])
-        self.do_click(self.add_capacity_ui["kebab_storage_cluster"])
+        self.do_click(self.add_capacity_ui["kebab_storage_cluster"], avoid_stale=True)
         self.wait_until_expected_text_is_found(
             locator=self.add_capacity_ui["add_capacity_button"],
             timeout=10,
