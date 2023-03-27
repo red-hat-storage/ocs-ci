@@ -8,14 +8,25 @@ logger = logging.getLogger(name=__file__)
 
 
 @pytest.fixture(scope="session")
-def block_pod(pvc_factory_session, pod_factory_session):
+def block_pod(
+    pvc_factory_session, pod_factory_session, service_account_factory_session
+):
     """
     Returns:
         obj: Utilized pod with RBD pvc
 
     """
     pvc = pvc_factory_session(size=5, interface=constants.CEPHBLOCKPOOL)
-    pod = pod_factory_session(pvc=pvc, interface=constants.CEPHBLOCKPOOL)
+    sa = service_account_factory_session(project=pvc.project)
+    dc = pod_factory_session(
+        pvc=pvc, interface=constants.CEPHBLOCKPOOL, deployment_config=True
+    )
+    pod = get_all_pods(
+        namespace=pvc.project.namespace,
+        selector=[dc.name],
+        selector_label="name",
+    )[0]
+    pod.pvc = dc.pvc
     logger.info(f"Utilization of RBD PVC {pvc.name} with pod {pod.name} starts")
     pod.run_io(
         storage_type="fs",
@@ -44,14 +55,23 @@ def block_md5(block_pod):
 
 
 @pytest.fixture(scope="session")
-def fs_pod(pvc_factory_session, pod_factory_session):
+def fs_pod(pvc_factory_session, pod_factory_session, service_account_factory_session):
     """
     Returns:
         obj: Utilized pod with Ceph FS pvc
 
     """
     pvc = pvc_factory_session(size=5, interface=constants.CEPHFILESYSTEM)
-    pod = pod_factory_session(pvc=pvc, interface=constants.CEPHFILESYSTEM)
+    sa = service_account_factory_session(project=pvc.project)
+    dc = pod_factory_session(
+        pvc=pvc, interface=constants.CEPHFILESYSTEM, deployment_config=True
+    )
+    pod = get_all_pods(
+        namespace=pvc.project.namespace,
+        selector=[dc.name],
+        selector_label="name",
+    )[0]
+    pod.pvc = dc.pvc
     logger.info(f"Utilization of Ceph FS PVC {pvc.name} with pod {pod.name} starts")
     pod.run_io(
         storage_type="fs",
