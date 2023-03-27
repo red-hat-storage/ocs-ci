@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import cal_md5sum
+from ocs_ci.ocs.resources.pod import cal_md5sum, get_all_pods
 
 logger = logging.getLogger(name=__file__)
 
@@ -19,7 +19,10 @@ def block_pod(
     pvc = pvc_factory_session(size=5, interface=constants.CEPHBLOCKPOOL)
     sa = service_account_factory_session(project=pvc.project)
     dc = pod_factory_session(
-        pvc=pvc, interface=constants.CEPHBLOCKPOOL, deployment_config=True
+        pvc=pvc,
+        interface=constants.CEPHBLOCKPOOL,
+        deployment_config=True,
+        service_account=sa,
     )
     pod = get_all_pods(
         namespace=pvc.project.namespace,
@@ -64,7 +67,10 @@ def fs_pod(pvc_factory_session, pod_factory_session, service_account_factory_ses
     pvc = pvc_factory_session(size=5, interface=constants.CEPHFILESYSTEM)
     sa = service_account_factory_session(project=pvc.project)
     dc = pod_factory_session(
-        pvc=pvc, interface=constants.CEPHFILESYSTEM, deployment_config=True
+        pvc=pvc,
+        interface=constants.CEPHFILESYSTEM,
+        deployment_config=True,
+        service_account=sa,
     )
     pod = get_all_pods(
         namespace=pvc.project.namespace,
