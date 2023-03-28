@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     ipi_deployment_required,
     ignore_leftovers,
+    skipif_external_mode,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants, defaults
@@ -270,6 +271,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             pytest.param(False, marks=pytest.mark.polarion_id("OCS-2190")),
         ],
     )
+    @skipif_external_mode
     def test_automated_recovery_from_stopped_node_and_start(
         self, nodes, additional_node
     ):
