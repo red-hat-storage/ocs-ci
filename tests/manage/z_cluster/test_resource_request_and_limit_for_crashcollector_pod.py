@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     skipif_external_mode,
-    ignore_leftovers,
 )
 
 log = logging.getLogger(__name__)
@@ -30,10 +29,27 @@ class TestResourceCrashCollector(ManageTest):
     4.The new values of CPU, memory limit and requests should be updated in crash collector pod
     """
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Make sure all nodes are up again
+
+        """
+
+        def finalizer():
+            crash_col_request = '{"spec": {"resources":{}}}'
+            # Add crash collector pod limit and request values in storage cluster yaml
+            assert self.storage_cluster.patch(
+                resource_name="ocs-storagecluster",
+                params=crash_col_request,
+                format_type="merge",
+            ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched for limit values"
+
+        request.addfinalizer(finalizer)
+
     @tier2
     @bugzilla("1962751")
     @skipif_external_mode
-    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-4835")
     @pytest.mark.parametrize(
         argnames=["limit_cpu", "request_cpu", "limit_memory", "request_memory"],
@@ -50,7 +66,7 @@ class TestResourceCrashCollector(ManageTest):
 
         cluster_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         assert verify_rook_ceph_crashcollector_pods_where_rook_ceph_pods_are_running()
-        storage_cluster = StorageCluster(
+        self.storage_cluster = StorageCluster(
             resource_name="ocs-storagecluster",
             namespace=cluster_namespace,
         )
@@ -70,13 +86,13 @@ class TestResourceCrashCollector(ManageTest):
             + "}}}}}"
         )
         # Add crash collector pod limit and request values in storage cluster yaml
-        assert storage_cluster.patch(
+        assert self.storage_cluster.patch(
             resource_name="ocs-storagecluster",
             params=crash_col_limit,
             format_type="merge",
         ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched for limit values"
 
-        assert storage_cluster.patch(
+        assert self.storage_cluster.patch(
             resource_name="ocs-storagecluster",
             params=crash_col_request,
             format_type="merge",
