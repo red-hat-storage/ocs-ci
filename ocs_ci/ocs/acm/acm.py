@@ -53,8 +53,19 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         self.navigate_clusters_page()
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+
         if not self.check_element_presence(
-            (By.ID, self.acm_page_nav["Import_cluster"][0]), timeout=100
+            (By.XPATH, self.acm_page_nav["Import_cluster"][0]), timeout=600
         ):
             raise ACMClusterImportException("Import button not found")
         self.do_click(self.acm_page_nav["Import_cluster"])

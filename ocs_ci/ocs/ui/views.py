@@ -513,7 +513,8 @@ acm_page_nav = {
     "Applications": ("Applications", By.LINK_TEXT),
     "Governance": ("Governance", By.LINK_TEXT),
     "Credentials": ("Credentials", By.LINK_TEXT),
-    "Import_cluster": ("importCluster", By.ID),
+    #"Import_cluster": ("importCluster", By.ID),
+    "Import_cluster": ("//button[@id='importCluster'", By.XPATH),
     "Import_cluster_enter_name": ("clusterName", By.ID),
     "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
@@ -767,6 +768,7 @@ acm_configuration_4_12 = {
 
 acm_configuration_4_13 = {
     **acm_configuration_4_12,
+    "Import_cluster": ("//button[@id='importCluster']")
 }
 
 add_capacity = {
