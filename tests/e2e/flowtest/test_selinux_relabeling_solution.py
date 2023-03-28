@@ -15,7 +15,7 @@ from ocs_ci.helpers import helpers
 
 TARFILE = "cephfs.tar.gz"
 SIZE = "20Gi"
-TFILES = 40
+TFILES = 2000
 SAMPLE_TEXT = b"QWERTYUIOP ASDFGJKL ZXCVBNM"
 ntar_loc = mkdtemp()
 
@@ -27,12 +27,10 @@ class TestSelinuxrelabel(E2ETest):
         log.info(f"Creating {TFILES} files ")
         onetenth = TFILES / 10
         endoften = onetenth - 1
-
         tarfile = os.path.join(ntar_loc, TARFILE)
         one_dir = mkdtemp()
         log.info(f"dir crated{one_dir}")
         n = 0
-
         while n in range(0, 11):
             first_dir = mkdtemp(suffix="Fdir", dir=one_dir)
             log.info(f"created dir {first_dir}")
@@ -80,48 +78,48 @@ class TestSelinuxrelabel(E2ETest):
         # Create deployment config for app pod
         log.info("----create deployment config----")
         deployment_config = """
-                                apiVersion: apps.openshift.io/v1
-                                kind: DeploymentConfig
+                            apiVersion: apps.openshift.io/v1
+                            kind: DeploymentConfig
+                            metadata:
+                              name: nfs-test-pod-2
+                              namespace: openshift-storage
+                              labels:
+                                app: nfs-test-pod
+                            spec:
+                              template:
                                 metadata:
-                                  name: nfs-test-pod-2
-                                  namespace: openshift-storage
                                   labels:
-                                    app: nfs-test-pod
+                                    name: nfs-test-pod-2
                                 spec:
-                                  template:
-                                    metadata:
-                                      labels:
-                                        name: nfs-test-pod-2
-                                    spec:
-                                      restartPolicy: Always
-                                      volumes:
-                                      - name: vol
-                                        persistentVolumeClaim:
-                                          claimName: nfs-pvc-2
-                                      containers:
-                                      - name: fedora-2
-                                        image: fedora
-                                        command: ['/bin/bash', '-ce', 'tail -f /dev/null']
-                                        imagePullPolicy: IfNotPresent
-                                        securityContext:
-                                          capabilities: {}
-                                          privileged: true
-                                        volumeMounts:
-                                        - mountPath: /mnt
-                                          name: vol
-                                        livenessProbe:
-                                          exec:
-                                            command:
-                                            - 'sh'
-                                            - '-ec'
-                                            - 'df /mnt'
-                                          initialDelaySeconds: 5
-                                          periodSeconds: 5
-                                  replicas: 1
-                                  triggers:
-                                    - type: ConfigChange
-                                  paused: false
-                                """
+                                  restartPolicy: Always
+                                  volumes:
+                                  - name: vol
+                                    persistentVolumeClaim:
+                                      claimName: nfs-pvc-2
+                                  containers:
+                                  - name: fedora-2
+                                    image: fedora
+                                    command: ['/bin/bash', '-ce', 'tail -f /dev/null']
+                                    imagePullPolicy: IfNotPresent
+                                    securityContext:
+                                      capabilities: {}
+                                      privileged: true
+                                    volumeMounts:
+                                    - mountPath: /mnt
+                                      name: vol
+                                    livenessProbe:
+                                      exec:
+                                        command:
+                                        - 'sh'
+                                        - '-ec'
+                                        - 'df /mnt'
+                                      initialDelaySeconds: 5
+                                      periodSeconds: 5
+                              replicas: 1
+                              triggers:
+                                - type: ConfigChange
+                              paused: false
+                            """
         deployment_config_data = yaml.safe_load(deployment_config)
         helpers.create_resource(**deployment_config_data)
         time.sleep(60)
@@ -183,11 +181,9 @@ class TestSelinuxrelabel(E2ETest):
         pod_objs = pod.get_all_pods(
             namespace=self.namespace, selector=["nfs-test-pod-2"], selector_label="name"
         )
-
         pod_obj = pod_objs[0]
         log.info(f"pod obj name----{pod_obj.name}")
         pod_name = pod_obj.name
-
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -247,8 +243,6 @@ class TestSelinuxrelabel(E2ETest):
 
         # Todo
         # Apply the fix/solution in the “Existing PVs” section
-        #
-        #
 
         self.data_integrity_check()
         log.info(f"Creating a PVC from snapshot [restore] {snap_obj.name}")
