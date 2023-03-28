@@ -1,6 +1,9 @@
 import logging
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    on_prem_platform_required,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
 
@@ -16,7 +19,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUI
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +256,7 @@ class TestObcUserInterface(object):
                     "three_dots",
                     True,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2542"),
+                marks=pytest.mark.polarion_id("OCS-4698"),
             ),
             pytest.param(
                 *[
@@ -263,7 +265,16 @@ class TestObcUserInterface(object):
                     "Actions",
                     True,
                 ],
-                marks=pytest.mark.polarion_id("OCS-4698"),
+                marks=pytest.mark.polarion_id("OCS-2542"),
+            ),
+            pytest.param(
+                *[
+                    "ocs-storagecluster-ceph-rgw",
+                    None,
+                    "three_dots",
+                    True,
+                ],
+                marks=[pytest.mark.polarion_id("OCS-4698"), on_prem_platform_required],
             ),
         ],
     )
@@ -273,6 +284,8 @@ class TestObcUserInterface(object):
         """
         Test creation and deletion of an OBC via the UI
 
+        The test covers BZ #2097772 Introduce tooltips for contextual information
+        The test covers BZ #2175685 RGW OBC creation via the UI is blocked by "Address form errors to proceed"
         """
         obc_name = create_unique_resource_name(
             resource_description="ui", resource_type="obc"
@@ -294,18 +307,21 @@ class TestObcUserInterface(object):
         test_obc_obj = test_obc.get()
 
         obc_storageclass = test_obc_obj.get("spec").get("storageClassName")
-        obc_bucketclass = (
-            test_obc_obj.get("spec").get("additionalConfig").get("bucketclass")
-        )
         assert (
             obc_storageclass == storageclass
         ), f"StorageClass mismatch. Expected: {storageclass}, found: {obc_storageclass}"
-        assert (
-            obc_bucketclass == bucketclass
-        ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
+
+        # no Bucket Classes available for ocs-storagecluster-ceph-rgw Storage Class
+        if bucketclass:
+            obc_bucketclass = (
+                test_obc_obj.get("spec").get("additionalConfig").get("bucketclass")
+            )
+            assert (
+                obc_bucketclass == bucketclass
+            ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
         # covers BZ 2097772
-        if verify_ob_removal and obc_ui_obj.ocs_version_semantic > version.VERSION_4_11:
+        if verify_ob_removal:
             ObUI(setup_ui_class).delete_object_bucket_ui(
                 delete_via="three_dots", expect_fail=True, resource_name=obc_name
             )

@@ -46,6 +46,7 @@ deployment = {
     ),
     "search_operator_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "thin_sc": ('a[id="thin-link"]', By.CSS_SELECTOR),
+    "thin-csi_sc": ("//span[text()='(default) | csi.vsphere.vmware.com']", By.XPATH),
     "gp2_sc": ('a[id="gp2-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "standard_csi_sc": ('a[id="standard-csi-link"]', By.CSS_SELECTOR),
@@ -201,6 +202,7 @@ generic_locators = {
         'a[data-test="dropdown-menu-item-link"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class": ("//span[contains(text(), '{}')]", By.XPATH),
     "second_dropdown_option": (
         '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
         By.XPATH,
@@ -287,10 +289,7 @@ obc = {
     ),
     "obc_menu_name": ("//a[normalize-space()='Object Bucket Claims']", By.XPATH),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
-    "storageclass_text_field": (
-        'input[placeholder="Select StorageClass"]',
-        By.CSS_SELECTOR,
-    ),
+    "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
         'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"]',
