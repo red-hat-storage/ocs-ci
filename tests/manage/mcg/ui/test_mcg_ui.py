@@ -264,7 +264,7 @@ class TestObcUserInterface(object):
                     None,
                     "three_dots",
                 ],
-                marks=[pytest.mark.polarion_id("OCS-4698"), on_prem_platform_required],
+                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
             ),
         ],
     )
