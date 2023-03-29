@@ -1512,3 +1512,110 @@ class VSPHERE(object):
             timeout=timeout, sleep=10, func=self.is_vm_obj_exist, vm=vm
         )
         return sample.wait_for_func_status(result=False)
+
+    def get_network_device(
+        self, ip, dc, label="Network adapter 1", network="VM Network"
+    ):
+        """
+        Get the network adapter for a VM.
+
+        Args:
+            ip (str): The IP address of the VM.
+            dc (str): The datacenter name where the VM is located.
+            label (str, optional): The label of the network adapter. Defaults to "Network adapter 1".
+            network (str, optional): The name of the network. Defaults to "VM Network".
+
+        Returns:
+            vim.vm.device.VirtualEthernetCard: The network adapter, or False if not found.
+        """
+        vm_network_spec = vim.vm.device.VirtualEthernetCard
+        vm = self.get_vm_by_ip(ip, dc)
+
+        logging.info(
+            f"Finding Network Adapter '{label}' on Virtual Machine '{vm.name}'"
+        )
+        # Find the network adapter.
+        for dev in vm.config.hardware.device:
+            if (
+                isinstance(dev, vm_network_spec)
+                and dev.deviceInfo.label == label
+                and dev.deviceInfo.summary == network
+            ):
+                logging.info(
+                    f"Network adapter: '{label}' Found on Virtial Machine: '{vm.name}'."
+                )
+                return dev
+
+        logging.error(
+            f"Network adapter: '{label}' Not Found on Virtial Machine: '{vm.name}'."
+        )
+        return False
+
+    def change_vm_network_state(
+        self,
+        ip,
+        dc,
+        label="Network adapter 1",
+        network="VM Network",
+        timeout=10,
+        connect=True,
+    ):
+        """
+        Connects or disconnects a VM's network adapter.
+
+        Args:
+            ip (str): The IP address of the VM.
+            dc (str): The datacenter name where the VM is located.
+            label (str, optional): The label of the network adapter to disconnect. Defaults to "Network adapter 1".
+            network (str, optional): The name of the network to disconnect from. Defaults to "VM Network".
+            timeout (int, optional): The maximum time to wait for the operation to complete. Defaults to 10 seconds.
+            connect (bool, optional): True to connect the network adapter, False to disconnect. Defaults to True.
+
+        Returns:
+            bool: True if the operation was successful, False otherwise.
+        """
+        action = "connected" if connect else "disconnected"
+        action_verb = "Connecting" if connect else "Disconnecting"
+
+        # Find the network adapter to change state
+        vm_device = self.get_network_device(ip, dc, label=label, network=network)
+
+        if not vm_device:
+            logging.error(
+                f"No network adapter found to {action} for Virtual Machine with IP: {ip}."
+            )
+            return False
+
+        if vm_device.connectable.connected == connect:
+            logging.info(
+                f"Network adapter is already {action} for Virtual Machine with IP: {ip}."
+            )
+            return True
+
+        # Change the network adapter state
+        vm = self.get_vm_by_ip(ip, dc)
+        vm_device.connectable.connected = connect
+        spec = vim.vm.ConfigSpec()
+        spec.deviceChange = [
+            vim.vm.device.VirtualDeviceSpec(device=vm_device, operation="edit")
+        ]
+        task = vm.ReconfigVM_Task(spec=spec)
+        logging.info(
+            f"{action_verb} Network adapter '{label}' on Virtual Machine with IP: {ip}."
+        )
+
+        # Wait for the task to complete or timeout
+        sampler = TimeoutSampler(
+            timeout, 1, lambda: task.info.state == vim.TaskInfo.State.success
+        )
+
+        if sampler:
+            logging.info(
+                f"Network adapter '{label}' {action} for Virtual Machine with IP: {ip}."
+            )
+            return True
+
+        logging.error(
+            f"Timeout error: Failed to {action} Network adapter '{label}' on Virtual Machine with IP: {ip}."
+        )
+        return False

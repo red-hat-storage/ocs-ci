@@ -37,6 +37,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -4129,3 +4130,49 @@ def check_cluster_is_compact():
     master_n = node.get_master_nodes()
     if (existing_num_nodes == 3) and (worker_n.sort() == master_n.sort()):
         return True
+
+
+def disable_vm_network_for_duration(
+    ip, label="Network adapter 1", network="VM Network", duration=5
+):
+    """
+    Disable network connectivity for a virtual machine with a specified IP address for a given duration.
+
+    Args:
+        ip: the IP address of the virtual machine to disable network connectivity for
+        label: the label of the network adapter to disable (default: "Network adapter 1")
+        network: the name of the network to connect to (default: "VM Network")
+        duration: the duration in seconds to disable network connectivity (default: 5 seconds)
+
+    Returns:
+        True if network connectivity was successfully disabled and re-enabled, False otherwise
+    """
+    vsphere_server = config.ENV_DATA["vsphere_server"]
+    vsphere_user = config.ENV_DATA["vsphere_user"]
+    vsphere_password = config.ENV_DATA["vsphere_password"]
+    vsphere_datacenter = config.ENV_DATA["vsphere_datacenter"]
+    vm_obj = VSPHERE(vsphere_server, vsphere_user, vsphere_password)
+
+    try:
+        # Disable network connectivity for the specified virtual machine
+        vm_obj.change_vm_network_state(
+            ip, vsphere_datacenter, label=label, network=network, connect=False
+        )
+        logger.info(
+            f"Disabled network connectivity for virtual machine {ip} for {duration} seconds"
+        )
+
+        # Wait for the specified duration
+        time.sleep(duration)
+
+        # Enable network connectivity for the specified virtual machine
+        vm_obj.change_vm_network_state(
+            ip, vsphere_datacenter, label=label, network=network, connect=True
+        )
+        logger.info(f"Enabled network connectivity for virtual machine {ip}")
+        return True
+    except Exception as e:
+        logger.error(
+            f"An error occurred while disabling network connectivity for virtual machine {ip}: {e}"
+        )
+        return False

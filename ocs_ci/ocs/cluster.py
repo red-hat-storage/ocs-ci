@@ -55,6 +55,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
+from ocs_ci.ocs.resources.pod import get_mds_pods
 
 logger = logging.getLogger(__name__)
 
@@ -2972,3 +2973,53 @@ def get_lvm_full_version():
     image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
     full_version = image.split(":")[1]
     return full_version
+
+
+def get_mds_standby_replay_info():
+    """Return the IP address of the node running the standby-replay MDS daemon."""
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+
+    # Find ceph daemon state as 'standby-replay'
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "standby-replay"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No standby-replay MDS daemon found")
+        return False
+
+    logger.info(f"Found standby-replay MDS daemon: {ceph_daemon_name}")
+
+    # Find ceph MDS pod running 'standby-replay' daemon.
+    mds_pods = get_mds_pods()
+    standby_replay_pod = next(
+        (srp for srp in mds_pods if ceph_daemon_name in srp.name), None
+    )
+
+    if standby_replay_pod is None:
+        logger.error(
+            f"No standby-replay MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return False
+
+    logger.info(f"Found standby-replay MDS pod: {standby_replay_pod.name}")
+
+    # Get the node name of running pod.
+    node_ip = standby_replay_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return False
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "standby_replay_pod": standby_replay_pod.name,
+    }
