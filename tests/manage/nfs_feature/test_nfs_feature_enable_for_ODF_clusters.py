@@ -25,7 +25,6 @@ from ocs_ci.framework.testlib import (
 )
 
 from ocs_ci.ocs.resources import pod, ocs
-
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -33,6 +32,35 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
+
+
+@pytest.fixture()
+def outcluster_nfs_mount_unmount(
+    nfs_client_ip, nfs_client_user, nfs_client_pwd, test_folder
+):
+    """
+    This fixture creates a ssh connection to test-nfs-vm and finally unmounts
+    at the end of the test
+    """
+    # ssh to test-nfs-vm
+    log.info("Login to test vm")
+    con = Connection(
+        nfs_client_ip,
+        nfs_client_user,
+        password=nfs_client_pwd,
+        private_key=constants.SSH_PRIV_KEY,
+    )
+    yield
+    # unmount
+    retry(
+        (CommandFailed),
+        tries=600,
+        delay=10,
+    )(con.exec_cmd(cmd="umount -f " + test_folder))
+
+    # Check mount point unmounted successfully
+    retcode, _, _ = con.exec_cmd("findmnt -M " + test_folder)
+    assert retcode == 1
 
 
 @tier1
@@ -294,6 +322,7 @@ class TestNfsEnable(ManageTest):
     def test_outcluster_nfs_export(
         self,
         pod_factory,
+        outcluster_nfs_mount_unmount,
     ):
         """
         This test is to validate export where the export is consumed from outside the Openshift cluster
@@ -324,11 +353,8 @@ class TestNfsEnable(ManageTest):
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            user=self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+        self.con = outcluster_nfs_mount_unmount(
+            self.nfs_client_ip, self.nfs_client_user, self.nfs_client_pwd
         )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
@@ -451,17 +477,6 @@ class TestNfsEnable(ManageTest):
         )
         assert result.rstrip() == "hello world" + """\n""" + "test_writing"
 
-        # unmount
-        retry(
-            (CommandFailed),
-            tries=600,
-            delay=10,
-        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
-
-        # Check mount point unmounted successfully
-        retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
-        assert retcode == 1
-
         # Deletion of Pods and PVCs
         log.info("Deleting pod")
         pod_obj.delete()
@@ -487,6 +502,7 @@ class TestNfsEnable(ManageTest):
     def test_multiple_nfs_based_PVs(
         self,
         pod_factory,
+        outcluster_nfs_mount_unmount,
     ):
         """
         This test is to validate creation of multiple NFS based PVs and verify the creation of
@@ -510,11 +526,8 @@ class TestNfsEnable(ManageTest):
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            user=self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+        self.con = outcluster_nfs_mount_unmount(
+            self.nfs_client_ip, self.nfs_client_user, self.nfs_client_pwd
         )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
@@ -612,17 +625,6 @@ class TestNfsEnable(ManageTest):
             log.info(stdout)
             assert stdout == "hello world"
 
-            # unmount
-            retry(
-                (CommandFailed),
-                tries=600,
-                delay=10,
-            )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
-
-            # Check mount point unmounted successfully
-            retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
-            assert retcode == 1
-
             # Deletion of Pods and PVCs
             log.info("Deleting pods")
             pod_obj.delete()
@@ -646,6 +648,7 @@ class TestNfsEnable(ManageTest):
     def test_multiple_mounts_of_same_nfs_volume(
         self,
         pod_factory,
+        outcluster_nfs_mount_unmount,
     ):
         """
         This test is to validate multiple mounts of the same NFS volume/export
@@ -668,11 +671,8 @@ class TestNfsEnable(ManageTest):
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            user=self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+        self.con = outcluster_nfs_mount_unmount(
+            self.nfs_client_ip, self.nfs_client_user, self.nfs_client_pwd
         )
 
         # Create nfs pvc with storageclass ocs-storagecluster-ceph-nfs
@@ -763,17 +763,6 @@ class TestNfsEnable(ManageTest):
             assert_str = f"I am pod, {pod_name}"
             assert assert_str in stdout
 
-        # unmount
-        retry(
-            (CommandFailed),
-            tries=600,
-            delay=10,
-        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
-
-        # Check mount point unmounted successfully
-        retcode, _, _ = self.con.exec_cmd("findmnt -M " + self.test_folder)
-        assert retcode == 1
-
         # Deletion of Pods and PVCs
         log.info("Deleting pods")
         for pod_obj in pod_objs:
@@ -800,6 +789,7 @@ class TestNfsEnable(ManageTest):
     def test_external_nfs_client_can_write_read_new_file(
         self,
         pod_factory,
+        outcluster_nfs_mount_unmount,
     ):
         """
         This test is to validate external client can write and read back a new file,
@@ -823,11 +813,8 @@ class TestNfsEnable(ManageTest):
 
         # ssh to test-nfs-vm
         log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            user=self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+        self.con = outcluster_nfs_mount_unmount(
+            self.nfs_client_ip, self.nfs_client_user, self.nfs_client_pwd
         )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
@@ -924,17 +911,6 @@ class TestNfsEnable(ManageTest):
             out_yaml_format=False,
         )
         assert result.rstrip() == "written from external client"
-
-        # unmount
-        retry(
-            (CommandFailed),
-            tries=600,
-            delay=10,
-        )(self.con.exec_cmd(cmd="umount -f " + self.test_folder))
-
-        # Check mount point unmounted successfully
-        retcode, _, _ = self.con.exec_cmd("findmnt -M  " + self.test_folder)
-        assert retcode == 1
 
         # Deletion of Pods and PVCs
         log.info("Deleting pod")
