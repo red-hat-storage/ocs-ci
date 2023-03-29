@@ -605,35 +605,15 @@ class PageNavigator(BaseUI):
     def nav_odf_default_page(self):
         """
         Navigate to OpenShift Data Foundation default page
-        If OCP version >= 4.13 Storage / Data foundation opens Topology
-        If OCP version > 4.10 and OCP version < 4.13 Storage / Data foundation opens Overview
-        If OCP version < 4.10 Storage / OpenShift Data Foundation opens Overview
+        Default Data foundation page is Overview at ODF 4.13
         """
 
-        ocs_version = version.get_semantic_ocs_version_from_config()
-
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        if (
-            self.ocp_version_full >= version.VERSION_4_10
-            and ocs_version >= version.VERSION_4_10
-        ):
-            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
-        else:
-            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
-        if (
-            # Uncomment next line and remove line bellow when
-            # ODF/Ceph topology in OpenShift Console merged and released
-            # self.ocp_version_full >= version.VERSION_4_13
-            self.ocp_version_full
-            > version.VERSION_4_13
-        ):
-            default_tab = TopologyTab()
-            logger.info(f"Default page is {self.driver.title}")
-        else:
-            default_tab = OverviewTab()
-            logger.info(f"Default page is {self.driver.title}")
+        default_tab = OverviewTab()
+        logger.info(f"Default page is {self.driver.title}")
         return default_tab
 
     def navigate_quickstarts_page(self):
