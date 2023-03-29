@@ -500,7 +500,16 @@ class BAREMETALUPI(Deployment):
 
             self.test_cluster()
             logger.info("Performing Disk cleanup")
-            clean_disk()
+            ocp_obj = ocp.OCP()
+            policy = constants.PSA_BASELINE
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                policy = constants.PSA_PRIVILEGED
+            ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
+            time.sleep(10)
+            workers = get_nodes(node_type="worker")
+            for worker in workers:
+                clean_disk(worker)
+            ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         def create_config(self):
             """
@@ -714,153 +723,54 @@ LABEL disk0
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk():
+def clean_disk(worker):
     """
     Perform disk cleanup
+
+    Args:
+        worker (object): worker node object
+
     """
-    lvm_to_clean = []
-    workers = get_nodes(node_type="worker")
-
     ocp_obj = ocp.OCP()
-    policy = constants.PSA_BASELINE
-    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
-        policy = constants.PSA_PRIVILEGED
-    ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
-    time.sleep(10)
-    for worker in workers:
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name,
-            cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-            namespace=constants.BM_DEBUG_NODE_NS,
-        )
-        logger.info(out)
-        lsblk_output = json.loads(str(out))
-        lsblk_devices = lsblk_output["blockdevices"]
-        for lsblk_device in lsblk_devices:
-            base_cmd = (
-                """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
-                % lsblk_device["name"]
+    cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
+    )
+    disk_to_ignore_cleanup_raw = json.loads(str(out))
+    disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+    for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
+        if disk_to_ignore_cleanup["mountpoint"] == "/boot":
+            logger.info(
+                f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
             )
+            selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
+            # Adding break when root disk is found
+            break
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name,
+        cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
+        namespace=constants.BM_DEBUG_NODE_NS,
+    )
+    lsblk_output = json.loads(str(out))
+    lsblk_devices = lsblk_output["blockdevices"]
 
-            cmd = (
-                f"debug nodes/{worker.name} --to-namespace={constants.BM_DEBUG_NODE_NS} "
-                f"-- chroot /host {base_cmd}"
-            )
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            time.sleep(10)
-            logger.info(out)
-            pvs_output = json.loads(str(out))
-            pvs_list = pvs_output["report"]
-            for pvs in pvs_list:
-                pv_list = pvs["pv"]
-                for pv in pv_list:
-                    logger.debug(pv)
-                    device_dict = {
-                        "hostname": f"{worker.name}",
-                        "pv_name": f"{pv['pv_name']}",
-                    }
-                    lvm_to_clean.append(device_dict)
-            base_cmd = (
-                """vgs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
-                % lsblk_device["name"]
-            )
-
-            cmd = (
-                f"debug nodes/{worker.name} --to-namespace={constants.BM_DEBUG_NODE_NS} "
-                f"-- chroot /host {base_cmd}"
-            )
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            time.sleep(10)
-            logger.info(out)
-            vgs_output = json.loads(str(out))
-            vgs_list = vgs_output["report"]
-            for vgs in vgs_list:
-                vg_list = vgs["vg"]
-                for vg in vg_list:
-                    logger.debug(vg)
-                    device_dict = {
-                        "hostname": f"{worker.name}",
-                        "vg_name": f"{vg['vg_name']}",
-                    }
-                    lvm_to_clean.append(device_dict)
-    for devices in lvm_to_clean:
-        if devices.get("vg_name"):
-            cmd = (
-                f"debug nodes/{devices['hostname']} --to-namespace={constants.BM_DEBUG_NODE_NS} "
-                f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
-            )
-            logger.info("Removing vg")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            time.sleep(10)
-            logger.info(out)
-    for devices in lvm_to_clean:
-        if devices.get("pv_name"):
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=devices["hostname"],
-                cmd_list=[f"pvremove {devices['pv_name']} -y"],
-                namespace=constants.BM_DEBUG_NODE_NS,
-            )
-            logger.info(out)
-
-    for worker in workers:
-        cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
-        )
-        disk_to_ignore_cleanup_raw = json.loads(str(out))
-        disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
-        for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
-            if disk_to_ignore_cleanup["mountpoint"] == "/boot":
-                logger.info(
-                    f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
-                )
-                selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
-                # Adding break when root disk is found
-                break
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name,
-            cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-            namespace=constants.BM_DEBUG_NODE_NS,
-        )
-        lsblk_output = json.loads(str(out))
-        lsblk_devices = lsblk_output["blockdevices"]
-        for lsblk_device in lsblk_devices:
+    for lsblk_device in lsblk_devices:
+        if lsblk_device["name"] == str(selected_disk_to_ignore_cleanup):
+            pass
+        else:
+            logger.info(f"Cleaning up {lsblk_device['name']}")
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
-                cmd_list=[f"lsblk -b /dev/{lsblk_device['name']} --output NAME --json"],
+                cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
                 namespace=constants.BM_DEBUG_NODE_NS,
             )
-            lsblk_output = json.loads(str(out))
-            lsblk_devices_to_clean = lsblk_output["blockdevices"]
-            for device_to_clean in lsblk_devices_to_clean:
-                if device_to_clean["name"] == str(selected_disk_to_ignore_cleanup):
-                    logger.info(
-                        f"Skipping disk cleanup for {device_to_clean['name']} because it's a root disk"
-                    )
-                else:
-                    out = ocp_obj.exec_oc_debug_cmd(
-                        node=worker.name,
-                        cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"],
-                        namespace=constants.BM_DEBUG_NODE_NS,
-                    )
-                    logger.info(out)
-                    out = ocp_obj.exec_oc_debug_cmd(
-                        node=worker.name,
-                        cmd_list=[f"sgdisk --zap-all /dev/{device_to_clean['name']}"],
-                        namespace=constants.BM_DEBUG_NODE_NS,
-                    )
-                    logger.info(out)
-
-    ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+            logger.info(out)
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
+                namespace=constants.BM_DEBUG_NODE_NS,
+            )
+            logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):
