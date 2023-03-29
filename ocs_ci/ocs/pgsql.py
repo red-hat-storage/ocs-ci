@@ -32,6 +32,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_unique_resource_name,
     storagecluster_independent_check,
+    validate_pv_delete,
 )
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.ocs.ocp import switch_to_project
@@ -533,6 +534,15 @@ class Postgresql(BenchmarkOperator):
             self.pgsql_cmap.delete()
             self.pgsql_service._is_deleted = False
             self.pgsql_service.delete()
+            pods_obj = self.get_pgbench_pods()
+            pvcs_obj = self.get_postgres_pvc()
+            for pod in pods_obj:
+                pod.delete()
+                pod.ocp.wait_for_delete(pod.name)
+            for pvc in pvcs_obj:
+                pvc.delete()
+                pvc.ocp.wait_for_delete(pvc.name)
+                validate_pv_delete(pvc.backed_pv)
         log.info("Deleting benchmark operator configuration")
         BenchmarkOperator.cleanup(self)
 
