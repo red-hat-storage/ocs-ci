@@ -9,6 +9,7 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility import version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.views import locators
@@ -346,16 +347,10 @@ class ObcUI(BucketsUI):
 
         logger.info("Select Storage Class")
         self.do_click(self.obc_loc["storageclass_dropdown"])
-
-        if self.ocp_version_full <= version.VERSION_4_8:
-            self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
-
-        if self.ocp_version_full <= version.VERSION_4_8 or (
-            self.ocp_version_full > version.VERSION_4_8 and not bucketclass
-        ):
-            self.do_click(self.generic_locators["first_dropdown_option"])
-        else:
-            self.do_click(self.generic_locators["second_dropdown_option"])
+        self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
+        self.do_click(
+            locator=format_locator(self.generic_locators["storage_class"], storageclass)
+        )
 
         if bucketclass:
             logger.info("Select BucketClass")
