@@ -448,6 +448,8 @@ PV_BACKINGSTORE_YAML = os.path.join(TEMPLATE_MCG_DIR, "PVBackingStore.yaml")
 
 MCG_BUCKETCLASS_YAML = os.path.join(TEMPLATE_MCG_DIR, "BucketClass.yaml")
 
+AWS_BUCKET_LOG_TEMPLATE = os.path.join(TEMPLATE_MCG_DIR, "aws-bucket-log-template")
+
 CSI_RBD_POD_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "pod.yaml")
 
 CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml")
