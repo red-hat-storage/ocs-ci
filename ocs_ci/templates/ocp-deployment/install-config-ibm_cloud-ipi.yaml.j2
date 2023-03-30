@@ -7,7 +7,7 @@ compute:
   name: worker
   platform:
     ibmcloud:
-      type: {{ worker_instance_type | default('mx2-16x128') }}
+      type: {{ worker_instance_type | default('bx2-16x64') }}
   replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   architecture: amd64
