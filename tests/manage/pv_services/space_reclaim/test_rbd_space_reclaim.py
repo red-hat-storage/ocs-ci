@@ -33,12 +33,20 @@ class TestRbdSpaceReclaim(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, storageclass_factory, create_pvcs_and_pods):
+    def setup(
+        self,
+        access_modes_rbd,
+        project_factory,
+        storageclass_factory,
+        create_pvcs_and_pods,
+    ):
         """
         Create PVCs and pods
 
         """
         self.pool_replica = 3
+        if access_modes_rbd == constants.ACCESS_MODE_RWX:
+            access_modes_rbd = f"{access_modes_rbd}-Block"
         pvc_size_gi = 25
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -47,69 +55,106 @@ class TestRbdSpaceReclaim(ManageTest):
         )
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
-            access_modes_rbd=[constants.ACCESS_MODE_RWO],
+            access_modes_rbd=[access_modes_rbd],
             num_of_rbd_pvc=1,
             num_of_cephfs_pvc=0,
             sc_rbd=self.sc_obj,
         )
 
-    @polarion_id("OCS-2741")
     @tier1
     @skipif_external_mode
     @skipif_managed_service
-    def test_rbd_space_reclaim(self):
+    @pytest.mark.parametrize(
+        argnames="access_modes_rbd",
+        argvalues=[
+            pytest.param(
+                *[constants.ACCESS_MODE_RWO],
+                marks=pytest.mark.polarion_id("OCS-2741"),
+            ),
+            pytest.param(
+                *[constants.ACCESS_MODE_RWX],
+                marks=pytest.mark.polarion_id("OCS-4835"),
+            ),
+        ],
+    )
+    def test_rbd_space_reclaim(self, access_modes_rbd):
         """
         Test to verify RBD space reclamation
 
         Steps:
         1. Create and attach RBD PVC of size 25 GiB to an app pod.
         2. Get the used size of the RBD pool
-        3. Create two files of size 10GiB
+        3. Create two files of size 10GiB for RWWO and 20GB space for RWX
         4. Verify the increased used size of the RBD pool
-        5. Delete one file
+        5. Delete one file for RWO and erase 10GB space for RWX
         6. Create ReclaimSpaceJob
         7. Verify the decreased used size of the RBD pool
 
         """
-
+        size = 10
         pvc_obj = self.pvc[0]
         pod_obj = self.pod[0]
 
         fio_filename1 = "fio_file1"
         fio_filename2 = "fio_file2"
-
+        fio_filename = [fio_filename1, fio_filename2]
         # Fetch the used size of pool
         cbp_name = self.sc_obj.get().get("parameters").get("pool")
         used_size_before_io = fetch_used_size(cbp_name)
         log.info(f"Used size before IO is {used_size_before_io}")
-
-        # Create two 10 GB file
-        for filename in fio_filename1, fio_filename2:
+        if access_modes_rbd == constants.ACCESS_MODE_RWO:
+            # Create two 10 GB file
+            for filename in fio_filename:
+                pod_obj.run_io(
+                    storage_type="fs",
+                    size=f"{size}G",
+                    runtime=120,
+                    fio_filename=filename,
+                    end_fsync=1,
+                )
+                pod_obj.get_fio_results()
+        else:
+            # Fill 20GB space for RWX
             pod_obj.run_io(
-                storage_type="fs",
-                size="10G",
+                storage_type="block",
+                size=f"{2*size}G",
                 runtime=120,
-                fio_filename=filename,
+                fio_filename="/dev/rbdblock",
                 end_fsync=1,
+                readwrite="write",
+                rate="1500M",
+                direct=1,
+                invalidate=0,
+                rate_process=None,
+                buffer_pattern="0xdeadface",
+                bs="100M",
+                jobs=1,
+                rw_ratio=50,
             )
             pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (20 * self.pool_replica)
+        exp_used_size_after_io = used_size_before_io + (2 * size * self.pool_replica)
         used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
-        log.info(f"Used size after IO is {used_size_after_io}")
 
-        # Delete one file
-        file_path = get_file_path(pod_obj, fio_filename1)
-        pod_obj.exec_cmd_on_pod(command=f"rm -f {file_path}", out_yaml_format=False)
+        if access_modes_rbd == constants.ACCESS_MODE_RWO:
+            # Delete one file
+            file_path = get_file_path(pod_obj, fio_filename1)
+            pod_obj.exec_cmd_on_pod(command=f"rm -f {file_path}", out_yaml_format=False)
+            # Verify whether file is deleted
+            try:
+                check_file_existence(pod_obj=pod_obj, file_path=file_path)
+            except CommandFailed as cmdfail:
+                if "No such file or directory" not in str(cmdfail):
+                    raise
+                log.info(f"Verified: File {file_path} deleted.")
 
-        # Verify whether file is deleted
-        try:
-            check_file_existence(pod_obj=pod_obj, file_path=file_path)
-        except CommandFailed as cmdfail:
-            if "No such file or directory" not in str(cmdfail):
-                raise
-            log.info(f"Verified: File {file_path} deleted.")
+        else:
+            # Delete half of the space for RBD block mode
+            pod_obj.exec_cmd_on_pod(
+                command=f"blkdiscard -o 0 -l {size}G /dev/rbdblock",
+                out_yaml_format=False,
+            )
 
         # Wait for 15 seconds after deleting the file
         time.sleep(15)
@@ -122,20 +167,20 @@ class TestRbdSpaceReclaim(ManageTest):
 
         time.sleep(120)
 
-        # Verify space is reclaimed by checking the used size of the RBD pool
+        # Verify space is reclaimed by checking the used pool_replicaize of the RBD pool
         used_after_reclaiming_space = fetch_used_size(
             cbp_name, used_size_after_io - (10 * self.pool_replica)
         )
         log.info(
             f"Space has been reclaimed. Used size after io is {used_after_reclaiming_space}."
         )
-
-        # Verify the presence of another file in the directory
-        log.info("Verifying the existence of remaining file in the pod")
-        file_path = get_file_path(pod_obj, fio_filename2)
-        log.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
-        if check_file_existence(pod_obj=pod_obj, file_path=file_path):
-            log.info(f"{fio_filename2} is intact")
+        if access_modes_rbd == constants.ACCESS_MODE_RWO:
+            # Verify the presence of another file in the directory
+            log.info("Verifying the existence of remaining file in the pod")
+            file_path = get_file_path(pod_obj, fio_filename2)
+            log.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
+            if check_file_existence(pod_obj=pod_obj, file_path=file_path):
+                log.info(f"{fio_filename2} is intact")
 
     @polarion_id("OCS-2774")
     @tier1
