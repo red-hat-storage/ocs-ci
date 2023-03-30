@@ -187,9 +187,8 @@ deployment_4_12 = {
 
 generic_locators = {
     "project_selector": (
-        'button[class="pf-c-dropdown__toggle pf-m-plain"],'
-        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
-        By.CSS_SELECTOR,
+        "//span[contains(text(), 'Project: ')]",
+        By.XPATH,
     ),
     "select_openshift-storage_project": (
         'a[id="openshift-storage-link"]',
@@ -201,6 +200,7 @@ generic_locators = {
         'a[data-test="dropdown-menu-item-link"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class": ("//span[contains(text(), '{}')]", By.XPATH),
     "second_dropdown_option": (
         '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
         By.XPATH,
@@ -303,9 +303,9 @@ obc = {
     "default_bucketclass": ("noobaa-default-bucket-class-link", By.ID),
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
-    "delete_obc": (
-        'button[data-test-action="Delete Object Bucket Claim"], li[id="Delete"] a[role="menuitem"]',
-        By.CSS_SELECTOR,
+    "delete_resource": (
+        "//*[contains(@data-test-action, 'Delete')]",
+        By.XPATH,
     ),
 }
 
@@ -483,7 +483,8 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
-    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    "show-default-projects-state": ("//input[@class='pf-c-switch__input']", By.XPATH),
+    "show-default-projects-toggle": ("//span[@class='pf-c-switch__toggle']", By.XPATH),
 }
 
 page_nav_4_6 = {
@@ -1232,6 +1233,7 @@ locators = {
         },
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
         "acm_page": {**acm_page_nav, **acm_configuration},
+        "obc": obc,
     },
     "4.9": {
         "login": login,
