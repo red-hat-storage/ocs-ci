@@ -340,7 +340,7 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
-    validate_page_title(driver, title=page_title)
+    validate_page_title(title=page_title)
 
     return driver
 
