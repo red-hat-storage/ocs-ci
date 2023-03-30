@@ -541,48 +541,49 @@ class PageNavigator(BaseUI):
 
     """
 
-    ocp_version = get_ocp_version()
-    running_ocp_semantic_version = version.get_semantic_ocp_running_version()
-    ocp_version_full = version.get_semantic_ocp_version_from_config()
-    ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-    ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-
-    page_nav = locators[ocp_version]["page"]
-    generic_locators = locators[ocp_version]["generic"]
-    validation_loc = locators[ocp_version]["validation"]
-    dep_loc = locators[ocp_version]["deployment"]
-
-    operator_name = (
-        ODF_OPERATOR if ocs_version_semantic >= version.VERSION_4_9 else OCS_OPERATOR
-    )
-    if config.DEPLOYMENT.get("local_storage", False):
-        storage_class = "localblock_sc"
-    elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        storage_class = "thin_sc"
-    elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-        aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
-        if aws_sc == "gp3-csi":
-            storage_class = "gp3-csi_sc"
-        elif aws_sc == "gp2-csi":
-            storage_class = "gp2-csi_sc"
-        else:
-            if running_ocp_semantic_version >= version.VERSION_4_12:
-                storage_class = "gp2-csi_sc"
-            else:
-                storage_class = "gp2_sc"
-    elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
-        if ocp_version_semantic >= version.VERSION_4_11:
-            storage_class = "managed-csi_sc"
-        else:
-            storage_class = "managed-premium_sc"
-    elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
-        if ocs_version_semantic < version.VERSION_4_12:
-            storage_class = "standard_sc"
-        else:
-            storage_class = "standard_csi_sc"
-
     def __init__(self):
         super().__init__()
+        self.ocp_version = get_ocp_version()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+
+        self.page_nav = locators[self.ocp_version]["page"]
+        self.generic_locators = locators[self.ocp_version]["generic"]
+        self.validation_loc = locators[self.ocp_version]["validation"]
+        self.dep_loc = locators[self.ocp_version]["deployment"]
+
+        self.operator_name = (
+            ODF_OPERATOR
+            if self.ocs_version_semantic >= version.VERSION_4_9
+            else OCS_OPERATOR
+        )
+        if config.DEPLOYMENT.get("local_storage", False):
+            self.storage_class = "localblock_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            self.storage_class = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
+            if aws_sc == "gp3-csi":
+                self.storage_class = "gp3-csi_sc"
+            elif aws_sc == "gp2-csi":
+                self.storage_class = "gp2-csi_sc"
+            else:
+                if self.running_ocp_semantic_version >= version.VERSION_4_12:
+                    self.storage_class = "gp2-csi_sc"
+                else:
+                    self.storage_class = "gp2_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            if self.ocs_version_semantic < version.VERSION_4_12:
+                self.storage_class = "standard_sc"
+            else:
+                self.storage_class = "standard_csi_sc"
 
     def navigate_storage(self):
         logger.info("Navigate to ODF tab under Storage section")
@@ -993,8 +994,6 @@ class DataFoundationDefaultTab(DataFoundationTabBar):
     """
     Default Foundation default Tab: TopologyTab | OverviewTab
     """
-
-    validation_loc = locators[PageNavigator.ocp_version]["validation"]
 
     def __init__(self):
         DataFoundationTabBar.__init__(self)
