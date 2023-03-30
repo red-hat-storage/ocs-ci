@@ -205,9 +205,8 @@ deployment_4_12 = {
 
 generic_locators = {
     "project_selector": (
-        'button[class="pf-c-dropdown__toggle pf-m-plain"],'
-        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
-        By.CSS_SELECTOR,
+        "//span[contains(text(), 'Project: ')]",
+        By.XPATH,
     ),
     "select_openshift-storage_project": (
         'a[id="openshift-storage-link"]',
@@ -356,25 +355,10 @@ obc = {
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[id="Delete"]',
         By.CSS_SELECTOR,
     ),
-    "namespace_store_create": (
-        "button[id='yaml-create']",
-        By.CSS_SELECTOR,
-    ),
-    "namespace_store_name": ('input[id="ns-name"]', By.CSS_SELECTOR),
-    "namespace_store_provider": (
-        "//div[@data-test='namespacestore-provider']//button",
-        By.XPATH,
-    ),
-    "namespace_store_filesystem": ("//li[@id='Filesystem']", By.XPATH),
-    "namespace_store_pvc_expand": ("//div[@id='pvc-name']//button", By.XPATH),
-    "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
-    "namespace_store_create_item": (
-        'button[data-test="namespacestore-create-button"]',
-        By.CSS_SELECTOR,
-    ),
+    "bucket_class_search_bar": ("search-bar", By.ID),
 }
 
 pvc = {
@@ -557,7 +541,8 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
-    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    "show-default-projects-state": ("//input[@class='pf-c-switch__input']", By.XPATH),
+    "show-default-projects-toggle": ("//span[@class='pf-c-switch__toggle']", By.XPATH),
 }
 
 page_nav_4_6 = {

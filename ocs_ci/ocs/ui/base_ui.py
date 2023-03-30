@@ -388,7 +388,7 @@ class BaseUI:
         """
         return self.driver.find_elements(by=locator[1], value=locator[0])
 
-    def wait_for_element_to_be_visible(self, locator, timeout=30):
+    def wait_for_element_to_be_visible(self, locator, timeout):
         """
         Wait for element to be visible. Use when Web element is not have to be clickable (icons, disabled btns, etc.)
         Method does not fail when Web element not found
@@ -441,9 +441,7 @@ class BaseUI:
             if sample == attribute_value:
                 break
 
-    def page_has_loaded(
-        self, retries=5, sleep_time=2, module_loc=("html", By.TAG_NAME)
-    ):
+    def page_has_loaded(self, retries=5, sleep_time=1):
         """
         Waits for page to completely load by comparing current page hash values.
         Not suitable for pages that use frequent dynamically content (less than sleep_time)
@@ -627,6 +625,473 @@ class BaseUI:
         """
         wait = WebDriverWait(self.driver, timeout=timeout)
         wait.until(ec.url_matches(endswith))
+
+
+class PageNavigator(BaseUI):
+    """
+    Page Navigator Class
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.ocp_version = get_ocp_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
+        self.page_nav = locators[self.ocp_version]["page"]
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+        self.operator_name = (
+            ODF_OPERATOR
+            if self.ocs_version_semantic >= version.VERSION_4_9
+            else OCS_OPERATOR
+        )
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+            self.generic_locators = locators[self.ocp_version]["generic"]
+
+        if config.DEPLOYMENT.get("local_storage", False):
+            self.storage_class = "localblock_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            self.storage_class = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
+            if aws_sc == "gp3-csi":
+                self.storage_class = "gp3-csi_sc"
+            elif aws_sc == "gp2-csi":
+                self.storage_class = "gp2-csi_sc"
+            else:
+                if self.running_ocp_semantic_version >= version.VERSION_4_12:
+                    self.storage_class = "gp2-csi_sc"
+                else:
+                    self.storage_class = "gp2_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            if self.ocs_version_semantic < version.VERSION_4_12:
+                self.storage_class = "standard_sc"
+            else:
+                self.storage_class = "standard_csi_sc"
+
+    def navigate_overview_page(self):
+        """
+        Navigate to Overview Page
+
+        """
+        logger.info("Navigate to Overview Page")
+        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
+            self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        else:
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["overview_page"])
+
+    def navigate_odf_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview Page
+        """
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (
+            self.ocp_version_full >= version.VERSION_4_10
+            and ocs_version >= version.VERSION_4_10
+        ):
+            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        else:
+            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        self.page_has_loaded(retries=15)
+        logger.info("Successfully navigated to ODF tab under Storage section")
+
+    def navigate_quickstarts_page(self):
+        """
+        Navigate to Quickstarts Page
+
+        """
+        self.navigate_overview_page()
+        logger.info("Navigate to Quickstarts Page")
+        self.scroll_into_view(self.page_nav["quickstarts"])
+        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
+
+    def navigate_projects_page(self):
+        """
+        Navigate to Projects Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["projects_page"], enable_screenshot=False)
+
+    def navigate_search_page(self):
+        """
+        Navigate to Search Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["search_page"], enable_screenshot=False)
+
+    def navigate_explore_page(self):
+        """
+        Navigate to Explore Page
+
+        """
+        logger.info("Navigate to Explore Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["explore_page"], enable_screenshot=False)
+
+    def navigate_events_page(self):
+        """
+        Navigate to Events Page
+
+        """
+        logger.info("Navigate to Events Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["events_page"], enable_screenshot=False)
+
+    def navigate_operatorhub_page(self):
+        """
+        Navigate to OperatorHub Page
+
+        """
+        logger.info("Navigate to OperatorHub Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.do_click(
+            locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+        )
+
+    def navigate_installed_operators_page(self):
+        """
+        Navigate to Installed Operators Page
+
+        """
+        logger.info("Navigate to Installed Operators Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.do_click(
+            self.page_nav["installed_operators_page"], enable_screenshot=False
+        )
+        self.page_has_loaded(retries=25, sleep_time=5)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.do_click(self.page_nav["drop_down_projects"])
+            self.do_click(self.page_nav["choose_all_projects"])
+
+    def navigate_to_ocs_operator_page(self):
+        """
+        Navigate to the OCS Operator management page
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select openshift-storage project")
+        self.do_click(
+            self.generic_locators["project_selector"], enable_screenshot=False
+        )
+        self.do_click(
+            self.generic_locators["select_openshift-storage_project"],
+            enable_screenshot=False,
+        )
+
+        logger.info("Enter the OCS operator page")
+        self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
+
+    def navigate_persistentvolumes_page(self):
+        """
+        Navigate to Persistent Volumes Page
+
+        """
+        logger.info("Navigate to Persistent Volumes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["persistentvolumes_page"], enable_screenshot=False
+        )
+
+    def navigate_persistentvolumeclaims_page(self):
+        """
+        Navigate to Persistent Volume Claims Page
+
+        """
+        logger.info("Navigate to Persistent Volume Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["persistentvolumeclaims_page"],
+            enable_screenshot=True,
+        )
+
+    def navigate_storageclasses_page(self):
+        """
+        Navigate to Storage Classes Page
+
+        """
+        logger.info("Navigate to Storage Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["storageclasses_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshots_page(self):
+        """
+        Navigate to Storage Volume Snapshots Page
+
+        """
+        logger.info("Navigate to Storage Volume Snapshots Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshots_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshotclasses_page(self):
+        """
+        Navigate to Volume Snapshot Classes Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshotclasses_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshotcontents_page(self):
+        """
+        Navigate to Volume Snapshot Contents Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Contents Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshotcontents_page"],
+            enable_screenshot=False,
+        )
+
+    def navigate_object_buckets_page(self):
+        """
+        Navigate to Object Buckets Page
+
+        """
+        logger.info("Navigate to Object Buckets Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["object_buckets_page"], enable_screenshot=False
+        )
+
+    def navigate_object_bucket_claims_page(self):
+        """
+        Navigate to Object Bucket Claims Page
+
+        """
+        logger.info("Navigate to Object Bucket Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["object_bucket_claims_page"], enable_screenshot=False
+        )
+
+    def navigate_alerting_page(self):
+        """
+        Navigate to Alerting Page
+
+        """
+        logger.info("Navigate to Alerting Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["alerting_page"], enable_screenshot=False)
+
+    def navigate_metrics_page(self):
+        """
+        Navigate to Metrics Page
+
+        """
+        logger.info("Navigate to Metrics Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["metrics_page"], enable_screenshot=False)
+
+    def navigate_dashboards_page(self):
+        """
+        Navigate to Dashboards Page
+
+        """
+        logger.info("Navigate to Dashboards Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["dashboards_page"], enable_screenshot=False)
+
+    def navigate_pods_page(self):
+        """
+        Navigate to Pods Page
+
+        """
+        logger.info("Navigate to Pods Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
+        self.do_click(locator=self.page_nav["Pods"], enable_screenshot=False)
+
+    def navigate_block_pool_page(self):
+        """
+        Navigate to block pools page
+
+        """
+        logger.info("Navigate to block pools page")
+        self.navigate_to_ocs_operator_page()
+        self.do_click(locator=self.page_nav["block_pool_link"])
+
+    def wait_for_namespace_selection(self, project_name):
+        """
+        If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
+        It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
+        namespace drop-down.
+        The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
+
+        Args:
+            project_name (str): Name of the project to be selected
+
+        Returns:
+            bool: True if the project is found, raises NoSuchElementException otherwise with a log message
+        """
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        if (
+            self.get_element_attribute(
+                locator=self.page_nav["show-default-projects-state"],
+                attribute="data-checked-state",
+            )
+            == "false"
+        ):
+            logger.info("Show default projects")
+            self.do_click(self.page_nav["show-default-projects-toggle"])
+
+        pvc_loc = locators[self.ocp_version]["pvc"]
+        logger.info(f"Wait and select namespace {project_name}")
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            expected_text=f"{project_name}",
+            timeout=10,
+        )
+        if wait_for_project:
+            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            logger.info(f"Namespace {project_name} selected")
+        else:
+            raise NoSuchElementException(f"Namespace {project_name} not found on UI")
+
+    def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        """
+        Compares a given status string to the one shown in the resource's UI page
+
+        Args:
+            status_to_check (str): The status that will be compared with the one in the UI
+            timeout (int): How long should the check run before moving on
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        def _retrieve_current_status_from_ui():
+            resource_status = WebDriverWait(self.driver, timeout).until(
+                ec.visibility_of_element_located(
+                    self.generic_locators["resource_status"][::-1]
+                )
+            )
+            logger.info(f"Resource status is {resource_status.text}")
+            return resource_status
+
+        logger.info(
+            f"Verifying that the resource has reached a {status_to_check} status"
+        )
+        try:
+            for resource_ui_status in TimeoutSampler(
+                timeout,
+                3,
+                _retrieve_current_status_from_ui,
+            ):
+                if resource_ui_status.text.lower() == status_to_check.lower():
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                "The resource did not reach the expected state within the time limit."
+            )
+            return False
+
+
+class StorageSystemNavigator(PageNavigator):
+    """
+    Storage Navigator Class
+
+    """
+
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.validation_loc = locators[self.ocp_version]["validation"]
+
+    def navigate_cephblockpool(self):
+        """
+        Initial page OCP Home page
+        Navigate to StorageSystem details / ocs-storagecluster-cephblockpool
+
+        """
+        self.navigate_odf_storagesystems()
+        self.navigate_storagecluster_storagesystem()
+        self.navigate_cephblockpool_verify_statusready()
+
+    def navigate_odf_storagesystems(self):
+        """
+        Initial page OCP Home page
+        Navigate to Storage Systems tab
+
+        """
+        self.navigate_odf_overview_page()
+        logger.info("Click on 'Storage Systems' tab")
+        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+
+    def navigate_storagecluster_storagesystem(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab
+        Navigate to StorageSystem details
+
+        """
+        if not config.DEPLOYMENT.get("external_mode"):
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
+            )
+            self.do_click(
+                self.validation_loc["ocs-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+        else:
+            logger.info(
+                "Click on 'ocs-external-storagecluster-storagesystem' link "
+                "from Storage Systems page for External Mode Deployment"
+            )
+            self.do_click(
+                self.validation_loc["ocs-external-storagecluster-storagesystem"],
+                enable_screenshot=True,
+            )
+
+    def navigate_cephblockpool_verify_statusready(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details
+        Navigate to ocs-storagecluster-cephblockpool
+        Verify cephblockpool status is 'Ready'
+
+        Raises:
+            CephHealthException if cephblockpool_status != 'Ready'
+        """
+        logger.info("Click on 'BlockPools' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["blockpools-odf-4-10"],
+                enable_screenshot=True,
+            )
+        else:
+            self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
+        cephblockpool_status = self.get_element_text(
+            self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
+        )
+        if not "Ready" == cephblockpool_status:
+            raise CephHealthException(
+                f"cephblockpool status error | expected status:Ready \n "
+                f"actual status:{cephblockpool_status}"
+            )
 
 
 def screenshot_dom_location(type_loc="screenshot"):
