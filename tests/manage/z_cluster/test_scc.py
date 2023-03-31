@@ -3,6 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
@@ -23,12 +24,23 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_ocs_version,
 )
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
 logger = logging.getLogger(__name__)
 
 
 class TestSCC:
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        if storagecluster_independent_check():
+            self.sanity_helpers = SanityExternalCluster()
+        else:
+            self.sanity_helpers = Sanity()
+
     @tier2
     @bugzilla("1938647")
     @polarion_id("OCS-4483")

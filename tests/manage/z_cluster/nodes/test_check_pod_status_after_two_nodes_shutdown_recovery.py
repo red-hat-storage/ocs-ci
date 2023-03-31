@@ -10,7 +10,8 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_external_mode,
 )
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -34,8 +35,10 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         Initialize Sanity instance
 
         """
-
-        self.sanity_helpers = Sanity()
+        if storagecluster_independent_check():
+            self.sanity_helpers = SanityExternalCluster()
+        else:
+            self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-2315")
     @skipif_ibm_cloud
