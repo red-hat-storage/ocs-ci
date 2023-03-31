@@ -82,15 +82,10 @@ class AcmPageNavigator(BaseUI):
             ),
             timeout=timeout,
         )
-        self.page_has_loaded()
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(
-            locator=self.acm_page_nav["Clusters_page"],
-            timeout=timeout,
-            enable_screenshot=True,
-        )
+        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
 
     def navigate_bare_metal_assets_page(self):
         """

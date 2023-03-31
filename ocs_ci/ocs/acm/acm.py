@@ -52,25 +52,29 @@ class AcmAddClusters(AcmPageNavigator):
             kubeconfig_location (str): kubeconfig file location of imported cluster
 
         """
-        self.navigate_clusters_page()
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
-        if self.check_element_presence(
-            (
-                self.acm_page_nav["modal_dialog_close_button"][1],
-                self.acm_page_nav["modal_dialog_close_button"][0],
-            ),
-            timeout=200,
-        ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+        try:
+            if self.check_element_presence(
+                (
+                    self.acm_page_nav["modal_dialog_close_button"][1],
+                    self.acm_page_nav["modal_dialog_close_button"][0],
+                ),
+                timeout=100,
+            ):
+                self.do_click(
+                    self.acm_page_nav["modal_dialog_close_button"], timeout=100
+                )
+        except Exception as e:
+            log.warning(f"Modal dialog not found: {e}")
 
         if not self.check_element_presence(
             (By.XPATH, self.acm_page_nav["Import_cluster"][0]), timeout=600
         ):
             raise ACMClusterImportException("Import button not found")
-        self.do_click(self.acm_page_nav["Import_cluster"])
+        self.do_click(self.acm_page_nav["Import_cluster"], timeout=1600)
         log.info("Clicked on Import cluster")
-        self.wait_for_endswith_url("import", timeout=300)
+        self.wait_for_endswith_url("import", timeout=600)
 
         self.do_send_keys(
             self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
@@ -119,6 +123,7 @@ class AcmAddClusters(AcmPageNavigator):
         ):
             if sample:
                 log.info(f"Cluster: {cluster_name} successfully imported")
+                self.navigate_clusters_page()
                 return
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
