@@ -23,8 +23,7 @@ from ocs_ci.ocs.exceptions import (
     KMSResourceCleaneupError,
     ResourceNotFoundError,
 )
-from ocs_ci.utility import kms
-from semantic_version import Version
+from ocs_ci.utility import kms, version
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ else:
                 "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2613")
             ),
         ]
-    if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.12"):
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
         argvalues.append(
             pytest.param(
                 "v1",
@@ -392,9 +391,10 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify if keys for PVCs and snapshots are deleted from  Vault
-            if kv_version == "v1" or Version.coerce(
-                config.ENV_DATA["ocs_version"]
-            ) >= Version.coerce("4.9"):
+            if (
+                kv_version == "v1"
+                or version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9
+            ):
                 log.info(
                     "Verify whether the keys for PVCs and snapshots are deleted in vault"
                 )
