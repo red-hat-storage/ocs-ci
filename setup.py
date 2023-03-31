@@ -100,6 +100,7 @@ setup(
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
             "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
+            "cherry-picks=ocs_ci.utility.cherry_pick:main",
         ],
     },
     zip_safe=True,
