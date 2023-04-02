@@ -9,45 +9,25 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_LABEL,
     CSI_RBDPLUGIN_PROVISIONER_LABEL,
 )
+from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla, polarion_id
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_containers_names_by_pod
 
 log = getLogger("__name__")
 
 LIVENESS_CONTAINER = "liveness-prometheus"
 
 
-def get_containers_names_by_pod(pod: OCP) -> set:
-    """
-    Gets the names of all containers in given pod or pods
-
-    Args:
-        pod (OCP): instance of OCP object that represents a pod (kind=POD)
-
-    Returns:
-        set: hash set of names of all containers in given pod or pods
-
-    """
-    items = pod.data.get("items")
-    if not isinstance(items, list):
-        items = [items]
-
-    container_names = list()
-    for item in items:
-        containers = item.get("spec").get("containers")
-        container_names += [c.get("name") for c in containers]
-
-    log.debug(f"Containers: {container_names}")
-
-    return set(container_names)
-
-
+@tier1
+@bugzilla("2142901")
+@polarion_id("TBD")
 def test_no_liveness_container():
     """
     Automated test for BZ #2142901
     Checks if "liveness-prometheus" container is running on CSI pods
 
     """
-    csi_pod = OCP(
+    csi_plugin_pod = OCP(
         kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=CSI_CEPHFSPLUGIN_LABEL
     )
     csi_prov_pod = OCP(
@@ -55,7 +35,7 @@ def test_no_liveness_container():
         namespace=OPENSHIFT_STORAGE_NAMESPACE,
         selector=CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     )
-    rbd_pod = OCP(
+    rbd_plugin_pod = OCP(
         kind=POD,
         namespace=OPENSHIFT_STORAGE_NAMESPACE,
         selector=CSI_RBDPLUGIN_LABEL,
@@ -65,7 +45,8 @@ def test_no_liveness_container():
         namespace=OPENSHIFT_STORAGE_NAMESPACE,
         selector=CSI_RBDPLUGIN_PROVISIONER_LABEL,
     )
-    for pods in (csi_pod, rbd_pod, rbd_prov_pod, csi_prov_pod):
+    for pods in (csi_plugin_pod, rbd_plugin_pod, rbd_prov_pod, csi_prov_pod):
         assert LIVENESS_CONTAINER not in get_containers_names_by_pod(
             pods
         ), "liveness-prometheus container found"
+    log.info("liveness-prometheus container not found, as expected")
