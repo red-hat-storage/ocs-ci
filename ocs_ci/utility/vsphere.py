@@ -1531,9 +1531,7 @@ class VSPHERE(object):
         vm_network_spec = vim.vm.device.VirtualEthernetCard
         vm = self.get_vm_by_ip(ip, dc)
 
-        logging.info(
-            f"Finding Network Adapter '{label}' on Virtual Machine '{vm.name}'"
-        )
+        logger.info(f"Finding Network Adapter '{label}' on Virtual Machine '{vm.name}'")
         # Find the network adapter.
         for dev in vm.config.hardware.device:
             if (
@@ -1541,12 +1539,12 @@ class VSPHERE(object):
                 and dev.deviceInfo.label == label
                 and dev.deviceInfo.summary == network
             ):
-                logging.info(
+                logger.info(
                     f"Network adapter: '{label}' Found on Virtial Machine: '{vm.name}'."
                 )
                 return dev
 
-        logging.error(
+        logger.error(
             f"Network adapter: '{label}' Not Found on Virtial Machine: '{vm.name}'."
         )
         return False
@@ -1581,13 +1579,13 @@ class VSPHERE(object):
         vm_device = self.get_network_device(ip, dc, label=label, network=network)
 
         if not vm_device:
-            logging.error(
+            logger.error(
                 f"No network adapter found to {action} for Virtual Machine with IP: {ip}."
             )
             return False
 
         if vm_device.connectable.connected == connect:
-            logging.info(
+            logger.info(
                 f"Network adapter is already {action} for Virtual Machine with IP: {ip}."
             )
             return True
@@ -1600,7 +1598,7 @@ class VSPHERE(object):
             vim.vm.device.VirtualDeviceSpec(device=vm_device, operation="edit")
         ]
         task = vm.ReconfigVM_Task(spec=spec)
-        logging.info(
+        logger.info(
             f"{action_verb} Network adapter '{label}' on Virtual Machine with IP: {ip}."
         )
 
@@ -1610,12 +1608,12 @@ class VSPHERE(object):
         )
 
         if sampler:
-            logging.info(
+            logger.info(
                 f"Network adapter '{label}' {action} for Virtual Machine with IP: {ip}."
             )
             return True
 
-        logging.error(
+        logger.error(
             f"Timeout error: Failed to {action} Network adapter '{label}' on Virtual Machine with IP: {ip}."
         )
         return False
