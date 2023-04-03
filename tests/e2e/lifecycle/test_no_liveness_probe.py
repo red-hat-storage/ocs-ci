@@ -20,7 +20,7 @@ LIVENESS_CONTAINER = "liveness-prometheus"
 
 @tier1
 @bugzilla("2142901")
-@polarion_id("TBD")
+@polarion_id("OCS-4847")
 def test_no_liveness_container():
     """
     Automated test for BZ #2142901
