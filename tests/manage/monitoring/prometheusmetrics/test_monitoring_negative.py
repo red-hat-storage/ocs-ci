@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier3, skipif_managed_service
+from ocs_ci.framework.testlib import tier3, skipif_managed_service, skipif_external_mode
 from ocs_ci.ocs import metrics
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
@@ -90,6 +90,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
 @tier3
 @pytest.mark.polarion_id("OCS-1307")
 @skipif_managed_service
+@skipif_external_mode
 def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     """
     Make sure simple problems with OSD daemons are reported via OCP Prometheus.
