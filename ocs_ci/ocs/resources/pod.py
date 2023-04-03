@@ -3086,7 +3086,7 @@ def get_containers_names_by_pod(pod: OCP) -> set:
     Gets the names of all containers in given pod or pods
 
     Args:
-        pod (OCP): instance of OCP object that represents a pod (kind=POD)
+        pod (ocp.OCP): instance of OCP object that represents a pod (kind=POD)
 
     Returns:
         set: hash set of names of all containers in given pod or pods
