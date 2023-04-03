@@ -174,7 +174,8 @@ class TestNodesRestartMS(ManageTest):
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources_on_ms_consumers()
+        tries = 4 if is_ms_consumer_cluster() else 1
+        self.sanity_helpers.create_resources_on_ms_consumers(tries=tries)
 
     @tier4b
     @bugzilla("1754287")
