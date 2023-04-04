@@ -269,7 +269,7 @@ class TestObcUserInterface(object):
         ],
     )
     def test_obc_creation_and_deletion(
-        self, setup_ui_class, storageclass, bucketclass, delete_via, verify_ob_removal
+        self, setup_ui_class, storageclass, bucketclass, delete_via
     ):
         """
         Test creation and deletion of an OBC via the UI
