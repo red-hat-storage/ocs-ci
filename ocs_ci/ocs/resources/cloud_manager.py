@@ -247,9 +247,9 @@ class S3Client(CloudClient):
 
         """
         if region is None:
-            self.client.create_bucket(Bucket=name)
+            self.s3_resource.create_bucket(Bucket=name)
         else:
-            self.client.create_bucket(
+            self.s3_resource.create_bucket(
                 Bucket=name, CreateBucketConfiguration={"LocationConstraint": region}
             )
 
@@ -271,9 +271,9 @@ class S3Client(CloudClient):
             # TODO: Check why bucket policy deletion fails on IBM COS
             # when bucket have no policy set
             if "aws" in name:
-                self.client.meta.client.delete_bucket_policy(Bucket=name)
-            self.client.Bucket(name).objects.all().delete()
-            self.client.Bucket(name).delete()
+                self.s3_client.delete_bucket_policy(Bucket=name)
+            self.s3_resource.Bucket(name).objects.all().delete()
+            self.s3_resource.Bucket(name).delete()
             deletion_result = True
 
         except ClientError:
@@ -288,7 +288,7 @@ class S3Client(CloudClient):
         Returns a set containing all the bucket names that the client has access to
 
         """
-        return {bucket.name for bucket in self.client.buckets.all()}
+        return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
     def verify_uls_exists(self, uls_name):
         """
@@ -303,7 +303,7 @@ class S3Client(CloudClient):
         """
         try:
             # Todo: rename client to resource (or find an alternative)
-            self.client.meta.client.head_bucket(Bucket=uls_name)
+            self.s3_client.head_bucket(Bucket=uls_name)
             logger.info(f"{uls_name} exists")
             return True
         except ClientError:
@@ -336,11 +336,11 @@ class S3Client(CloudClient):
                 ],
             }
             bucket_policy = json.dumps(bucket_policy)
-            self.client.meta.client.put_bucket_policy(
+            self.s3_client.put_bucket_policy(
                 Bucket=aws_bucket_name, Policy=bucket_policy
             )
         else:
-            self.client.meta.client.delete_bucket_policy(Bucket=aws_bucket_name)
+            self.s3_client.delete_bucket_policy(Bucket=aws_bucket_name)
 
     def create_s3_secret(self, secret_prefix, data_prefix):
         """
