@@ -10,9 +10,7 @@ from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility import version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
 from tests.conftest import delete_projects
 
 logger = logging.getLogger(__name__)
@@ -27,9 +25,6 @@ class MCGStoreUI(PageNavigator):
     def __init__(self):
         super().__init__()
         self.wait = WebDriverWait(self.driver, 30)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.mcg_stores = locators[ocs_version]["mcg_stores"]
 
     def create_store_ui(self, kind, store_name, secret_name, target_bucket):
         """
@@ -104,9 +99,6 @@ class BucketClassUI(PageNavigator):
 
     def __init__(self):
         super().__init__()
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.bucketclass = locators[ocs_version]["bucketclass"]
 
     def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
         """
@@ -260,8 +252,6 @@ class BucketsUI(PageNavigator):
 
     def __init__(self):
         super().__init__()
-        self.ocs_version = str(version.get_ocs_version_from_csv(only_major_minor=True))
-        self.obc_loc = locators[self.ocs_version]["obc"]
 
     def select_openshift_storage_project(self, cluster_namespace):
         """
@@ -323,7 +313,6 @@ class ObcUI(BucketsUI):
 
     def __init__(self):
         super().__init__()
-        self.obc_loc = locators[self.ocs_version]["obc"]
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -390,7 +379,7 @@ class ObcUI(BucketsUI):
 class ObcUi(ObcUI):
     def __init__(self):
         super().__init__()
-        self.sc_loc = locators[self.ocp_version]["obc"]
+        self.sc_loc = self.obc_loc
 
     def check_obc_option(self, text="Object Bucket Claims"):
         """check OBC is visible to user after giving admin access"""

@@ -2,8 +2,6 @@ import logging
 import time
 import os
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
 from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -20,8 +18,6 @@ class StorageClassUI(PageNavigator):
 
     def __init__(self):
         super().__init__()
-        ocp_version = get_ocp_version()
-        self.sc_loc = locators[ocp_version]["storageclass"]
 
     def create_storageclass(self, pool_name):
         """

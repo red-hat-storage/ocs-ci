@@ -13,9 +13,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
 from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators, acm_ui_specific
+from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     expose_ocp_version,
     run_cmd,
     get_running_acm_version,
@@ -48,8 +47,6 @@ class AcmPageNavigator(BaseUI):
 
     def __init__(self):
         super().__init__()
-        self.ocp_version = get_ocp_version()
-        self.acm_page_nav = locators[self.ocp_version]["acm_page"]
 
     def navigate_welcome_page(self):
         """

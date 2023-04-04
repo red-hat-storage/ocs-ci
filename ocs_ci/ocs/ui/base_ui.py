@@ -5,6 +5,7 @@ import os
 import gc
 import time
 import zipfile
+from functools import reduce
 
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -80,8 +81,32 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.dom_folder}")
 
+        self.ocp_version = get_ocp_version()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+
+        self.page_nav = self.deep_get(locators, self.ocp_version, "page")
+        self.generic_locators = self.deep_get(locators, self.ocp_version, "generic")
+        self.validation_loc = self.deep_get(locators, self.ocp_version, "validation")
+        self.dep_loc = self.deep_get(locators, self.ocp_version, "deployment")
+        self.pvc_loc = self.deep_get(locators, self.ocp_version, "pvc")
+        self.bp_loc = self.deep_get(locators, self.ocp_version, "block_pool")
+        self.sc_loc = self.deep_get(locators, self.ocp_version, "storageclass")
+        self.ocs_loc = self.deep_get(locators, self.ocp_version, "ocs_operator")
+        self.bucketclass = self.deep_get(locators, self.ocp_version, "bucketclass")
+        self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
+        self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
+        self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
+        self.add_capacity_ui = self.deep_get(locators, self.ocp_version, "add_capacity")
+
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
+
+    @classmethod
+    def deep_get(cls, dictionary, *keys):
+        return reduce(lambda d, key: d.get(key) if d else None, keys, dictionary)
 
     def do_click(
         self,
@@ -543,16 +568,6 @@ class PageNavigator(BaseUI):
 
     def __init__(self):
         super().__init__()
-        self.ocp_version = get_ocp_version()
-        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
-        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
-        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-
-        self.page_nav = locators[self.ocp_version]["page"]
-        self.generic_locators = locators[self.ocp_version]["generic"]
-        self.validation_loc = locators[self.ocp_version]["validation"]
-        self.dep_loc = locators[self.ocp_version]["deployment"]
 
         self.operator_name = (
             ODF_OPERATOR
@@ -880,15 +895,16 @@ class PageNavigator(BaseUI):
                 logger.info("Show default projects")
                 self.do_click(self.page_nav["show-default-projects"])
 
-        pvc_loc = locators[self.ocp_version]["pvc"]
         logger.info(f"Wait and select namespace {project_name}")
         wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
             expected_text=f"{project_name}",
             timeout=10,
         )
         if wait_for_project:
-            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
             logger.info(f"Namespace {project_name} selected")
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")

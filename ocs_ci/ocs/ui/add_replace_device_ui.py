@@ -1,7 +1,6 @@
 import logging
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
 
 
@@ -22,7 +21,6 @@ class AddReplaceDeviceUI(PageNavigator):
         Add Capacity via UI
 
         """
-        self.add_capacity_ui = locators[self.ocp_version]["add_capacity"]
         self.navigate_installed_operators_page()
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.add_capacity_ui["odf_operator"])

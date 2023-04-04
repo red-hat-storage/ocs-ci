@@ -23,7 +23,6 @@ from ocs_ci.utility.utils import (
     string_chunkify,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.ocs.exceptions import (
@@ -42,7 +41,7 @@ class AcmAddClusters(AcmPageNavigator):
 
     def __init__(self):
         super().__init__()
-        self.page_nav = locators[self.ocp_version]["acm_page"]
+        self.page_nav = self.acm_page_nav
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
