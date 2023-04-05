@@ -596,6 +596,10 @@ class VolumesExistError(Exception):
     pass
 
 
+class ExternalClusterNodeRoleNotFound(Exception):
+    pass
+
+
 class UnexpectedODFAccessException(Exception):
     pass
 
