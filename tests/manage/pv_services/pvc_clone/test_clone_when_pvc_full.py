@@ -95,7 +95,7 @@ class TestCloneWhenFull(ManageTest):
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
         log.info("Created clone of the PVCs. Cloned PVCs are Bound")
         for pvc_obj in self.pvcs:
-            if pvc_obj.backed_sc == "ocs-storagecluster-cephfs":
+            if pvc_obj.backed_sc == constants.CEPHFILESYSTEM_SC:
                 pv_obj = pvc_obj.backed_pv_obj
                 subvolumname = (
                     pv_obj.get()
@@ -108,7 +108,7 @@ class TestCloneWhenFull(ManageTest):
 
         # Bug 2042318
         for clone_pvc in cloned_pvcs:
-            if clone_pvc.backed_sc == "ocs-storagecluster-cephfs":
+            if clone_pvc.backed_sc == constants.CEPHFILESYSTEM_SC:
                 pv = clone_pvc.get().get("spec").get("volumeName")
                 error_msg = f"{pv} failed to create clone from subvolume"
                 csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
