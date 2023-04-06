@@ -28,6 +28,6 @@ REPORTING:
   # to use internal image for must gather
   ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
   ocs_must_gather_latest_tag: 'latest'
-  # notification_email_0: MAIL USED FOR SENDGRID
+  notification_email_0: odf-ms-qe@redhat.com
   # notification_email_1: MAIL USED FOR SENDGRID
   # notification_email_2: MAIL USED FOR SENDGRID
