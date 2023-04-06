@@ -1371,7 +1371,7 @@ FLEXY_JENKINS_USER = "jenkins"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
-FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:latest"
+FLEXY_IMAGE_URL = "images.paas.redhat.com/dno-ood/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
 FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
