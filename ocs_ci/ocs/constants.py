@@ -65,6 +65,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
+KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 DATA_DIR = os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -1269,6 +1270,10 @@ MUST_GATHER_COMMANDS_JSON = [
     "ceph_df_--format_json-pretty",
     "ceph_auth_list_--format_json-pretty",
 ]
+
+# ceph debug commands
+CEPHOBJECTSTORE_TOOL_CMD = "ceph-objectstore-tool"
+CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
 
 # local storage
 LOCAL_STORAGE_OPERATOR = os.path.join(
