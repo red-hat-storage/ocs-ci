@@ -5960,37 +5960,6 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
 
 
 @pytest.fixture(scope="function")
-def edit_mcg_subnets(request):
-    """
-    Patch the NooBaa CR to allow access to MCG's load balancers from particular subnets
-    """
-    noobaa = OCP(kind="noobaa", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    lb_cfg = (
-        '{"spec":\
-    {"loadBalancerSourceSubnets":{"s3":["%s","%s"],"sts":["%s", "%s"]}}}'
-        % (
-            constants.TEST_NET_1_BLOCK,
-            constants.TEST_NET_2_BLOCK,
-            constants.TEST_NET_3_BLOCK,
-            constants.TEST_NET_MCAST_BLOCK,
-        )
-    )
-
-    log.info("Patching the NooBaa CR with a load balancer source subnet config")
-    noobaa.patch(resource_name="noobaa", params=lb_cfg, format_type="merge")
-    log.info(f"NooBaa CR: {noobaa.get()['items'][0]}")
-
-    def cleanup():
-        log.info("Clearing out NooBaa CR load balancer source subnet config")
-        clean_lb_config = '{"spec":{"loadBalancerSourceSubnets":null}}'
-        noobaa.patch(
-            resource_name="noobaa", params=clean_lb_config, format_type="merge"
-        )
-
-    request.addfinalizer(cleanup)
-
-
-@pytest.fixture(scope="function")
 def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
     request, create_scale_pods_and_pvcs_using_kube_job
 ):
