@@ -1935,6 +1935,25 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
+ACM_MANAGEDCLUSTER = "managedclusters.cluster.open-cluster-management.io"
+ACM_LOCAL_CLUSTER = "local-cluster"
+ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
+
+#GitOps
+GITOPS_NAMESPACE = "openshift-operators"
+GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
+GITOPS_CLUSTER_NAME = "argo-acm-importer"
+GITOPS_CLUSTER = "GitOpsCluster"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+GITOPS_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_cluster.yaml"
+)
+GITOPS_PLACEMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_placement.yaml"
+)
+GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "managedcluster_setbinding.yaml"
+)
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
