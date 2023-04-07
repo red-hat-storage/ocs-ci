@@ -1942,7 +1942,7 @@ ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 #GitOps
 GITOPS_NAMESPACE = "openshift-operators"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
-GITOPS_CLUSTER_NAME = "argo-acm-importer"
+GITOPS_CLUSTER_NAME = "gitops-cluster"
 GITOPS_CLUSTER = "GitOpsCluster"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 GITOPS_CLUSTER_YAML = os.path.join(
@@ -1953,6 +1953,9 @@ GITOPS_PLACEMENT_YAML = os.path.join(
 )
 GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "managedcluster_setbinding.yaml"
+)
+GITOPS_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
 
 # Vault encryption KMS types for PV encryption

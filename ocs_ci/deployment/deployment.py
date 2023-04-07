@@ -211,7 +211,7 @@ class Deployment(object):
             return
         logger.info("Creating GitOps Operator Subscription")
         gitops_subscription_yaml_data = templating.load_yaml(
-            constants.ACM_HUB_SUBSCRIPTION_YAML
+            constants.GITOPS_SUBSCRIPTION_YAML
         )
         package_manifest = PackageManifest(
             resource_name=constants.GITOPS_OPERATOR_NAME,
@@ -242,7 +242,7 @@ class Deployment(object):
         logger.info("Creating GitOps CLuster Placement Resource")
         run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
-        logger.info("Creating ManagedClusterSetBinding" )
+        logger.info("Creating ManagedClusterSetBinding")
 
         cluster_set = []
         managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
