@@ -637,6 +637,8 @@ class AWSUPI(AWSBase):
         pod.upload(rhel_pod_obj.name, host_file, "/")
         # install pod packages
         rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
+        if rhel_version_for_ansible == 8:
+            rhel_pod_obj.install_packages(["python38-resolvelib"])
         # run ansible
         openshift_ansible_path = "/usr/share/ansible/openshift-ansible"
         cmd = (
