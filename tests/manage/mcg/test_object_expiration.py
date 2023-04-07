@@ -84,6 +84,8 @@ class TestObjectExpiration(MCGTest):
 
     @tier1
     @bugzilla("2039309")
+    @skipif_ocs_version("<4.11")
+    @pytest.mark.polarion_id("OCS-4852")
     def test_object_expiration(self, mcg_obj, bucket_factory):
         """
         Test object expiration, see if the object is deleted within the expiration + 8 hours buffer time
@@ -95,7 +97,7 @@ class TestObjectExpiration(MCGTest):
         obj_data = "Random data" + str(uuid.uuid4().hex)
         expiration_days = 1
         buffer_time_in_hours = 8
-        # 4.10 dict to be removed once BZ 2091509 is fixed
+
         expire_rule_4_10 = {
             "Rules": [
                 {
@@ -143,7 +145,7 @@ class TestObjectExpiration(MCGTest):
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key, data=obj_data
         ), "Failed: Put Object"
 
-        logger.info("Waiting for 1 day + 8 hours")
+        logger.info("Waiting for 1 day + 8 hours buffer time")
         sleep(((expiration_days * 24) + buffer_time_in_hours) * 60 * 60)
 
         logger.info(f"Getting {object_key} from bucket: {bucket} after 1 day + 8 hours")
