@@ -148,7 +148,7 @@ class TestUserInterfaceValidation(object):
     @skipif_ui_not_support("validation")
     def test_check_upgrade_status_and_odf_catalog_source_health(self, setup_ui_class):
         """
-        Check the health of ODF Catalog Source on UI
+        Check the health of ODF Catalog Source on User Interface
 
         Args:
             setup_ui_class: login function on conftest file
