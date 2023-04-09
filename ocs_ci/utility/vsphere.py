@@ -21,6 +21,8 @@ from ocs_ci.ocs.constants import (
     COMPATABILITY_MODE,
     DISK_PATH_PREFIX,
     VMFS,
+    VM_DEFAULT_NETWORK,
+    VM_DEFAULT_NETWORK_ADAPTER,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -1514,7 +1516,7 @@ class VSPHERE(object):
         return sample.wait_for_func_status(result=False)
 
     def get_network_device(
-        self, ip, dc, label="Network adapter 1", network="VM Network"
+        self, ip, dc, label=VM_DEFAULT_NETWORK_ADAPTER, network=VM_DEFAULT_NETWORK
     ):
         """
         Get the network adapter for a VM.
@@ -1526,8 +1528,9 @@ class VSPHERE(object):
             network (str, optional): The name of the network. Defaults to "VM Network".
 
         Returns:
-            vim.vm.device.VirtualEthernetCard: The network adapter, or False if not found.
+            vim.vm.device.VirtualEthernetCard: The network adapter, or None if not found.
         """
+
         vm_network_spec = vim.vm.device.VirtualEthernetCard
         vm = self.get_vm_by_ip(ip, dc)
 
@@ -1547,14 +1550,14 @@ class VSPHERE(object):
         logger.error(
             f"Network adapter: '{label}' Not Found on Virtial Machine: '{vm.name}'."
         )
-        return False
+        return None
 
     def change_vm_network_state(
         self,
         ip,
         dc,
-        label="Network adapter 1",
-        network="VM Network",
+        label=VM_DEFAULT_NETWORK_ADAPTER,
+        network=VM_DEFAULT_NETWORK,
         timeout=10,
         connect=True,
     ):
@@ -1572,13 +1575,14 @@ class VSPHERE(object):
         Returns:
             bool: True if the operation was successful, False otherwise.
         """
+
         action = "connected" if connect else "disconnected"
         action_verb = "Connecting" if connect else "Disconnecting"
 
         # Find the network adapter to change state
         vm_device = self.get_network_device(ip, dc, label=label, network=network)
 
-        if not vm_device:
+        if vm_device is None:
             logger.error(
                 f"No network adapter found to {action} for Virtual Machine with IP: {ip}."
             )

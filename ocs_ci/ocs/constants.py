@@ -990,6 +990,10 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 VMFS = "VMFS"
 VSAN = "vsan"
 
+# VMware VM Default network settings.
+VM_DEFAULT_NETWORK_ADAPTER = "Network adapter 1"
+VM_DEFAULT_NETWORK = "VM Network"
+
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
 

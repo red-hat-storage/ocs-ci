@@ -2976,7 +2976,15 @@ def get_lvm_full_version():
 
 
 def get_mds_standby_replay_info():
-    """Return the IP address of the node running the standby-replay MDS daemon."""
+    """Return information about the Ceph MDS standby replay node.
+
+    Returns:
+        dict: A dictionary containing information about the standby-replay MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the standby-replay MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "standby_replay_pod": The name of the standby replay pod.
+    """
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
 
@@ -2992,7 +3000,7 @@ def get_mds_standby_replay_info():
 
     if ceph_daemon_name is None:
         logger.error("No standby-replay MDS daemon found")
-        return False
+        return None
 
     logger.info(f"Found standby-replay MDS daemon: {ceph_daemon_name}")
 
@@ -3006,7 +3014,7 @@ def get_mds_standby_replay_info():
         logger.error(
             f"No standby-replay MDS Pod found with running daemon '{ceph_daemon_name}'"
         )
-        return False
+        return None
 
     logger.info(f"Found standby-replay MDS pod: {standby_replay_pod.name}")
 
@@ -3016,7 +3024,7 @@ def get_mds_standby_replay_info():
         logger.error(
             f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
         )
-        return False
+        return None
 
     return {
         "node_ip": node_ip,
