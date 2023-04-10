@@ -16,7 +16,6 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from selenium.common.exceptions import NoSuchElementException
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ def dr_ui_validation_before_operation(setup_acm_ui):
     acm_obj.navigate_infrastructure_env_page()
     # Submariner validation is not applicable for Metro-DR
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
-    if multicluster_mode == "regional-dr":
+    if multicluster_mode == constants.RDR_MODE:
         acm_add_clusters_obj.submariner_validation_ui()
 
 
@@ -45,7 +44,7 @@ def check_cluster_status_on_acm_console(
     down_cluster_name=None,
     cluster_names=None,
     timeout=900,
-    expected_text="Ready",
+    expected_text=constants.STATUS_READY,
     wait=False,
 ):
     """
@@ -84,13 +83,18 @@ def check_cluster_status_on_acm_console(
         )
         if check_cluster_unavailability:
             log.info(f"Down cluster {down_cluster_name} is {expected_text}")
-            return
+            return True
         else:
             cluster_status = acm_obj.get_element_text(acm_loc["cluster_status_check"])
             assert (
-                cluster_status == "Ready"
+                cluster_status == constants.STATUS_READY
             ), f"Down cluster {down_cluster_name} is still in {cluster_status} state after {timeout} seconds"
-            if not check_cluster_unavailability and cluster_status != "Ready":
+            if (
+                not check_cluster_unavailability
+                and cluster_status != constants.STATUS_READY
+            ):
+                # Overall cluster status should change as per BZ 2155203, hence the below code is written
+                # and can be further modified depending upon the fix
                 other_expected_status = ["NotReady", "Error", "Unknown"]
                 for status in other_expected_status:
                     check_cluster_unavailability = (
@@ -104,13 +108,12 @@ def check_cluster_status_on_acm_console(
                     )
                     if check_cluster_unavailability:
                         f"Cluster {down_cluster_name} is in {status} state"
-                        return
-                return
+                        return True
             else:
                 log.error(
                     f"Down cluster {down_cluster_name} status check failed, actual status is {cluster_status}"
                 )
-                raise NoSuchElementException
+                return False
     if not cluster_names:
         primary_cluster = get_current_primary_cluster_name
         secondary_cluster = get_current_secondary_cluster_name
@@ -125,10 +128,12 @@ def check_cluster_status_on_acm_console(
                 expected_text=expected_text,
                 timeout=timeout,
             )
-            assert wait_cluster_readiness
-            f"Cluster {cluster} is not {expected_text}, actual status is {cluster_status}"
             log.info(f"Status of {cluster} is {cluster_status}")
-            acm_obj.do_click(acm_loc["nodes-tab"], enable_screenshot=True)
+            log.info("Navigate back to Clusters page to check status of other clusters")
+            acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
+            if not wait_cluster_readiness:
+                return False
+    return True
 
 
 def failover_relocate_ui(
@@ -162,7 +167,7 @@ def failover_relocate_ui(
 
     acm_version = get_running_acm_version()
     if (
-        acm_version >= "2.7"
+        acm_version >= constants.ACM_VERSION
         and workload_to_move
         and policy_name
         and failover_or_preferred_cluster
@@ -201,11 +206,13 @@ def failover_relocate_ui(
         )
         if action == constants.ACTION_FAILOVER:
             assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"], expected_text="Ready"
+                locator=acm_loc["operation-readiness"],
+                expected_text=constants.STATUS_READY,
             ), "Failover Operation readiness check failed"
         else:
             assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"], expected_text="Ready"
+                locator=acm_loc["operation-readiness"],
+                expected_text=constants.STATUS_READY,
             ), "Relocate Operation readiness check failed"
         acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
         log.info("Click on Initiate button to failover/relocate")

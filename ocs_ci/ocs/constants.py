@@ -792,6 +792,9 @@ DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 
+# ACM version constants
+ACM_VERSION = "2.7"
+
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
