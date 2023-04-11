@@ -2,10 +2,8 @@
 Helper functions specific for DR User Interface
 """
 
-from ocs_ci.utility import version
-
 import logging
-from ocs_ci.utility.utils import get_running_acm_version
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.dr_helpers import (
@@ -14,33 +12,37 @@ from ocs_ci.helpers.dr_helpers import (
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.acm.acm import AcmAddClusters
+from ocs_ci.ocs.acm import acm
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility.utils import get_ocp_version
 
 log = logging.getLogger(__name__)
 
 
-def dr_ui_validation_before_operation(setup_acm_ui):
+def dr_ui_validation_before_operation():
     """
      This function calls other functions to navigate to ACM UI from OCP console of Hub and does pre-checks
      such as Submariner validation from ACM console for Regional DR.
      Submariner check will not be done for Metro DR and only navigation to ACM console will take place.
 
-    Args:
-        setup_acm_ui: login function to ACM on conftest file
+    This function is only applicable for Regional DR.
 
     """
-    acm_obj = AcmPageNavigator(setup_acm_ui)
-    acm_add_clusters_obj = AcmAddClusters(setup_acm_ui)
-    acm_obj.navigate_infrastructure_env_page()
-    # Submariner validation is not applicable for Metro-DR
+    ui_driver = acm.login_to_acm()
+    # acm_page_nav_obj = AcmPageNavigator(ui_driver)
+    acm_add_clusters_obj = AcmAddClusters(ui_driver)
+
+    # acm_page_nav_obj.navigate_infrastructure_env_page()
+
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
+
+    # TODO: remove the cluster_set_name name for Jenkins runs to auto fetch it.
     if multicluster_mode == constants.RDR_MODE:
-        acm_add_clusters_obj.submariner_validation_ui()
+        acm_add_clusters_obj.submariner_validation_ui(cluster_set_name="myclusterset")
 
 
 def check_cluster_status_on_acm_console(
-    setup_acm_ui,
     down_cluster_name=None,
     cluster_names=None,
     timeout=900,
@@ -52,7 +54,6 @@ def check_cluster_status_on_acm_console(
     These clusters are the managed OCP clusters and the ACM Hub cluster.
 
     Args:
-        setup_acm_ui: login function to ACM on conftest file
         down_cluster_name (str): If Failover is performed when a cluster goes down, wait is set to True & the updated
                             status of cluster unavailability is checked on the ACM console.
                             It takes the cluster name which is down.
@@ -68,8 +69,9 @@ def check_cluster_status_on_acm_console(
 
     """
 
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    acm_obj = AcmPageNavigator(setup_acm_ui)
+    ocp_version = get_ocp_version()
+    ui_driver = acm.login_to_acm()
+    acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
 
     acm_obj.navigate_clusters_page()
@@ -86,9 +88,10 @@ def check_cluster_status_on_acm_console(
             return True
         else:
             cluster_status = acm_obj.get_element_text(acm_loc["cluster_status_check"])
-            assert (
-                cluster_status == constants.STATUS_READY
-            ), f"Down cluster {down_cluster_name} is still in {cluster_status} state after {timeout} seconds"
+            assert cluster_status == constants.STATUS_READY, (
+                f"Down cluster {down_cluster_name} is still in {cluster_status} state after {timeout} seconds,"
+                f"expected status is {expected_text}"
+            )
             if (
                 not check_cluster_unavailability
                 and cluster_status != constants.STATUS_READY
@@ -137,7 +140,6 @@ def check_cluster_status_on_acm_console(
 
 
 def failover_relocate_ui(
-    setup_acm_ui,
     workload_to_move=None,
     policy_name=None,
     failover_or_preferred_cluster=None,
@@ -148,7 +150,6 @@ def failover_relocate_ui(
     Function to perform Failover/Relocate operations via ACM UI
 
     Args:
-        setup_acm_ui: login function to ACM on conftest file
         workload_to_move (str): Name of running workloads on which action to be taken
         policy_name (str): Name of the DR policy applied to the running workloads
         failover_or_preferred_cluster (str): Name of the failover cluster or preferred cluster to which workloads
@@ -161,20 +162,12 @@ def failover_relocate_ui(
 
     """
 
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    acm_obj = AcmPageNavigator(setup_acm_ui)
-    acm_loc = locators[ocp_version]["acm_page"]
-
-    acm_version = get_running_acm_version()
-    if (
-        acm_version >= constants.ACM_VERSION
-        and workload_to_move
-        and policy_name
-        and failover_or_preferred_cluster
-    ):
-        ocp_version = version.get_semantic_ocp_version_from_config()
+    if workload_to_move and policy_name and failover_or_preferred_cluster:
+        ocp_version = get_ocp_version()
         acm_loc = locators[ocp_version]["acm_page"]
-        acm_obj = AcmPageNavigator(setup_acm_ui)
+        ui_driver = acm.login_to_acm()
+        acm_obj = AcmPageNavigator(ui_driver)
+        acm_loc = locators[ocp_version]["acm_page"]
         acm_obj.navigate_data_services()
         acm_obj.do_click(acm_loc["applications-page"], enable_screenshot=True)
         acm_obj.do_click(acm_loc["apply-filter"])
@@ -242,21 +235,19 @@ def failover_relocate_ui(
         raise NotImplementedError
 
 
-def verify_failover_relocate_status_ui(
-    setup_acm_ui, action=constants.ACTION_FAILOVER, timeout=900
-):
+def verify_failover_relocate_status_ui(action=constants.ACTION_FAILOVER, timeout=900):
     """
     Function to verify if Failover/Relocate was successfully triggered from ACM UI or not
 
     Args:
-        setup_acm_ui: login function to ACM on conftest file
         action (str): action "Failover" or "Relocate" which was taken on the workloads and to be verified,
                     "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
     """
 
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    acm_obj = AcmPageNavigator(setup_acm_ui)
+    ocp_version = get_ocp_version()
+    ui_driver = acm.login_to_acm()
+    acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
 
     log.info(
