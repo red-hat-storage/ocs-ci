@@ -83,7 +83,7 @@ class DeploymentFactory(object):
         elif self.deployment_platform == constants.FUSIONAAS_PLATFORM:
             from .fusion_aas import FUSIONAAS
 
-            self.cls_map["fusion_aas"] = FUSIONAAS
+            self.cls_map["fusion_aas_managed"] = FUSIONAAS
         elif self.deployment_platform == constants.RHV_PLATFORM:
             from .rhv import RHVIPI
 
