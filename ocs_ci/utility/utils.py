@@ -1834,10 +1834,22 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else "."
+    raw_version = config.DEPLOYMENT["installer_version"]
     if config.ENV_DATA.get("skip_ocp_deployment"):
-        raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
-    else:
-        raw_version = config.DEPLOYMENT["installer_version"]
+        try:
+            raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
+        except KeyError:
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ):
+                # In IBM ROKS, there is some issue that openshiftVersion is not available
+                # after fresh deployment. As W/A we are taking the version from config only if not found.
+                log.warning(
+                    "openshiftVersion key not found! Taking OCP version from config."
+                )
+            else:
+                raise
     version = Version.coerce(raw_version)
     return char.join([str(version.major), str(version.minor)])
 
