@@ -2,10 +2,10 @@ apiVersion: misf.ibm.com/v1alpha1
 kind: ManagedFusionOffering
 metadata:
   name: managedfusionoffering-sample
-  namespace: fusion-storage
+  namespace: openshift-storage
 spec:
   kind: DF
-  release: "{{ocp_version}}"
+  release: "{{offering_data.ocp_version}}"
   config: 
-    usableCapacityInTiB: "{{size}}"
-    onboardingValidationKey: {{onboarding_validation_key}}
+    usableCapacityInTiB: "{{offering_data.size}}"
+    onboardingValidationKey: {{offering_data.onboarding_validation_key}}
