@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 This module contains platform specific methods and classes for deployment
-on Openshfit Dedicated Platform.
+on Fusion aaS
 """
 
 import logging
@@ -38,7 +38,7 @@ class FUSIONAASOCP(rosa_deployment.ROSAOCP):
 
     def deploy(self, log_level=""):
         """
-        Deployment specific to OCP cluster on a ROSA Managed Service platform.
+        Deployment specific to OCP cluster on a Fusion aaS platform.
 
         Args:
             log_cli_level (str): openshift installer's log level
@@ -75,7 +75,7 @@ class FUSIONAASOCP(rosa_deployment.ROSAOCP):
 
 class FUSIONAAS(rosa_deployment.ROSA):
     """
-    Deployment class for ROSA.
+    Deployment class for Fusion aaS.
     """
 
     OCPDeployment = FUSIONAASOCP
@@ -102,7 +102,7 @@ class FUSIONAAS(rosa_deployment.ROSA):
 
     def deploy_ocs(self):
         """
-        Deployment of ODF Managed Service addon on ROSA.
+        Deployment of ODF Managed Service addon on Fusion aaS.
         """
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
