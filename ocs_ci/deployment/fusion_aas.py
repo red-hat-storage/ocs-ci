@@ -10,30 +10,23 @@ import os
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment import rosa as rosa_deployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_ocp_version,
-    retry,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
 )
 from ocs_ci.ocs.fusion import create_fusion_monitoring_resources, deploy_odf
-from ocs_ci.ocs.managedservice import (
-    update_non_ga_version,
-    update_pull_secret,
-    patch_consumer_toolbox,
-)
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
 
 
-class FUSIONAASOCP(rosa_deployment.ROSADEPLOYMENT):
+class FUSIONAASOCP(rosa_deployment.ROSAOCP):
     """
     Fusion aaS deployment class.
     """
