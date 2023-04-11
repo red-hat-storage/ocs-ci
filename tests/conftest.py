@@ -3545,6 +3545,7 @@ def ceph_toolbox(request):
     managed_platform = (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM
     )
     if not (deploy_teardown or not no_ocs) or (
         managed_platform and not deploy_teardown

@@ -239,6 +239,7 @@ def get_ocs_csv():
     if (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM
     ):
         ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
         for item in ocp_cluster.get()["items"]:
