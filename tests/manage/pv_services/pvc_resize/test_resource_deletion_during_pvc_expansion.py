@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     skipif_upgraded_from,
+    skipif_external_mode,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers import disruption_helpers
@@ -24,8 +25,12 @@ log = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
-        pytest.param("mgr", marks=pytest.mark.polarion_id("OCS-2224")),
-        pytest.param("osd", marks=pytest.mark.polarion_id("OCS-2225")),
+        pytest.param(
+            "mgr", marks=[pytest.mark.polarion_id("OCS-2224"), skipif_external_mode]
+        ),
+        pytest.param(
+            "osd", marks=[pytest.mark.polarion_id("OCS-2225"), skipif_external_mode]
+        ),
         pytest.param("rbdplugin", marks=pytest.mark.polarion_id("OCS-2226")),
         pytest.param("cephfsplugin", marks=pytest.mark.polarion_id("OCS-2227")),
         pytest.param(
