@@ -1341,7 +1341,12 @@ class VSPHEREUPI(VSPHEREBASE):
                 "vsphere",
             )
 
-        terraform_scale_up = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scale_up_terraform_data_dir, "terraform.tfstate"
+        )
+        terraform_scale_up = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
