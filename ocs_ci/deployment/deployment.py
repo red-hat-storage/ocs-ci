@@ -85,6 +85,8 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     collect_ocs_logs,
     enable_console_plugin,
+    get_all_acm_indexes,
+    get_active_acm_index,
 )
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
@@ -347,7 +349,7 @@ class Deployment(object):
             return
         if config.multicluster:
             dr_conf = self.get_rdr_conf()
-            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
+            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
 
     def do_deploy_lvmo(self):
@@ -569,7 +571,6 @@ class Deployment(object):
         _ocp = ocp.OCP(kind="node")
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
@@ -2074,6 +2075,10 @@ class RBDDRDeployOps(object):
         config.switch_acm_ctx()
 
 
+def get_multicluster_dr_deployment():
+    return MULTICLUSTER_DR_MAP[config.MULTICLUSTER["multicluster_mode"]]
+
+
 class MultiClusterDROperatorsDeploy(object):
     """
     Implement Multicluster DR operators deploy part here, mainly
@@ -2085,10 +2090,6 @@ class MultiClusterDROperatorsDeploy(object):
     """
 
     def __init__(self, dr_conf):
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
         self.meta_map = {
             "awss3": self.s3_meta_obj_store,
             "mcg": self.mcg_meta_obj_store,
@@ -2103,8 +2104,7 @@ class MultiClusterDROperatorsDeploy(object):
         deploy ODF multicluster orchestrator operator
 
         """
-        # current CTX: ACM
-        config.switch_acm_ctx()
+
         # Create openshift-dr-system namespace
         run_cmd_multicluster(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
@@ -2116,13 +2116,6 @@ class MultiClusterDROperatorsDeploy(object):
         )
         # HUB operator will be deployed by multicluster orechestrator
         self.verify_dr_hub_operator()
-
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            rbddops.deploy()
-
-        self.deploy_dr_policy()
 
     def deploy_dr_multicluster_orchestrator(self):
         """
@@ -2252,6 +2245,9 @@ class MultiClusterDROperatorsDeploy(object):
                 "cluster_name"
             ]
 
+        if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
+
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_policy_hub_", delete=False
         )
@@ -2372,3 +2368,95 @@ class MultiClusterDROperatorsDeploy(object):
     class mcg_meta_obj_store:
         def __init__(self):
             raise NotImplementedError("MCG metadata store support not implemented")
+
+
+class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
+    """
+    A class for Regiona-DR deployments
+    """
+
+    def __init__(self, dr_conf):
+        super().__init__(dr_conf)
+        # DR use case could be RBD or CephFS or Both
+        self.rbd = dr_conf.get("rbd_dr_scenario", False)
+        # CephFS For future usecase
+        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
+
+    def deploy(self):
+        """
+        RDR specific steps for deploy
+        """
+        # current CTX: ACM
+        config.switch_acm_ctx()
+        super.deploy()
+        # RBD specific dr deployment
+        if self.rbd:
+            rbddops = RBDDRDeployOps()
+            rbddops.deploy()
+        self.deploy_dr_policy()
+
+
+class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
+    """
+    A class for Metro-DR deployments
+    """
+
+    def __init__(self, dr_conf):
+        super().__init__(dr_conf)
+
+    def deploy(self):
+        # We need multicluster orchestrator on both the active/passive ACM clusters
+        acm_indexes = get_all_acm_indexes()
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            self.deploy_dr_multicluster_orchestrator()
+
+        # Deploy dr policy
+        self.deploy_dr_policy()
+
+        # Enable cluster backup on both ACMs
+        for i in acm_indexes:
+            config.switch_acm_ctx(i)
+            self.enable_cluster_backup
+
+
+    def deploy_multicluster_orchestrator(self):
+        super().deploy()
+
+    def deploy_dr_policy(self):
+        """
+        Deploy dr policy with MDR perspective, only on active ACM
+        """
+        old_ctx = config.cur_index
+        active_acm_index = get_active_acm_index()
+        config.switch_ctx(active_acm_index)
+        super().deploy_dr_policy()
+        config.switch_ctx(old_ctx)
+
+    def enable_cluster_backup(self):
+        """
+        set cluster-backup to True in mch resource
+        """
+        mch_resource = ocp.OCP(
+            kind="MultiClusterHub",
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            namespace=constants.ACM_HUB_NAMESPACE,
+        )
+        mch_resource.get()
+        for components in mch_resource['items'][0]['spec']['overrides']['components']:
+            if components['name'] == 'cluster-backup':
+                components['enabled'] = True
+        mch_resource_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mch", delete=False
+        )
+        yaml_serialized = yaml.dump(mch_resource)
+        mch_resource_yaml.write(yaml_serialized)
+        mch_resource_yaml.flush()
+        run_cmd(f"oc apply -f {mch_resource_yaml.name}")
+        mch_resource.wait_for_phase("Running")
+        
+        
+MULTICLUSTER_DR_MAP = {
+    "regional-dr": RDRMultiClusterDROperatorsDeploy,
+    "metro-dr": MDRMultiClusterDROperatorsDeploy,
+}

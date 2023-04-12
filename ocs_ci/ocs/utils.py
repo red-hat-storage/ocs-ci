@@ -1417,6 +1417,30 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_all_acm_indexes():
+    """
+    Get indexes fro all ACM clusters
+    This is more relevant in case of MDR scenario
+
+    Returns:
+        list: A list of ACM indexes
+
+    """
+    acm_indexes = []
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["acm_cluster"]:
+            acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+
+
+def get_active_acm_index():
+    """
+    Get index of active acm cluster
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["active_acm_cluster"]:
+            return cluster.MULTICLUSTER["multicluster_index"]
+
+
 def get_primary_cluster_config():
     """
     Get the primary cluster config object in a DR scenario

@@ -1,0 +1,3 @@
+MULTICLUSTER:
+  # Other modes could be managed services
+  multicluster_mode: "metro-dr"
