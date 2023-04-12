@@ -98,7 +98,7 @@ def check_cluster_status_on_acm_console(
             ):
                 # Overall cluster status should change as per BZ 2155203, hence the below code is written
                 # and can be further modified depending upon the fix
-                other_expected_status = ["NotReady", "Error", "Unknown"]
+                other_expected_status = ["NotReady", "Offline", "Error", "Unknown"]
                 for status in other_expected_status:
                     check_cluster_unavailability = (
                         acm_obj.wait_until_expected_text_is_found(
