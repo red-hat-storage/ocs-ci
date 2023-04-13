@@ -9,7 +9,7 @@ from ocs_ci.ocs import constants
 
 logger = logging.getLogger(name=__file__)
 
-FUSION_TEMPLATE_DIR = "fusion-aas"
+FUSION_TEMPLATE_DIR = os.path.join(constants.TEMPLATE_DIR, "fusion-aas")
 
 
 def create_fusion_monitoring_resources():
@@ -21,9 +21,7 @@ def create_fusion_monitoring_resources():
     logger.info(f"Creating {project_name} project")
     helpers.create_project(project_name=project_name)
     logger.info("Creating an OperatorGroup")
-    og_path = os.path.join(
-        constants.TEMPLATE_DIR, FUSION_TEMPLATE_DIR, "operatorgroup.yaml"
-    )
+    og_path = os.path.join(FUSION_TEMPLATE_DIR, "operatorgroup.yaml")
     og_data = load_yaml(og_path)
     helpers.create_resource(**og_data)
     logger.info("Creating a CatalogSource")
@@ -33,9 +31,7 @@ def create_fusion_monitoring_resources():
     )
     helpers.create_resource(**template)
     logger.info("Creating a Subscription")
-    og_path = os.path.join(
-        constants.TEMPLATE_DIR, FUSION_TEMPLATE_DIR, "subscription.yaml"
-    )
+    og_path = os.path.join(FUSION_TEMPLATE_DIR, "subscription.yaml")
     og_data = load_yaml(og_path)
     helpers.create_resource(**og_data)
     logger.info("Creating a monitoring secret")
