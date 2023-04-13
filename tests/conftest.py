@@ -2844,7 +2844,7 @@ def multiregion_mirror_setup_fixture(bucket_factory):
 
     bucketclass = {
         "interface": "CLI",
-        "backingstore_dict": {"aws": [(1, "us-west-1"), (1, "us-east-2")]},
+        "backingstore_dict": {"aws": [(1, "us-west-1"), (1, "us-east-1")]},
         "placement_policy": "Mirror",
     }
 
@@ -3686,7 +3686,7 @@ def ns_resource_factory(
         else:
             # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
             # is resolved
-            region = "us-east-2"
+            region = "us-east-1"
         target_bucket_name = mcg_obj.create_namespace_resource(
             rand_ns_resource,
             rand_connection,

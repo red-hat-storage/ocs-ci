@@ -877,7 +877,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
     """
     logger.info("Create the namespace resources and verify health")
-    nss_tup = ("oc", {"aws": [(2, "us-east-2")]})
+    nss_tup = ("oc", {"aws": [(2, "us-east-1")]})
     ns_stores = namespace_store_factory(*nss_tup)
 
     logger.info("Create the namespace bucket on top of the namespace resource")

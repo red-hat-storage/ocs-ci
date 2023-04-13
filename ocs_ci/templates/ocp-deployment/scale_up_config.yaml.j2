@@ -30,5 +30,5 @@ services:
     # <<: *AWSPriv
     awscred: {{ aws_creds_path | default('~/.aws') }}
     config_opts:
-      region: {{ region | default('us-east-2')}}
+      region: {{ region | default('us-east-1')}}
     install_base_domain: {{ base_domain }}

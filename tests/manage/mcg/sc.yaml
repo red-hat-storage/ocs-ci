@@ -1,0 +1,10 @@
+apiVersion: ocs.openshift.io/v1
+kind: StorageCluster
+metadata:
+  annotations:
+    cluster.ocs.openshift.io/local-devices: 'true'
+  name: ocs-storagecluster
+  namespace: openshift-storage
+spec:
+  multiCloudGateway:
+    reconcileStrategy: standalone

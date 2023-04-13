@@ -66,7 +66,7 @@ class TestStoreUserInterface(object):
         Test creation and deletion of MCG stores via the UI
 
         """
-        uls_name = list(cloud_uls_factory({"aws": [(1, "us-east-2")]})["aws"])[0]
+        uls_name = list(cloud_uls_factory({"aws": [(1, "us-east-1")]})["aws"])[0]
 
         store_name = create_unique_resource_name(
             resource_description="ui", resource_type=kind
@@ -138,7 +138,7 @@ class TestBucketclassUserInterface(object):
         Test creation and deletion of a BS via the UI
 
         """
-        test_stores = backingstore_factory("oc", {"aws": [(bs_amount, "us-east-2")]})
+        test_stores = backingstore_factory("oc", {"aws": [(bs_amount, "us-east-1")]})
 
         bc_name = create_unique_resource_name(
             resource_description="ui", resource_type="bucketclass"
@@ -195,14 +195,14 @@ class TestBucketclassUserInterface(object):
         """
         nss_names = [
             nss.name
-            for nss in namespace_store_factory("oc", {"aws": [(amount, "us-east-2")]})
+            for nss in namespace_store_factory("oc", {"aws": [(amount, "us-east-1")]})
         ]
 
         bs_names = []
         if policy == "cache":
             bs_names = [
                 bs.name
-                for bs in backingstore_factory("oc", {"aws": [(amount, "us-east-2")]})
+                for bs in backingstore_factory("oc", {"aws": [(amount, "us-east-1")]})
             ]
 
         bc_name = create_unique_resource_name(

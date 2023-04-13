@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 OBJ_DATA = "Sample string content to write to a S3 object"
 ROOT_OBJ = "RootKey-" + str(uuid.uuid4().hex)
 COPY_OBJ = "CopyKey-" + str(uuid.uuid4().hex)
-DEFAULT_REGION = "us-east-2"
+DEFAULT_REGION = "us-east-1"
 
 
 def setup_objects_to_list(mcg_obj, bucket_name, amount=100, prefix=""):

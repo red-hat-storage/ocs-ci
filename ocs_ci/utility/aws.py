@@ -47,7 +47,7 @@ class AWS(object):
         Constructor for AWS class
 
         Args:
-            region_name (str): Name of AWS region (default: us-east-2)
+            region_name (str): Name of AWS region (default: us-east-1)
         """
         self._region_name = region_name or config.ENV_DATA["region"]
 

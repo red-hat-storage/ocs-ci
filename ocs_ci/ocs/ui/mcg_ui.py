@@ -57,7 +57,7 @@ class MCGStoreUI(PageNavigator):
         self.do_click(self.mcg_stores["provider_dropdown"])
         self.do_click(self.mcg_stores["aws_provider"])
 
-        logger.info("Pick the us-east-2 region")
+        logger.info("Pick the us-east-1 region")
         self.do_click(self.mcg_stores["aws_region_dropdown"])
         self.do_click(self.mcg_stores["us_east_2_region"])
 

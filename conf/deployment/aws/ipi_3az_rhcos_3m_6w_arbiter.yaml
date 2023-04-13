@@ -7,21 +7,21 @@ DEPLOYMENT:
   type: 'EBS'
   local_storage: true
   ocs_operator_nodes_to_label: 6
-  arbiter_zone: 'us-east-2c'
+  arbiter_zone: 'us-east-1c'
   arbiter_autodetect: false
   local_storage_storagedeviceset_count: 3
   network_split_setup: true
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
-  region: 'us-east-2'
+  region: 'us-east-1'
   worker_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
+    - 'us-east-1a'
+    - 'us-east-1b'
   master_availability_zones:
-    - 'us-east-2a'
-    - 'us-east-2b'
-    - 'us-east-2c'
+    - 'us-east-1a'
+    - 'us-east-1b'
+    - 'us-east-1c'
   worker_replicas: 6
   master_replicas: 3
   worker_instance_type: 'm5.4xlarge'

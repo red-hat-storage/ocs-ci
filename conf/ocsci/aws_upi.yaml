@@ -7,6 +7,6 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'upi'
-  region: 'us-east-2'
+  region: 'us-east-1'
   worker_instance_type: 'm4.xlarge'
   rhel_workers: false

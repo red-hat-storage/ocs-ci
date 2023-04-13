@@ -245,7 +245,7 @@ mcg_stores = {
     "provider_dropdown": ('button[data-test*="store-provider"]', By.CSS_SELECTOR),
     "aws_provider": ("AWS S3-link", By.ID),
     "aws_region_dropdown": ("region", By.ID),
-    "us_east_2_region": ("us-east-2-link", By.ID),
+    "us_east_2_region": ("us-east-1-link", By.ID),
     "aws_secret_dropdown": ("secret-dropdown", By.ID),
     "aws_secret_search_field": (
         'input[data-test-id="dropdown-text-filter"]',

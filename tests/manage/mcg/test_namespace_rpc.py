@@ -37,7 +37,7 @@ class TestNamespace(MCGTest):
 
     # TODO: fix this when https://github.com/red-hat-storage/ocs-ci/issues/3338
     # is resolved
-    DEFAULT_REGION = "us-east-2"
+    DEFAULT_REGION = "us-east-1"
 
     @pytest.mark.polarion_id("OCS-2255")
     @tier1

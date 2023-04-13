@@ -92,7 +92,7 @@ class TestScaleNamespace(E2ETest):
                     "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
-                            "aws": [(2, "us-east-2")],
+                            "aws": [(2, "us-east-1")],
                         },
                     },
                 },

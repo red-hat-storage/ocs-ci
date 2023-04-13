@@ -4,6 +4,6 @@
 ENV_DATA:
   platform: 'aws'
   worker_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-1a'
   master_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-1a'

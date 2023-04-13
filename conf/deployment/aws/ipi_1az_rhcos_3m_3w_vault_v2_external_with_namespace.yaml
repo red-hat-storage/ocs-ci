@@ -5,17 +5,17 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
-  region: 'us-east-2'
+  region: 'us-east-1'
   worker_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-1a'
   master_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-1a'
   worker_replicas: 3
   master_replicas: 3
   worker_instance_type: 'm5.4xlarge'
   encryption_at_rest: true
   vault_deploy_mode: external
-  use_vault_namespace: true 
+  use_vault_namespace: true
   KMS_PROVIDER: vault
   KMS_SERVICE_NAME: vault
   VAULT_CACERT: "ocs-kms-ca-secret"

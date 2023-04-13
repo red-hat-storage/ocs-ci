@@ -1413,7 +1413,7 @@ DISCON_CL_PROXY_ALLOWED_DOMAINS = (
     ".elb.amazonaws.com",
     "s3.openshift-storage.svc",
     ".s3.us-west-1.amazonaws.com",
-    ".s3.us-east-2.amazonaws.com",
+    ".s3.us-east-1.amazonaws.com",
     "s3.amazonaws.com",
     "mirrorlist.centos.org",
     "mirror.centos.org",
