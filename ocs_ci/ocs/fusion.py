@@ -5,7 +5,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.templating import load_yaml, Templating
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.utils import get_ocp_version, exec_cmd
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(name=__file__)
@@ -55,9 +55,10 @@ def deploy_odf():
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
-    project_name = "openshift-storage"
-    logger.info(f"Creating {project_name} project")
+    ns_name = "openshift-storage"
+    logger.info(f"Creating {ns_name} namespace")
     helpers.create_project(project_name=project_name)
+    exec_cmd(["oc", "create", "ns", ns_name])
     logger.info("Creating the offering CRD")
     offering_data = dict()
     offering_data["ocp_version"] = get_ocp_version()
