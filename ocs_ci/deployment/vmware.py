@@ -1297,11 +1297,16 @@ class VSPHEREUPI(VSPHEREBASE):
         os.chdir(previous_dir)
 
         if config.DEPLOYMENT["external_mode"]:
-            rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
-            # get external cluster details
-            host, user, password, ssh_key = get_external_cluster_client()
-            external_cluster = ExternalCluster(host, user, password, ssh_key)
-            external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
+            try:
+                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                # get external cluster details
+                host, user, password, ssh_key = get_external_cluster_client()
+                external_cluster = ExternalCluster(host, user, password, ssh_key)
+                external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
+            except Exception as ex:
+                logger.warning(
+                    f"Failed to remove rbd images, probably due to installation was not successful. Error: {ex}"
+                )
 
         # release IPAM ip from sno
         if config.ENV_DATA["sno"]:
