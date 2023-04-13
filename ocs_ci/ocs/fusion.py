@@ -1,5 +1,6 @@
 import os
 import logging
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -31,6 +32,7 @@ def create_fusion_monitoring_resources():
         "catalogsource.yaml.j2",
         catsource_data,
     )
+    template = yaml.load(template)
     helpers.create_resource(**template)
     logger.info("Creating a Subscription")
     og_path = os.path.join(FUSION_TEMPLATE_DIR, "subscription.yaml")
@@ -44,6 +46,7 @@ def create_fusion_monitoring_resources():
         "monitoringsecret.yaml.j2",
         secret_data,
     )
+    template = yaml.load(template)
     helpers.create_resource(**template)
 
 
@@ -66,4 +69,5 @@ def deploy_odf():
         "managedfusionoffering.yaml.j2",
         offering_data,
     )
+    template = yaml.load(template)
     helpers.create_resource(**template)
