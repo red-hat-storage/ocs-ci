@@ -5,7 +5,7 @@ metadata:
   namespace: openshift-storage
 spec:
   kind: DF
-  release: "{{offering_data.ocp_version}}"
+  release: "{{ ocp_version }}"
   config: 
-    usableCapacityInTiB: "{{offering_data.size}}"
-    onboardingValidationKey: {{offering_data.onboarding_validation_key}}
+    usableCapacityInTiB: "{{ size }}"
+    onboardingValidationKey: {{ onboarding_validation_key }}

@@ -63,7 +63,7 @@ def deploy_odf():
         "public_key"
     ]
     template = templating.render_template(
-        "monitoringsecret.yaml.j2",
+        "managedfusionoffering.yaml.j2",
         offering_data,
     )
     helpers.create_resource(**template)
