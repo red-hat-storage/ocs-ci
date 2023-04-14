@@ -1394,6 +1394,6 @@ def collect_pod_container_rpm_package(dir_name):
                     log.warning(
                         f"Following exception {e} was raised for pod {pod_obj.name} and container {container_name}"
                     )
-                log_file_name = f"{package_log_dir_path}/{container_name}-rpm.log"
+                log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-rpm.log"
                 with open(log_file_name, "w") as f:
                     f.write(container_output)
