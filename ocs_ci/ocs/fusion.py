@@ -9,6 +9,7 @@ from ocs_ci.utility.managedservice import remove_header_footer_from_key
 from ocs_ci.utility.templating import load_yaml, Templating
 from ocs_ci.utility.utils import get_ocp_version, exec_cmd
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 logger = logging.getLogger(name=__file__)
 
@@ -40,6 +41,12 @@ def create_fusion_monitoring_resources():
     og_path = os.path.join(FUSION_TEMPLATE_DIR, "subscription.yaml")
     og_data = load_yaml(og_path)
     helpers.create_resource(**og_data)
+    logger.info("Waiting for catalogsource")
+    catalog_source = CatalogSource(
+        resource_name="managed-fusion-catsrc",
+        namespace="managed-fusion",
+    )
+    catalog_source.wait_for_state("READY")
     logger.info("Creating a monitoring secret")
     secret_data = dict()
     secret_data["pagerduty_config"] = config.ENV_DATA["pagerduty_config"]
