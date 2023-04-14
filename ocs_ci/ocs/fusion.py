@@ -90,8 +90,8 @@ def deploy_odf():
     )
     template = yaml.load(template, Loader=yaml.Loader)
     # CRDs may have not be available yet
-    retry(
-        (CommandFailed, TimeoutError),
-        tries=6,
-        delay=10,
-    )(helpers.create_resource(**template))
+    offering_check_cmd = ["oc", "get", "crd", "managedfusionofferings.misf.ibm.com"]
+    retry(CommandFailed, tries=6, delay=10,)(
+        exec_cmd
+    )(offering_check_cmd)
+    helpers.create_resource(**template)
