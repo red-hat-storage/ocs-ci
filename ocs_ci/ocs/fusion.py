@@ -6,9 +6,11 @@ from ocs_ci.ocs.exceptions import ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import load_yaml, Templating
 from ocs_ci.utility.utils import get_ocp_version, exec_cmd
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 logger = logging.getLogger(name=__file__)
@@ -67,7 +69,7 @@ def deploy_odf():
     ns_name = "openshift-storage"
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "create", "ns", ns_name])
-    logger.info("Creating the offering CRD")
+    logger.info("Creating the offering CR")
     offering_data = dict()
     offering_data["ocp_version"] = get_ocp_version()
     offering_data["size"] = config.ENV_DATA["size"]
@@ -87,4 +89,9 @@ def deploy_odf():
         offering_data,
     )
     template = yaml.load(template, Loader=yaml.Loader)
-    helpers.create_resource(**template)
+    # CRDs may have not be available yet
+    retry(
+        (CommandFailed, TimeoutError),
+        tries=6,
+        delay=10,
+    )(helpers.create_resource(**template))
