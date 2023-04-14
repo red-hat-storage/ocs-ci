@@ -2,8 +2,10 @@ import os
 import logging
 import yaml
 
+from ocs_ci.ocs.exceptions import ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.utility.managedservice import remove_header_footer_from_key
 from ocs_ci.utility.templating import load_yaml, Templating
 from ocs_ci.utility.utils import get_ocp_version, exec_cmd
 from ocs_ci.ocs import constants
@@ -62,9 +64,17 @@ def deploy_odf():
     offering_data = dict()
     offering_data["ocp_version"] = get_ocp_version()
     offering_data["size"] = config.ENV_DATA["size"]
-    offering_data["onboarding_validation_key"] = config.AUTH["managed_service"][
-        "public_key"
-    ]
+    public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+    if not public_key:
+        raise ConfigurationError(
+            "Public key for Managed Service not defined.\n"
+            "Expected following configuration in auth.yaml file:\n"
+            "managed_service:\n"
+            '  private_key: "..."\n'
+            '  public_key: "..."'
+        )
+    public_key_only = remove_header_footer_from_key(public_key)
+    offering_data["onboarding_validation_key"] = public_key_only
     template = templating.render_template(
         "managedfusionoffering.yaml.j2",
         offering_data,
