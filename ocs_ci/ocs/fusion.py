@@ -57,7 +57,6 @@ def deploy_odf():
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
     ns_name = "openshift-storage"
     logger.info(f"Creating {ns_name} namespace")
-    helpers.create_project(project_name=project_name)
     exec_cmd(["oc", "create", "ns", ns_name])
     logger.info("Creating the offering CRD")
     offering_data = dict()
