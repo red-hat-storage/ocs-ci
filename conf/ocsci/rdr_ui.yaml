@@ -1,5 +1,5 @@
 ---
-#Perform Failover/Relocate via ACM UI (Combination of OCP>=4.12 and ACM>=2.7 is supported, please look at the code)
+#Perform Failover/Relocate via ACM UI (Combination of ODF>=4.13 and ACM>=2.7 is supported, please look at the code)
 
 ENV_DATA:
   rdr_failover_via_ui: true
