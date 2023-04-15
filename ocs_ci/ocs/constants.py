@@ -84,6 +84,7 @@ HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.y
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 # Statuses
 STATUS_READY = "Ready"
+PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
@@ -206,6 +207,7 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+
 # cluster types
 MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
@@ -791,6 +793,8 @@ RBD_SIDECAR_COUNT_4_12 = 14
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
+DRPOLICY_STATUS = "Validated"
+RDR_REPLICATION_POLICY = "async"
 
 # ACM version constants
 ACM_VERSION = "2.7"

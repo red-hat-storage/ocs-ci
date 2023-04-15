@@ -145,8 +145,16 @@ class AcmPageNavigator(BaseUI):
         self.do_click(locator=self.acm_page_nav["Credentials"])
 
     def navigate_data_services(self):
+        """
+        Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
+
+        """
         log.info("Navigate to Data Policies page on ACM console")
-        self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["data-services"])
+        element = self.driver.find_element_by_xpath(
+            "//button[normalize-space()='Data Services']"
+        )
+        if element.get_attribute("aria-expanded") == "false":
+            self.do_click(locator=self.acm_page_nav["data-services"])
         self.do_click(
             locator=self.acm_page_nav["data-policies"], enable_screenshot=True
         )

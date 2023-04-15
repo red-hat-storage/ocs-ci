@@ -209,7 +209,6 @@ class AcmAddClusters(AcmPageNavigator):
         """
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
         log.info("Click on Cluster sets")
         self.do_click(self.page_nav["cluster-sets"])
         self.page_has_loaded(retries=15, sleep_time=5)
