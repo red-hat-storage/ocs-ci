@@ -495,19 +495,19 @@ def import_clusters_with_acm(import_ui=False):
             log.info("Wait managedcluster move to Available state")
             ocp_obj = OCP(kind="managedcluster")
             ocp_obj.wait_for_resource(
-                timeout=300,
+                timeout=600,
                 condition="True",
                 column="AVAILABLE",
                 resource_name=cluster[0],
             )
             ocp_obj.wait_for_resource(
-                timeout=300,
+                timeout=600,
                 condition="True",
                 column="JOINED",
                 resource_name=cluster[0],
             )
             ocp_obj.wait_for_resource(
-                timeout=300,
+                timeout=600,
                 condition="true",
                 column="HUB ACCEPTED",
                 resource_name=cluster[0],
