@@ -97,6 +97,11 @@ class TestRookCephLogRotate(ManageTest):
                 f"pod_type:{pod_type} cnt_logs_before_fill_log:"
                 f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
             )
+            pod_obj.exec_cmd_on_pod(
+                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=550",
+                out_yaml_format=False,
+                container_name="log-collector",
+            )
             return False
         return True
 
@@ -175,6 +180,7 @@ class TestRookCephLogRotate(ManageTest):
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
+            log.info("Copy data to /var/log/ceph/<ceph>.log file")
             pod_obj.exec_cmd_on_pod(
                 command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=530",
                 out_yaml_format=False,
