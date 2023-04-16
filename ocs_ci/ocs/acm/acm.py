@@ -26,11 +26,11 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
-from ocs_ci.ocs.exceptions import (
-    ACMClusterImportException,
-    UnexpectedDeploymentConfiguration,
-)
 from ocs_ci.utility import version
+from ocs_ci.ocs.exceptions import ACMClusterImportException, UnexpectedDeploymentConfiguration
+from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.helpers.helpers import create_project
 
 log = logging.getLogger(__name__)
 
@@ -449,7 +449,7 @@ def get_clusters_env():
     return clusters_env
 
 
-def import_clusters_with_acm():
+def import_clusters_with_acm(import_ui=False):
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
 
@@ -461,15 +461,54 @@ def import_clusters_with_acm():
     kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
     cluster_name_a = clusters_env.get("cluster_name_1")
     cluster_name_b = clusters_env.get("cluster_name_2")
+    clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
     verify_running_acm()
-    login_to_acm()
-    acm_nav = AcmAddClusters()
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_a,
-        kubeconfig_location=kubeconfig_a,
-    )
+    if import_ui:
+        login_to_acm()
+        acm_nav = AcmAddClusters()
+        acm_nav.import_cluster(
+            cluster_name=cluster_name_a,
+            kubeconfig_location=kubeconfig_a,
+        )
+    else:
+        for cluster in clusters:
+            log.info(f"Create project {cluster[0]}")
+            create_project(cluster[0])
 
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_b,
-        kubeconfig_location=kubeconfig_b,
-    )
+            log.info("Create and apply managed-cluster.yaml")
+            managed_cluster = templating.load_yaml(
+                "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
+            )
+            managed_cluster["metadata"]["name"] = cluster[0]
+            managed_cluster_obj = OCS(**managed_cluster)
+            managed_cluster_obj.apply(**managed_cluster)
+
+            log.info("Create and Apply the auto-import-secret.yaml")
+            auto_import_secret = templating.load_yaml(
+                "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+            )
+            auto_import_secret["metadata"]["namespace"] = cluster[0]
+            auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
+            auto_import_secret_obj = OCS(**auto_import_secret)
+            auto_import_secret_obj.apply(**auto_import_secret)
+
+            log.info("Wait managedcluster move to Available state")
+            ocp_obj = OCP(kind="managedcluster")
+            ocp_obj.wait_for_resource(
+                timeout=300,
+                condition="True",
+                column="AVAILABLE",
+                resource_name=cluster[0],
+            )
+            ocp_obj.wait_for_resource(
+                timeout=300,
+                condition="True",
+                column="JOINED",
+                resource_name=cluster[0],
+            )
+            ocp_obj.wait_for_resource(
+                timeout=300,
+                condition="true",
+                column="HUB ACCEPTED",
+                resource_name=cluster[0],
+            )
