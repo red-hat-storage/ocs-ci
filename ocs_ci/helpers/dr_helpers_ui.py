@@ -67,9 +67,7 @@ def check_cluster_status_on_acm_console(
     ui_driver = acm.login_to_acm()
     acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
-
     acm_obj.navigate_clusters_page()
-
     if down_cluster_name:
         wait = True
         acm_obj.do_click(format_locator(acm_loc["cluster_name"], down_cluster_name))
@@ -161,12 +159,19 @@ def verify_drpolicy_ui(scheduling_interval):
     ui_driver = acm.login_to_acm()
     acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
+    acm_obj.navigate_clusters_page()
     acm_obj.navigate_data_services()
     log.info("Verify status of DRPolicy on ACM UI")
-    policy_status = acm_obj.get_element_text(acm_loc["drpolicy-status"])
-    assert (
-        policy_status == constants.DRPOLICY_STATUS
-    ), f"DRPolicy status on ACM UI is {policy_status}, can not proceed"
+    policy_status = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["drpolicy-status"], expected_text="Validated"
+    )
+    if policy_status:
+        log.info(f"DRPolicy status on ACM UI is {constants.DRPOLICY_STATUS}")
+    else:
+        log.error(
+            f"DRPolicy status on ACM UI is not {constants.DRPOLICY_STATUS}, can not proceed"
+        )
+        raise NoSuchElementException
     log.info("Verify Replication policy on ACM UI")
     replication_policy = acm_obj.get_element_text(acm_loc["replication-policy"])
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
@@ -201,16 +206,13 @@ def failover_relocate_ui(
             bool: True if the action is triggered, raises Exception if any of the mandatory argument is not provided
 
     """
-
     if workload_to_move and policy_name and failover_or_preferred_cluster:
         ocp_version = get_ocp_version()
         ui_driver = acm.login_to_acm()
         acm_obj = AcmPageNavigator(ui_driver)
         acm_loc = locators[ocp_version]["acm_page"]
         verify_drpolicy_ui(scheduling_interval=scheduling_interval)
-        log.info("Navigate to Applications page")
-        acm_obj.page_has_loaded(retries=25, sleep_time=15)
-        acm_obj.do_click(acm_loc["applications-page"], enable_screenshot=True)
+        acm_obj.navigate_applications_page()
         log.info("Apply Filter on Applications page")
         acm_obj.do_click(acm_loc["apply-filter"])
         log.info("Select subscription from filters")
@@ -298,8 +300,7 @@ def verify_failover_relocate_status_ui(action=constants.ACTION_FAILOVER, timeout
     acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_clusters_page()
-    log.info("Navigate to Applications page")
-    acm_obj.do_click(acm_loc["applications-page"], enable_screenshot=True)
+    acm_obj.navigate_applications_page()
     log.info("Apply Filter on Applications page")
     acm_obj.do_click(acm_loc["apply-filter"])
     log.info("Select subscription from filters")

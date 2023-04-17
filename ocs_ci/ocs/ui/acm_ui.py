@@ -126,7 +126,9 @@ class AcmPageNavigator(BaseUI):
 
         """
         log.info("Navigate into Applications Page")
-        self.do_click(locator=self.acm_page_nav["Applications"])
+        self.do_click(
+            locator=self.acm_page_nav["Applications"], timeout=120, avoid_stale=True
+        )
 
     def navigate_governance_page(self):
         """
@@ -150,14 +152,28 @@ class AcmPageNavigator(BaseUI):
 
         """
         log.info("Navigate to Data Policies page on ACM console")
-        element = self.driver.find_element_by_xpath(
-            "//button[normalize-space()='Data Services']"
+        find_element = self.wait_until_expected_text_is_found(
+            locator=self.acm_page_nav["data-services"],
+            expected_text="Data Services",
+            timeout=120,
         )
-        if element.get_attribute("aria-expanded") == "false":
-            self.do_click(locator=self.acm_page_nav["data-services"])
-        self.do_click(
-            locator=self.acm_page_nav["data-policies"], enable_screenshot=True
-        )
+        if find_element:
+            element = self.driver.find_element_by_xpath(
+                "//button[normalize-space()='Data Services']"
+            )
+            if element.get_attribute("aria-expanded") == "false":
+                self.do_click(locator=self.acm_page_nav["data-services"])
+            data_policies = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["data-policies"],
+                expected_text="Data policies",
+            )
+            if data_policies:
+                self.do_click(
+                    locator=self.acm_page_nav["data-policies"], enable_screenshot=True
+                )
+        else:
+            log.error("Couldn't navigate to ata Services page on ACM UI")
+            raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):
         """
@@ -187,7 +203,6 @@ class AcmPageNavigator(BaseUI):
             self.take_screenshot()
             raise NoSuchElementException
         self.do_click(self.acm_page_nav["click-local-cluster"])
-        self.page_has_loaded()
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 

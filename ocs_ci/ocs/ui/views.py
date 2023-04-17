@@ -726,11 +726,7 @@ acm_configuration_4_12 = {
     "data-services": ("//button[normalize-space()='Data Services']", By.XPATH),
     "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
     "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
-    "drpolicy-status": ("//td[@id='status']", By.XPATH),
-    "applications-page": (
-        "//a[normalize-space()='Applications']",
-        By.XPATH,
-    ),
+    "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "apply-filter": ("//button[@aria-label='Options menu']", By.XPATH),
     "subscription": ("//input[@id='app.k8s.io/Application']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),

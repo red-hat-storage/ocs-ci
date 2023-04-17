@@ -5,7 +5,7 @@ import os
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-
+from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
@@ -208,10 +208,17 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         self.navigate_clusters_page()
-        self.page_has_loaded(retries=15, sleep_time=5)
-        log.info("Click on Cluster sets")
-        self.do_click(self.page_nav["cluster-sets"])
-        self.page_has_loaded(retries=15, sleep_time=5)
+        cluster_sets_page = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["cluster-sets"],
+            expected_text="Cluster sets",
+            timeout=120,
+        )
+        if cluster_sets_page:
+            log.info("Click on Cluster sets")
+            self.do_click(self.page_nav["cluster-sets"])
+        else:
+            log.error("Couldn't navigate to Cluster sets page")
+            raise NoSuchElementException
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(
