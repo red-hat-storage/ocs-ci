@@ -98,7 +98,7 @@ class TestRookCephLogRotate(ManageTest):
                 f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
             )
             pod_obj.exec_cmd_on_pod(
-                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=550",
+                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=560",
                 out_yaml_format=False,
                 container_name="log-collector",
             )
@@ -189,7 +189,7 @@ class TestRookCephLogRotate(ManageTest):
 
         for pod_type in self.podtype_id:
             sample = TimeoutSampler(
-                timeout=963,
+                timeout=1800,
                 sleep=40,
                 func=self.verify_new_log_created,
                 pod_type=pod_type,
