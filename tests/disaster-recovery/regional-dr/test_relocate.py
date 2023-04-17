@@ -17,13 +17,20 @@ class TestRelocate:
 
     """
 
-    def test_relocate(self, rdr_workload):
+    @pytest.mark.parametrize(
+        argnames=["workload_type"],
+        argvalues=[
+            pytest.param("Subscription", marks=pytest.mark.polarion_id("OCS-4425")),
+            pytest.param("ApplicationSet", marks=pytest.mark.polarion_id("OCS-4425")),
+        ],
+    )
+    def test_relocate(self, rdr_workload, workload_type):
         """
         Test to verify relocation of application between managed clusters
 
         """
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -31,18 +38,24 @@ class TestRelocate:
 
         # Relocate action
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace)
+        dr_helpers.relocate(
+            secondary_cluster_name, rdr_workload.workload_namespace, workload_type
+        )
 
         # Verify resources deletion from previous primary or current secondary cluster
         dr_helpers.set_current_secondary_cluster_context(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        dr_helpers.wait_for_all_resources_deletion(
+            rdr_workload.workload_namespace, workload_type
+        )
 
         # Verify resources creation on new primary cluster (preferredCluster)
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        dr_helpers.set_current_primary_cluster_context(
+            rdr_workload.workload_namespace, workload_type
+        )
         dr_helpers.wait_for_all_resources_creation(
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
