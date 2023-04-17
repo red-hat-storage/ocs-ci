@@ -35,6 +35,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.helpers.sanity_helpers import SanityManagedService, Sanity
 from ocs_ci.ocs.cluster import is_ms_provider_cluster, is_managed_service_cluster
 from ocs_ci.framework import config
+from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
+from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 
 
 log = logging.getLogger(__name__)
@@ -51,11 +53,12 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
         Initialize the Sanity instance for the Managed Service
 
         """
+        switch_to_correct_cluster_at_setup(request)
         if is_managed_service_cluster():
             self.sanity_helpers = SanityManagedService(
                 create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
@@ -151,7 +154,13 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                 self.sanity_helpers.health_check(cluster_check=False, tries=40)
 
     @managed_service_required
-    def test_rolling_terminate_and_recovery_in_controlled_fashion_ms(self, nodes):
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [MS_PROVIDER_TYPE, MS_CONSUMER_TYPE],
+    )
+    def test_rolling_terminate_and_recovery_in_controlled_fashion_ms(
+        self, cluster_type, nodes
+    ):
         """
         Test rolling terminate and recovery of the OCS worker nodes, when waiting for the pods to
         be running and Ceph Health OK between the iterations. This test is for the Managed Service
