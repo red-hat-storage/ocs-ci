@@ -1103,40 +1103,57 @@ def _collect_ocs_logs(
         while counter < 5:
             counter += 1
             try:
+                if (
+                    ocsci_config.multicluster
+                    and ocsci_config.get_acm_index()
+                    == cluster_config.MULTICLUSTER["multicluster_index"]
+                ):
+                    break
                 collect_noobaa_db_dump(log_dir_path, cluster_config)
                 break
             except CommandFailed as ex:
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
                 sleep(30)
     # Collect ACM logs only from ACM
-    if cluster_config.ENV_DATA.get("multicluster_mode", None) == "regional-dr":
+    if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
         if cluster_config.MULTICLUSTER.get("acm_cluster", False):
-            image_prefix = "acm_must_gather"
+            log.info("Collecting ACM logs")
+            image_prefix = '"acm_must_gather"'
             acm_mustgather_path = os.path.join(
                 os.path.expanduser(cluster_config.RUN["log_dir"]),
                 f"{dir_name}_{cluster_config.RUN['run_id']}",
             )
-            csv_cmd = f"oc get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
-            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
-            json_out = subprocess.Popen(shlex.split(csv_cmd), stdout=subprocess.PIPE)
-            out = subprocess.Popen(
-                shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+            csv_cmd = (
+                f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
+                f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
             )
-            acm_mustgather_image = out.communicate()[0].decode()
+            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
+            json_out = run_cmd(csv_cmd)
+            out = subprocess.run(
+                shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
+            )
+            acm_mustgather_image = out.stdout.decode()
             run_must_gather(
                 acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
             )
+
         submariner_log_path = os.path.join(
             os.path.expanduser(cluster_config.RUN["log_dir"]),
             f"{dir_name}_{cluster_config.RUN['run_id']}",
             f"{cluster_config.ENV_DATA['cluster_name']}",
             "submariner",
         )
+        run_cmd(f"mkdir -p {submariner_log_path}")
+        cwd = os.getcwd()
+        run_cmd(f"chmod -R 777 {submariner_log_path}")
+        os.chdir(submariner_log_path)
         submariner_log_collect = (
             f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-            f" --dir {submariner_log_path}"
         )
+        log.info("Collecting submariner logs")
         out = run_cmd(submariner_log_collect)
+        run_cmd(f"chmod -R 777 {submariner_log_path}")
+        os.chdir(cwd)
         log.info(out)
 
 
