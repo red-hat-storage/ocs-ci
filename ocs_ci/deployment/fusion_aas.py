@@ -33,9 +33,14 @@ class FUSIONAASOCP(rosa_deployment.ROSAOCP):
         self.ocp_version = get_ocp_version()
         self.region = config.ENV_DATA["region"]
 
-    def deploy(self):
+    def deploy(self, log_level=""):
         """
         Deployment specific to OCP cluster on a Fusion aaS platform.
+
+        Args:
+            log_level (str): openshift installer's log level that is expected from
+                inherited class
+
         """
         rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
 
