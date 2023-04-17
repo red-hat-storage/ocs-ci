@@ -19,13 +19,19 @@ class TestFailoverAndRelocate:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["workload_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
-                False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
+                "Subscription", False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
             ),
             pytest.param(
-                True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
+                "Subscription", True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
+            ),
+            pytest.param(
+                "ApplicationSet", False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
+            ),
+            pytest.param(
+                "ApplicationSet", True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
             ),
         ],
     )
@@ -33,6 +39,7 @@ class TestFailoverAndRelocate:
         self,
         primary_cluster_down,
         nodes_multicluster,
+        workload_type,
         rdr_workload,
         node_restart_teardown,
     ):
@@ -45,12 +52,13 @@ class TestFailoverAndRelocate:
                 back to primary cluster once it recovers
 
         """
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
+
+        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -62,12 +70,12 @@ class TestFailoverAndRelocate:
 
         # Failover action
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace)
+        dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace, workload_type)
 
         # Verify resources creation on new primary cluster (failoverCluster)
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
         dr_helpers.wait_for_all_resources_creation(
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
@@ -76,7 +84,7 @@ class TestFailoverAndRelocate:
 
         # Verify resources deletion from previous primary or current secondary cluster
         dr_helpers.set_current_secondary_cluster_context(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         # Start nodes if cluster is down
         if primary_cluster_down:
@@ -95,18 +103,18 @@ class TestFailoverAndRelocate:
 
         # Relocate action
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace)
+        dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace, workload_type)
 
         # Verify resources deletion from previous primary or current secondary cluster
         dr_helpers.set_current_secondary_cluster_context(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         # Verify resources creation on new primary cluster (preferredCluster)
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
         dr_helpers.wait_for_all_resources_creation(
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
