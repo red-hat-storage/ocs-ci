@@ -302,9 +302,8 @@ class BusyBox_AppSet(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
 
-        app_set_yaml_data_list = list(templating.load_yaml(
-            self.appset_yaml_file, multi_document=True
-        )
+        app_set_yaml_data_list = list(
+            templating.load_yaml(self.appset_yaml_file, multi_document=True)
         )
         for app_set_yaml_data in app_set_yaml_data_list:
             if app_set_yaml_data["kind"] == constants.PLACEMENT:
@@ -341,13 +340,17 @@ class BusyBox_AppSet(DRWorkload):
         placcement_obj = ocp.OCP(
             kind=constants.PLACEMENT_KIND,
             resource_name=self.appset_placement_name,
-            namespace="openshift-gitops"
+            namespace="openshift-gitops",
         )
-        placcement_obj.annotate(annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'")
+        placcement_obj.annotate(
+            annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
+        )
         placcement_obj.annotate(
             annotation=f"drplacementcontrol.ramendr.openshift.io/drpc-name={self.appset_placement_name}-drpc"
         )
-        placcement_obj.annotate(annotation="drplacementcontrol.ramendr.openshift.io/drpc-namespace=openshift-gitops")
+        placcement_obj.annotate(
+            annotation="drplacementcontrol.ramendr.openshift.io/drpc-namespace=openshift-gitops"
+        )
 
     def _get_workload_namespace(self):
         """
@@ -395,7 +398,10 @@ class BusyBox_AppSet(DRWorkload):
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
-            self.workload_pvc_count, self.workload_pod_count, self.workload_namespace, skip_vr=skip_vr
+            self.workload_pvc_count,
+            self.workload_pod_count,
+            self.workload_namespace,
+            skip_vr=skip_vr,
         )
 
     def delete_workload(self, force=False):
@@ -406,9 +412,7 @@ class BusyBox_AppSet(DRWorkload):
         drpc_name = f"{self.appset_placement_name}-drpc"
         try:
             config.switch_acm_ctx()
-            run_cmd(
-                f"oc delete -f {self.appset_yaml_file}"
-            )
+            run_cmd(f"oc delete -f {self.appset_yaml_file}")
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -426,4 +430,6 @@ class BusyBox_AppSet(DRWorkload):
 
         finally:
             config.switch_acm_ctx()
-            run_cmd(f"oc delete drpc -n {constants.GITOPS_CLUSTER_NAMESPACE} {drpc_name}")
+            run_cmd(
+                f"oc delete drpc -n {constants.GITOPS_CLUSTER_NAMESPACE} {drpc_name}"
+            )

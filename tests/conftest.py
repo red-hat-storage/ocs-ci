@@ -6079,10 +6079,11 @@ def rdr_workload(request):
     """
     Setup Busybox workload for RDR setup
     """
-    if constants.SUBSCRIPTION == request.getfixturevalue('workload_type'):
+    if constants.SUBSCRIPTION == request.getfixturevalue("workload_type"):
         workload = BusyBox_Subscription()
     else:
         workload = BusyBox_AppSet()
+
     def teardown():
         workload.delete_workload(force=True)
 

@@ -22,16 +22,28 @@ class TestFailoverAndRelocate:
         argnames=["workload_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
-                "Subscription", False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
+                "Subscription",
+                False,
+                marks=pytest.mark.polarion_id("OCS-4430"),
+                id="primary_up",
             ),
             pytest.param(
-                "Subscription", True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
+                "Subscription",
+                True,
+                marks=pytest.mark.polarion_id("OCS-4427"),
+                id="primary_down",
             ),
             pytest.param(
-                "ApplicationSet", False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
+                "ApplicationSet",
+                False,
+                marks=pytest.mark.polarion_id("OCS-4430"),
+                id="primary_up",
             ),
             pytest.param(
-                "ApplicationSet", True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
+                "ApplicationSet",
+                True,
+                marks=pytest.mark.polarion_id("OCS-4427"),
+                id="primary_down",
             ),
         ],
     )
@@ -53,7 +65,9 @@ class TestFailoverAndRelocate:
 
         """
 
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
+        dr_helpers.set_current_primary_cluster_context(
+            rdr_workload.workload_namespace, workload_type
+        )
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
 
@@ -72,10 +86,14 @@ class TestFailoverAndRelocate:
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace, workload_type)
+        dr_helpers.failover(
+            secondary_cluster_name, rdr_workload.workload_namespace, workload_type
+        )
 
         # Verify resources creation on new primary cluster (failoverCluster)
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
+        dr_helpers.set_current_primary_cluster_context(
+            rdr_workload.workload_namespace, workload_type
+        )
         dr_helpers.wait_for_all_resources_creation(
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
@@ -105,7 +123,9 @@ class TestFailoverAndRelocate:
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload.workload_namespace, workload_type
         )
-        dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace, workload_type)
+        dr_helpers.relocate(
+            secondary_cluster_name, rdr_workload.workload_namespace, workload_type
+        )
 
         # Verify resources deletion from previous primary or current secondary cluster
         dr_helpers.set_current_secondary_cluster_context(
@@ -114,7 +134,9 @@ class TestFailoverAndRelocate:
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         # Verify resources creation on new primary cluster (preferredCluster)
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace, workload_type)
+        dr_helpers.set_current_primary_cluster_context(
+            rdr_workload.workload_namespace, workload_type
+        )
         dr_helpers.wait_for_all_resources_creation(
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
