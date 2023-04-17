@@ -1,0 +1,21 @@
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: DRPlacementControl
+metadata:
+  labels:
+    cluster.open-cluster-management.io/backup: resource
+  name: PLACEHOLDER
+  namespace: openshift-gitops
+spec:
+  drPolicyRef:
+    apiVersion: ramendr.openshift.io/v1alpha1
+    kind: DRPolicy
+    name: PLACEHOLDER
+  placementRef:
+    apiVersion: cluster.open-cluster-management.io/v1beta1
+    kind: Placement
+    name: PLACEHOLDER
+    namespace: openshift-gitops
+  preferredCluster: PLACEHOLDER
+  pvcSelector:
+    matchLabels:
+      PLACEHOLDER
