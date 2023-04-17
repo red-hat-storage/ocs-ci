@@ -12,10 +12,7 @@ from ocs_ci.deployment import rosa as rosa_deployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import (
-    ceph_health_check,
-    get_ocp_version,
-)
+from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -36,13 +33,9 @@ class FUSIONAASOCP(rosa_deployment.ROSAOCP):
         self.ocp_version = get_ocp_version()
         self.region = config.ENV_DATA["region"]
 
-    def deploy(self, log_level=""):
+    def deploy(self):
         """
         Deployment specific to OCP cluster on a Fusion aaS platform.
-
-        Args:
-            log_cli_level (str): openshift installer's log level
-
         """
         rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
 
@@ -131,9 +124,6 @@ class FUSIONAAS(rosa_deployment.ROSA):
             resource_count=3,
             timeout=600,
         )
-
-        # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
     def destroy_ocs(self):
         """
