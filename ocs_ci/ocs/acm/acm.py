@@ -31,6 +31,7 @@ from ocs_ci.ocs.exceptions import ACMClusterImportException, UnexpectedDeploymen
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -493,7 +494,7 @@ def import_clusters_with_acm(import_ui=False):
             auto_import_secret_obj.apply(**auto_import_secret)
 
             log.info("Wait managedcluster move to Available state")
-            ocp_obj = OCP(kind="managedcluster")
+            ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
             ocp_obj.wait_for_resource(
                 timeout=600,
                 condition="True",
