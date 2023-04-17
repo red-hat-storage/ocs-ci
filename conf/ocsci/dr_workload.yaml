@@ -4,5 +4,9 @@ ENV_DATA:
   dr_workload_pod_count: 20
   dr_workload_pvc_count: 20
   dr_workload_subscription_dir: "rdr/busybox/app-busybox-1/subscriptions"
+  dr_workload_app_dir: "rdr/busybox/AppSet/"
+  dr_workload_app_path: "appset-busybox-1"
+  dr_workload_app_placement_name: "busybox-1-placement"
+  dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}
   # dr_policy_name: PLACEHOLDER
   # preferred_primary_cluster: PLACEHOLDER
