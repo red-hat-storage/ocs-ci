@@ -2008,3 +2008,13 @@ TOPOLVM_ALERTS = {
 
 
 WARP_CLIENT_PORT = 7761
+
+#DR
+DRPC_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "drpc.yaml"
+)
+APPLICATION_SET = "ApplicationSet"
+PLACEMENT = "Placement"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+APPLICATION_ARGOCD = "applications.argoproj.io"
+PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
