@@ -3079,3 +3079,28 @@ def check_ceph_cmd_execute_successfully():
 
         logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
         return False
+
+
+def get_containers_names_by_pod(pod: OCP) -> set:
+    """
+    Gets the names of all containers in given pod or pods
+
+    Args:
+        pod (ocp.OCP): instance of OCP object that represents a pod (kind=POD)
+
+    Returns:
+        set: hash set of names of all containers in given pod or pods
+
+    """
+    items = pod.data.get("items")
+    if not isinstance(items, list):
+        items = [items]
+
+    container_names = list()
+    for item in items:
+        containers = item.get("spec").get("containers")
+        container_names += [c.get("name") for c in containers]
+
+    logger.debug(f"Containers: {container_names}")
+
+    return set(container_names)
