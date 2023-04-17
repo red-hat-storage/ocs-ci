@@ -188,7 +188,14 @@ class BaseUI:
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        try:
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        except TimeoutException:
+            # element_to_be_clickable() doesn't work as expected so just to harden
+            # we are using presence_of_element_located
+            element = wait.until(
+                ec.presence_of_element_located((locator[1], locator[0]))
+            )
         return True if element.get_attribute("aria-expanded") == "true" else False
 
     def choose_expanded_mode(self, mode, locator):

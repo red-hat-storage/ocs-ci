@@ -7,9 +7,6 @@ import logging
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.acm.acm import AcmAddClusters
-from ocs_ci.ocs.acm import acm
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
@@ -18,7 +15,7 @@ from ocs_ci.ocs.utils import get_non_acm_cluster_config
 log = logging.getLogger(__name__)
 
 
-def dr_submariner_validation_from_ui():
+def dr_submariner_validation_from_ui(acm_obj):
     """
     This function is only applicable for Regional DR.
 
@@ -26,15 +23,15 @@ def dr_submariner_validation_from_ui():
     such as Submariner validation from ACM console for Regional DR.
 
     """
-    ui_driver = acm.login_to_acm()
-    acm_add_clusters_obj = AcmAddClusters(ui_driver)
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
-    # TODO: remove the cluster_set_name name for Jenkins runs to auto fetch it.
     if multicluster_mode == constants.RDR_MODE:
-        acm_add_clusters_obj.submariner_validation_ui(cluster_set_name="myclusterset")
+        # Add an arg to below function and pass the cluster_set_name created on your cluster
+        # when running the test locally.
+        acm_obj.submariner_validation_ui(cluster_set_name="myclusterset")
 
 
 def check_cluster_status_on_acm_console(
+    acm_obj,
     down_cluster_name=None,
     cluster_names=None,
     timeout=900,
@@ -64,8 +61,6 @@ def check_cluster_status_on_acm_console(
     """
 
     ocp_version = get_ocp_version()
-    ui_driver = acm.login_to_acm()
-    acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_clusters_page()
     if down_cluster_name:
@@ -147,7 +142,7 @@ def check_cluster_status_on_acm_console(
         return True
 
 
-def verify_drpolicy_ui(scheduling_interval):
+def verify_drpolicy_ui(acm_obj, scheduling_interval):
     """
     Function to verify DRPolicy status and replication policy on Data Policies page of ACM console
 
@@ -156,10 +151,8 @@ def verify_drpolicy_ui(scheduling_interval):
 
     """
     ocp_version = get_ocp_version()
-    ui_driver = acm.login_to_acm()
-    acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
-    acm_obj.navigate_clusters_page()
+    # acm_obj.navigate_clusters_page()
     acm_obj.navigate_data_services()
     log.info("Verify status of DRPolicy on ACM UI")
     policy_status = acm_obj.wait_until_expected_text_is_found(
@@ -184,6 +177,7 @@ def verify_drpolicy_ui(scheduling_interval):
 
 
 def failover_relocate_ui(
+    acm_obj,
     scheduling_interval,
     workload_to_move=None,
     policy_name=None,
@@ -208,10 +202,8 @@ def failover_relocate_ui(
     """
     if workload_to_move and policy_name and failover_or_preferred_cluster:
         ocp_version = get_ocp_version()
-        ui_driver = acm.login_to_acm()
-        acm_obj = AcmPageNavigator(ui_driver)
         acm_loc = locators[ocp_version]["acm_page"]
-        verify_drpolicy_ui(scheduling_interval=scheduling_interval)
+        verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
         log.info("Apply Filter on Applications page")
         acm_obj.do_click(acm_loc["apply-filter"])
@@ -285,7 +277,9 @@ def failover_relocate_ui(
         raise NotImplementedError
 
 
-def verify_failover_relocate_status_ui(action=constants.ACTION_FAILOVER, timeout=900):
+def verify_failover_relocate_status_ui(
+    acm_obj, action=constants.ACTION_FAILOVER, timeout=900
+):
     """
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
 
@@ -296,15 +290,7 @@ def verify_failover_relocate_status_ui(action=constants.ACTION_FAILOVER, timeout
     """
 
     ocp_version = get_ocp_version()
-    ui_driver = acm.login_to_acm()
-    acm_obj = AcmPageNavigator(ui_driver)
     acm_loc = locators[ocp_version]["acm_page"]
-    acm_obj.navigate_clusters_page()
-    acm_obj.navigate_applications_page()
-    log.info("Apply Filter on Applications page")
-    acm_obj.do_click(acm_loc["apply-filter"])
-    log.info("Select subscription from filters")
-    acm_obj.do_click(acm_loc["subscription"], enable_screenshot=True)
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["data-policy-hyperlink"], expected_text="1 policy", timeout=30
     )
