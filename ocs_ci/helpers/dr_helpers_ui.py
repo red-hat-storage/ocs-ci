@@ -87,7 +87,7 @@ def check_cluster_status_on_acm_console(
             check_cluster_availability = acm_obj.wait_until_expected_text_is_found(
                 format_locator(acm_loc["cluster_status_check"], "Ready"),
                 expected_text="Ready",
-                timeout=timeout,
+                timeout=30,
             )
             assert check_cluster_availability, (
                 f"Down cluster {down_cluster_name} is still in {constants.STATUS_READY} state after {timeout} seconds,"
@@ -155,7 +155,6 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
-    # acm_obj.navigate_clusters_page()
     acm_obj.navigate_data_services()
     log.info("Verify status of DRPolicy on ACM UI")
     policy_status = acm_obj.wait_until_expected_text_is_found(
@@ -291,7 +290,7 @@ def failover_relocate_ui(
 
 
 def verify_failover_relocate_status_ui(
-    acm_obj, action=constants.ACTION_FAILOVER, timeout=900
+    acm_obj, action=constants.ACTION_FAILOVER, timeout=30
 ):
     """
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
@@ -306,7 +305,9 @@ def verify_failover_relocate_status_ui(
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
-        locator=acm_loc["data-policy-hyperlink"], expected_text="1 policy", timeout=30
+        locator=acm_loc["data-policy-hyperlink"],
+        expected_text="1 policy",
+        timeout=timeout,
     )
     if data_policy_hyperlink:
         log.info(
