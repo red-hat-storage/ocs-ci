@@ -29,6 +29,7 @@ class TestCephFSWithMDSNetworkFailure:
 
     @tier4b
     @pytest.mark.bugzilla("2130925")
+    @pytest.mark.polarion_id("OCS-4858")
     def test_cephfs_network_interruption_standby_replay_MDS(self, pod_factory, request):
         """Test MDS crash by causing network interruption to the standby-replay daemon
 
