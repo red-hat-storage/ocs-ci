@@ -3090,7 +3090,6 @@ def check_ceph_cmd_execute_successfully():
         return False
 
 
-
 def search_pattern_in_pod_logs(
     pod_name,
     pattern,
@@ -3159,4 +3158,3 @@ def get_ceph_daemon_id(pod_obj):
         str: ceph_daemon_id
     """
     return pod_obj.get("labels").get("metadata").get("labels").get("ceph_daemon_id")
-
