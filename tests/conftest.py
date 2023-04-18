@@ -127,7 +127,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
 )
-
+from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -5868,10 +5868,8 @@ def set_live_must_gather_images(pytestconfig):
     if (
         managed_ibmcloud_platform
         and not live_deployment
-        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11)
+        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_13)
     ):
-        # There is a promise that in 4.10 or 4.11 there will be possible to change
-        # global pull secret. If that's the case, we can remove those workarounds.
         config.REPORTING[
             "default_ocs_must_gather_image"
         ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
@@ -6237,3 +6235,59 @@ def scc_factory(request):
 
     request.addfinalizer(teardown)
     return create_scc
+
+
+@pytest.fixture(scope="session")
+def krew_rook_ceph_install_factory(request):
+    """
+    Install rook-ceph plugin
+    """
+    RookCephPlugin()
+
+
+@pytest.fixture()
+def ceph_objectstore_factory(request, krew_rook_ceph_install_factory):
+    """
+    Setup CephObjectStoreTool instance
+    """
+    return ceph_objectstore_tool_fixture(request)
+
+
+def ceph_objectstore_tool_fixture(request):
+    """
+    Implementation of ceph_objectstore_factory()
+    """
+    cot_obj = CephObjectStoreTool()
+
+    def teardown():
+        deployment_in_debug = cot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            cot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return cot_obj
+
+
+@pytest.fixture()
+def ceph_monstore_factory(request, krew_rook_ceph_install_factory):
+    """
+    Setup MonStoreTool instance
+    """
+    return ceph_monstore_tool_fixture(request)
+
+
+def ceph_monstore_tool_fixture(request):
+    """
+    Implementation of ceph_monstore_factory()
+    """
+    mot_obj = MonStoreTool()
+
+    def teardown():
+        deployment_in_debug = mot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            mot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return mot_obj

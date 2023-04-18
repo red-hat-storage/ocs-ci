@@ -65,6 +65,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
+KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 DATA_DIR = os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -937,11 +938,15 @@ TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
+# importing here due to circular dependency
+from ocs_ci.utility.utils import get_ocp_version
+
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
-VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
-VSPHERE_CLUSTER_LAUNCHER = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+VSPHERE_CLUSTER_LAUNCHER = (
+    VSPHERE_SCALEUP_REPO
+) = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -956,7 +961,8 @@ TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
 SCALEUP_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR, "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
+    EXTERNAL_DIR,
+    f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
 )
 SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
 SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
@@ -1291,6 +1297,10 @@ MUST_GATHER_COMMANDS_JSON = [
     "ceph_auth_list_--format_json-pretty",
 ]
 
+# ceph debug commands
+CEPHOBJECTSTORE_TOOL_CMD = "ceph-objectstore-tool"
+CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
+
 # local storage
 LOCAL_STORAGE_OPERATOR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
@@ -1389,7 +1399,7 @@ FLEXY_JENKINS_USER = "jenkins"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
-FLEXY_IMAGE_URL = "docker-registry.upshift.redhat.com/flexy/ocp4:latest"
+FLEXY_IMAGE_URL = "images.paas.redhat.com/dno-ood/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
 FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME

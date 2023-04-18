@@ -80,7 +80,10 @@ class Terraform(object):
         """
         logger.info("Initializing terraform work directory")
         if upgrade:
-            cmd = f"{self.terraform_installer} init -upgrade {self.path}"
+            if self.is_directory_path_supported:
+                cmd = f"{self.terraform_installer} init -upgrade {self.path}"
+            else:
+                cmd = f"{self.terraform_installer} -chdir={self.path} init -upgrade"
         elif self.is_directory_path_supported:
             cmd = f"{self.terraform_installer} init {self.path}"
         else:

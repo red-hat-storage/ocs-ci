@@ -202,6 +202,7 @@ generic_locators = {
         'a[data-test="dropdown-menu-item-link"]',
         By.CSS_SELECTOR,
     ),
+    "storage_class": ("//span[contains(text(), '{}')]", By.XPATH),
     "second_dropdown_option": (
         '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
         By.XPATH,
@@ -288,10 +289,7 @@ obc = {
     ),
     "obc_menu_name": ("//a[normalize-space()='Object Bucket Claims']", By.XPATH),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
-    "storageclass_text_field": (
-        'input[placeholder="Select StorageClass"]',
-        By.CSS_SELECTOR,
-    ),
+    "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
         'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"]',
@@ -1172,6 +1170,8 @@ locators = {
             **deployment_4_11,
             **deployment_4_12,
         },
+        "obc": obc,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
     },
     "4.12": {
         "login": {**login, **login_4_11},
