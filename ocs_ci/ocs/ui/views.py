@@ -728,6 +728,10 @@ acm_configuration_4_12 = {
     "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "apply-filter": ("//button[@aria-label='Options menu']", By.XPATH),
+    "clear-all-filters": (
+        "(//button[@type='button'][normalize-space()='Clear all filters'])[2]",
+        By.XPATH,
+    ),
     "subscription": ("//input[@id='app.k8s.io/Application']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),

@@ -19,8 +19,11 @@ def dr_submariner_validation_from_ui(acm_obj):
     """
     This function is only applicable for Regional DR.
 
-    This function calls other functions and does pre-checks on ACM UI
+    This function calls other function and does pre-checks on ACM UI
     such as Submariner validation from ACM console for Regional DR.
+
+    Args:
+        acm_obj (driver): Selenium webdriver object
 
     """
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
@@ -43,8 +46,9 @@ def check_cluster_status_on_acm_console(
     These clusters are the managed OCP clusters and the ACM Hub cluster.
 
     Args:
-        down_cluster_name (str): If Failover is performed when a cluster goes down, wait is set to True & the updated
-                            status of cluster unavailability is checked on the ACM console.
+        acm_obj (driver): Selenium webdriver object
+        down_cluster_name (str): If Failover is performed when a cluster goes down, it waits and checks the updated
+                            status of cluster unavailability on the ACM console.
                             It takes the cluster name which is down.
         cluster_names (list): This is a list of cluster names involved in a DR setup. You can either pass the cluster
                             names as args in the form of list, but if not passed, it fetches the primary & secondary
@@ -64,12 +68,10 @@ def check_cluster_status_on_acm_console(
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_clusters_page()
     if down_cluster_name:
-        wait = True
-        acm_obj.do_click(format_locator(acm_loc["cluster_name"], down_cluster_name))
-        cluster_status = acm_obj.get_element_text(
-            format_locator(acm_loc["cluster_status_check"], expected_text)
+        log.info(
+            "Down cluster name is provided, checking it's updated status on ACM console"
         )
-        log.info(f"Cluster {down_cluster_name} status is {cluster_status} on ACM UI")
+        acm_obj.do_click(format_locator(acm_loc["cluster_name"], down_cluster_name))
         check_cluster_unavailability = acm_obj.wait_until_expected_text_is_found(
             format_locator(acm_loc["cluster_status_check"], expected_text),
             expected_text=expected_text,
@@ -100,14 +102,14 @@ def check_cluster_status_on_acm_console(
             # and can be further modified depending upon the fix.
             other_expected_status = ["Unavailable", "NotReady", "Offline", "Error"]
             for status in other_expected_status:
-                check_cluster_unavailability = (
+                check_cluster_unavailability_again = (
                     acm_obj.wait_until_expected_text_is_found(
                         format_locator(acm_loc["cluster_status_check"], status),
                         expected_text=status,
-                        timeout=30,
+                        timeout=10,
                     )
                 )
-                if check_cluster_unavailability:
+                if check_cluster_unavailability_again:
                     f"Cluster {down_cluster_name} is in {status} state on ACM UI"
                     acm_obj.take_screenshot()
                     log.info("Navigate back to Clusters page")
@@ -147,6 +149,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     Function to verify DRPolicy status and replication policy on Data Policies page of ACM console
 
     Args:
+        acm_obj (driver): Selenium webdriver object
         scheduling_interval (int): Scheduling interval in the DRPolicy to be verified on ACM UI
 
     """
@@ -189,6 +192,7 @@ def failover_relocate_ui(
     Function to perform Failover/Relocate operations via ACM UI
 
     Args:
+        acm_obj (driver): Selenium webdriver object
         workload_to_move (str): Name of running workloads on which action to be taken
         policy_name (str): Name of the DR policy applied to the running workloads
         failover_or_preferred_cluster (str): Name of the failover cluster or preferred cluster to which workloads
@@ -205,6 +209,15 @@ def failover_relocate_ui(
         acm_loc = locators[ocp_version]["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
+        check_applied_filters = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["clear-all-filters"], expected_text="Clear all filters", timeout=15
+        )
+        if check_applied_filters:
+            log.info("Clear applied filters on Applications page")
+            acm_obj.do_click("acm_loc['clear-all-filters']", enable_screenshot=True)
+        else:
+            log.warning("No applied filter found on Applications page")
+            acm_obj.take_screenshot()
         log.info("Apply Filter on Applications page")
         acm_obj.do_click(acm_loc["apply-filter"])
         log.info("Select subscription from filters")
@@ -284,6 +297,7 @@ def verify_failover_relocate_status_ui(
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
 
     Args:
+        acm_obj (driver): Selenium webdriver object
         action (str): action "Failover" or "Relocate" which was taken on the workloads,
                     "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
@@ -315,6 +329,7 @@ def verify_failover_relocate_status_ui(
             timeout=timeout,
         )
         assert action_status, "Failover verification from ACM UI failed"
+        log.info(f"{action} successfully verified on ACM UI, status is 'FailedOver'")
     else:
         action_status = acm_obj.wait_until_expected_text_is_found(
             acm_loc["action-status-relocate"],
@@ -322,4 +337,4 @@ def verify_failover_relocate_status_ui(
             timeout=timeout,
         )
         assert action_status, "Relocate verification from ACM UI failed"
-    log.info(f"{action} successfully verified on ACM UI, status is {action_status}")
+        log.info(f"{action} successfully verified on ACM UI, status is 'Relocated'")
