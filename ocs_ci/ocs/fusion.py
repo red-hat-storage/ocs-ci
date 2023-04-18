@@ -25,7 +25,7 @@ def create_fusion_monitoring_resources():
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
     ns_name = "managed-fusion"
     logger.info(f"Creating {ns_name} namespace")
-    exec_cmd(["oc", "create", "ns", ns_name])
+    exec_cmd(["oc", "new-project", ns_name])
     logger.info("Creating an OperatorGroup")
     og_path = os.path.join(FUSION_TEMPLATE_DIR, "operatorgroup.yaml")
     og_data = load_yaml(og_path)
