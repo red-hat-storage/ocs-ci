@@ -201,7 +201,7 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
 
-    def submariner_validation_ui(self, cluster_set_name=None):
+    def submariner_validation_ui(self):
         """
         This function validates submariner status on ACM console which connects 2 managed OCP clusters.
         This is a mandatory pre-check for Regional DR.

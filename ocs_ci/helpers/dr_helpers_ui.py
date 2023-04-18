@@ -30,7 +30,7 @@ def dr_submariner_validation_from_ui(acm_obj):
     if multicluster_mode == constants.RDR_MODE:
         # Add an arg to below function and pass the cluster_set_name created on your cluster
         # when running the test locally.
-        acm_obj.submariner_validation_ui(cluster_set_name="myclusterset")
+        acm_obj.submariner_validation_ui()
 
 
 def check_cluster_status_on_acm_console(
