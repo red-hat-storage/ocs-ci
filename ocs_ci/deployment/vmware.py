@@ -1024,7 +1024,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
             if not config.ENV_DATA["sno"]:
-                timeout = 1800
+                timeout = 2400
                 # wait for all nodes to generate CSR
                 # From OCP version 4.4 and above, we have to approve CSR manually
                 # for all the nodes
