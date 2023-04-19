@@ -117,10 +117,9 @@ def check_cluster_status_on_acm_console(
                     log.info("Navigate back to Clusters page")
                     acm_obj.do_click(acm_loc["clusters-page"])
                     return True
-                else:
-                    log.error(f"Down cluster {down_cluster_name} status check failed")
-                    acm_obj.take_screenshot()
-                    return False
+            log.error(f"Down cluster {down_cluster_name} status check failed")
+            acm_obj.take_screenshot()
+            return False
     else:
         if not cluster_names:
             cluster_names = ["local-cluster"]
@@ -135,7 +134,6 @@ def check_cluster_status_on_acm_console(
                 log.info(f"Cluster {cluster} status is {cluster_status} on ACM UI")
                 log.info("Navigate back to Clusters page")
                 acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
-                return True
             else:
                 wait_for_expected_status = acm_obj.wait_until_expected_text_is_found(
                     format_locator(acm_loc["cluster_status_check"], expected_text),
@@ -145,7 +143,6 @@ def check_cluster_status_on_acm_console(
                     log.info(f"Cluster {cluster} status is {expected_text} on ACM UI")
                     log.info("Navigate back to Clusters page")
                     acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
-                    return True
                 else:
                     log.error(
                         f"Cluster {cluster} status is not {expected_text} on ACM UI"
@@ -153,30 +150,6 @@ def check_cluster_status_on_acm_console(
                     log.info("Navigate back to Clusters page")
                     acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
                     return False
-        if wait:
-            log.info(
-                "Wait is set to True, checking desired state of provided cluster name"
-            )
-            acm_obj.do_click(
-                format_locator(acm_loc["cluster_name"], cluster_name_for_status_check)
-            )
-            check_cluster_desired_state = acm_obj.wait_until_expected_text_is_found(
-                format_locator(acm_loc["cluster_status_check"], expected_text),
-                expected_text=expected_text,
-                timeout=timeout,
-            )
-            if check_cluster_desired_state:
-                log.info(
-                    f"Status of cluster {cluster_name_for_status_check} is {expected_text} as desired"
-                )
-                return True
-            else:
-                log.error("Cluster status check failed")
-                acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
-                log.info("Navigated back to Clusters page")
-                raise Exception(
-                    f"Cluster {cluster_name_for_status_check} is not in {expected_text} state"
-                )
 
 
 def verify_drpolicy_ui(acm_obj, scheduling_interval):
