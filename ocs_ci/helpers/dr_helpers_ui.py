@@ -39,8 +39,6 @@ def check_cluster_status_on_acm_console(
     cluster_names=None,
     timeout=900,
     expected_text=constants.STATUS_READY,
-    wait=False,
-    cluster_name_for_status_check=None,
 ):
     """
     This function checks the current status of imported clusters on the ACM console.
@@ -60,12 +58,8 @@ def check_cluster_status_on_acm_console(
         timeout (int): Timeout to wait for certain elements to be found on the ACM UI
         expected_text (str): Any particular string/status of the cluster to be checked on the ACM console.
                             Default is set to ready
-        wait (bool): When True, additional cluster status check will be done for the cluster name provided
-                    in the given timeout.
-        cluster_name_for_status_check (str): Provide cluster name for which an additional status check is needed
 
     """
-
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_clusters_page()
@@ -308,8 +302,8 @@ def verify_failover_relocate_status_ui(
         action (str): action "Failover" or "Relocate" which was taken on the workloads,
                     "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
-    """
 
+    """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
