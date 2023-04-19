@@ -8,10 +8,11 @@ from ocs_ci.helpers import helpers
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import load_yaml, Templating
-from ocs_ci.utility.utils import get_ocp_version, exec_cmd
-from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import TimeoutSampler,get_ocp_version, exec_cmd
+from ocs_ci.ocs import onstants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 
 logger = logging.getLogger(name=__file__)
 
@@ -23,7 +24,7 @@ def create_fusion_monitoring_resources():
     Create resources used for Managed Fusion aaS Monitoring
     """
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
-    ns_name = "managed-fusion"
+    ns_name = constants.MANAGED_FUSION_NAMESPACE
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "new-project", ns_name])
     logger.info("Creating an OperatorGroup")
@@ -46,7 +47,7 @@ def create_fusion_monitoring_resources():
     logger.info("Waiting for catalogsource")
     catalog_source = CatalogSource(
         resource_name="managed-fusion-catsrc",
-        namespace="managed-fusion",
+        namespace=ns_name,
     )
     catalog_source.wait_for_state("READY")
     logger.info("Creating a monitoring secret")
@@ -66,7 +67,7 @@ def deploy_odf():
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
-    ns_name = "openshift-storage"
+    ns_name = constants.OPENSHIFT_STORAGE_NAMESPACE
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "create", "ns", ns_name])
     logger.info("Creating the offering CR")
@@ -95,3 +96,11 @@ def deploy_odf():
         exec_cmd
     )(offering_check_cmd)
     helpers.create_resource(**template)
+    # Wait for installation to be completed
+    sample = TimeoutSampler(
+        timeout=1200,
+        sleep=15,
+        func=check_all_csvs_are_succeeded,
+        namespace=ns_name
+    )
+    sample.wait_for_func_value(value=True)

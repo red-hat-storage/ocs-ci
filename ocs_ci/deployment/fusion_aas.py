@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
 )
 from ocs_ci.ocs.fusion import create_fusion_monitoring_resources, deploy_odf
+from ocs_ci.ocs.managedservice import update_pull_secret
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -110,25 +111,9 @@ class FUSIONAAS(rosa_deployment.ROSA):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
         create_fusion_monitoring_resources()
+        if config.DEPLOYMENT.get("pullsecret_workaround"):
+            update_pull_secret()
         deploy_odf()
-        pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-
-        # Check for Ceph pods
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector=constants.MON_APP_LABEL,
-            resource_count=3,
-            timeout=1200,
-        )
-        assert pod.wait_for_resource(
-            condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
-        )
-        assert pod.wait_for_resource(
-            condition="Running",
-            selector=constants.OSD_APP_LABEL,
-            resource_count=3,
-            timeout=600,
-        )
 
     def destroy_ocs(self):
         """
