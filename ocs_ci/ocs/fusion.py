@@ -7,9 +7,9 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.managedservice import remove_header_footer_from_key
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.templating import load_yaml, Templating
-from ocs_ci.utility.utils import TimeoutSampler,get_ocp_version, exec_cmd
-from ocs_ci.ocs import onstants
+from ocs_ci.utility.templating import Templating, load_yaml
+from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, exec_cmd
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
