@@ -40,6 +40,7 @@ def check_cluster_status_on_acm_console(
     timeout=900,
     expected_text=constants.STATUS_READY,
     wait=False,
+    cluster_name_for_status_check=None,
 ):
     """
     This function checks the current status of imported clusters on the ACM console.
@@ -61,6 +62,7 @@ def check_cluster_status_on_acm_console(
                             Default is set to ready
         wait (bool): When True, additional cluster status check will be done for the expected text/status
                     in the given timeout.
+        cluster_name_for_status_check (str): Provide cluster name for which a different status is expected to be checked
 
     """
 
@@ -130,18 +132,34 @@ def check_cluster_status_on_acm_console(
                 format_locator(acm_loc["cluster_status_check"], expected_text)
             )
             log.info(f"Cluster {cluster} status is {cluster_status} on ACM UI")
+            log.info("Navigate back to Clusters page")
+            acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
             if wait:
-                wait_cluster_readiness = acm_obj.wait_until_expected_text_is_found(
+                log.info(
+                    "Wait is set to True, checking desired state of provided cluster name"
+                )
+                acm_obj.do_click(
+                    format_locator(
+                        acm_loc["cluster_name"], cluster_name_for_status_check
+                    )
+                )
+                check_cluster_desired_state = acm_obj.wait_until_expected_text_is_found(
                     format_locator(acm_loc["cluster_status_check"], expected_text),
                     expected_text=expected_text,
                     timeout=timeout,
                 )
-                log.info(f"Status of {cluster} is {cluster_status}")
-                log.info("Navigate back to Clusters page")
-                acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
-                if not wait_cluster_readiness:
-                    return False
-        return True
+                if check_cluster_desired_state:
+                    log.info(
+                        f"Status of cluster {cluster_name_for_status_check} is {cluster_status} as desired"
+                    )
+                    return True
+                else:
+                    log.error("Cluster status check failed")
+                    acm_obj.do_click(acm_loc["clusters-page"], enable_screenshot=True)
+                    log.info("Navigated back to Clusters page")
+                    raise Exception(
+                        f"Cluster {cluster_name_for_status_check} is not in {expected_text} state"
+                    )
 
 
 def verify_drpolicy_ui(acm_obj, scheduling_interval):
@@ -339,3 +357,10 @@ def verify_failover_relocate_status_ui(
         )
         assert action_status, "Relocate verification from ACM UI failed"
         log.info(f"{action} successfully verified on ACM UI, status is 'Relocated'")
+    close_action_modal = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["close-action-modal"], expected_text="Close", timeout=30
+    )
+    if close_action_modal:
+        log.info("Close button found")
+        acm_obj.do_click("acm_loc['close-action-modal']", enable_screenshot=True)
+        log.info("Data policy modal page closed")

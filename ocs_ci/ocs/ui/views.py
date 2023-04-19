@@ -760,7 +760,6 @@ acm_configuration_4_12 = {
     "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
     "action-status-failover": ("//*[text()='Failed']", By.XPATH),
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
-    "random-click": ("//div[@id='options-menu-bottom-pagination']", By.XPATH),
 }
 
 add_capacity = {
