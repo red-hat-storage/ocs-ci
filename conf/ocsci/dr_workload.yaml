@@ -1,8 +1,11 @@
 ENV_DATA:
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
-  dr_workload_pod_count: 20
-  dr_workload_pvc_count: 20
-  dr_workload_subscription_dir: "rdr/busybox/app-busybox-1/subscriptions"
+  dr_workload_subscription: [
+    {name: "busybox-1", workload_dir: "rdr/busybox/app-busybox-1", pod_count: 20, pvc_count: 20},
+    {name: "busybox-2", workload_dir: "rdr/busybox/app-busybox-2", pod_count: 5, pvc_count: 5},
+    {name: "busybox-3", workload_dir: "rdr/busybox/app-busybox-3", pod_count: 20, pvc_count: 20},
+    {name: "busybox-4", workload_dir: "rdr/busybox/app-busybox-4", pod_count: 20, pvc_count: 20},
+    {name: "busybox-5", workload_dir: "rdr/busybox/app-busybox-5", pod_count: 20, pvc_count: 20},
+  ]
   # dr_policy_name: PLACEHOLDER
-  # preferred_primary_cluster: PLACEHOLDER
