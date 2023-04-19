@@ -98,9 +98,6 @@ def deploy_odf():
     helpers.create_resource(**template)
     # Wait for installation to be completed
     sample = TimeoutSampler(
-        timeout=1200,
-        sleep=15,
-        func=check_all_csvs_are_succeeded,
-        namespace=ns_name
+        timeout=1200, sleep=15, func=check_all_csvs_are_succeeded, namespace=ns_name
     )
     sample.wait_for_func_value(value=True)
