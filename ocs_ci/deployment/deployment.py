@@ -363,17 +363,27 @@ class Deployment(object):
         Installs cert-manager operator
 
         """
-        deploy_cert_manager()
-        self.wait_for_subscription(
-            defaults.CERT_MANAGER_OPERATOR_NAME, defaults.CERT_MANAGER_NAMESPACE
-        )
-        self.wait_for_csv(
-            defaults.CERT_MANAGER_OPERATOR_NAME, defaults.CERT_MANAGER_NAMESPACE
-        )
-        logger.info(
-            f"Sleeping for 30 seconds after {defaults.CERT_MANAGER_OPERATOR_NAME} created"
-        )
-        time.sleep(30)
+        if not config.ENV_DATA["skip_ocp_deployment"]:
+            cert_manager_operator = defaults.CERT_MANAGER_OPERATOR_NAME
+            cert_manager_namespace = defaults.CERT_MANAGER_NAMESPACE
+            cert_manager_operator_csv = f"openshift-{cert_manager_operator}"
+
+            # creating Namespace and operator group for cert-manager
+            logger.info("Creating namespace and operator group for cert-manager")
+            run_cmd(f"oc create -f {constants.CERT_MANAGER_NS_YAML}")
+
+            deploy_cert_manager()
+            self.wait_for_subscription(cert_manager_operator, cert_manager_namespace)
+            self.wait_for_csv(cert_manager_operator, cert_manager_namespace)
+            logger.info(
+                f"Sleeping for 30 seconds after {cert_manager_operator} created"
+            )
+            time.sleep(30)
+            package_manifest = PackageManifest(resource_name=cert_manager_operator_csv)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
