@@ -201,29 +201,18 @@ class S3Client(CloudClient):
         self.data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
         key_id = auth_dict.get(f"{self.secret_prefix}_ACCESS_KEY_ID")
         access_key = auth_dict.get(f"{self.secret_prefix}_SECRET_ACCESS_KEY")
-        self.endpoint = auth_dict.get("ENDPOINT") or None
+        self.endpoint = auth_dict.get("ENDPOINT") or endpoint
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
         self.secret_key = access_key
 
-        self.s3_resource = boto3.resource(
+        self.client = boto3.resource(
             "s3",
             verify=verify,
             endpoint_url=self.endpoint,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-        self.s3_client = self.s3_resource.meta.client
-
-        self.ec2_resource = boto3.resource(
-            "ec2",
-            region_name=config.ENV_DATA["region"],
-            verify=verify,
-            endpoint_url=self.endpoint,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-        )
-
         self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
         self.nss_creds = {
