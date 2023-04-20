@@ -17,6 +17,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = "v1"
 
 INSTALLER_VERSION = "4.1.4"
 CLIENT_VERSION = INSTALLER_VERSION
+CERT_MANAGER_NAMESPACE = "openshift-operators"
 SRE_BUILD_TEST_NAMESPACE = "openshift-build-test"
 ROOK_CLUSTER_NAMESPACE = "openshift-storage"
 OCS_MONITORING_NAMESPACE = "openshift-monitoring"
@@ -41,6 +42,7 @@ NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
+CERT_MANAGER_OPERATOR_NAME = "openshift-cert-manager"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 

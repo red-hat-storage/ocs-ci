@@ -1,0 +1,6 @@
+---
+# This config file is used to install cert-manager provided by Red Hat
+# https://github.com/openshift/cert-manager-operator
+DEPLOYMENT:
+  install_cert_manager: true
+  channel: tech-preview

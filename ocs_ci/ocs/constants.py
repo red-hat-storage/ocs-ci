@@ -25,6 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
@@ -163,6 +164,8 @@ STORAGECLIENT = "StorageClient"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 ENDPOINTS = "Endpoints"
+WEBHOOK = "ValidatingWebhookConfiguration"
+ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -633,6 +636,10 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
 SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
+
+SUBSCRIPTION_CERT_MANAGER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER, "subscription_cert_manager.yaml"
+)
 
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
 
