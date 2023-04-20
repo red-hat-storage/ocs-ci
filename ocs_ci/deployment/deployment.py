@@ -47,6 +47,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
@@ -357,6 +358,23 @@ class Deployment(object):
         """
         self.deploy_lvmo()
 
+    def do_deploy_cert_manager(self):
+        """
+        Installs cert-manager operator
+
+        """
+        deploy_cert_manager()
+        self.wait_for_subscription(
+            defaults.CERT_MANAGER_OPERATOR_NAME, defaults.CERT_MANAGER_NAMESPACE
+        )
+        self.wait_for_csv(
+            defaults.CERT_MANAGER_OPERATOR_NAME, defaults.CERT_MANAGER_NAMESPACE
+        )
+        logger.info(
+            f"Sleeping for 30 seconds after {defaults.CERT_MANAGER_OPERATOR_NAME} created"
+        )
+        time.sleep(30)
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -370,6 +388,9 @@ class Deployment(object):
         # ocs-deployment, not just here in this particular case
         tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
         logger.debug("created temporary directory %s", tmp_path)
+
+        if config.DEPLOYMENT.get("install_cert_manager"):
+            self.do_deploy_cert_manager()
 
         # Deployment of network split and or extra latency scripts via
         # machineconfig API happens after OCP but before OCS deployment.
@@ -672,18 +693,18 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the subscription: {subscription_name}")
 
-    def wait_for_csv(self, csv_name):
+    def wait_for_csv(self, csv_name, namespace=None):
         """
         Wait for the CSV to appear
 
         Args:
             csv_name (str): CSV name pattern
+            namespace (str): Namespace where CSV exists
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
-        for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
-        ):
+        namespace = namespace or self.namespace
+        ocp.OCP(kind="subscription", namespace=namespace)
+        for sample in TimeoutSampler(300, 10, ocp.OCP, kind="csv", namespace=namespace):
             csvs = sample.get().get("items", [])
             for csv in csvs:
                 found_csv_name = csv.get("metadata", {}).get("name", "")
