@@ -947,7 +947,7 @@ def get_helper_pods_output():
     for helper_pod in helper_pods:
         try:
             helper_pod_obj = get_pod_obj(
-                name=helper_pod, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                name=helper_pod, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
             )
             output_describe_mg_helper += (
                 f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
@@ -1276,7 +1276,7 @@ def enable_console_plugin():
         ocp_obj = OCP()
         patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
         patch_cmd = (
-            f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f"patch console.operator cluster -n {ocsci_config.ENV_DATA['cluster_namespace']}"
             f" --type json -p {patch}"
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
@@ -1339,7 +1339,7 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
         upgrade_version (semantic_version.Version): ODF semantic version for upgrade
             if it's an upgrade run, otherwise None.
     """
-    namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = namespace or ocsci_config.ENV_DATA["cluster_namespace"]
     log.info(f"Labelling namespace {namespace} for PodSecurity admission")
     if version.get_semantic_ocp_running_version() >= version.VERSION_4_12 or (
         upgrade_version and upgrade_version >= version.VERSION_4_12

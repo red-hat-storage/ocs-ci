@@ -984,7 +984,7 @@ def validate_cephfilesystem(fs_name):
 
 
 def create_ocs_object_from_kind_and_name(
-    kind, resource_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    kind, resource_name, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Create OCS object from kind and name
@@ -2227,7 +2227,7 @@ def verify_pv_mounted_on_node(node_pv_dict):
     """
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
-        cmd = f"oc debug nodes/{node_name} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- df"
+        cmd = f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
         df_on_node = run_cmd(cmd)
         existing_pvs[node_name] = []
         for pv_name in pvs:
@@ -3185,7 +3185,7 @@ def run_cmd_verify_cli_output(
         cmd = f"{cmd_start} {cmd}"
     elif debug_node is not None:
         cmd_start = (
-            f"oc debug nodes/{debug_node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc debug nodes/{debug_node} --to-namespace={config.ENV_DATA['cluster_namespace']} "
             "-- chroot /host /bin/bash -c "
         )
         cmd = f'{cmd_start} "{cmd}"'
@@ -3263,7 +3263,7 @@ def set_configmap_log_level_rook_ceph_operator(value):
     """
     configmap_obj = OCP(
         kind=constants.CONFIGMAP,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
     logger.info(f"Setting ROOK_LOG_LEVEL to: {value}")
@@ -3733,7 +3733,7 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
 
     # Take a backup of the current mon deployment which running
     dep_obj = OCP(
-        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
     if is_lso_cluster():
         mon = mon_pod_running.get().get("metadata").get("labels").get("mon")
@@ -3866,7 +3866,7 @@ def recover_mon_quorum(mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id):
         raise CommandFailed("Failed to scale up rook-ceph-operator to 1")
     logger.info("Successfully scaled up rook-ceph-operator to 1")
     logger.info("Validate rook-ceph-operator pod is running")
-    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.OPERATOR_LABEL,
@@ -3976,7 +3976,7 @@ def get_cephfs_subvolumegroup():
     ):
         subvolume_group = ocp.OCP(
             kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         subvolume_group_obj = subvolume_group.get().get("items")[0]
         subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
@@ -3986,7 +3986,7 @@ def get_cephfs_subvolumegroup():
     return subvolume_group_name
 
 
-def create_sa_token_secret(sa_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def create_sa_token_secret(sa_name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Creates a serviceaccount token secret
 

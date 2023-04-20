@@ -5,6 +5,7 @@ import threading
 
 from uuid import uuid4
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier2,
@@ -119,7 +120,7 @@ class TestObjectVersioning:
         # one current version of the object
         pod_data = get_pods_having_label(
             label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
 
         db_pod = Pod(**pod_data)

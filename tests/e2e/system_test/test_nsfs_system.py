@@ -4,6 +4,7 @@ from time import sleep
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, system_test
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
@@ -250,7 +251,7 @@ def scale_ceph(replica=1):
 
     """
     dep_ocp = OCP(
-        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
     deployments = [
         constants.ROOK_CEPH_OPERATOR,

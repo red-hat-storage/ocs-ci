@@ -34,7 +34,7 @@ class TestPvcAssignPodNode(ManageTest):
         shouldn't contain api access token
         """
         odf_operator_pod_objs = res_pod.get_all_pods(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector_label="app.kubernetes.io/name",
             selector=[constants.ODF_SUBSCRIPTION],
         )

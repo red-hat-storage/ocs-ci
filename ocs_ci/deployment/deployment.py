@@ -1751,7 +1751,7 @@ class RBDDRDeployOps(object):
 
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
-            f"oc get CephBlockPool -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
@@ -1797,7 +1797,7 @@ class RBDDRDeployOps(object):
         """
         # Number of containers should be 8/8 from 2 pods now which makes total 16 containers
         rbd_pods = (
-            f"oc get pods -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc get pods -n {config.ENV_DATA['cluster_namespace']} "
             f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
         )
         timeout = 10
@@ -1855,7 +1855,7 @@ class RBDDRDeployOps(object):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 token_xchange_agent = get_pods_having_label(
                     constants.TOKEN_EXCHANGE_AGENT_LABEL,
-                    constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    config.ENV_DATA["cluster_namespace"],
                 )
                 pod_status = token_xchange_agent[0]["status"]["phase"]
                 pod_name = token_xchange_agent[0]["metadata"]["name"]

@@ -2441,7 +2441,7 @@ class LVM(object):
 
         """
         lvmc_cop = OCP(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
         )
@@ -2921,7 +2921,7 @@ def check_clusters():
         lvmcluster_obj = OCP(
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             silent=True,
         )
         if isinstance(lvmcluster_obj.data, dict):

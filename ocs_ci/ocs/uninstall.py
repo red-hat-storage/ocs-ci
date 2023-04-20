@@ -234,8 +234,8 @@ def uninstall_ocs():
         log.info("Cleanup policy set to retain. skipping nodes cleanup")
 
     log.info("Deleting openshift-storage namespace")
-    ocp_obj.delete_project(constants.OPENSHIFT_STORAGE_NAMESPACE)
-    ocp_obj.wait_for_delete(constants.OPENSHIFT_STORAGE_NAMESPACE)
+    ocp_obj.delete_project(config.ENV_DATA["cluster_namespace"])
+    ocp_obj.wait_for_delete(config.ENV_DATA["cluster_namespace"])
     switch_to_project(constants.DEFAULT_NAMESPACE)
 
     # step 10: TODO remove crypto from nodes.

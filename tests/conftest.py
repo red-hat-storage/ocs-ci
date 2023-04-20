@@ -1998,7 +1998,7 @@ def memory_leak_function(request):
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = (
                     "debug"
-                    f" nodes/{worker} --to-namespaces={constants.OPENSHIFT_STORAGE_NAMESPACE} --"
+                    f" nodes/{worker} --to-namespaces={config.ENV_DATA['cluster_namespace']} --"
                     " chroot /host top -n 2 b"
                 )
                 with open("/tmp/file.txt", "w+") as temp:
@@ -4650,7 +4650,7 @@ def pv_encryption_vault_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -4669,7 +4669,7 @@ def pv_encryption_vault_setup_factory(request):
         vault.vault_create_policy(policy_name=vault_resource_name)
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
 
         try:
             ocp_obj.get_resource(
@@ -4741,7 +4741,7 @@ def pv_encryption_kmip_setup_factory(request):
         kmip.kmip_secret_name = kmip.create_kmip_secret(type="csi")
 
         # If csi-kms-connection-details exists, edit the configmap to add new kmip config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
 
         try:
             ocp_obj.get_resource(
@@ -4779,7 +4779,7 @@ def pv_encryption_kmip_setup_factory(request):
         if kmip.kmip_secret_name:
             run_cmd(
                 f"oc delete secret {kmip.kmip_secret_name} -n"
-                f" {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" {config.ENV_DATA['cluster_namespace']}"
             )
         if kmip.kmip_key_identifier:
             kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
@@ -4811,7 +4811,7 @@ def pv_encryption_hpcs_setup_factory(request):
 
         # Create or update hpcs related confimap.
         hpcs_resource_name = create_unique_resource_name("test", "hpcs")
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
         # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
         try:
             ocp_obj.get_resource(
@@ -4852,7 +4852,7 @@ def pv_encryption_hpcs_setup_factory(request):
         hpcs.delete_resource(
             hpcs.ibm_kp_secret_name,
             "secret",
-            constants.OPENSHIFT_STORAGE_NAMESPACE,
+            config.ENV_DATA["cluster_namespace"],
         )
 
     request.addfinalizer(finalizer)
@@ -5088,7 +5088,7 @@ def vault_tenant_sa_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -5122,7 +5122,7 @@ def vault_tenant_sa_setup_factory(request):
             vault.vault_kube_auth_setup()
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(
                 resource_name="csi-kms-connection-details", column="NAME"

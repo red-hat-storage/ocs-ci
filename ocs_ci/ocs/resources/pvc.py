@@ -557,7 +557,7 @@ def create_pvc_clone(
 
 def get_pvc_objs(
     pvc_names,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get the PVC objects of the specified names

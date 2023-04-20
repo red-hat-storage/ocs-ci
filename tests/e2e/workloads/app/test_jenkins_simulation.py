@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id, bugzilla
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import templating
@@ -49,7 +50,7 @@ class TestJenkinsSimulation(ManageTest):
         """
         if interface_iterate == constants.CEPHFILESYSTEM:
             csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 selector=["csi-cephfsplugin"],
             )
 

@@ -343,7 +343,7 @@ def get_managedocs_component_state(component):
     managedocs_obj = ocp.OCP(
         kind="managedocs",
         resource_name="managedocs",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     return managedocs_obj.get()["status"]["components"][component]["state"]
 

@@ -913,7 +913,7 @@ def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace
 
 def get_lvm_vg_manager_pod(
     label=constants.LVMO_POD_LABEL["default"]["vg-manager_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get vg manager pod in the lvm cluster
@@ -932,7 +932,7 @@ def get_lvm_vg_manager_pod(
 
 def get_lvm_operator_pod(
     label=constants.LVMO_POD_LABEL["default"]["controller_manager_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get lvm operator controller manager pod in the lvm cluster
@@ -951,7 +951,7 @@ def get_lvm_operator_pod(
 
 def get_topolvm_controller_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-controller_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get topolvm controller pod in the lvm cluster
@@ -970,7 +970,7 @@ def get_topolvm_controller_pod(
 
 def get_topolvm_node_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-node_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get topolvm node pod in the lvm cluster
@@ -2900,7 +2900,7 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
 
 
 def pod_resource_utilization_raw_output_from_adm_top(
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Gets the pod's memory utilization using adm top command.

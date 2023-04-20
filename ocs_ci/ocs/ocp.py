@@ -201,7 +201,7 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
             f' -- chroot /host /bin/bash -c "{cmd}"'

@@ -142,7 +142,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             # Add tolerations to the configmap rook-ceph-operator-config
             configmap_obj = ocp.OCP(
                 kind=constants.CONFIGMAP,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
             )
             toleration = (

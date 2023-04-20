@@ -108,7 +108,7 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
     return output
 
 
-def run_oc_command(cmd, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def run_oc_command(cmd, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Running an 'oc' command
     This function is needed in Performance tests in order to be able to run a separate command within the test
@@ -778,7 +778,7 @@ def wait_for_resource_bulk_status(
 
 
 def pod_attach_csi_time(
-    interface, pv_name, start_time, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    interface, pv_name, start_time, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Get the pod start/attach csi time of a pod based on csi-rbdplugin container in csi-rbdplugin pods

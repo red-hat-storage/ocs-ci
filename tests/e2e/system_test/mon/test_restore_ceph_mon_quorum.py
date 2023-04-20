@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
@@ -83,10 +84,10 @@ class TestRestoreCephMonQuorum(E2ETest):
         def finalizer():
             op_obj = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             pod_obj = OCP(
-                kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
             )
             operator_obj = op_obj.get(resource_name=constants.ROOK_CEPH_OPERATOR)
             if operator_obj.get("spec").get("replicas") != 1:

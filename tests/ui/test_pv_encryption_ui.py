@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_pods,
@@ -59,7 +60,7 @@ class TestPVEncryption(ManageTest):
         os.environ.pop("VAULT_NAMESPACE", None)
         # Check if cert secrets already exist, if not create cert resources
         logger.info("Check if cert secrets already exist, if not create cert resources")
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
