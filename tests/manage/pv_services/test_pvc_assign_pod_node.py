@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework import config
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import (
     ManageTest,
