@@ -1032,7 +1032,9 @@ def _collect_ocs_logs(
 
     """
     log.info(
-        (f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}")
+        (
+            f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
+        )
     )
     if not (
         cluster_config.RUN.get("kubeconfig", False)
