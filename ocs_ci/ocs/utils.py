@@ -1031,7 +1031,9 @@ def _collect_ocs_logs(
     This function runs in thread
 
     """
-    log.info(f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']}")
+    log.info(
+        (f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}")
+    )
     if not (
         cluster_config.RUN.get("kubeconfig", False)
         or os.path.exists(os.path.expanduser("~/.kube/config"))
@@ -1044,8 +1046,8 @@ def _collect_ocs_logs(
         log_dir_path = os.path.join(
             os.path.expanduser(cluster_config.RUN["log_dir"]),
             f"failed_testcase_ocs_logs_{cluster_config.RUN['run_id']}",
-            f"{cluster_config.ENV_DATA['cluster_name']}",
             f"{dir_name}_ocs_logs",
+            f"{cluster_config.ENV_DATA['cluster_name']}",
         )
     else:
         log_dir_path = os.path.join(
@@ -1119,10 +1121,7 @@ def _collect_ocs_logs(
         if cluster_config.MULTICLUSTER.get("acm_cluster", False):
             log.info("Collecting ACM logs")
             image_prefix = '"acm_must_gather"'
-            acm_mustgather_path = os.path.join(
-                os.path.expanduser(cluster_config.RUN["log_dir"]),
-                f"{dir_name}_{cluster_config.RUN['run_id']}",
-            )
+            acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
             csv_cmd = (
                 f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
                 f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
@@ -1138,9 +1137,7 @@ def _collect_ocs_logs(
             )
 
         submariner_log_path = os.path.join(
-            os.path.expanduser(cluster_config.RUN["log_dir"]),
-            f"{dir_name}_{cluster_config.RUN['run_id']}",
-            f"{cluster_config.ENV_DATA['cluster_name']}",
+            log_dir_path,
             "submariner",
         )
         run_cmd(f"mkdir -p {submariner_log_path}")
