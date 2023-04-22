@@ -103,6 +103,9 @@ DEPLOYMENT:
   install_lvmo: False
   # Cloud Credential Operator Utility
   ccoctl_version: "4.11.0"
+  # AWS profile ( profile must exist in ~/.aws/credentials )
+  aws_profile: "ocs_ci"
+  aws_cred_path: "~/.aws/credentials"
 
 
 # Section for reporting configuration
@@ -117,7 +120,7 @@ REPORTING:
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
-  odf_live_must_gather_image: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
+  odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
   default_ocs_must_gather_latest_tag: 'latest-4.13'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
@@ -200,14 +203,14 @@ ENV_DATA:
   # OCP version, we need to make sure to put rhel_version to the all ocp related version config files
   rhel_version: "8.4"
   # This RHEL version will be used for running ansible playbook for adding RHEL nodes
-  rhel_version_for_ansible: 7
+  rhel_version_for_ansible: 8
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
   cluster_type: ""
 
   # RHEL template which are used for vSphere platform
   rhel7_template: 'rhel79_ocs4qe'
-  rhel8_template: 'rhel85_ocs4qe'
+  rhel8_template: 'rhel87_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
   default_acm_unreleased_image: "2.7.0-DOWNSTREAM-2023-01-26-20-15-10"
@@ -216,7 +219,7 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.11'
+  rosa_cli_version: '1.2.16'
   rosa_billing_model: 'standard'
   appliance_mode: true
   ms_osd_pod_memory: "6Gi"

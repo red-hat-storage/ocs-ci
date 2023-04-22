@@ -76,7 +76,7 @@ def create_cluster(cluster_name, version, region):
     )
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--machine-cidr {machine_cidr} --compute-nodes {compute_nodes} "
+        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
         f"--version {rosa_ocp_version} {multi_az}--sts --yes"
     )

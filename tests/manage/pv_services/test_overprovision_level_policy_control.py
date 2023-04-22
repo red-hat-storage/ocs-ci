@@ -7,7 +7,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.utility import version
 from ocs_ci.helpers.helpers import verify_quota_resource_exist
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -116,11 +115,6 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        # Bug fixed on ODF4.11 https://bugzilla.redhat.com/show_bug.cgi?id=2158277
-        if ocs_version == version.VERSION_4_10:
-            for sc in quota_names:
-                quota_names[sc] = f"ocs-{quota_names[sc]}"
         self.quota_name = quota_names[sc_name]
         log.info("Create project with “openshift-quota” label")
         project_name = "ocs-quota-sc-test"

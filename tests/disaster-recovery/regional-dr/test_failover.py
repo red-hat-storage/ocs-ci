@@ -4,14 +4,17 @@ import pytest
 from time import sleep
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import rdr_test
+from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 
-@rdr_test
+@acceptance
+@tier1
 class TestFailover:
     """
     Test Failover action
@@ -56,6 +59,7 @@ class TestFailover:
 
         # Stop primary cluster nodes
         if primary_cluster_down:
+            logger.info("Stopping primary cluster nodes")
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
         # Failover action
@@ -84,6 +88,14 @@ class TestFailover:
             sleep(wait_time * 60)
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             wait_for_nodes_status([node.name for node in node_objs])
+            logger.info(
+                "Wait for all the pods in openshift-storage to be in running state"
+            )
+            assert wait_for_pods_to_be_running(
+                timeout=720
+            ), "Not all the pods reached running state"
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         dr_helpers.wait_for_mirroring_status_ok()

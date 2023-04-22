@@ -9,7 +9,7 @@ ENV_DATA:
   multi_availability_zones: False
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.4xlarge'
+  worker_instance_type: 'm5.2xlarge'
   configs: 'aws,stage'
   addon_name: "ocs-provider-qe"
   region: 'us-east-2'

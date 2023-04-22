@@ -78,7 +78,14 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.dom_folder}")
 
-    def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
+    def do_click(
+        self,
+        locator,
+        timeout=30,
+        enable_screenshot=False,
+        copy_dom=False,
+        avoid_stale=False,
+    ):
         """
         Click on Button/link on OpenShift Console
 
@@ -86,35 +93,52 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
+        avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
+        refresh the page once and try click again
+        * don't use when refreshed page expected to be different from initial page, or loose input values
         """
-        self.page_has_loaded()
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-        if screenshot:
-            self.take_screenshot()
-        if copy_dom:
-            self.copy_dom()
 
-        wait = WebDriverWait(self.driver, timeout)
-        try:
-            if (
-                version.get_semantic_version(get_ocp_version(), True)
-                <= version.VERSION_4_11
-            ):
-                element = wait.until(
-                    ec.element_to_be_clickable((locator[1], locator[0]))
-                )
-            else:
-                element = wait.until(
-                    ec.visibility_of_element_located((locator[1], locator[0]))
-                )
-            element.click()
-        except TimeoutException as e:
-            self.take_screenshot()
-            self.copy_dom()
-            logger.error(e)
-            raise TimeoutException(
-                f"Failed to find the element ({locator[1]},{locator[0]})"
+        def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
+            self.page_has_loaded()
+            screenshot = (
+                ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
             )
+            if screenshot:
+                self.take_screenshot()
+            if _copy_dom:
+                self.copy_dom()
+
+            wait = WebDriverWait(self.driver, timeout)
+            try:
+                if (
+                    version.get_semantic_version(get_ocp_version(), True)
+                    <= version.VERSION_4_11
+                ):
+                    element = wait.until(
+                        ec.element_to_be_clickable((locator[1], locator[0]))
+                    )
+                else:
+                    element = wait.until(
+                        ec.visibility_of_element_located((locator[1], locator[0]))
+                    )
+                element.click()
+            except TimeoutException as e:
+                self.take_screenshot()
+                self.copy_dom()
+                logger.error(e)
+                raise TimeoutException(
+                    f"Failed to find the element ({locator[1]},{locator[0]})"
+                )
+
+        try:
+            _do_click(locator, timeout, enable_screenshot, copy_dom)
+        except StaleElementReferenceException:
+            if avoid_stale:
+                logger.info("Refresh page to avoid reference to a stale element")
+                self.driver.refresh()
+                _do_click(locator, timeout, enable_screenshot, copy_dom)
+            else:
+                raise
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)

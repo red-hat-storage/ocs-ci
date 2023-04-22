@@ -3,13 +3,14 @@ import pytest
 
 from time import sleep
 
-from ocs_ci.framework.testlib import rdr_test
+from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 
 logger = logging.getLogger(__name__)
 
 
-@rdr_test
+@acceptance
+@tier1
 @pytest.mark.polarion_id("OCS-4425")
 class TestRelocate:
     """

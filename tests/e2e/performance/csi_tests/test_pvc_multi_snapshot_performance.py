@@ -124,11 +124,13 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                     log.error(f"Cannot delete {snap_name} : {err}")
 
             # Deleting the pod which wrote data to the pvc
-            log.info(f"Deleting the test POD : {self.pod_obj.name}")
+            log.info(f"Deleting the test POD : {self.pod_object.name}")
             try:
-                self.pod_obj.delete()
+                self.pod_object.delete()
                 log.info("Wait until the pod is deleted.")
-                self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
+                self.pod_object.ocp.wait_for_delete(
+                    resource_name=self.pod_object.name, timeout=180
+                )
             except Exception as ex:
                 log.error(f"Cannot delete the test pod : {ex}")
 
@@ -234,7 +236,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         # Find the path that the PVC is mounted within the POD
         path = (
-            self.pod_obj.get("spec")
+            self.pod_object.get("spec")
             .get("spec")
             .get("containers")[0]
             .get("volumeMounts")[0]
@@ -376,7 +378,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info(f"Starting test number {test_num}")
 
             # Running IO on the POD - (re)-write data on the PVC
-            self.pod_obj.exec_cmd_on_pod(
+            self.pod_object.exec_cmd_on_pod(
                 self.fio_cmd, out_yaml_format=False, timeout=3600
             )
 
@@ -409,8 +411,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     )
     def test_pvc_multiple_snapshot_performance(
         self,
-        pvc_factory,
-        pod_factory,
         secret_factory,
         interface_type,
         snap_number,
@@ -460,9 +460,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             raise exceptions.StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_snaps + 2))
+        self.pvc_size = str(int(self.capacity_to_use / (self.num_of_snaps + 2)))
         if self.dev_mode:
-            self.pvc_size = 5
+            self.pvc_size = "5"
 
         self.interface = interface_type
         self.sc_name = "pas-testing-rbd"
@@ -491,28 +491,39 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         # Create new PVC
         log.info(f"Creating {self.pvc_size} GiB PVC of {interface_type}")
-        self.pvc_obj = pvc_factory(
-            interface=self.interface,
-            storageclass=self.sc_obj,
-            size=self.pvc_size,
-            status=constants.STATUS_BOUND,
-            project=self.proj,
+
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name,
+            size=self.pvc_size + "Gi",
+            namespace=self.namespace,
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
 
         # Create POD which will attache to the new PVC
-        log.info("Creating A POD")
-        self.pod_obj = pod_factory(
-            interface=self.interface,
-            pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING,
-            pod_dict_path=constants.PERF_POD_YAML,
-        )
+        log.info("Creating a Pod")
+
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+            # self.pod_object.workload_setup("fs", jobs=1, fio_installed=True)
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise exceptions.PodNotCreated("Pod on PVC was not created.")
 
         # Calculating the file size as 80% of the PVC size
         self.filesize = self.pvc_obj.size * 0.80
         # Change the file size to MB for the FIO function
         self.file_size = f"{int(self.filesize * constants.GB2MB)}M"
-        self.file_name = self.pod_obj.name
+        self.file_name = self.pod_object.name
 
         log.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "

@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.ocs.cluster import (
@@ -89,16 +90,21 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             kind=constants.STORAGECLUSTER,
         )
+
         tolerations = (
             '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
             '"operator": "Equal", "value": "true"}, '
             '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
             '"operator": "Equal", "value": "true"}]}'
         )
-        param = (
-            f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
-            f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
-        )
+        if config.ENV_DATA["mcg_only_deployment"]:
+            param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        else:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
+                f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
+            )
+
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
@@ -118,38 +124,53 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             sub_obj.patch(params=param, format_type="merge")
             logger.info(f"Successfully added toleration to {sub}")
 
-        # Add tolerations to the ocsinitializations.ocs.openshift.io
-        param = (
-            '{"spec":  {"tolerations": '
-            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-            '"value": "true"}]}}'
-        )
-        ocsini_obj = ocp.OCP(
-            resource_name=constants.OCSINIT,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            kind=constants.OCSINITIALIZATION,
-        )
-        ocsini_obj.patch(params=param, format_type="merge")
-        logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            # Add tolerations to the ocsinitializations.ocs.openshift.io
+            param = (
+                '{"spec":  {"tolerations": '
+                '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+                '"value": "true"}]}}'
+            )
+            ocsini_obj = ocp.OCP(
+                resource_name=constants.OCSINIT,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                kind=constants.OCSINITIALIZATION,
+            )
+            ocsini_obj.patch(params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
 
-        # Add tolerations to the configmap rook-ceph-operator-config
-        configmap_obj = ocp.OCP(
-            kind=constants.CONFIGMAP,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-        )
-        toleration = (
-            '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
-        )
-        toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
+            # Add tolerations to the configmap rook-ceph-operator-config
+            configmap_obj = ocp.OCP(
+                kind=constants.CONFIGMAP,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            )
+            toleration = (
+                '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
+            )
+            toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
 
-        params = (
-            f'{{"data": {{"CSI_PLUGIN_TOLERATIONS": "{toleration}", '
-            f'"CSI_PROVISIONER_TOLERATIONS": "{toleration}"}}}}'
-        )
+            params = (
+                f'{{"data": {{"CSI_PLUGIN_TOLERATIONS": "{toleration}", '
+                f'"CSI_PROVISIONER_TOLERATIONS": "{toleration}"}}}}'
+            )
 
-        configmap_obj.patch(params=params, format_type="merge")
-        logger.info(f"Successfully added toleration to {configmap_obj.kind}")
+            configmap_obj.patch(params=params, format_type="merge")
+            logger.info(f"Successfully added toleration to {configmap_obj.kind}")
+
+        if config.ENV_DATA["mcg_only_deployment"]:
+            # Wait some time after adding toleration for pods respin.
+            waiting_time = 60
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+
+            # Force delete all pods.
+            pod_list = get_all_pods(
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                exclude_selector=True,
+            )
+            for pod in pod_list:
+                pod.delete(wait=False)
 
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
@@ -167,19 +188,20 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ), "Number of pods didn't match"
 
         # Add capacity to check if new osds has toleration
-        osd_size = storage_cluster.get_osd_size()
-        count = storage_cluster.add_capacity(osd_size)
-        pod = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        if is_flexible_scaling_enabled():
-            replica_count = 1
-        else:
-            replica_count = 3
-        assert pod.wait_for_resource(
-            timeout=300,
-            condition=constants.STATUS_RUNNING,
-            selector=constants.OSD_APP_LABEL,
-            resource_count=count * replica_count,
-        ), "New OSDs failed to reach running state"
-        check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            osd_size = storage_cluster.get_osd_size()
+            count = storage_cluster.add_capacity(osd_size)
+            pod = ocp.OCP(
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+            )
+            if is_flexible_scaling_enabled():
+                replica_count = 1
+            else:
+                replica_count = 3
+            assert pod.wait_for_resource(
+                timeout=300,
+                condition=constants.STATUS_RUNNING,
+                selector=constants.OSD_APP_LABEL,
+                resource_count=count * replica_count,
+            ), "New OSDs failed to reach running state"
+            check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)

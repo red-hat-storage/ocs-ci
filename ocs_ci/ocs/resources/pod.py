@@ -154,7 +154,13 @@ class Pod(OCS):
             raise
 
     def exec_cmd_on_pod(
-        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+        self,
+        command,
+        out_yaml_format=True,
+        secrets=None,
+        timeout=600,
+        container_name=None,
+        **kwargs,
     ):
         """
         Execute a command on a pod (e.g. oc rsh)
@@ -168,14 +174,17 @@ class Pod(OCS):
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
-
+            container_name (str): The container name
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
-        rsh_cmd = f"rsh {self.name} "
-        rsh_cmd += command
+        if container_name:
+            cmd = f"exec {self.name} -c {container_name} {command}"
+        else:
+            cmd = f"rsh {self.name} "
+            cmd += command
         return self.ocp.exec_oc_cmd(
-            rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
+            cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
 
     def exec_s3_cmd_on_pod(self, command, mcg_obj=None):
@@ -3079,3 +3088,41 @@ def check_ceph_cmd_execute_successfully():
 
         logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
         return False
+
+
+def get_containers_names_by_pod(pod: OCP) -> set:
+    """
+    Gets the names of all containers in given pod or pods
+
+    Args:
+        pod (ocp.OCP): instance of OCP object that represents a pod (kind=POD)
+
+    Returns:
+        set: hash set of names of all containers in given pod or pods
+
+    """
+    items = pod.data.get("items")
+    if not isinstance(items, list):
+        items = [items]
+
+    container_names = list()
+    for item in items:
+        containers = item.get("spec").get("containers")
+        container_names += [c.get("name") for c in containers]
+
+    logger.debug(f"Containers: {container_names}")
+
+    return set(container_names)
+
+
+def get_ceph_daemon_id(pod_obj):
+    """
+    Get Ceph Daemon ID of osd, mds, mon, rgw, mgr
+
+    Args:
+       pod_obj (POD Obj): pod object
+
+    Returns:
+        str: ceph_daemon_id
+    """
+    return pod_obj.get("labels").get("metadata").get("labels").get("ceph_daemon_id")

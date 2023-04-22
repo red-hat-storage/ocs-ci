@@ -996,13 +996,15 @@ def collect_noobaa_db_dump(log_dir_path):
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
     if ocs_version < version.VERSION_4_7:
         cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+        remote_path = "/opt/app-root/src/nbcore.gz"
     else:
-        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
+        cmd = 'bash -c "pg_dump nbcore | gzip > /tmp/nbcore.gz"'
+        remote_path = "/tmp/nbcore.gz"
 
     nb_db_pod.exec_cmd_on_pod(cmd)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
-        remotepath="/opt/app-root/src/nbcore.gz",
+        remotepath=remote_path,
         localpath=ocs_log_dir_path,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     )
@@ -1392,6 +1394,8 @@ def collect_pod_container_rpm_package(dir_name):
                     log.warning(
                         f"Following exception {e} was raised for pod {pod_obj.name} and container {container_name}"
                     )
-                log_file_name = f"{package_log_dir_path}/{container_name}-rpm.log"
+                log_file_name = (
+                    f"{package_log_dir_path}/{pod_obj.name}-{container_name}-rpm.log"
+                )
                 with open(log_file_name, "w") as f:
                     f.write(container_output)

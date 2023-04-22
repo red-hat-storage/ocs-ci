@@ -9,12 +9,10 @@ ENV_DATA:
   multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.4xlarge'
+  worker_instance_type: 'm5.2xlarge'
   configs: 'aws,stage'
-  addon_name: "ocs-provider-dev"
+  addon_name: "ocs-provider"
   region: 'us-east-2'
-  # Storage Cluster Size
-  size: '4'
 DEPLOYMENT:
   force_download_ocm_cli: True
   ocm_cli_version: '0.1.60'

@@ -161,7 +161,12 @@ class ExternalCluster(object):
             logger.info(ex)
             cmd = "grep -e '^rgw frontends' /etc/ceph/ceph.conf"
             rgw_node = get_rgw_endpoint()
-            rgw_conn = Connection(host=rgw_node, user=self.user, password=self.password)
+            rgw_conn = Connection(
+                host=rgw_node,
+                user=self.user,
+                private_key=self.ssh_key,
+                password=self.password,
+            )
             _, out, _ = rgw_conn.exec_cmd(cmd)
             port = out.split(":")[-1]
 
@@ -378,7 +383,12 @@ def get_rgw_endpoint():
 
     """
     rgw_endpoint = None
+    zone = config.ENV_DATA.get("zone")
     for each in config.EXTERNAL_MODE["external_cluster_node_roles"].values():
+        if zone and f"zone-{zone}" not in each.get("location", {}).get(
+            "datacenter", ""
+        ):
+            continue
         if "rgw" in each["role"]:
             if config.EXTERNAL_MODE.get("use_fqdn_rgw_endpoint"):
                 logger.info("using FQDN as rgw endpoint")
@@ -391,7 +401,10 @@ def get_rgw_endpoint():
                 rgw_endpoint = each["ip_address"]
             return rgw_endpoint
     if not rgw_endpoint:
-        raise ExternalClusterRGWEndPointMissing
+        err_msg = "No RGW endpoint found"
+        if zone:
+            err_msg += f" in zone: {zone}"
+        raise ExternalClusterRGWEndPointMissing(err_msg)
 
 
 def get_external_cluster_client():
