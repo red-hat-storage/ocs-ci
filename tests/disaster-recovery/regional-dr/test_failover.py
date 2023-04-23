@@ -145,7 +145,7 @@ class TestFailover:
             logger.info(
                 f"Waiting for {wait_time} minutes before starting nodes of previous primary cluster"
             )
-            sleep(120)
+            sleep(wait_time * 60)
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             wait_for_nodes_status([node.name for node in node_objs])
             logger.info(

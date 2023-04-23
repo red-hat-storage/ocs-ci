@@ -45,9 +45,9 @@ class TestRelocate:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace
         )
-        wait_time = 1  # Time in minutes
+        wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(1)
+        sleep(wait_time * 60)
 
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload.workload_namespace
