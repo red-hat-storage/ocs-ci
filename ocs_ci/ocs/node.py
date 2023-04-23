@@ -973,6 +973,7 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
+    from ocs_ci.ocs.platform_nodes import VSPHEREUPINode
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 
     plt = PlatformNodesFactory()
@@ -998,6 +999,19 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         log.info("Preparing to create a new node...")
         new_node_names = add_new_node_and_label_upi(node_type, 1)
         new_node_name = new_node_names[0]
+
+        if config.ENV_DATA.get("rhel_user"):
+            node_type = constants.RHEL_OS
+        else:
+            node_type = constants.RHCOS
+
+        node_cls_obj = VSPHEREUPINode(
+            node_conf={}, node_type=node_type, compute_count=0
+        )
+        log.info(f"Modifying terraform state file of the removed VMs {osd_node_name}")
+        node_cls_obj.change_terraform_statefile_after_remove_vm(osd_node_name)
+        node_cls_obj.change_terraform_tfvars_after_remove_vm()
+
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
         log.info(
