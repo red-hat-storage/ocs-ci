@@ -1008,7 +1008,8 @@ class Deployment(object):
             cluster_data["spec"]["network"] = {
                 "provider": "multus",
                 "selectors": {
-                    "public": f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+                    "public": "default/public-net",
+                    "cluster": "default/cluster-net",
                 },
             }
 
