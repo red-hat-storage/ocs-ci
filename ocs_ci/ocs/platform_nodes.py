@@ -20,6 +20,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
+    UnknownOperationForTerraformVariableUpdate,
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
@@ -1677,22 +1678,7 @@ class VSPHEREUPINode(VMWareNodes):
         """
         Update terraform variables
         """
-        logger.debug("Updating terraform variables")
-        compute_str = "compute_count ="
-        updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
-
-        # backup the terraform variable file
-        original_file = f"{self.terraform_var}_{int(time.time())}"
-        shutil.copyfile(self.terraform_var, original_file)
-        logger.info(f"original terraform file: {original_file}")
-
-        replace_content_in_file(
-            self.terraform_var,
-            compute_str,
-            updated_compute_str,
-            match_and_replace_line=True,
-        )
+        self.update_terraform_tfvars_compute_count(type="add", count=self.compute_count)
 
     def _update_machine_conf(self):
         """
@@ -1710,6 +1696,38 @@ class VSPHEREUPINode(VMWareNodes):
 
         # update the machine configurations
         update_machine_conf(self.folder_structure)
+
+    def update_terraform_tfvars_compute_count(self, type, count):
+        """
+        Update terraform tfvars file for compute count
+
+        Args:
+             type (str): Type of operation. Either add or remove
+             count (int): Number to add or remove to the exiting compute count
+
+        """
+        logger.debug("Updating terraform variables")
+        compute_str = "compute_count ="
+        if type == "add":
+            target_compute_count = self.current_count_in_tfvars + count
+        elif type == "remove":
+            target_compute_count = self.current_count_in_tfvars - count
+        else:
+            raise UnknownOperationForTerraformVariableUpdate
+        updated_compute_str = f'{compute_str} "{target_compute_count}"'
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+
+        # backup the terraform variable file
+        original_file = f"{self.terraform_var}_{int(time.time())}"
+        shutil.copyfile(self.terraform_var, original_file)
+        logger.info(f"original terraform file: {original_file}")
+
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     @retry(
         (NoValidConnectionsError, AuthenticationException),
@@ -1933,6 +1951,18 @@ class VSPHEREUPINode(VMWareNodes):
             instance=instance,
         )
         os.chdir(self.previous_dir)
+
+    def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
+        """
+        Update the compute count after removing node from cluster
+
+        Args:
+             num_nodes_removed (int): Number of nodes removed from cluster
+
+        """
+        self.update_terraform_tfvars_compute_count(
+            type="remove", count=num_nodes_removed
+        )
 
 
 class BaremetalNodes(NodesBase):
@@ -2856,7 +2886,6 @@ class VMWareUPINodes(VMWareNodes):
         """
         Terminate the VMs.
         The VMs will be deleted only from the inventory and not from the disk.
-        After deleting the VMs, it will also modify terraform state file of the removed VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2868,15 +2897,5 @@ class VMWareUPINodes(VMWareNodes):
         vms = self.get_vms(nodes)
         vm_names = [vm.name for vm in vms]
 
+        logger.info(f"Terminating nodes: {vm_names}")
         super().terminate_nodes(nodes, wait)
-
-        if config.ENV_DATA.get("rhel_user"):
-            node_type = constants.RHEL_OS
-        else:
-            node_type = constants.RHCOS
-        node_cls_obj = VSPHEREUPINode(
-            node_conf={}, node_type=node_type, compute_count=0
-        )
-        logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
-        for vm_name in vm_names:
-            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
