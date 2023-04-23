@@ -69,12 +69,19 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self, timeout=30):
+    def navigate_clusters_page(self, timeout=120):
         """
         Navigate to ACM Clusters Page
 
         """
         log.info("Navigate into Clusters Page")
+        self.check_element_presence(
+            (
+                self.acm_page_nav["Infrastructure"][1],
+                self.acm_page_nav["Infrastructure"][0],
+            ),
+            timeout=timeout,
+        )
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
@@ -155,7 +162,7 @@ class AcmPageNavigator(BaseUI):
         find_element = self.wait_until_expected_text_is_found(
             locator=self.acm_page_nav["data-services"],
             expected_text="Data Services",
-            timeout=120,
+            timeout=240,
         )
         if find_element:
             element = self.driver.find_element_by_xpath(
@@ -166,13 +173,14 @@ class AcmPageNavigator(BaseUI):
             data_policies = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["data-policies"],
                 expected_text="Data policies",
+                timeout=240,
             )
             if data_policies:
                 self.do_click(
                     locator=self.acm_page_nav["data-policies"], enable_screenshot=True
                 )
         else:
-            log.error("Couldn't navigate to ata Services page on ACM UI")
+            log.error("Couldn't navigate to data Services page on ACM UI")
             raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):

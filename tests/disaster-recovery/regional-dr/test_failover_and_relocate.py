@@ -22,6 +22,13 @@ from ocs_ci.helpers.dr_helpers import get_current_primary_cluster_name
 
 logger = logging.getLogger(__name__)
 
+polarion_id_primary_up = "OCS-4430"
+polarion_id_primary_down = "OCS-4427"
+if config.RUN.get("rdr_failover_via_ui"):
+    polarion_id_primary_down = "OCS-4744"
+# TODO: Specify polarion id when available for test case where primary is up when failedover and relocate back.
+#  This test case is added in ODF 4.13 test plan.
+
 
 @acceptance
 @tier1
@@ -35,11 +42,15 @@ class TestFailoverAndRelocate:
         argnames=["primary_cluster_down"],
         argvalues=[
             pytest.param(
-                False, marks=pytest.mark.polarion_id("OCS-4430"), id="primary_up"
+                False,
+                marks=pytest.mark.polarion_id(polarion_id_primary_up),
+                id="primary_up",
             ),
-            # pytest.param(
-            #     True, marks=pytest.mark.polarion_id("OCS-4427"), id="primary_down"
-            # ),
+            pytest.param(
+                True,
+                marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                id="primary_down",
+            ),
         ],
     )
     def test_failover_and_relocate(
@@ -83,7 +94,7 @@ class TestFailoverAndRelocate:
             rdr_workload.workload_namespace
         )
 
-        if config.ENV_DATA.get("rdr_failover_via_ui"):
+        if config.RUN.get("rdr_failover_via_ui"):
             ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_13:
                 logger.info("Start the process of Failover from ACM UI")
@@ -98,17 +109,17 @@ class TestFailoverAndRelocate:
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
             # Verify if cluster is marked unavailable on ACM console
-            if config.ENV_DATA.get("rdr_failover_via_ui"):
+            if config.RUN.get("rdr_failover_via_ui"):
                 config.switch_acm_ctx()
                 check_cluster_status_on_acm_console(
                     acm_obj,
                     down_cluster_name=primary_cluster_name,
                     expected_text="Unknown",
                 )
-        elif config.ENV_DATA.get("rdr_failover_via_ui"):
+        elif config.RUN.get("rdr_failover_via_ui"):
             check_cluster_status_on_acm_console(acm_obj)
 
-        if config.ENV_DATA.get("rdr_failover_via_ui"):
+        if config.RUN.get("rdr_failover_via_ui"):
             # Failover via ACM UI
             failover_relocate_ui(
                 acm_obj,
@@ -156,7 +167,7 @@ class TestFailoverAndRelocate:
 
         dr_helpers.wait_for_mirroring_status_ok()
 
-        if config.ENV_DATA.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_relocate_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 
@@ -168,7 +179,7 @@ class TestFailoverAndRelocate:
             rdr_workload.workload_namespace
         )
 
-        if config.ENV_DATA.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_relocate_via_ui"):
             logger.info("Start the process of Relocate from ACM UI")
             check_cluster_status_on_acm_console(acm_obj)
             dr_submariner_validation_from_ui(acm_obj)
@@ -201,7 +212,7 @@ class TestFailoverAndRelocate:
 
         dr_helpers.wait_for_mirroring_status_ok()
 
-        if config.ENV_DATA.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_relocate_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE

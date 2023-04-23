@@ -143,6 +143,19 @@ class BaseUI:
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
 
+    def do_click_by_xpath(self, xpath, timeout=30):
+        """
+        Function to click on a web element using XPATH
+        Args:
+            xpath (str): xpath to interact with web element
+            timeout (int): timeout until which an exception won't be raised
+
+        Returns:
+                Clicks on the web element found
+
+        """
+        return self.do_click((xpath, By.XPATH), timeout)
+
     def do_send_keys(self, locator, text, timeout=30):
         """
         Send text to element on OpenShift Console
@@ -206,7 +219,7 @@ class BaseUI:
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator, timeout=100)
+        current_mode = self.is_expanded(locator=locator, timeout=180)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 

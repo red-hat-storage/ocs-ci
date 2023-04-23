@@ -18,10 +18,14 @@ from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
+polarion_id_relocate = "OCS-4425"
+if config.RUN.get("rdr_relocate_via_ui"):
+    polarion_id_relocate = "OCS-4744"
+
 
 @acceptance
 @tier1
-@pytest.mark.polarion_id("OCS-4425")
+@pytest.mark.polarion_id(polarion_id_relocate)
 class TestRelocate:
     """
     Test Relocate action
@@ -49,7 +53,7 @@ class TestRelocate:
             rdr_workload.workload_namespace
         )
 
-        if config.ENV_DATA.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_relocate_via_ui"):
             ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_13:
                 logger.info("Start the process of Relocate from ACM UI")
@@ -88,7 +92,7 @@ class TestRelocate:
 
         dr_helpers.wait_for_mirroring_status_ok()
 
-        if config.ENV_DATA.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_relocate_via_ui"):
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE
             )

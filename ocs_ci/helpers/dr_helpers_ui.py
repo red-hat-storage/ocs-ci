@@ -95,7 +95,7 @@ def check_cluster_status_on_acm_console(
             )
             # Overall cluster status should change when only a few nodes of the cluster are down
             # as per BZ 2155203, hence the below code is written
-            # and can be further modified depending upon the fix.
+            # and can be further implemented depending upon the fix.
             other_expected_status = ["Unavailable", "NotReady", "Offline", "Error"]
             for status in other_expected_status:
                 check_cluster_unavailability_again = (
@@ -120,6 +120,7 @@ def check_cluster_status_on_acm_console(
             for cluster in get_non_acm_cluster_config():
                 cluster_names.append(cluster.ENV_DATA["cluster_name"])
         for cluster in cluster_names:
+            log.info(f"Checking status of cluster {cluster} on ACM UI")
             acm_obj.do_click(format_locator(acm_loc["cluster_name"], cluster))
             cluster_status = acm_obj.get_element_text(
                 format_locator(acm_loc["cluster_status_check"], expected_text)
@@ -187,7 +188,7 @@ def failover_relocate_ui(
     policy_name=None,
     failover_or_preferred_cluster=None,
     action=constants.ACTION_FAILOVER,
-    timeout=30,
+    timeout=120,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -210,19 +211,6 @@ def failover_relocate_ui(
         acm_loc = locators[ocp_version]["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
-        check_applied_filters = acm_obj.wait_until_expected_text_is_found(
-            acm_loc["clear-all-filters"], expected_text="Clear all filters", timeout=15
-        )
-        if check_applied_filters:
-            log.info("Clear applied filters on Applications page")
-            acm_obj.do_click("acm_loc['clear-all-filters']", enable_screenshot=True)
-        else:
-            log.warning("No applied filter found on Applications page")
-            acm_obj.take_screenshot()
-        log.info("Apply Filter on Applications page")
-        acm_obj.do_click(acm_loc["apply-filter"])
-        log.info("Select subscription from filters")
-        acm_obj.do_click(acm_loc["subscription"], enable_screenshot=True)
         workload_check = acm_obj.wait_until_expected_text_is_found(
             format_locator(acm_loc["workload-name"], workload_to_move),
             expected_text=workload_to_move,
@@ -234,10 +222,14 @@ def failover_relocate_ui(
         acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
         if action == constants.ACTION_FAILOVER:
             log.info("Selecting action as Failover from ACM UI")
-            acm_obj.do_click(acm_loc["failover-app"], enable_screenshot=True)
+            acm_obj.do_click(
+                acm_loc["failover-app"], enable_screenshot=True, timeout=timeout
+            )
         else:
             log.info("Selecting action as Relocate from ACM UI")
-            acm_obj.do_click(acm_loc["relocate-app"], enable_screenshot=True)
+            acm_obj.do_click(
+                acm_loc["relocate-app"], enable_screenshot=True, timeout=timeout
+            )
         log.info("Click on policy dropdown")
         acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
         log.info("Select policy from policy dropdown")
@@ -292,7 +284,7 @@ def failover_relocate_ui(
 
 
 def verify_failover_relocate_status_ui(
-    acm_obj, action=constants.ACTION_FAILOVER, timeout=30
+    acm_obj, action=constants.ACTION_FAILOVER, timeout=120
 ):
     """
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
@@ -331,20 +323,22 @@ def verify_failover_relocate_status_ui(
             expected_text="FailedOver",
             timeout=timeout,
         )
+        fetch_status = acm_obj.get_element_text(acm_loc["action-status-failover"])
         assert action_status, "Failover verification from ACM UI failed"
-        log.info(f"{action} successfully verified on ACM UI, status is 'FailedOver'")
+        log.info(f"{action} successfully verified on ACM UI, status is {fetch_status}")
     else:
         action_status = acm_obj.wait_until_expected_text_is_found(
             acm_loc["action-status-relocate"],
             expected_text="Relocated",
             timeout=timeout,
         )
+        fetch_status = acm_obj.get_element_text(acm_loc["action-status-relocate"])
         assert action_status, "Relocate verification from ACM UI failed"
-        log.info(f"{action} successfully verified on ACM UI, status is 'Relocated'")
+        log.info(f"{action} successfully verified on ACM UI, status is {fetch_status}")
     close_action_modal = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["close-action-modal"], expected_text="Close", timeout=30
+        acm_loc["close-action-modal"], expected_text="Close", timeout=120
     )
     if close_action_modal:
         log.info("Close button found")
-        acm_obj.do_click("acm_loc['close-action-modal']", enable_screenshot=True)
+        acm_obj.do_click_by_xpath("//*[text()='Close']")
         log.info("Data policy modal page closed")

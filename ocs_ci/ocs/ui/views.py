@@ -718,7 +718,7 @@ acm_configuration_4_11 = {
 acm_configuration_4_12 = {
     "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
     "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
-    "local-cluster": ("pf-dropdown-toggle-id-128", By.ID),
+    "local-cluster": ("//h2[text()='local-cluster']", By.XPATH),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
     "cluster_name": ("//a[normalize-space()='{}']", By.XPATH),
     "clusters-page": ("a[class='pf-c-breadcrumb__link']", By.CSS_SELECTOR),
@@ -727,14 +727,11 @@ acm_configuration_4_12 = {
     "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
     "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
-    "apply-filter": ("//button[@aria-label='Options menu']", By.XPATH),
-    "clear-all-filters": (
-        "(//button[@type='button'][normalize-space()='Clear all filters'])[2]",
+    "workload-name": ('//*[text()="{}"]', By.XPATH),
+    "kebab-action": (
+        "(//button[@class='pf-c-dropdown__toggle pf-m-plain'])[4]",
         By.XPATH,
     ),
-    "subscription": ("//input[@id='app.k8s.io/Application']", By.XPATH),
-    "workload-name": ('//*[text()="{}"]', By.XPATH),
-    "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
     "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
@@ -749,6 +746,7 @@ acm_configuration_4_12 = {
     "peer-ready": ("//i[normalize-space()='Peer ready']", By.XPATH),
     "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
     "close-action-modal": ("//button[normalize-space()='Close']", By.XPATH),
+    "close-action-modal-page": ("//*[text()='Close']", By.XPATH),
     "title-alert-after-action": ("//h4[@class='pf-c-alert__title']", By.XPATH),
     "clear-filters": (
         "(//button[@type='button'][normalize-space()='Clear all filters'])[2]"
