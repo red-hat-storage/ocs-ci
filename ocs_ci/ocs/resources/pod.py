@@ -3090,6 +3090,38 @@ def check_ceph_cmd_execute_successfully():
         return False
 
 
+def search_pattern_in_pod_logs(
+    pod_name,
+    pattern,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    container=None,
+    all_containers=False,
+):
+    """
+    Searches for the given regular expression pattern in the logs of a pod and returns all matching lines.
+
+    Args:
+        pod_name (str): The name of the pod.
+        pattern (str): The regular expression pattern to search for.
+        namespace (str, optional): The namespace of the pod. Defaults to None.
+        container (str, optional): The name of the container to search logs for. Defaults to None.
+        all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+
+    Returns:
+        A list of matched lines with the pattern.
+    """
+    pod_logs = get_pod_logs(
+        pod_name=pod_name,
+        namespace=namespace,
+        container=container,
+        all_containers=all_containers,
+    )
+
+    matched_lines = [line for line in pod_logs.split("\n") if re.search(pattern, line)]
+
+    return matched_lines
+
+
 def get_containers_names_by_pod(pod: OCP) -> set:
     """
     Gets the names of all containers in given pod or pods
