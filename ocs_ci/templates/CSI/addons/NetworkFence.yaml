@@ -3,7 +3,7 @@ kind: NetworkFence
 metadata:
   name: network-fence-sample
 spec:
-  driver: example.driver
+  driver: example.drivero
   cidrs:
     - 10.90.89.66/32
     - 11.67.12.42/24
