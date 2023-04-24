@@ -887,13 +887,17 @@ class Vault(KMS):
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
 
-    def create_vault_csi_kms_token(
-        self, namespace=config.ENV_DATA["cluster_namespace"]
-    ):
+    def create_vault_csi_kms_token(self, namespace=None):
         """
         create vault specific csi kms secret resource
 
+        Args:
+            namespace (str) the namespace of the resource. If None is provided
+                then value from config will be used.
+
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
         csi_kms_token = templating.load_yaml(constants.EXTERNAL_VAULT_CSI_KMS_TOKEN)
         csi_kms_token["data"]["token"] = base64.b64encode(
             self.vault_path_token.encode()
@@ -905,13 +909,15 @@ class Vault(KMS):
         self,
         kv_version,
         vault_auth_method=constants.VAULT_TOKEN,
-        namespace=config.ENV_DATA["cluster_namespace"],
+        namespace=None,
     ):
         """
         Create vault specific csi kms connection details
         configmap resource
 
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
 
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
