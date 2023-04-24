@@ -983,21 +983,22 @@ def validate_cephfilesystem(fs_name):
     return True if (ceph_validate and ocp_validate) else False
 
 
-def create_ocs_object_from_kind_and_name(
-    kind, resource_name, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def create_ocs_object_from_kind_and_name(kind, resource_name, namespace=None):
     """
     Create OCS object from kind and name
 
     Args:
         kind (str): resource kind like CephBlockPool, pvc.
         resource_name (str): name of the resource.
-        namespace (str) the namespace of the resource.
+        namespace (str) the namespace of the resource. If None is provided
+            then value from config will be used.
 
     Returns:
         ocs_ci.ocs.resources.ocs.OCS (obj): returns OCS object from kind and name.
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     ocp_object = OCP(kind=kind, resource_name=resource_name, namespace=namespace).get()
     return OCS(**ocp_object)
 
