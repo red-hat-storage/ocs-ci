@@ -1,6 +1,7 @@
 import logging
 import pytest
 import random
+import time
 
 
 from ocs_ci.framework.testlib import (
@@ -114,13 +115,15 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
         else:
             # If it's not a provider cluster, test rolling terminate two ocs worker nodes will suffice
-            ocs_node_objs = random.choices(get_ocs_nodes(), k=2)
+            ocs_node_objs = random.sample(get_ocs_nodes(), k=2)
+        log.info(f"Generated ocs worker nodes: {[n.name for n in ocs_node_objs]}")
 
         log.info("Start rolling terminate and recovery of the OCS worker nodes")
         for node_obj in ocs_node_objs:
             old_wnodes = get_worker_nodes()
             log.info(f"Current worker nodes: {old_wnodes}")
             machine_name = get_machine_from_node_name(node_obj.name)
+            log.info(f"Machine name: {machine_name}")
             machineset = get_machineset_from_machine_name(machine_name)
             log.info(f"machineset name: {machineset}")
             old_ready_rc = get_ready_replica_count(machineset)
@@ -138,6 +141,9 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     "Change the current replica count to the expected ready replica count"
                 )
                 set_replica_count(machineset, expected_ready_rc)
+                timeout = 20
+                log.info(f"Wait {timeout} seconds before adding a new node")
+                time.sleep(timeout)
                 new_ocs_node_names = add_new_node_and_label_it(machineset)
                 new_ocs_node = get_node_objs(new_ocs_node_names)[0]
 
