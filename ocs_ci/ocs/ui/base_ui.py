@@ -5,6 +5,7 @@ import os
 import gc
 import time
 import zipfile
+from functools import reduce
 
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -59,6 +60,7 @@ class BaseUI:
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
         )
+        logger.info(f"UI logs directory class {base_ui_logs_dir}")
         self.screenshots_folder = os.path.join(
             base_ui_logs_dir,
             "screenshots_ui",
@@ -77,7 +79,43 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.dom_folder}")
 
-    def do_click(self, locator, timeout=30, enable_screenshot=False, copy_dom=False):
+        self.ocp_version = get_ocp_version()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+
+        self.page_nav = self.deep_get(locators, self.ocp_version, "page")
+        self.generic_locators = self.deep_get(locators, self.ocp_version, "generic")
+        self.validation_loc = self.deep_get(locators, self.ocp_version, "validation")
+        self.dep_loc = self.deep_get(locators, self.ocp_version, "deployment")
+        self.pvc_loc = self.deep_get(locators, self.ocp_version, "pvc")
+        self.bp_loc = self.deep_get(locators, self.ocp_version, "block_pool")
+        self.sc_loc = self.deep_get(locators, self.ocp_version, "storageclass")
+        self.ocs_loc = self.deep_get(locators, self.ocp_version, "ocs_operator")
+        self.bucketclass = self.deep_get(locators, self.ocp_version, "bucketclass")
+        self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
+        self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
+        self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
+        self.add_capacity_ui_loc = self.deep_get(
+            locators, self.ocp_version, "add_capacity"
+        )
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} Web Page"
+
+    @classmethod
+    def deep_get(cls, dictionary, *keys):
+        return reduce(lambda d, key: d.get(key) if d else None, keys, dictionary)
+
+    def do_click(
+        self,
+        locator,
+        timeout=30,
+        enable_screenshot=False,
+        copy_dom=False,
+        avoid_stale=False,
+    ):
         """
         Click on Button/link on OpenShift Console
 
@@ -85,38 +123,82 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
+        avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
+        refresh the page once and try click again
+        * don't use when refreshed page expected to be different from initial page, or loose input values
         """
-        self.page_has_loaded()
-        screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
-        if screenshot:
-            self.take_screenshot()
-        if copy_dom:
-            self.copy_dom()
 
-        wait = WebDriverWait(self.driver, timeout)
-        try:
-            if (
-                version.get_semantic_version(get_ocp_version(), True)
-                <= version.VERSION_4_11
-            ):
-                element = wait.until(
-                    ec.element_to_be_clickable((locator[1], locator[0]))
-                )
-            else:
-                element = wait.until(
-                    ec.visibility_of_element_located((locator[1], locator[0]))
-                )
-            element.click()
-        except TimeoutException as e:
-            self.take_screenshot()
-            self.copy_dom()
-            logger.error(e)
-            raise TimeoutException(
-                f"Failed to find the element ({locator[1]},{locator[0]})"
+        def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
+            self.page_has_loaded()
+            screenshot = (
+                ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
             )
+            if screenshot:
+                self.take_screenshot()
+            if _copy_dom:
+                self.copy_dom()
+
+            wait = WebDriverWait(self.driver, timeout)
+            try:
+                if (
+                    version.get_semantic_version(get_ocp_version(), True)
+                    <= version.VERSION_4_11
+                ):
+                    element = wait.until(
+                        ec.element_to_be_clickable((locator[1], locator[0]))
+                    )
+                else:
+                    element = wait.until(
+                        ec.visibility_of_element_located((locator[1], locator[0]))
+                    )
+                element.click()
+            except TimeoutException as e:
+                self.take_screenshot()
+                self.copy_dom()
+                logger.error(e)
+                raise TimeoutException(
+                    f"Failed to find the element ({locator[1]},{locator[0]})"
+                )
+
+        try:
+            _do_click(locator, timeout, enable_screenshot, copy_dom)
+        except StaleElementReferenceException:
+            if avoid_stale:
+                logger.info("Refresh page to avoid reference to a stale element")
+                self.driver.refresh()
+                _do_click(locator, timeout, enable_screenshot, copy_dom)
+            else:
+                raise
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
+
+    def do_click_by_xpath(self, xpath, timeout=30):
+        """
+        Function to click on a web element using XPATH
+        Args:
+            xpath (str): xpath to interact with web element
+            timeout (int): timeout until which an exception won't be raised
+
+        Returns:
+                Clicks on the web element found
+
+        """
+        return self.do_click((xpath, By.XPATH), timeout)
+
+    def find_an_element_by_xpath(self, locator):
+        """
+        Function to find an element using xpath
+
+        Args:
+            locator (str): locator of the element to be found
+
+        Returns:
+            an object of the type WebElement
+
+        """
+        element = self.driver.find_element_by_xpath(locator)
+        return element
 
     def do_send_keys(self, locator, text, timeout=30):
         """
@@ -163,7 +245,14 @@ class BaseUI:
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        try:
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        except TimeoutException:
+            # element_to_be_clickable() doesn't work as expected so just to harden
+            # we are using presence_of_element_located
+            element = wait.until(
+                ec.presence_of_element_located((locator[1], locator[0]))
+            )
         return True if element.get_attribute("aria-expanded") == "true" else False
 
     def choose_expanded_mode(self, mode, locator):
@@ -174,7 +263,7 @@ class BaseUI:
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator, timeout=100)
+        current_mode = self.is_expanded(locator=locator, timeout=1000)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 
@@ -299,7 +388,7 @@ class BaseUI:
             if sample == attribute_value:
                 break
 
-    def page_has_loaded(self, retries=5, sleep_time=1):
+    def page_has_loaded(self, retries=5, sleep_time=2):
         """
         Waits for page to completely load by comparing current page hash values.
         Not suitable for pages that use frequent dynamically content (less than sleep_time)
@@ -310,13 +399,13 @@ class BaseUI:
 
         """
 
+        @retry(TimeoutException)
         def get_page_hash():
             """
             Get dom html hash
             """
-            dom = self.driver.find_element_by_tag_name("html").get_attribute(
-                "innerHTML"
-            )
+            self.check_element_presence((By.TAG_NAME, "html"))
+            dom = self.get_element_attribute(("html", By.TAG_NAME), "innerHTML")
             dom_hash = hash(dom.encode("utf-8"))
             return dom_hash
 
@@ -346,6 +435,13 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    def navigate_backward(self):
+        """
+        Navigate to a previous Web Page
+
+        """
+        self.driver.back()
 
     def scroll_into_view(self, locator):
         """
@@ -528,6 +624,15 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
+        self.page_has_loaded(5, 5)
+
+    def navigate_OCP_home_page(self):
+        """
+        Navigate to Home Page
+        """
+        logger.info("Navigate to OCP Home Page")
+        self.driver.get(get_ocp_url())
+        self.page_has_loaded()
 
     def navigate_overview_page(self):
         """
@@ -623,6 +728,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.page_has_loaded(retries=25, sleep_time=5)
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
@@ -799,7 +905,7 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        if version.VERSION_4_10 <= self.ocp_version_full < version.VERSION_4_12:
+        if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11):
             default_projects_is_checked = self.driver.find_element_by_xpath(
                 "//span[@class='pf-c-switch__toggle']"
             )
