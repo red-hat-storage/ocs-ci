@@ -397,8 +397,10 @@ class MCGS3Bucket(ObjectBucket):
         Deletes the bucket using the S3 API
         """
         response = self.s3client.get_bucket_versioning(Bucket=self.name)
-        if "Status" in response.keys():
-            self.s3resource.Bucket(self.name).object_versions.delete()
+        logger.info(response)
+        if "Status" in response and response["Status"] == "Enabled":
+            for obj_version in self.s3resource.Bucket(self.name).object_versions.all():
+                obj_version.delete()
         else:
             self.s3resource.Bucket(self.name).objects.all().delete()
         self.s3resource.Bucket(self.name).delete()
