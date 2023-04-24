@@ -69,7 +69,7 @@ class TestFailoverAndRelocate:
                 back to primary cluster once it recovers
 
         This test is also compatible to be run from ACM UI,
-        pass the yaml conf/ocsci/rdr_ui.yaml to trigger it.
+        pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
 
         """
         if config.RUN.get("rdr_relocate_via_ui"):

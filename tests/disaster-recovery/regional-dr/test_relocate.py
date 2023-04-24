@@ -37,7 +37,7 @@ class TestRelocate:
         Test to verify relocation of application between managed clusters
 
         This test is also compatible to be run from ACM UI,
-        pass the yaml conf/ocsci/rdr_ui.yaml to trigger it.
+        pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
 
         """
         if config.RUN.get("rdr_relocate_via_ui"):
