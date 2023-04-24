@@ -108,6 +108,7 @@ class TestFailoverAndRelocate:
 
             # Stop primary cluster nodes
         if primary_cluster_down:
+            logger.info("Stopping primary cluster nodes")
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
             # Verify if cluster is marked unavailable on ACM console
@@ -132,9 +133,6 @@ class TestFailoverAndRelocate:
             )
         else:
             # Failover action via CLI
-            secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-                rdr_workload.workload_namespace
-            )
             dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace)
 
         # Verify resources creation on new primary cluster (failoverCluster)
