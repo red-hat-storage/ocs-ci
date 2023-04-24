@@ -16,7 +16,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
-from ocs_ci.helpers.dr_helpers import get_current_primary_cluster_name
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -69,6 +68,12 @@ class TestFailover:
         pass the yaml conf/ocsci/rdr_ui.yaml to trigger it.
 
         """
+        if config.RUN.get("rdr_relocate_via_ui"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version <= version.VERSION_4_12:
+                logger.error("ODF/ACM version isn't supported for Failover operation")
+                raise NotImplementedError
+
         acm_obj = AcmAddClusters(setup_acm_ui)
 
         dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
@@ -82,7 +87,7 @@ class TestFailover:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        primary_cluster_name = get_current_primary_cluster_name(
+        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workload.workload_namespace
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
@@ -90,14 +95,9 @@ class TestFailover:
         )
 
         if config.RUN.get("rdr_failover_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version >= version.VERSION_4_13:
-                logger.info("Start the process of failover from ACM UI")
-                config.switch_acm_ctx()
-                dr_submariner_validation_from_ui(acm_obj)
-            else:
-                logger.error("ODF/ACM version isn't supported for Failover operation")
-                raise NotImplementedError
+            logger.info("Start the process of Failover from ACM UI")
+            config.switch_acm_ctx()
+            dr_submariner_validation_from_ui(acm_obj)
 
         # Stop primary cluster nodes
         if primary_cluster_down:

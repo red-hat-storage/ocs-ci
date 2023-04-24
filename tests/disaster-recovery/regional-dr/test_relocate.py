@@ -40,6 +40,12 @@ class TestRelocate:
         pass the yaml conf/ocsci/rdr_ui.yaml to trigger it.
 
         """
+        if config.RUN.get("rdr_relocate_via_ui"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version <= version.VERSION_4_12:
+                logger.error("ODF/ACM version isn't supported for Relocate operation")
+                raise NotImplementedError
+
         acm_obj = AcmAddClusters(setup_acm_ui)
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
@@ -54,24 +60,19 @@ class TestRelocate:
         )
 
         if config.RUN.get("rdr_relocate_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version >= version.VERSION_4_13:
-                logger.info("Start the process of Relocate from ACM UI")
-                config.switch_acm_ctx()
-                dr_submariner_validation_from_ui(acm_obj)
-                check_cluster_status_on_acm_console(acm_obj)
-                # Relocate via ACM UI
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=f"{rdr_workload.workload_name}-1",
-                    policy_name=rdr_workload.dr_policy_name,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                    action=constants.ACTION_RELOCATE,
-                )
-            else:
-                logger.error("ODF/ACM version isn't supported for Relocate operation")
-                raise NotImplementedError
+            logger.info("Start the process of Relocate from ACM UI")
+            config.switch_acm_ctx()
+            dr_submariner_validation_from_ui(acm_obj)
+            check_cluster_status_on_acm_console(acm_obj)
+            # Relocate via ACM UI
+            failover_relocate_ui(
+                acm_obj,
+                scheduling_interval=scheduling_interval,
+                workload_to_move=f"{rdr_workload.workload_name}-1",
+                policy_name=rdr_workload.dr_policy_name,
+                failover_or_preferred_cluster=secondary_cluster_name,
+                action=constants.ACTION_RELOCATE,
+            )
         else:
             # Relocate action via CLI
             dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace)
