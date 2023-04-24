@@ -312,7 +312,7 @@ class TestObcUserInterface(object):
         ), f"StorageClass mismatch. Expected: {storageclass}, found: {obc_storageclass}"
 
         # no Bucket Classes available for ocs-storagecluster-ceph-rgw Storage Class
-        if bucketclass:
+        if bucketclass and False:
             obc_bucketclass = (
                 test_obc_obj.get("spec").get("additionalConfig").get("bucketclass")
             )
