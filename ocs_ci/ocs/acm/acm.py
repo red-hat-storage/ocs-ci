@@ -5,7 +5,7 @@ import os
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-
+from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
@@ -26,7 +26,10 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
 from ocs_ci.utility.version import compare_versions
-from ocs_ci.ocs.exceptions import ACMClusterImportException
+from ocs_ci.ocs.exceptions import (
+    ACMClusterImportException,
+    UnexpectedDeploymentConfiguration,
+)
 
 log = logging.getLogger(__name__)
 
@@ -200,16 +203,22 @@ class AcmAddClusters(AcmPageNavigator):
 
     def submariner_validation_ui(self):
         """
-        Checks available status of imported clusters after submariner creation
+        This function validates submariner status on ACM console which connects 2 managed OCP clusters.
+        This is a mandatory pre-check for Regional DR.
 
         """
-
         self.navigate_clusters_page()
-        self.page_has_loaded(retries=15, sleep_time=5)
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
-        log.info("Click on Cluster sets")
-        self.do_click(self.page_nav["cluster-sets"])
-        self.page_has_loaded(retries=15, sleep_time=5)
+        cluster_sets_page = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["cluster-sets"],
+            expected_text="Cluster sets",
+            timeout=120,
+        )
+        if cluster_sets_page:
+            log.info("Click on Cluster sets")
+            self.do_click(self.page_nav["cluster-sets"])
+        else:
+            log.error("Couldn't navigate to Cluster sets page")
+            raise NoSuchElementException
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(
@@ -218,42 +227,42 @@ class AcmAddClusters(AcmPageNavigator):
             )
         )
         log.info("Click on 'Submariner add-ons' tab")
-        self.do_click(self.page_nav["submariner-tab"])
+        self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
         log.info("Checking connection status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Connection status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Agent status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "First gateway node label check did not pass for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
+        ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
-        log.info("Submariner add-ons creation is successful")
+        log.info("Submariner is healthy, check passed")
 
 
 def copy_kubeconfig(file):
@@ -315,6 +324,8 @@ def login_to_acm():
 
     """
     acm_version = ".".join(get_running_acm_version().split(".")[:2])
+    if not acm_version:
+        raise UnexpectedDeploymentConfiguration("ACM not found")
     cmp_str = f"{acm_version}>=2.7"
     if compare_versions(cmp_str):
         url = f"{get_ocp_url()}{ACM_2_7_MULTICLUSTER_URL}"
@@ -323,7 +334,8 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator(driver)
-    page_nav.navigate_from_ocp_to_acm_cluster_page()
+    if not compare_versions(cmp_str):
+        page_nav.navigate_from_ocp_to_acm_cluster_page()
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
