@@ -234,16 +234,20 @@ class Deployment(object):
             )
             run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
 
-            self.wait_for_subscription(constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS)
+            self.wait_for_subscription(
+                constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            )
             time.sleep(90)
             subscriptions = ocp.OCP(
                 kind=constants.SUBSCRIPTION_WITH_ACM,
                 resource_name=constants.GITOPS_OPERATOR_NAME,
-                namespace=constants.OPENSHIFT_OPERATORS
+                namespace=constants.OPENSHIFT_OPERATORS,
             ).get()
             gitops_csv_name = subscriptions["status"]["currentCSV"]
-            csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
-            csv.wait_for_phase("Succeeded", timeout=720) # 720
+            csv = CSV(
+                resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
+            )
+            csv.wait_for_phase("Succeeded", timeout=720)  # 720
             logger.info("GitOps Operator Deployment Succeeded")
 
             logger.info("Creating GitOps CLuster Resource")
