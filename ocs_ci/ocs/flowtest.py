@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import node, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers

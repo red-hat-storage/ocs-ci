@@ -22,7 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
     compare_directory,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, gen_bucket_policy
 from ocs_ci.ocs.resources import pod
