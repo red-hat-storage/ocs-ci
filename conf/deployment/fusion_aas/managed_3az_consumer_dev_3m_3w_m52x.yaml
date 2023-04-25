@@ -5,6 +5,7 @@ ENV_DATA:
   # MS cluster via rosa _addons
   # or via rosa_service i.e appliance mode
   cluster_type: 'consumer'
+  cluster_namespace: 'fusion-storage'
   multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3
