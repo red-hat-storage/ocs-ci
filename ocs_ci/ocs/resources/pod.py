@@ -160,6 +160,7 @@ class Pod(OCS):
         secrets=None,
         timeout=600,
         container_name=None,
+        cluster_config=None,
         **kwargs,
     ):
         """
@@ -175,6 +176,9 @@ class Pod(OCS):
                 subprocess.run(``**kwargs``)
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
             container_name (str): The container name
+            cluster_config (MultiClusterConfig): In case of multicluser scenario, this object will hold
+                specific cluster's Config
+
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
@@ -184,7 +188,12 @@ class Pod(OCS):
             cmd = f"rsh {self.name} "
             cmd += command
         return self.ocp.exec_oc_cmd(
-            cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
+            cmd,
+            out_yaml_format,
+            secrets=secrets,
+            timeout=timeout,
+            cluster_config=cluster_config,
+            **kwargs,
         )
 
     def exec_s3_cmd_on_pod(self, command, mcg_obj=None):
@@ -1315,20 +1324,22 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
     return used_percentage
 
 
-def get_pods_having_label(label, namespace):
+def get_pods_having_label(label, namespace, cluster_config=None):
     """
     Fetches pod resources with given label in given namespace
 
     Args:
         label (str): label which pods might have
         namespace (str): Namespace in which to be looked up
+        cluster_config (MultiClusterConfig): In case of multicluster, this object will hold
+            specif cluster config
 
     Return:
         list: of pods info
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-    pods = ocp_pod.get(selector=label).get("items")
+    pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
     return pods
 
 
@@ -1811,7 +1822,9 @@ def upload(pod_name, localpath, remotepath, namespace=None):
     run_cmd(cmd)
 
 
-def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
+def download_file_from_pod(
+    pod_name, remotepath, localpath, namespace=None, cluster_config=None
+):
     """
     Download a file from a pod
 
@@ -1823,10 +1836,13 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
 
     """
     namespace = namespace or constants.DEFAULT_NAMESPACE
-    cmd = (
-        f"oc -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
-    )
-    run_cmd(cmd)
+    kubeconfig = None
+    cmd = "oc"
+    if cluster_config:
+        kubeconfig = cluster_config.RUN.get("kubeconfig")
+        cmd = cmd + f" --kubeconfig {kubeconfig}"
+    cmd = f"{cmd} -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
+    run_cmd(cmd, cluster_config=cluster_config)
 
 
 def wait_for_storage_pods(timeout=200):

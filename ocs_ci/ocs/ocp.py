@@ -120,6 +120,7 @@ class OCP(object):
         timeout=600,
         ignore_error=False,
         silent=False,
+        cluster_config=None,
         **kwargs,
     ):
         """
@@ -137,6 +138,8 @@ class OCP(object):
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
             silent (bool): If True will silent errors from the server, default false
+            cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
+                executions
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -144,14 +147,18 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        env_kubeconfig = os.getenv("KUBECONFIG")
+        env_kubeconfig = None
+        if not cluster_config:
+            cluster_config = config
+            env_kubeconfig = os.getenv("KUBECONFIG")
         kubeconfig_path = (
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
         )
 
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                cluster_config.ENV_DATA["cluster_path"],
+                cluster_config.RUN.get("kubeconfig_location"),
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
@@ -167,6 +174,7 @@ class OCP(object):
             ignore_error=ignore_error,
             threading_lock=self.threading_lock,
             silent=silent,
+            cluster_config=cluster_config,
             **kwargs,
         )
 
@@ -225,6 +233,7 @@ class OCP(object):
         dont_raise=False,
         silent=False,
         field_selector=None,
+        cluster_config=None,
     ):
         """
         Get command - 'oc get <resource>'
@@ -248,6 +257,8 @@ class OCP(object):
             None: Incase dont_raise is True and get is not found
 
         """
+        if not cluster_config:
+            cluster_config = config
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector
@@ -267,7 +278,9 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command, silent=silent)
+                return self.exec_oc_cmd(
+                    command, silent=silent, cluster_config=cluster_config
+                )
             except CommandFailed as ex:
                 if not silent:
                     log.warning(
