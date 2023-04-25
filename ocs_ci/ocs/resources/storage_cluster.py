@@ -1625,6 +1625,25 @@ def verify_managedocs_security():
         assert "ALL" in dropped_capabilities
 
 
+def verify_managed_fusion_provider():
+    """
+    1. Check the presence of catalogsource and its state
+    2. Check the presence of subscription
+    """
+    catsrc = ocp.OCP(kind=constants.CATSRC, namespace="managed-fusion")
+    catsrc_info = catsrc.get().get("items")[0]
+    log.info(f"Catalogsource: {catsrc_info}")
+    assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
+    assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
+    subscr = ocp.OCP(
+        kind=constants.CATSRC,
+        namespace="managed-fusion",
+        selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
+    )
+    subscr_info = subscr.get().get("items")[0]
+    assert subscr_info["spec"]["name"] == "managed-fusion-agent"
+
+
 def get_ceph_clients():
     """
     Get the yamls of all ceph clients.
