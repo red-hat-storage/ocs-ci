@@ -1411,7 +1411,9 @@ def verify_provider_resources():
     )
 
     # Verify that cephcluster is Ready and hostNetworking is True
-    cephcluster = OCP(kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"])
+    cephcluster = OCP(
+        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     cephcluster_yaml = cephcluster.get().get("items")[0]
     log.info("Verifying that cephcluster is Ready and hostNetworking is True")
     assert (
@@ -1440,7 +1442,9 @@ def verify_consumer_resources():
     mgr_ip = mgr_ep_yaml["subsets"][0]["addresses"][0]["ip"]
     log.info(f"MGR endpoint IP is {mgr_ip}")
     assert re.match("\\d+(\\.\\d+){3}", mgr_ip)
-    cephcluster = OCP(kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"])
+    cephcluster = OCP(
+        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     cephcluster_yaml = cephcluster.get().get("items")[0]
     monitoring_endpoint = cephcluster_yaml["spec"]["monitoring"][
         "externalMgrEndpoints"
@@ -1577,7 +1581,9 @@ def verify_consumer_storagecluster(sc_data):
         f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
     )
     assert len(ticket) > 500
-    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"])
+    catsrc = ocp.OCP(
+        kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith(
@@ -1627,7 +1633,9 @@ def get_ceph_clients():
     Returns:
         list: yamls of all ceph clients
     """
-    consumer = ocp.OCP(kind="CephClient", namespace=config.ENV_DATA["cluster_namespace"])
+    consumer = ocp.OCP(
+        kind="CephClient", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     return consumer.get().get("items")
 
 

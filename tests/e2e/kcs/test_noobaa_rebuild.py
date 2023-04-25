@@ -163,7 +163,9 @@ class TestNoobaaRebuild(E2ETest):
         )
 
         # Validate noobaa pods are up and running
-        pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         noobaa_pods = get_noobaa_pods()
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,

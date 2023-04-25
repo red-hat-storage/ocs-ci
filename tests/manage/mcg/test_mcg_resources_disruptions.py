@@ -247,7 +247,9 @@ class TestMCGResourcesDisruptions(MCGTest):
                 namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
-        ocp_scc = ocp.OCP(kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"])
+        ocp_scc = ocp.OCP(
+            kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_data = pod_obj.get()
 
         log.info(f"Verifying current SCC is {scc_name} in db pod")

@@ -102,7 +102,9 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
             worker_node_list = get_worker_nodes()
             node_names = list(set(worker_node_list) - set(noobaa_pod_node.name.split()))
             unschedule_nodes(node_names=node_names)
-            ocp_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+            ocp_obj = OCP(
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+            )
             rgw_pod_obj[0].delete()
             ocp_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,

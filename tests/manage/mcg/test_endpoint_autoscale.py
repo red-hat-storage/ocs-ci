@@ -62,7 +62,9 @@ class TestEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(1)
 
     def _assert_endpoint_count(self, desired_count):
-        pod = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
 
         assert pod.wait_for_resource(
             resource_count=desired_count,

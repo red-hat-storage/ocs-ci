@@ -49,7 +49,9 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     """
 
     log.info("Verifying ceph health status metrics is updated after rebooting the node")
-    ocp_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_obj = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     mgr_pod = (
         ocp_obj.get(selector=constants.MGR_APP_LABEL)
         .get("items")[0]
@@ -344,7 +346,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert modify_osd_replica_count(resource_name=resource_name, replica_count=0)
 
         # Validate osd is down
-        pod_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod_obj = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj.wait_for_delete(resource_name=resource_name), (
             f"Resources is not deleted {resource_name}"
         )
@@ -452,7 +456,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check for Ceph pods
-        pod_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod_obj = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         assert pod_obj.wait_for_resource(
             condition="Running", selector="app=rook-ceph-mgr", timeout=600
         )
@@ -615,7 +621,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
         log.info(f"Wait for a mgr pod {pod_mgr_name[0]} to be deleted")
-        oc_pod = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        oc_pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
         log.info(f"Upscaling deployment {mgr} back to 1")

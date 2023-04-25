@@ -2126,7 +2126,8 @@ def validate_existence_of_blocking_pdb():
 
     """
     pdb_obj = ocp.OCP(
-        kind=constants.POD_DISRUPTION_BUDGET, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.POD_DISRUPTION_BUDGET,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []

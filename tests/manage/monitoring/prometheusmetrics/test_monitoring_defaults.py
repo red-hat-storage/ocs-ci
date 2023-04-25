@@ -85,7 +85,9 @@ def test_ceph_mgr_dashboard_not_deployed():
     .. _`ceph mgr dashboard`: https://rook.io/docs/rook/v1.0/ceph-dashboard.html
     """
     logger.info("Checking that there is no ceph mgr dashboard pod deployed")
-    ocp_pod = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pod = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     # if there is no "items" in the reply, OCS is very broken
     ocs_pods = ocp_pod.get()["items"]
     for pod_item in ocs_pods:

@@ -19,7 +19,9 @@ def get_all_pvs(selector=None):
          dict: Dict of all pv in openshift-storage namespace
     """
     ocp_pv_obj = ocp.OCP(
-        kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"], selector=selector
+        kind=constants.PV,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=selector,
     )
     return ocp_pv_obj.get()
 

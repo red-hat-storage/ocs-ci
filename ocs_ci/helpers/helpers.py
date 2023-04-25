@@ -1191,7 +1191,9 @@ def get_all_pvs():
     Returns:
          dict: Dict of all pv in openshift-storage namespace
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     return ocp_pv_obj.get()
 
 
@@ -1211,7 +1213,9 @@ def validate_pv_delete(pv_name):
     Raises:
         AssertionError: If pv is not deleted
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"]
+    )
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
@@ -3462,7 +3466,9 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_obj = OCP(
+        kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
 

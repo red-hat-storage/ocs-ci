@@ -408,7 +408,9 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
 
         # Validate noobaa pod is up and running
-        pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),

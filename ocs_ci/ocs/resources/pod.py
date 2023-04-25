@@ -2161,7 +2161,9 @@ def wait_for_pods_to_be_running(
         return False
 
 
-def list_of_nodes_running_pods(selector, namespace=config.ENV_DATA["cluster_namespace"]):
+def list_of_nodes_running_pods(
+    selector, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     The function returns the list of nodes for the given selector
 
@@ -2349,7 +2351,9 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     except TimeoutExpiredError:
         is_completed = False
 
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     osd_removal_pod_status = ocp_pod_obj.get_resource_status(osd_removal_pod_name)
 
     # Check if 'osd_removal_pod' is in status 'completed'
@@ -2418,7 +2422,9 @@ def delete_osd_removal_job(osd_id):
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
-    osd_removal_job = get_job_obj(job_name, namespace=config.ENV_DATA["cluster_namespace"])
+    osd_removal_job = get_job_obj(
+        job_name, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
@@ -2457,7 +2463,9 @@ def get_osd_pod_id(osd_pod):
     return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
 
 
-def get_pods_in_statuses(status_options, namespace=config.ENV_DATA["cluster_namespace"]):
+def get_pods_in_statuses(
+    status_options, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Get all the pods in specific statuses
 

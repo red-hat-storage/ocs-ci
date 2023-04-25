@@ -153,7 +153,9 @@ class TestFullClusterHealth(PASTest):
         wait_for_nodes_status()
 
         # Check for Ceph pods
-        pod_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+        pod_obj = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         assert pod_obj.wait_for_resource(
             condition="Running", selector="app=rook-ceph-mgr", timeout=600
         )

@@ -30,7 +30,9 @@ def test_ceph_rgw_metrics_after_metrics_exporter_respin(rgw_deployments):
 
     """
     logger.info("Respin ocs-metrics-exporter pod")
-    pod_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    pod_obj = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     metrics_pods = pod_obj.get(selector="app.kubernetes.io/name=ocs-metrics-exporter")[
         "items"
     ]
