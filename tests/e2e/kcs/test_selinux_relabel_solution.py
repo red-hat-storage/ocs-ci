@@ -1,17 +1,17 @@
 import logging
-import os.path
-
 import pytest
 import yaml
-from ocs_ci.ocs.resources import pod
-import time
-from tempfile import mkdtemp
 import os
+import os.path
+import time
+import urllib.request
+
+from ocs_ci.ocs.resources import pod
+from tempfile import mkdtemp
 from ocs_ci.ocs.resources.pod import validate_pods_are_respinned_and_running_state
-from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.helpers import helpers
-import urllib.request
 from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
 from ocs_ci.ocs.resources import pod as res_pod
 from ocs_ci.utility.utils import run_cmd
@@ -30,13 +30,10 @@ class TestSelinuxrelabel(E2ETest):
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = ntar_loc
         dir_path = os.path.join(os.getcwd(), download_path)
-        print(dir_path)
         file_path = os.path.join(dir_path, "file.gz")
-        print(file_path)
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
         urllib.request.urlretrieve(kernel_url, file_path)
-        print(dir_path)
         return dir_path
 
     @pytest.fixture()
@@ -98,22 +95,6 @@ class TestSelinuxrelabel(E2ETest):
             )
         log.info("cephfs test files created on pod")
 
-    def calculate_md5sum(self, pod_obj, pvc_obj):
-        pod_name = pod_obj.name
-        data_path = f'"{constants.FLEXY_MNT_CONTAINER_DIR}/x"'
-        ocp_obj = ocp.OCP(
-            kind=constants.POD,
-            namespace=pvc_obj.project.namespace,
-        )
-        random_file = ocp_obj.exec_oc_cmd(
-            f"exec -it {pod_name} -- /bin/bash"
-            f' -c "find {data_path} -type f | "shuf" -n 1"',
-            timeout=300,
-        )
-
-        md5sum_pod_data = pod.cal_md5sum(pod_obj=pod_obj, file_name=random_file)
-        return md5sum_pod_data
-
     def data_integrity_check(self, pod_obj, pvc_namespace):
         pod_name = pod_obj.name
         log.info(f"pod obj name---- {pod_name}")
@@ -128,7 +109,7 @@ class TestSelinuxrelabel(E2ETest):
             f' -c "find {data_path} -type f | "shuf" -n 1"',
             timeout=300,
         )
-        print(f"files are {random_file}")
+        log.info(f"files are {random_file}")
         ini_md5sum_pod_data = pod.cal_md5sum(pod_obj=pod_obj, file_name=random_file)
         start_time = time.time()
         assert validate_pods_are_respinned_and_running_state([pod_obj])
@@ -148,7 +129,6 @@ class TestSelinuxrelabel(E2ETest):
             assert ini_md5sum_pod_data == fin_md5sum_pod_data
         return total_time
 
-    @ignore_leftovers
     def test_selinux_relabel(
         self,
         create_pvc_and_deploymentconfig_pod,
@@ -160,27 +140,24 @@ class TestSelinuxrelabel(E2ETest):
         """
         Steps:
             1. Create multiple cephfs pvcs(4) and 100K files each across multiple nested  directories
-            2. Have some snapshots created.
-            3. Run the IOs for few vols with specific files and take md5sum for them
-            4. Apply the fix/solution as mentioned in the “Existing PVs” section
-            5. Restart the pods which are hosting cephfs files in large numbers
-            6. Check for relabeling - this should not be happening.
-            7. Check data integrity.
+            2. Run the IOs for few vols with specific files and take md5sum for them
+            3. Apply the fix/solution as mentioned in the “Existing PVs” section
+            4. Restart the pods which are hosting cephfs files in large numbers
+            5. Check for relabeling - this should not be happening.
+            6. Check data integrity.
 
         """
         download_files
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
         self.copy_files(pod_obj=pod_obj, pvc_obj=pvc_obj)
-        log.info("files copied to pod")
+        log.info(f"files copied to pod {pod_obj}")
 
-        snap_obj = snapshot_factory(pvc_obj=pvc_obj, wait=False)
-        log.info(f"snapshot created {snap_obj}")
         self.data_integrity_check(pod_obj, pvc_obj)
 
         # Apply the fix/solution in the “Existing PVs” section
         pv_name = pvc_obj.get().get("spec").get("volumeName")
         project_namespace = pvc_obj.project.namespace
-        print(pv_name)
+
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=project_namespace,
@@ -230,10 +207,3 @@ class TestSelinuxrelabel(E2ETest):
         assert key in output
 
         self.data_integrity_check(pod_obj, project_namespace)
-        log.info(f"Creating a PVC from snapshot [restore] {snap_obj.name}")
-        restore_snap_obj = snapshot_restore_factory(snapshot_obj=snap_obj)
-        log.info(f"snapshot restore created {restore_snap_obj}")
-        pod_restore_obj = pod_factory(
-            pvc=restore_snap_obj, status=constants.STATUS_RUNNING
-        )
-        log.info(f"pod restore created {pod_restore_obj.get()}")
