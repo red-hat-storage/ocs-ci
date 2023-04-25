@@ -233,12 +233,17 @@ class Deployment(object):
                 gitops_subscription_yaml_data, gitops_subscription_manifest.name
             )
             run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
-            logger.info("Sleeping for 90 seconds after subscribing to GitOps")
 
-            self.wait_for_subscription(constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE)
-            csv_name = package_manifest.get_current_csv(channel="latest")
-            csv = CSV(resource_name=csv_name, namespace=constants.GITOPS_NAMESPACE)
-            csv.wait_for_phase("Succeeded", timeout=720)
+            self.wait_for_subscription(constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS)
+            time.sleep(90)
+            subscriptions = ocp.OCP(
+                kind=constants.SUBSCRIPTION_WITH_ACM,
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+                namespace=constants.OPENSHIFT_OPERATORS
+            ).get()
+            gitops_csv_name = subscriptions["status"]["currentCSV"]
+            csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
+            csv.wait_for_phase("Succeeded", timeout=720) # 720
             logger.info("GitOps Operator Deployment Succeeded")
 
             logger.info("Creating GitOps CLuster Resource")
@@ -269,6 +274,7 @@ class Deployment(object):
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
             )
+            managedclustersetbinding_obj["metadata"]["name"] = cluster_set[0]
             managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set[0]
             managedclustersetbinding = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="managedcluster_setbinding", delete=False
@@ -400,7 +406,6 @@ class Deployment(object):
             self.deploy_acm_hub()
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
-
         self.do_gitops_deploy()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
@@ -632,15 +637,18 @@ class Deployment(object):
         logger.info("Sleeping for 30 seconds after CSV created")
         time.sleep(30)
 
-    def wait_for_subscription(self, subscription_name, namespace=self.namespace):
+    def wait_for_subscription(self, subscription_name, namespace=None):
         """
         Wait for the subscription to appear
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if empty then default from ENV_data
+            namespace (str): Namespace name for checking subscription if None then default from ENV_data
 
         """
+        if not namespace:
+            namespace = self.namespace
+
         if config.multicluster:
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:

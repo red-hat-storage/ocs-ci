@@ -1940,7 +1940,7 @@ ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 
 # GitOps
-GITOPS_NAMESPACE = "openshift-operators"
+GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
 GITOPS_CLUSTER_NAME = "gitops-cluster"
 GITOPS_CLUSTER = "GitOpsCluster"

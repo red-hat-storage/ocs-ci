@@ -1,7 +1,7 @@
 apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
-  name: all-openshift-clusters
+  name: PLACEHOLDER
   namespace: openshift-gitops
 spec:
   clusterSet: PLACEHOLDER
