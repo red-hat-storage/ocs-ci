@@ -1,114 +1,19 @@
 import os
-import json
 import random
 import shutil
-import pytest
-import yaml
 import filecmp
 import logging
 from ocs_ci.framework.pytest_customization.marks import polarion_id, blue_squad, tier2
 from ocs_ci.framework.testlib import BaseTest
-from ocs_ci.utility.utils import clone_repo, exec_cmd, check_if_executable_in_path
-from ocs_ci.ocs import constants
+from ocs_ci.utility.monitoring_tool import (
+    check_go_version,
+    comparetool_deviation_check,
+    convert_yaml_file_to_json_file,
+)
+from ocs_ci.utility.utils import exec_cmd
+
 
 logger = logging.getLogger(__name__)
-
-
-def check_go_version():
-    """
-    Check installed 'go' version
-    """
-    if check_if_executable_in_path("go"):
-        logger.debug("linux distribution details:")
-        exec_cmd("uname -a")
-        logger.debug("go version:")
-        exec_cmd("go version")
-    else:
-        logger.exception("'go' binary not found")
-
-
-@pytest.fixture(scope="session")
-def clone_upstream_ceph(request, tmp_path_factory):
-    """
-    fixture to make temporary directory for the 'upstream ceph' and clone repo to it
-    """
-    repo_dir = tmp_path_factory.mktemp("upstream_ceph_dir")
-
-    def finalizer():
-        shutil.rmtree(repo_dir, ignore_errors=True)
-
-    request.addfinalizer(finalizer)
-    clone_repo(
-        constants.CEPH_UPSTREAM_REPO, str(repo_dir), branch="main", tmp_repo=True
-    )
-    return repo_dir
-
-
-@pytest.fixture(scope="session")
-def clone_ocs_operator(request, tmp_path_factory):
-    """
-    fixture to make temporary directory for the 'ocs operator' and clone repo to it
-    """
-    repo_dir = tmp_path_factory.mktemp("ocs_operator_dir")
-
-    def finalizer():
-        shutil.rmtree(repo_dir, ignore_errors=True)
-
-    request.addfinalizer(finalizer)
-    clone_repo(constants.OCS_OPERATOR_REPO, str(repo_dir), branch="main", tmp_repo=True)
-    return repo_dir
-
-
-@pytest.fixture(scope="session")
-def clone_odf_monitoring_compare_tool(request, tmp_path_factory):
-    """
-    fixture to make temporary directory for the 'ODF monitor compare tool' and clone repo to it
-    """
-    repo_dir = tmp_path_factory.mktemp("monitor_tool_dir")
-
-    def finalizer():
-        shutil.rmtree(repo_dir, ignore_errors=True)
-
-    request.addfinalizer(finalizer)
-    clone_repo(
-        constants.ODF_MONITORING_TOOL_REPO, str(repo_dir), branch="main", tmp_repo=True
-    )
-    return repo_dir
-
-
-def convert_yaml_file_to_json_file(file_path):
-    """
-    Util to convert yaml file to json file and replace an ext of the files
-
-    Args:
-        file_path (Path): path to the file to convert
-    Returns:
-        Path: path to the new file, yaml converted to json
-    """
-    logger.info(f"convert yaml file '{file_path}' to json format")
-    with open(file_path) as file:
-        content = yaml.safe_load(file)
-    new_path = file_path.parent / (file_path.with_suffix("").name + ".json")
-    os.rename(file_path, new_path)
-    with open(new_path, "w") as file:
-        json.dump(content, file)
-    return new_path
-
-
-def comparetool_deviation_check(first_file, second_file, deviation_list):
-    """
-    Function to run 'comparetool' and verify deviation_list accordingly to comparetool output
-
-    Args:
-        first_file (Path): path to the file, standing first in comparetool args to compare
-        second_file (Path): path to the file, standing second in comparetool args to compare
-        deviation_list (list): list of deviation strings expected to be in comparetool output
-    """
-    complete_proc = exec_cmd(f"./comparealerts {first_file} {second_file}")
-    compare_res = complete_proc.stdout.decode("utf-8")
-    assert all(
-        alert in compare_res for alert in deviation_list
-    ), f"compare tool did not find all occurancies from {deviation_list}:\n{compare_res}"
 
 
 @tier2
