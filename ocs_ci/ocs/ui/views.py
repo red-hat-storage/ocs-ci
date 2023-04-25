@@ -554,8 +554,10 @@ acm_configuration = {
     "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
     "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
     "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "globalnet": ("//input[@id='globalist-enable']", By.XPATH),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
     "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
+    "check-globalnet": ("//div[normalize-space()='True']", By.XPATH),
     "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
     "connection-status-1": (
         "(//button[@type='button'][normalize-space()='Healthy'])[1]",

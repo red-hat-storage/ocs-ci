@@ -7,6 +7,7 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
     ACM_MANAGED_CLUSTERS,
@@ -30,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -112,12 +114,17 @@ class AcmAddClusters(AcmPageNavigator):
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
 
-    def install_submariner_ui(self):
+    def install_submariner_ui(self, globalnet=True):
         """
         Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
         on the Hub Cluster to create a link between them
 
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
         """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
         cluster_env = get_clusters_env()
         cluster_name_a = cluster_env.get("cluster_name_1")
         cluster_name_b = cluster_env.get("cluster_name_2")
@@ -177,6 +184,13 @@ class AcmAddClusters(AcmPageNavigator):
             ),
             enable_screenshot=True,
         )
+        if ocs_version >= version.VERSION_4_13 and globalnet:
+            log.info("Enabling globalnet")
+            self.do_click(self.page_nav["globalnet"])
+        else:
+            log.error(
+                "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
+            )
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")
@@ -197,6 +211,12 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
+        if globalnet:
+            check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
+            assert (
+                check_globalnet == constants.GLOBALNET_STATUS
+            ), "Globalnet was not enabled"
+            log.info("Globalnet is enabled")
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
