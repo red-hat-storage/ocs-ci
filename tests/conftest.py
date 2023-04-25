@@ -1081,7 +1081,6 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
-                deploy_pod_status=status,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
