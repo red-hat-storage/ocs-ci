@@ -84,6 +84,7 @@ HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.y
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 # Statuses
 STATUS_READY = "Ready"
+PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
@@ -206,6 +207,7 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+
 # cluster types
 MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
@@ -791,6 +793,8 @@ RBD_SIDECAR_COUNT_4_12 = 14
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
+DRPOLICY_STATUS = "Validated"
+RDR_REPLICATION_POLICY = "async"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -998,6 +1002,10 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 # VMware Datastore types
 VMFS = "VMFS"
 VSAN = "vsan"
+
+# VMware VM Default network settings.
+VM_DEFAULT_NETWORK_ADAPTER = "Network adapter 1"
+VM_DEFAULT_NETWORK = "VM Network"
 
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
@@ -1358,12 +1366,6 @@ JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
-TEST_NET_1_BLOCK = "192.0.2.0/24"
-TEST_NET_2_BLOCK = "198.51.100.0/24"
-TEST_NET_3_BLOCK = "203.0.113.0/24"
-TEST_NET_MCAST_BLOCK = "233.252.0.0/24"
-TEST_NET_BLOCK_SET_1 = {TEST_NET_1_BLOCK, TEST_NET_2_BLOCK}
-TEST_NET_BLOCK_SET_2 = {TEST_NET_3_BLOCK, TEST_NET_MCAST_BLOCK}
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
