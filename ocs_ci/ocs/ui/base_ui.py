@@ -6,6 +6,9 @@ import gc
 import time
 import zipfile
 
+import numpy as np
+import pandas as pd
+
 from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
@@ -290,6 +293,40 @@ class BaseUI:
             list: The list of WebElements
         """
         return self.driver.find_elements(by=locator[1], value=locator[0])
+
+    def get_child_elements(self, locator=None, element=None):
+        """
+        Locate parent element and get list of children web element's
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By)) for parent element
+            element (WebElement): parent element to retrieve children
+
+        Returns:
+            WebElement (list): all children from the parent
+        """
+        if locator:
+            return self.driver.find_element(
+                by=locator[1], value=locator[0]
+            ).find_elements_by_xpath("child::*")
+        else:
+            return element.find_elements_by_xpath("child::*")
+
+    def get_descendant_elements(self, locator=None, element=None):
+        """
+        Locate ancestor element and get list of descendant web element's
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By)) for ancestor element
+            element (WebElement): ancestor element to retrieve descendants
+
+        Returns:
+            WebElement (list): all descendant elements from the ancestor
+        """
+        if locator:
+            return self.driver.find_element(
+                by=locator[1], value=locator[0]
+            ).find_elements_by_xpath("descendant::*")
+        else:
+            return element.find_elements_by_css_selector("descendant::*")
 
     def wait_for_element_to_be_visible(self, locator, timeout):
         """
@@ -1003,6 +1040,42 @@ class StorageSystemNavigator(PageNavigator):
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
+
+    def get_resources_table(self):
+        """
+        This function dynamically generates DataFrame of the resources visible on a web page and Applicable for tables:
+            ObjectBucketClaims, ObjectBuckets, VolumeSnapshotContents, VolumeSnapshotClasses,
+            StorageClasses, PersistentVolumeClaims,PersistentVolumes, StorageSystems, BackingStores,
+            BucketClasses, NamespaceStores and similar tables
+
+        Returns:
+            pd.DataFrame: Dataframe table of the resources from the opened page
+        """
+
+        table_title_elements = self.get_child_elements(
+            locator=("tr[data-ouia-component-type='PF4/TableRow']", By.CSS_SELECTOR)
+        )
+        table_title_labels = [
+            el.get_attribute("data-label") for el in table_title_elements
+        ]
+        table_title_labels = [
+            lable for lable in table_title_labels if lable is not None
+        ]
+        table_value_lines = self.get_elements(("tr[role='row']", By.CSS_SELECTOR))
+
+        table_value_matrix = [
+            [
+                val.text
+                for val in self.get_child_elements(element=line)
+                if val is not None
+            ]
+            for line in table_value_lines
+        ]
+        table = pd.DataFrame(np.array(table_value_matrix), columns=table_title_labels)
+        logger.info(
+            f"\n{table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+        return table
 
 
 def screenshot_dom_location(type_loc="screenshot"):

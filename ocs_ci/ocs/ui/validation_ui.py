@@ -550,12 +550,26 @@ class ValidationUI(StorageSystemNavigator):
 
         """
         self.navigate_cephblockpool()
+        # let table render all values
+        render_timeout = 5
+        logger.info(f"sleep {render_timeout}sec")
+        time.sleep(render_timeout)
+        logger.info(
+            f"Find BlockPool by name '{constants.DEFAULT_CEPHBLOCKPOOL}' using search-bar"
+        )
+        self.do_send_keys(
+            self.generic_locators["search_resource_field"],
+            constants.DEFAULT_CEPHBLOCKPOOL,
+        )
+
         logger.info(
             f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
         )
-        compression_status_blockpools_tab = self.get_element_text(
-            self.validation_loc["storagesystem-details-compress-state"]
-        )
+        table = self.get_resources_table()
+        compression_status_blockpools_tab = table[
+            table.Name.str.contains(pat=constants.DEFAULT_CEPHBLOCKPOOL)
+        ]["Compression status"].item()
+
         logger.info(
             f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
         )
