@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     random_object_round_trip_verification,
     compare_directory,
@@ -154,7 +154,7 @@ class TestNSFSSystem(MCGTest):
             pod.Pod(
                 **pod.get_pods_having_label(
                     label=constants.NOOBAA_CORE_POD_LABEL,
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             ),
             get_mds_pods()[0],
@@ -167,7 +167,7 @@ class TestNSFSSystem(MCGTest):
             pod.Pod(
                 **pod.get_pods_having_label(
                     label=constants.NOOBAA_CORE_POD_LABEL,
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             ),
             get_mds_pods()[0],

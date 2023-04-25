@@ -1695,7 +1695,7 @@ def get_ocs_build_number():
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
         operator_name,
-        defaults.ROOK_CLUSTER_NAMESPACE,
+        config.ENV_DATA["cluster_namespace"],
     )
     try:
         ocs_csv = ocs_csvs[0]

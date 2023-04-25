@@ -1008,7 +1008,7 @@ class Deployment(object):
             cluster_data["spec"]["network"] = {
                 "provider": "multus",
                 "selectors": {
-                    "public": f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+                    "public": f"{config.ENV_DATA['cluster_namespace']}/ocs-public"
                 },
             }
 
@@ -1032,7 +1032,7 @@ class Deployment(object):
         if config.DEPLOYMENT["infra_nodes"]:
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
-                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
 

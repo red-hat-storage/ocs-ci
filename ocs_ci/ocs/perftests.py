@@ -251,7 +251,7 @@ class PASTest(BaseTest):
             log.warning(f"Node type ({node_type}) is invalid")
             return
 
-        oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         self.environment[f"{node_type}_nodes_num"] = len(nodes)
         self.environment[f"{node_type}_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
             node=nodes[0],

@@ -842,7 +842,7 @@ def get_ceph_caps(secret_resource):
         resource_obj = ocp.OCP(
             resource_name=resource,
             kind=constants.SECRET,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         if constants.CEPHFS_NODE_SECRET in resource:
             keyring = (

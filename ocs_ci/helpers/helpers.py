@@ -224,7 +224,7 @@ def create_pod(
     interface_type=None,
     pvc_name=None,
     do_reload=True,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
@@ -488,7 +488,7 @@ def create_secret(interface_type):
     secret_data["metadata"]["name"] = create_unique_resource_name(
         f"test-{interface}", "secret"
     )
-    secret_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
     return create_resource(**secret_data)
 
@@ -528,7 +528,7 @@ def create_ceph_block_pool(
     cbp_data["metadata"]["name"] = (
         pool_name if pool_name else create_unique_resource_name("test", "cbp")
     )
-    cbp_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     cbp_data["spec"]["replicated"]["size"] = replica
 
     cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
@@ -563,7 +563,7 @@ def create_ceph_file_system(pool_name=None):
     cfs_data["metadata"]["name"] = (
         pool_name if pool_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    cfs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     cfs_data = create_resource(**cfs_data)
     cfs_data.reload()
 
@@ -700,14 +700,14 @@ def create_storage_class(
         if sc_name
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
-    sc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
         sc_data["parameters"][
             f"csi.storage.k8s.io/{key}-secret-namespace"
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
+        ] = config.ENV_DATA["cluster_namespace"]
 
-    sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
     sc_data["volumeBindingMode"] = volume_binding_mode
     sc_data["allowVolumeExpansion"] = allow_volume_expansion
@@ -722,7 +722,7 @@ def create_storage_class(
 def create_pvc(
     sc_name,
     pvc_name=None,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     size=None,
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
@@ -950,7 +950,7 @@ def validate_cephfilesystem(fs_name):
            will return False with valid msg i.e Failure cause
     """
     cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
@@ -1031,7 +1031,7 @@ def get_all_storageclass_names():
          list: list of storageclass name
     """
     sc_obj = ocp.OCP(
-        kind=constants.STORAGECLASS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.STORAGECLASS, namespace=config.ENV_DATA["cluster_namespace"]
     )
     result = sc_obj.get()
     sample = result["items"]
@@ -1072,7 +1072,7 @@ def get_cephblockpool_names():
          list: list of cephblockpool name
     """
     pool_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"]
     )
     result = pool_obj.get()
     sample = result["items"]
@@ -1190,7 +1190,7 @@ def get_all_pvs():
     Returns:
          dict: Dict of all pv in openshift-storage namespace
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
     return ocp_pv_obj.get()
 
 
@@ -1210,7 +1210,7 @@ def validate_pv_delete(pv_name):
     Raises:
         AssertionError: If pv is not deleted
     """
-    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pv_obj = ocp.OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
@@ -2599,7 +2599,7 @@ def wait_for_ct_pod_recovery():
                 "Hence, waiting for a new Ceph tools box pod to spin up"
             )
             pod_obj = ocp.OCP(
-                kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
             )
             pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
@@ -2718,7 +2718,7 @@ def modify_osd_replica_count(resource_name, replica_count):
 
     """
     ocp_obj = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = "-".join(resource_name.split("-")[0:4])
@@ -2739,7 +2739,7 @@ def modify_deployment_replica_count(deployment_name, replica_count):
 
     """
     ocp_obj = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
@@ -2815,7 +2815,7 @@ def collect_performance_stats(dir_name):
 
 
 def validate_pod_oomkilled(
-    pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None
+    pod_name, namespace=config.ENV_DATA["cluster_namespace"], container=None
 ):
     """
     Validate pod oomkilled message are found on log
@@ -3121,7 +3121,7 @@ def get_mon_pdb():
     pdb_obj = OCP(
         kind=constants.POD_DISRUPTION_BUDGET,
         resource_name=constants.MON_PDB,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     disruptions_allowed = pdb_obj.get().get("status").get("disruptionsAllowed")
@@ -3394,7 +3394,7 @@ def get_noobaa_url():
         str: url of noobaa console
 
     """
-    ocp_obj = OCP(kind=constants.ROUTE, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = OCP(kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"])
     route_obj = ocp_obj.get(resource_name="noobaa-mgmt")
     return route_obj["spec"]["host"]
 
@@ -3461,7 +3461,7 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"])
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
 
@@ -3584,7 +3584,7 @@ def check_number_of_mon_pods(expected_mon_num=3):
     return False
 
 
-def get_secret_names(namespace=defaults.ROOK_CLUSTER_NAMESPACE, resource_name=""):
+def get_secret_names(namespace=config.ENV_DATA["cluster_namespace"], resource_name=""):
     """
     Get secrets names
 

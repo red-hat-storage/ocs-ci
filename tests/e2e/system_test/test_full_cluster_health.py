@@ -7,7 +7,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.utility import templating
@@ -153,7 +153,7 @@ class TestFullClusterHealth(PASTest):
         wait_for_nodes_status()
 
         # Check for Ceph pods
-        pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         assert pod_obj.wait_for_resource(
             condition="Running", selector="app=rook-ceph-mgr", timeout=600
         )

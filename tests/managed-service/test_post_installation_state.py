@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, managedservice, ocp
+from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.testlib import (
     acceptance,
@@ -39,7 +39,7 @@ class TestPostInstallationState(ManageTest):
         for consumer_name in consumer_names:
             consumer_yaml = ocp.OCP(
                 kind="StorageConsumer",
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=consumer_name,
             )
             ceph_resources = consumer_yaml.get().get("status")["cephResources"]
@@ -64,7 +64,7 @@ class TestPostInstallationState(ManageTest):
         for consumer_name in consumer_names:
             consumer_yaml = ocp.OCP(
                 kind="StorageConsumer",
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=consumer_name,
             ).get()
             log.info(f"Verifying capacity of {consumer_name}")

@@ -18,7 +18,7 @@ from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
@@ -981,14 +981,14 @@ def collect_noobaa_db_dump(log_dir_path):
     try:
         nb_db_pod = Pod(
             **get_pods_having_label(
-                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                label=nb_db_label, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
             )[0]
         )
     except IndexError:
         log.warning(
             "Unable to find pod using label `%s` in namespace `%s`",
             nb_db_label,
-            defaults.ROOK_CLUSTER_NAMESPACE,
+            ocsci_config.ENV_DATA["cluster_namespace"],
         )
         return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
@@ -1006,7 +1006,7 @@ def collect_noobaa_db_dump(log_dir_path):
         pod_name=nb_db_pod.name,
         remotepath=remote_path,
         localpath=ocs_log_dir_path,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
 
 

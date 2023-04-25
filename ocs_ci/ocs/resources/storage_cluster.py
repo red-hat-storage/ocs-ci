@@ -505,7 +505,7 @@ def ocs_install_verification(
     if ocs_version < version.VERSION_4_6:
         log.info("Verifying CSI snapshotter is not present.")
         provisioner_pods = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector=[
                 constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
@@ -754,7 +754,7 @@ def verify_noobaa_endpoint_count():
     if not (disable_noobaa or managed_service):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         assert len(nb_ep_pods) <= max_eps, (
             f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
@@ -1071,7 +1071,7 @@ def set_deviceset_count(count):
     )
 
 
-def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get storage cluster name
 
@@ -1156,7 +1156,7 @@ def get_all_storageclass():
 
     """
     sc_obj = ocp.OCP(
-        kind=constants.STORAGECLASS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.STORAGECLASS, namespace=config.ENV_DATA["cluster_namespace"]
     )
     result = sc_obj.get()
     sample = result["items"]
@@ -1300,7 +1300,7 @@ def verify_multus_network():
     network_data = sc_data["spec"]["network"]
     assert network_data["provider"] == "multus"
     selectors = network_data["selectors"]
-    assert selectors["public"] == f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+    assert selectors["public"] == f"{config.ENV_DATA['cluster_namespace']}/ocs-public"
     # TODO: also check private network if it exists
 
 
@@ -1411,7 +1411,7 @@ def verify_provider_resources():
     )
 
     # Verify that cephcluster is Ready and hostNetworking is True
-    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster = OCP(kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"])
     cephcluster_yaml = cephcluster.get().get("items")[0]
     log.info("Verifying that cephcluster is Ready and hostNetworking is True")
     assert (
@@ -1432,7 +1432,7 @@ def verify_consumer_resources():
     """
     mgr_endpoint = OCP(
         kind="endpoints",
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MGR_APP_LABEL,
     )
     mgr_ep_yaml = mgr_endpoint.get().get("items")[0]
@@ -1440,7 +1440,7 @@ def verify_consumer_resources():
     mgr_ip = mgr_ep_yaml["subsets"][0]["addresses"][0]["ip"]
     log.info(f"MGR endpoint IP is {mgr_ip}")
     assert re.match("\\d+(\\.\\d+){3}", mgr_ip)
-    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster = OCP(kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"])
     cephcluster_yaml = cephcluster.get().get("items")[0]
     monitoring_endpoint = cephcluster_yaml["spec"]["monitoring"][
         "externalMgrEndpoints"
@@ -1577,7 +1577,7 @@ def verify_consumer_storagecluster(sc_data):
         f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
     )
     assert len(ticket) > 500
-    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"])
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith(
@@ -1627,23 +1627,25 @@ def get_ceph_clients():
     Returns:
         list: yamls of all ceph clients
     """
-    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    consumer = ocp.OCP(kind="CephClient", namespace=config.ENV_DATA["cluster_namespace"])
     return consumer.get().get("items")
 
 
-def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_storage_cluster_state(sc_name, namespace=None):
     """
     Get the storage cluster state
 
     Args:
         sc_name (str): The storage cluster name
         namespace (str): Namespace of the resource. The default value is:
-            'defaults.ROOK_CLUSTER_NAMESPACE'
+            'config.ENV_DATA["cluster_namespace"]' if None provided
 
     Returns:
         str: The storage cluster state
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         namespace=namespace,

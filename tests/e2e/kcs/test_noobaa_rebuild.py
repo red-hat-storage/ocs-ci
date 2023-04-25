@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
@@ -163,7 +163,7 @@ class TestNoobaaRebuild(E2ETest):
         )
 
         # Validate noobaa pods are up and running
-        pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         noobaa_pods = get_noobaa_pods()
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,

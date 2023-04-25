@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -408,7 +408,7 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
 
         # Validate noobaa pod is up and running
-        pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),

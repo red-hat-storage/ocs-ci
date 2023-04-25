@@ -1,13 +1,14 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier1,
     config,
     bugzilla,
     skipif_ocs_version,
 )
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
 )
@@ -69,7 +70,7 @@ def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
     # Checks if the cluster is upgraded from OCS 4.6 #bz 1952848
     if upgraded_from(["4.6"]):
-        bs_obj = ocp.OCP(kind="backingstore", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        bs_obj = ocp.OCP(kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"])
         bs_obj.patch(
             resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
             params='{"metadata":{"annotations":{"rgw":""}}}',

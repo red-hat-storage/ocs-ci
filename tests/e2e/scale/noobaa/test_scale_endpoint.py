@@ -4,7 +4,7 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
-from ocs_ci.ocs import constants, defaults, ocp, scale_pgsql
+from ocs_ci.ocs import constants, ocp, scale_pgsql
 from ocs_ci.utility import utils
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
@@ -73,7 +73,7 @@ class TestScaleEndpointAutoScale(MCGTest):
     MAX_ENDPOINT_COUNT = 2
 
     def _assert_endpoint_count(self, desired_count):
-        pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
         assert pod.wait_for_resource(
             resource_count=desired_count,

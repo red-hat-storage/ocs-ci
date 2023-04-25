@@ -564,7 +564,7 @@ def get_pvc_objs(
 
     Args:
         pvc_names (list): The list of the pvc names to get their objects
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: The PVC objects of the specified names

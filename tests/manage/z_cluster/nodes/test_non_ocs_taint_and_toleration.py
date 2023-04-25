@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs import ocp, constants, defaults
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
@@ -77,7 +77,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
 
         number_of_pods_before = len(
-            get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         )
 
         # Taint all nodes with non-ocs taint
@@ -87,7 +87,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Add tolerations to the storagecluster
         storagecluster_obj = ocp.OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
 
@@ -118,7 +118,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         for sub in sub_list:
             sub_obj = ocp.OCP(
                 resource_name=sub,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.SUBSCRIPTION,
             )
             sub_obj.patch(params=param, format_type="merge")
@@ -133,7 +133,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
             ocsini_obj = ocp.OCP(
                 resource_name=constants.OCSINIT,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.OCSINITIALIZATION,
             )
             ocsini_obj.patch(params=param, format_type="merge")
@@ -166,7 +166,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
             # Force delete all pods.
             pod_list = get_all_pods(
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 exclude_selector=True,
             )
             for pod in pod_list:
@@ -181,7 +181,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # check number of pods before and after adding non ocs taint
         number_of_pods_after = len(
-            get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         )
         assert (
             number_of_pods_before == number_of_pods_after

@@ -1468,7 +1468,7 @@ def scale_down_deployments(node_name):
         node_name (str): The node name
 
     """
-    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=config.ENV_DATA["cluster_namespace"])
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)

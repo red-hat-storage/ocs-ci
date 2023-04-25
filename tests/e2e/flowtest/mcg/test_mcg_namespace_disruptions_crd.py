@@ -129,7 +129,7 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_respin],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
 
@@ -212,7 +212,7 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_drain],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
 
@@ -239,7 +239,7 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_drain],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
