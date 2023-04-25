@@ -89,7 +89,6 @@ def create_storageclassclaim(
                 "name": "storageclient",
                 "namespace": namespace,
             }
-            sc_claim_data["metadata"]["namespace"] = None
         else:
             sc_claim_data["metadata"]["namespace"] = namespace
 
