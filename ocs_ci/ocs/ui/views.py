@@ -1062,8 +1062,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "article[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
-        By.CSS_SELECTOR,
+        "//dt[normalize-space()='Compression status']/following-sibling::dd",
+        By.XPATH,
     ),
     "performance-card": ("//h2[normalize-space()='Performance']", By.XPATH),
     "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),

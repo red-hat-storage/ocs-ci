@@ -81,7 +81,6 @@ class TestUserInterfaceValidation(object):
         """
 
         validation_ui_obj = ValidationUI(setup_ui_class)
-        validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
         compression_statuses = (
             validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
         )
