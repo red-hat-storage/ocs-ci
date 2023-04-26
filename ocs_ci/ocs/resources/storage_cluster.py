@@ -267,6 +267,15 @@ def ocs_install_verification(
             continue
         if "mds" in label and disable_cephfs:
             continue
+        if label == constants.MANAGED_CONTROLLER_LABEL:
+            if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+                service_pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["service_namespace"])
+                assert service_pod.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=label,
+                    resource_count=count,
+                    timeout=timeout,
+                )
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
