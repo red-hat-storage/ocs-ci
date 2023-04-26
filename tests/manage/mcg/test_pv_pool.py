@@ -1,6 +1,5 @@
 import json
 import logging
-
 import pytest
 
 from ocs_ci.framework import config
@@ -13,6 +12,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
     wait_for_pods_to_be_running,
+    get_pod_node,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
@@ -279,3 +279,51 @@ class TestPvPool:
             amount=1,
             s3_obj=OBC(bucket_name),
         )
+
+    def test_ephemeral_for_pv_bs(self, backingstore_factory):
+
+        """
+        Test if ephemeral storage on pv backingstore pod node is getting consumed
+        """
+
+        # create pv pool backingstore
+        pv_backingstore = backingstore_factory(
+            "OC",
+            {
+                "pv": [
+                    (1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, "ocs-storagecluster-ceph-rbd")
+                ]
+            },
+        )[0]
+
+        pv_bs_pod = Pod(
+            **(
+                get_pods_having_label(
+                    label=f"pool={pv_backingstore.name}",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )[0]
+            )
+        )
+
+        # create some dummy data under /noobaa_storage mount point in pv pool bs pod
+        pv_bs_pod.exec_sh_cmd_on_pod(
+            command="cd /noobaa_storage && dd if=/dev/urandom of=test_object bs=512 count=1"
+        )
+        pod_node = get_pod_node(pv_bs_pod).name
+        logger.info(f"{pv_bs_pod.name} is scheduled on {pod_node}!")
+
+        # check if the dummy data is also present in pv backingstore pod node ephemeral storage
+        base_dir = "/var/lib/kubelet/plugins/kubernetes.io/csi/openshift-storage.rbd.csi.ceph.com/"
+        guid_list = (
+            OCP()
+            .exec_oc_debug_cmd(
+                node=pod_node,
+                cmd_list=[f"ls -l {base_dir} | awk 'NR>1' | awk '{{print $9}}'"],
+            )
+            .split("\n")
+        )
+        for guid in guid_list:
+            file_path = f"{base_dir}/{guid}/globalmount/*/"
+            assert "test_object" not in OCP().exec_oc_debug_cmd(
+                node=pod_node, cmd_list=[f"ls -l {file_path} | awk '{{print $9}}'"]
+            ), "Dummy data was found in the node ephemeral storage!"
