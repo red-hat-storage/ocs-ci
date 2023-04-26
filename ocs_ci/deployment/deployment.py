@@ -14,6 +14,9 @@ from pathlib import Path
 import base64
 import yaml
 
+from botocore.exceptions import EndpointConnectionError, BotoCoreError
+import boto3
+
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -96,6 +99,7 @@ from ocs_ci.utility import (
     kms as KMS,
     version,
 )
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
@@ -2279,6 +2283,9 @@ class MultiClusterDROperatorsDeploy(object):
         def __init__(self, conf=None):
             self.dr_regions = self.get_participating_regions()
             self.conf = conf if conf else dict()
+            self.access_key = None
+            self.secret_key = None
+            self.bucket_name = None
 
         def deploy_and_configure(self):
             self.s3_configure()
@@ -2365,6 +2372,26 @@ class MultiClusterDROperatorsDeploy(object):
                 return True
             return False
 
+        def get_meta_access_secret_keys(self):
+            """
+            Get aws_access_key_id and aws_secret_access_key
+            by default we go with AWS, in case of noobaa it should be
+            implemented in mcg_meta_obj_store class
+
+            """
+            try:
+                logger.info("Trying to load AWS credentials")
+                secret_dict = update_config_from_s3().get("AUTH")
+            except (AttributeError, EndpointConnectionError):
+                logger.warning(
+                    "Failed to load credentials from ocs-ci-data.\n"
+                    "Your local AWS credentials might be misconfigured.\n"
+                    "Trying to load credentials from local auth.yaml instead"
+                )
+                secret_dict = load_auth_config().get("AUTH", {})
+            self.access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
+            self.secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+
     class mcg_meta_obj_store:
         def __init__(self):
             raise NotImplementedError("MCG metadata store support not implemented")
@@ -2418,7 +2445,80 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_acm_ctx(i)
             self.enable_cluster_backup
+        # Configuring s3 bucket
+        self.meta_obj.get_meta_access_secret_keys()
+        # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
+        self.meta_obj.bucket_name = self.build_bucket_name()
+        # create s3 bucket
+        self.create_s3_bucket()
+        self.create_generic_credentials()
+        # Create OADP
+        self.create_oadp()
 
+    def create_oadp(self):
+        """
+        Create OADP operator
+        """
+
+        oadp_data = templating.load_yaml(constants.ACM_DPA_OPERATOR)
+        oadp_data["backupLocations"][0]["velero"]["objectStorage"][
+            "bucket"
+        ] = self.meta_obj.bucket_name
+        oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
+        templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index())
+        run_cmd(f"oc create -f {oadp_yaml.name}")
+        config.switch_ctx(old_ctx)
+
+    def create_generic_credentials(self):
+        s3_cred_str = (
+            "[default]"
+            f"aws_access_key_id={self.meta_obj.access_key}"
+            f"aws_secret_access_key={self.meta_obj.secret_key}"
+        )
+        cred_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="s3_creds", delete=False
+        )
+        cred_file.write(s3_cred_str)
+        cred_file.flush()
+
+        cmd = (
+            f"oc create secret generic cloud-credentials --namespace {constants.ACM_HUB_BACKUP_NAMESPACE} "
+            f"--from-file cloud={cred_file.name}"
+        )
+        old_index = config.cur_index
+        # Create on all ACM clusters
+        for index in get_all_acm_indexes:
+            config.switch_ctx(index)
+            run_cmd(cmd)
+        config.switch_ctx(old_index)
+
+    def create_s3_bucket(self):
+        client = boto3.resource(
+            "s3",
+            verify=True,
+            endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=self.meta_obj.access_key,
+            aws_secret_access_key=self.meta_obj.secret_key,
+        )
+        try:
+            client.create_bucket(
+                Bucket=self.meta_obj.bucket_name,
+                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
+            )
+            logger.info(
+                f"Successfully created backup bucket: {self.meta_obj.bucket_name}"
+            )
+        except BotoCoreError as e:
+            logger.error(f"Failed to create s3 bucket {e}")
+            raise
+
+    def build_bucket_name(self):
+        bucket_name = ""
+        for index in get_all_acm_indexes():
+            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return bucket_name
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()
@@ -2443,9 +2543,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             namespace=constants.ACM_HUB_NAMESPACE,
         )
         mch_resource.get()
-        for components in mch_resource['items'][0]['spec']['overrides']['components']:
-            if components['name'] == 'cluster-backup':
-                components['enabled'] = True
+        for components in mch_resource["items"][0]["spec"]["overrides"]["components"]:
+            if components["name"] == "cluster-backup":
+                components["enabled"] = True
         mch_resource_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="mch", delete=False
         )
@@ -2454,8 +2554,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         mch_resource_yaml.flush()
         run_cmd(f"oc apply -f {mch_resource_yaml.name}")
         mch_resource.wait_for_phase("Running")
-        
-        
+
+
 MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,

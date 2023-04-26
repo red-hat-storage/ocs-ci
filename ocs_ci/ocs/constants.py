@@ -790,6 +790,7 @@ OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML = os.path.join(
 OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system_operatorgroup.yaml"
 )
+ACM_DPA_OPERATOR = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dpa_acm.yaml")
 DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
@@ -2014,6 +2015,7 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
