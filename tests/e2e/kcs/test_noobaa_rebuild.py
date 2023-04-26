@@ -12,8 +12,9 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
+
+from ocs_ci.ocs import constants
 from ocs_ci.utility.kms import is_kms_enabled
-from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
@@ -144,10 +145,20 @@ class TestNoobaaRebuild(E2ETest):
         # Delete noobaa secrets
         logger.info("Deleting noobaa related secrets")
         if is_kms_enabled():
+<<<<<<< HEAD
             dep_ocp.exec_oc_cmd("delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server")
         else:
             dep_ocp.exec_oc_cmd(
                 "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key")
+=======
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server"
+            )
+        else:
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key"
+            )
+>>>>>>> 82ea809b (Resoilved conflict)
 
         # Scale back noobaa-operator deployment
         logger.info(
