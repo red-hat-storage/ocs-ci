@@ -186,7 +186,8 @@ class AcmAddClusters(AcmPageNavigator):
         )
         if ocs_version >= version.VERSION_4_13 and globalnet:
             log.info("Enabling globalnet")
-            self.do_click(self.page_nav["globalnet"])
+            element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
+            self.driver.execute_script("arguments[0].click();", element)
         else:
             log.error(
                 "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
@@ -211,7 +212,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
-        if globalnet:
+        if ocs_version >= version.VERSION_4_13 and globalnet:
             check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
             assert (
                 check_globalnet == constants.GLOBALNET_STATUS

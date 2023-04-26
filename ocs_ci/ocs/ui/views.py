@@ -554,7 +554,6 @@ acm_configuration = {
     "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
     "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
     "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
-    "globalnet": ("//input[@id='globalist-enable']", By.XPATH),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
     "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
     "check-globalnet": ("//div[normalize-space()='True']", By.XPATH),
@@ -765,6 +764,9 @@ acm_configuration_4_12 = {
     "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
     "action-status-failover": ("//*[text()='Failed']", By.XPATH),
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
+    "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
+    "review-btn": ("//button[@id='save']", By.XPATH),
+    "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
 }
 
 add_capacity = {
