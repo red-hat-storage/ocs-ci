@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod as Pod
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
@@ -75,7 +75,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         io_size_gb = 400 if io_size_gb >= 400 else io_size_gb
 
         pod_objs = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
             exclude_selector=True,
         )
@@ -131,7 +131,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
             assert validate_pods_are_running_and_not_restarted(
                 pod_name=pod_name,
                 pod_restart_count=restart_count,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             ), f"Pod {pod_name} is either not running or restarted while running IOs"
 
         # Check ceph health is OK

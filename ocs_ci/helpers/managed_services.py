@@ -43,7 +43,7 @@ def verify_provider_topology():
         "16Ti": {"total_size": 48, "osd_count": 12, "instance_count": 6},
         "20Ti": {"total_size": 60, "osd_count": 15, "instance_count": 6},
     }
-    cluster_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    cluster_namespace = config.ENV_DATA["cluster_namespace"]
     storage_cluster = StorageCluster(
         resource_name="ocs-storagecluster",
         namespace=cluster_namespace,

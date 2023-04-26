@@ -3,7 +3,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -952,7 +952,7 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=600):
         )
 
 
-def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get storage cluster name
 

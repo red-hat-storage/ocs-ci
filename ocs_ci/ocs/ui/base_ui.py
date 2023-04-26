@@ -156,6 +156,20 @@ class BaseUI:
         """
         return self.do_click((xpath, By.XPATH), timeout)
 
+    def find_an_element_by_xpath(self, locator):
+        """
+        Function to find an element using xpath
+
+        Args:
+            locator (str): locator of the element to be found
+
+        Returns:
+            an object of the type WebElement
+
+        """
+        element = self.driver.find_element_by_xpath(locator)
+        return element
+
     def do_send_keys(self, locator, text, timeout=30):
         """
         Send text to element on OpenShift Console
@@ -219,7 +233,7 @@ class BaseUI:
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator, timeout=180)
+        current_mode = self.is_expanded(locator=locator, timeout=1000)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 

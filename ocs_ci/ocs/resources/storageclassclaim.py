@@ -4,6 +4,7 @@ StorageClassClaim related functionalities
 import os
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
@@ -83,7 +84,13 @@ def create_storageclassclaim(
         )
     )
     if namespace:
-        sc_claim_data["metadata"]["namespace"] = namespace
+        if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+            sc_claim_data["spec"]["storageClient"] = {
+                "name": "storageclient",
+                "namespace": namespace,
+            }
+        else:
+            sc_claim_data["metadata"]["namespace"] = namespace
 
     sc_claim_obj = StorageClassClaim(**sc_claim_data)
     sc_claim_obj.create(do_reload=True)

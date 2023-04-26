@@ -513,7 +513,7 @@ acm_page_nav = {
     "Applications": ("Applications", By.LINK_TEXT),
     "Governance": ("Governance", By.LINK_TEXT),
     "Credentials": ("Credentials", By.LINK_TEXT),
-    "Import_cluster": ("importCluster", By.ID),
+    "Import_cluster": ("//*[text()='Import cluster']", By.XPATH),
     "Import_cluster_enter_name": ("clusterName", By.ID),
     "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
@@ -556,6 +556,7 @@ acm_configuration = {
     "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
     "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
+    "check-globalnet": ("//div[normalize-space()='True']", By.XPATH),
     "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
     "connection-status-1": (
         "(//button[@type='button'][normalize-space()='Healthy'])[1]",
@@ -763,6 +764,13 @@ acm_configuration_4_12 = {
     "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
     "action-status-failover": ("//*[text()='Failed']", By.XPATH),
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
+    "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
+    "review-btn": ("//button[@id='save']", By.XPATH),
+    "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
+}
+
+acm_configuration_4_13 = {
+    **acm_configuration_4_12,
 }
 
 add_capacity = {
@@ -1221,6 +1229,7 @@ locators = {
             **acm_configuration,
             **acm_configuration_4_11,
             **acm_configuration_4_12,
+            **acm_configuration_4_13,
         },
     },
     "4.12": {

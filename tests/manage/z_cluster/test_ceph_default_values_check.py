@@ -16,7 +16,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
@@ -105,7 +105,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         """
         cm_obj = OCP(
             kind="configmap",
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
         config_data = cm_obj.get()["data"]["config"]
@@ -178,7 +178,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         cm_obj = OCP(
             kind=constants.CONFIGMAP,
             resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
         config_data = config_data.split("\n")
