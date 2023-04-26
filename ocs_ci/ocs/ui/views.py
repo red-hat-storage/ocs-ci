@@ -754,6 +754,7 @@ acm_configuration_4_12 = {
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "search-bar": ("//input[@class='pf-c-text-input-group__text-input']", By.XPATH),
+
     "kebab-action": (
         "//button[@class='pf-c-dropdown__toggle pf-m-plain']",
         By.XPATH,
@@ -1503,13 +1504,6 @@ locators = {
             **deployment_4_11,
             **deployment_4_12,
         },
-        "validation": {
-            **validation,
-            **validation_4_8,
-            **validation_4_9,
-            **validation_4_10,
-            **validation_4_11,
-        },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
         "acm_page": {
@@ -1518,6 +1512,14 @@ locators = {
             **acm_configuration_4_11,
             **acm_configuration_4_12,
             **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
