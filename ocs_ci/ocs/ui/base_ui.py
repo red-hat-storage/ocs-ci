@@ -219,7 +219,7 @@ class BaseUI:
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator, timeout=180)
+        current_mode = self.is_expanded(locator=locator, timeout=1000)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 

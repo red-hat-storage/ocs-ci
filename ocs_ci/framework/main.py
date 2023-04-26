@@ -223,6 +223,11 @@ def init_multicluster_ocsci_conf(args, nclusters):
     framework.config.multicluster_common_args.append(common_argv)
     # Set context to default_cluster_context_index
     framework.config.switch_default_cluster_ctx()
+    # Set same run_id across all clusters
+    # there is a race condition in which multiple run id's could be generated
+    universal_run_id = framework.config.RUN["run_id"]
+    for cluster in framework.config.clusters:
+        cluster.RUN["run_id"] = universal_run_id
 
 
 def tokenize_per_cluster_args(args, nclusters):
