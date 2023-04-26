@@ -24,7 +24,7 @@ def create_fusion_monitoring_resources():
     Create resources used for Managed Fusion aaS Monitoring
     """
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
-    ns_name = constants.MANAGED_FUSION_NAMESPACE
+    ns_name = config.ENV_DATA["service_namespace"]
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "new-project", ns_name])
     logger.info("Creating an OperatorGroup")
