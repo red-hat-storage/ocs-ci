@@ -9,10 +9,13 @@ from ocs_ci.utility.managedservice import remove_header_footer_from_key
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import Templating, load_yaml
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, exec_cmd
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.csv import (
+    check_all_csvs_are_succeeded,
+    get_csvs_start_with_prefix,
+)
 
 logger = logging.getLogger(name=__file__)
 
@@ -97,6 +100,16 @@ def deploy_odf():
         exec_cmd
     )(offering_check_cmd)
     helpers.create_resource(**template)
+    # Sometimes it takes time before ocs operator csv is present
+    for sample in TimeoutSampler(
+        timeout=1200,
+        sleep=15,
+        func=get_csvs_start_with_prefix,
+        csv_prefix=defaults.OCS_OPERATOR_NAME,
+        namespace=ns_name,
+    ):
+        if sample:
+            break
     # Wait for installation to be completed
     sample = TimeoutSampler(
         timeout=1200, sleep=15, func=check_all_csvs_are_succeeded, namespace=ns_name
